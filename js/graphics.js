@@ -1,4 +1,4 @@
-// ------------------ Graphics and Rendering ------------------
+// - - - - - - - - - - Graphics and Rendering - - - - - - - - - -
 
 // Sets up and manages the Three.js scene, camera, renderer, and sky.
 
