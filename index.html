@@ -3716,7 +3716,7 @@ self.onmessage = async function(e) {
                 spawnChunks.set(user, { cx: Math.floor(spawn.x / CHUNK_SIZE), cz: Math.floor(spawn.z / CHUNK_SIZE), username: data.username, world: data.world, spawn: spawn });
             }
         }
-        
+
 async function announceServer() {
     if (isHost) {
         console.log('[WebRTC] Already hosting, skipping announce for:', userName);
@@ -5733,4 +5733,3 @@ async function announceServer() {
     </script>
 </body>
 </html>
-
