@@ -521,6 +521,23 @@
             z-index: 200;
             pointer-events: none;
         }
+
+        #usersBtn.hosting {
+            box-shadow: 0 0 10px 3px rgba(255, 209, 102, 0.7);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 10px 3px rgba(255, 209, 102, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 14px 7px rgba(255, 209, 102, 0.7);
+            }
+            100% {
+                box-shadow: 0 0 10px 3px rgba(255, 209, 102, 0.7);
+            }
+        }
     </style>
 </head>
 <body>
@@ -564,7 +581,6 @@
             <button id="teleportBtn">Teleport (P)</button>
             <button id="saveChangesBtn" style="display:none;">Save (X)</button>
             <button id="joinScriptBtn" style="display:none;">Join (J)</button>
-            <button id="announceBtn">Host</button>
             <button id="usersBtn" style="display:none;">🌐 0</button>
         </div>
     </div>
@@ -3717,66 +3733,6 @@ self.onmessage = async function(e) {
             }
         }
 
-async function announceServer() {
-    if (isHost) {
-        console.log('[WebRTC] Already hosting, skipping announce for:', userName);
-        addMessage('Server already announced', 3000);
-        return;
-    }
-    if (isInitialLoad) {
-        console.log('[WebRTC] Waiting for initial load to complete before announcing');
-        await new Promise(resolve => {
-            const check = setInterval(() => {
-                if (!isInitialLoad) {
-                    clearInterval(check);
-                    resolve();
-                }
-            }, 100);
-        });
-    }
-    const modal = document.getElementById('joinScriptModal');
-    if (!modal) {
-        console.error('[WebRTC] joinScriptModal not found in DOM');
-        addMessage('UI error: Modal not found', 5000);
-        return;
-    }
-    isHost = true;
-    console.log('[WebRTC] Announcing server for:', userName);
-    // REMOVED: pc creation and peers.set(userName, ...)
-    // Open modal
-    const serverKeyword = 'MCServers@' + worldName;  // Note: Your code has 'MCServerJoin@', but adjust if needed
-    let serverAddr = null;
-    try {
-        serverAddr = await GetPublicAddressByKeyword(serverKeyword);
-    } catch (e) {
-        console.error('[WebRTC] Failed to fetch server address:', e);
-    }
-    const addressText = serverAddr ? serverAddr.trim().replace(/"|'/g, '') : serverKeyword;
-    modal.querySelector('h3').innerText = 'Announce Server';
-    modal.querySelector('p').innerText = `Copy this address and paste it into a Sup!? message To: field and click 📢 to announce your server.`;
-    modal.querySelector('#joinScriptText').value = addressText;
-    modal.style.display = 'block';
-    isPromptOpen = true;
-    addMessage('Server announced! Share the address to invite players.', 5000);
-    console.log('[WebRTC] Join script modal opened with address:', addressText);
-    // Start polling
-    if (isHost) {
-        const safeChunkKeys = []; // Fallback for undefined chunkKeys
-        worker.postMessage({
-            type: 'poll',
-            chunkKeys: safeChunkKeys,
-            masterKey: 'MCWorlds',
-            userAddress: userAddress,
-            worldName: worldName,
-            serverKeyword: 'MCServerJoin@' + worldName,
-            offerKeyword: 'MCConn@' + userName + '@' + worldName,
-            answerKeywords: [],
-            userName: userName
-        });
-        worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
-        startOfferPolling();
-    }
-}
 
         async function connectToServer(hostUser, offer, iceCandidates) {
             if (peers.size >= MAX_PEERS) {
@@ -3882,7 +3838,7 @@ async function announceServer() {
                     console.log('[WebRTC] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
                     return;
                 }
-                if (data.offer && isHost) {
+        if (data.offer) {
                     // Server mode: Process offer
                     const clientUser = data.user || 'anonymous';
                     if (clientUser === userName) {
@@ -4223,7 +4179,20 @@ async function announceServer() {
             }
             modal.style.display = isHost && pendingOffers.length > 0 ? 'block' : 'none';
         }
+function activateHost() {
+    if (!isHost) {
+        isHost = true;
+        console.log('[WebRTC] Hosting activated.');
+        addMessage('Host mode activated!', 3000);
+        startOfferPolling();
+        const usersBtn = document.getElementById('usersBtn');
+        if (usersBtn) {
+            usersBtn.classList.add('hosting');
+        }
+    }
+}
         async function acceptPendingOffers() {
+    activateHost();
     const checkboxes = document.querySelectorAll('.selectOffer:checked');
     if (checkboxes.length === 0) {
         addMessage('No offers selected', 3000);
@@ -5297,7 +5266,6 @@ async function announceServer() {
                     document.getElementById('joinScriptText').value = joinScript;
                     document.getElementById('joinScriptModal').style.display = 'block';
                 });
-                document.getElementById('announceBtn').addEventListener('click', announceServer);
                 document.getElementById('usersBtn').addEventListener('click', openUsersModal);
                 document.getElementById('closeCraft').addEventListener('click', function () {
                     isPromptOpen = false;
