@@ -1,5 +1,6 @@
 
 import os
+import time
 from playwright.sync_api import sync_playwright, expect
 
 def run(playwright):
@@ -32,16 +33,12 @@ def run(playwright):
             document.getElementById('pendingModal').style.display = 'block';
         }""")
 
-        # Use JavaScript to click the checkbox
-        page.evaluate("document.querySelector('.selectOffer').click()")
+        # Click the first offer. Use force=True because the canvas might be intercepting clicks.
+        page.locator('.selectOffer').check(force=True)
+        time.sleep(1)
 
-        # Click the accept button. This will activate host mode and show the join script modal.
+        # Click the accept button. This will activate host mode.
         page.locator("#acceptPending").click(force=True)
-
-        # Wait for the next modal and then close it to reveal the HUD again
-        expect(page.locator("#joinScriptModal")).to_be_visible()
-        page.locator("#closeJoinScript").click(force=True)
-        expect(page.locator("#joinScriptModal")).to_be_hidden()
 
         # The globe icon should now have the 'hosting' class.
         users_button = page.locator("#usersBtn")

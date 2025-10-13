@@ -559,7 +559,6 @@
             <button id="startBtn">Start — spawn world</button>
             <button id="announceLoginBtn" style="margin-top: 20px;">Announce Server</button>
             <button id="newUserJoinScriptBtn" style="margin-top: 20px;">Create Join Script</button>
-            <button id="announceBtn" style="margin-top: 20px;">Announce Server</button>
             <small style="display:block;margin-top:8px;opacity:0.78;">Type world (max 8 chars)/user (max 20 chars). Seed: <code>worldName</code>.</small>
         </div>
     </div>
@@ -3863,7 +3862,7 @@ async function announceServer() {
                     console.log('[WebRTC] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
                     return;
                 }
-                if (data.offer && isHost) {
+        if (data.offer) {
                     // Server mode: Process offer
                     const clientUser = data.user || 'anonymous';
                     if (clientUser === userName) {
