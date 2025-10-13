@@ -5713,15 +5713,14 @@ function activateHost() {
                 if (isMoving) moveVec.normalize();
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
-
                 var newX = modWrap(player.x + dx, MAP_SIZE);
-                if (!checkCollision(newX, player.y, player.z)) {
-                    player.x = newX;
-                }
-
                 var newZ = modWrap(player.z + dz, MAP_SIZE);
-                if (!checkCollision(player.x, player.y, newZ)) {
+                if (!checkCollision(newX, player.y, newZ)) {
+                    player.x = newX;
                     player.z = newZ;
+                } else {
+                    if (!checkCollision(newX, player.y, player.z)) player.x = newX;
+                    if (!checkCollision(player.x, player.y, newZ)) player.z = newZ;
                 }
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
@@ -5880,7 +5879,7 @@ function activateHost() {
 
                             const interpolatedPosition = new THREE.Vector3(
                                 userState.prevX + (userState.targetX - userState.prevX) * alpha,
-                                userState.prevY + (userState.targetY - userState.prevY) * alpha - 0.9,
+                                userState.prevY + (userState.targetY - userState.prevY) * alpha,
                                 userState.prevZ + (userState.targetZ - userState.prevZ) * alpha
                             );
                             avatar.position.copy(interpolatedPosition);
