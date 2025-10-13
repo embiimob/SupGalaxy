@@ -863,7 +863,14 @@
             // Using a public STUN server as a fallback.
             // This will not work for all network configurations (symmetric NATs).
             console.warn("Using fallback STUN server. For production, a secure TURN server is recommended for robust connectivity.");
-            return [{ urls: 'stun:stun.l.google.com:19302' }];
+            return [
+                { urls: 'stun:stun.l.google.com:19302' },
+                {
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject",
+                },
+            ];
         }
 
         async function GetPublicAddressByKeyword(keyword) {
@@ -3916,6 +3923,7 @@ self.onmessage = async function(e) {
             connectionAttempts.set(hostUser, Date.now());
             const iceServers = await getTurnCredentials();
             var pc = new RTCPeerConnection({ iceServers });
+            pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${hostUser}: ${pc.iceConnectionState}`);
             var dc = pc.createDataChannel('game');
             setupDataChannel(dc, hostUser);
             try {
@@ -4391,6 +4399,7 @@ function activateHost() {
         try {
             const iceServers = await getTurnCredentials();
             const pc = new RTCPeerConnection({ iceServers });
+            pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
             peers.set(clientUser, { pc, dc: null, address: offer.profile ? offer.profile.Creators[0] : null });
             pc.ondatachannel = (e) => {
                 const dc = e.channel;
