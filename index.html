@@ -780,7 +780,7 @@
         var worldName = 'KANYE';
         var userName = 'player';
         var userAddress = 'anonymous';
-        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false, health: 20, score: 0, width: 0.6, height: 1.8, yaw: 0, pitch: 0 };
+        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false, health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
         var isAttacking = false;
         var attackStartTime = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -3469,8 +3469,8 @@ self.onmessage = async function(e) {
             var minY = newY + 0.001;
             var maxX = newX + player.width / 2 - 0.001;
             var maxY = newY + player.height - 0.001;
-            var minZ = newZ - player.width / 2 + 0.001;
-            var maxZ = newZ + player.width / 2 - 0.001;
+            var minZ = newZ - player.depth / 2 + 0.001;
+            var maxZ = newZ + player.depth / 2 - 0.001;
             for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
                 for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
                     for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
@@ -3487,7 +3487,7 @@ self.onmessage = async function(e) {
                 { dx: 0.2, dz: 0 }, { dx: -0.2, dz: 0 }, { dx: 0, dz: 0.2 }, { dx: 0, dz: -0.2 },
                 { dx: 0.2, dz: 0.2 }, { dx: 0.2, dz: -0.2 }, { dx: -0.2, dz: 0.2 }, { dx: -0.2, dz: -0.2 }
             ];
-            for (var yOffset = 0; yOffset <= 2; yOffset += 0.2) {
+        for (var yOffset = 0; yOffset <= player.height; yOffset += 0.2) {
                 for (var dir of directions) {
                     var newX = modWrap(player.x + dir.dx, MAP_SIZE);
                     var newZ = modWrap(player.z + dir.dz, MAP_SIZE);
@@ -5710,14 +5710,15 @@ function activateHost() {
                 if (isMoving) moveVec.normalize();
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
+
                 var newX = modWrap(player.x + dx, MAP_SIZE);
-                var newZ = modWrap(player.z + dz, MAP_SIZE);
-                if (!checkCollision(newX, player.y, newZ)) {
+                if (!checkCollision(newX, player.y, player.z)) {
                     player.x = newX;
+                }
+
+                var newZ = modWrap(player.z + dz, MAP_SIZE);
+                if (!checkCollision(player.x, player.y, newZ)) {
                     player.z = newZ;
-                } else {
-                    if (!checkCollision(newX, player.y, player.z)) player.x = newX;
-                    if (!checkCollision(player.x, player.y, newZ)) player.z = newZ;
                 }
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
