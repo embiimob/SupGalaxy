@@ -737,6 +737,7 @@
             117: { name: 'Glass Tile', color: '#aeeaff', transparent: true },
             118: { name: 'Sandstone', color: '#e3c27d' },
             119: { name: 'Cobblestone', color: '#7d7d7d' },
+            120: { name: 'Torch', color: '#ff9900', light: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -767,6 +768,7 @@
             { id: 'glass_tile', out: { id: 117, count: 2 }, requires: { 100: 2 } },
             { id: 'sandstone', out: { id: 118, count: 2 }, requires: { 5: 2 } },
             { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
+            { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
         ];
         var scene, camera, renderer, controls;
         var meshGroup;
@@ -814,6 +816,7 @@
         var apiCallTimestamps = [];
         var audioErrorLogged = false;
         var sun, moon, stars, clouds;
+        var torchLights = new Map();
         var INVENTORY = new Array(32).fill(null);
         var isPromptOpen = false;
         var userPositions = {};
@@ -1009,6 +1012,7 @@ const BLOCKS = {
     115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
     117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
     119: { name: 'Cobblestone', color: '#7d7d7d' },
+    120: { name: 'Torch', color: '#ff9900', light: true },
 };
 
 const BIOMES = [
@@ -2104,70 +2108,120 @@ self.onmessage = async function(e) {
             y += 2;
             return { x: x, y: y, z: z };
         }
+        var skyProps;
         function initSky() {
-            sun = new THREE.Mesh(
-                new THREE.SphereGeometry(10, 32, 32),
-                new THREE.MeshBasicMaterial({ color: 0xffff00 })
-            );
-            moon = new THREE.Mesh(
-                new THREE.SphereGeometry(8, 32, 32),
-                new THREE.MeshBasicMaterial({ color: 0xcccccc })
-            );
+            const skyRnd = makeSeededRandom(worldSeed + '_sky');
+            const baseHue = skyRnd();
+            const baseSat = 0.5 + skyRnd() * 0.5;
+            const dayLightness = 0.6 + skyRnd() * 0.2;
+            const nightLightness = 0.05 + skyRnd() * 0.05;
+
+            skyProps = {
+                dayColor: new THREE.Color().setHSL(baseHue, baseSat, dayLightness),
+                nightColor: new THREE.Color().setHSL(baseHue, baseSat * 0.8, nightLightness),
+                cloudColor: new THREE.Color().setHSL(skyRnd(), 0.2 + skyRnd() * 0.3, 0.8),
+                suns: [],
+                moons: []
+            };
+
+            const numSuns = 1 + Math.floor(skyRnd() * 3); // 1 to 3 suns
+            for (let i = 0; i < numSuns; i++) {
+                const sunSize = 10 + skyRnd() * 20;
+                const sunColor = new THREE.Color().setHSL(skyRnd(), 0.8 + skyRnd() * 0.2, 0.6 + skyRnd() * 0.2);
+                const sun = new THREE.Mesh(
+                    new THREE.SphereGeometry(sunSize, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: sunColor })
+                );
+                skyProps.suns.push({ mesh: sun, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(sun);
+            }
+
+            const numMoons = Math.floor(skyRnd() * 4); // 0 to 3 moons
+            for (let i = 0; i < numMoons; i++) {
+                const moonSize = 5 + skyRnd() * 15;
+                const moonColor = new THREE.Color().setHSL(skyRnd(), 0.1 + skyRnd() * 0.2, 0.7 + skyRnd() * 0.2);
+                const moonShape = skyRnd() > 0.5 ? new THREE.SphereGeometry(moonSize, 32, 32) : new THREE.BoxGeometry(moonSize, moonSize, moonSize);
+                const moon = new THREE.Mesh(
+                    moonShape,
+                    new THREE.MeshBasicMaterial({ color: moonColor })
+                );
+                skyProps.moons.push({ mesh: moon, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(moon);
+            }
+
             stars = new THREE.Group();
-            var starGeometry = new THREE.BufferGeometry();
-            var starVertices = [];
-            var starNoise = makeNoise(worldSeed + '_stars');
-            for (var i = 0; i < 1000; i++) {
-                var theta = Math.random() * Math.PI * 2;
-                var phi = Math.acos(2 * Math.random() - 1);
-                var x = 1000 * Math.sin(phi) * Math.cos(theta);
-                var y = 1000 * Math.sin(phi) * Math.sin(theta);
-                var z = 1000 * Math.cos(phi);
-                if (starNoise(x * 0.01, z * 0.01) > 0.7) {
+            const starGeometry = new THREE.BufferGeometry();
+            const starVertices = [];
+            const starNoise = makeNoise(worldSeed + '_stars');
+            for (let i = 0; i < 2000; i++) {
+                const theta = skyRnd() * Math.PI * 2;
+                const phi = Math.acos(2 * skyRnd() - 1);
+                const x = 2000 * Math.sin(phi) * Math.cos(theta);
+                const y = 2000 * Math.sin(phi) * Math.sin(theta);
+                const z = 2000 * Math.cos(phi);
+                if (starNoise(x * 0.01, z * 0.01) > 0.6) {
                     starVertices.push(x, y, z);
                 }
             }
             starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-            var starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 });
-            var starPoints = new THREE.Points(starGeometry, starMaterial);
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 + skyRnd() * 2 });
+            const starPoints = new THREE.Points(starGeometry, starMaterial);
             stars.add(starPoints);
+            scene.add(stars);
+
             clouds = new THREE.Group();
-            for (var i = 0; i < 20; i++) {
-                var cloud = new THREE.Mesh(
-                    new THREE.PlaneGeometry(50, 50),
-                    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+            const numClouds = Math.floor(skyRnd() * 50);
+            for (let i = 0; i < numClouds; i++) {
+                const cloud = new THREE.Mesh(
+                    new THREE.PlaneGeometry(50 + skyRnd() * 100, 50 + skyRnd() * 50),
+                    new THREE.MeshBasicMaterial({ color: skyProps.cloudColor, transparent: true, opacity: 0.3 + skyRnd() * 0.4, side: THREE.DoubleSide })
                 );
                 cloud.position.set(
-                    (Math.random() - 0.5) * 2000,
-                    100 + Math.random() * 50,
-                    (Math.random() - 0.5) * 2000
+                    (skyRnd() - 0.5) * 4000,
+                    150 + skyRnd() * 100,
+                    (skyRnd() - 0.5) * 4000
                 );
                 clouds.add(cloud);
             }
-            scene.add(sun, moon, stars, clouds);
+            scene.add(clouds);
         }
+
         function updateSky(dt) {
-            var now = new Date();
-            var hours = now.getHours() + now.getMinutes() / 60;
-            var t = (hours / 24) * Math.PI * 2;
-            var isNight = hours >= 18 || hours < 6;
-            var sunAngle = t;
-            var moonAngle = t + Math.PI;
-            sun.position.set(1000 * Math.cos(sunAngle), 1000 * Math.sin(sunAngle), 0);
-            moon.position.set(1000 * Math.cos(moonAngle), 1000 * Math.sin(moonAngle), 0);
+            const now = new Date();
+            const hours = now.getHours() + now.getMinutes() / 60;
+            const timeRatio = hours / 24;
+            const timeAngle = timeRatio * Math.PI * 2;
+
+            // Determine if it's day or night for lighting purposes
+            const sunAngleForLight = timeAngle + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0);
+            const sunY = Math.sin(sunAngleForLight);
+            const isNight = sunY < -0.1;
+
+            skyProps.suns.forEach(sun => {
+                const angle = timeAngle + sun.angleOffset;
+                sun.mesh.position.set(2000 * Math.cos(angle), 2000 * Math.sin(angle), 800 * Math.sin(angle));
+                sun.mesh.visible = Math.sin(angle) > -0.1; // Visible when above horizon
+            });
+
+            skyProps.moons.forEach(moon => {
+                const angle = timeAngle + moon.angleOffset + Math.PI; // Opposite to the first sun
+                moon.mesh.position.set(1800 * Math.cos(angle), 1800 * Math.sin(angle), 600 * Math.sin(angle));
+                moon.mesh.visible = Math.sin(angle) > -0.1; // Visible when above horizon
+            });
+
             stars.visible = isNight;
-            clouds.children.forEach(function (cloud) {
-                cloud.position.x = modWrap(cloud.position.x + dt * 10, 2000);
+            stars.rotation.y += dt * 0.01;
+
+            clouds.children.forEach(cloud => {
+                cloud.position.x = modWrap(cloud.position.x + dt * (10 + Math.random() * 5), 4000);
                 cloud.lookAt(camera.position);
             });
-            var dayColor = new THREE.Color(0x87ceeb);
-            var nightColor = new THREE.Color(0x1c2526);
-            var tNorm = Math.sin(t) * 0.5 + 0.5;
-            scene.background = dayColor.lerp(nightColor, tNorm);
-            var ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
-            ambientLight.intensity = isNight ? 0.2 : 0.45;
-            sun.visible = !isNight;
-            moon.visible = isNight;
+
+            const tNorm = Math.max(0, sunY); // Use the main sun's height for interpolation
+            scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
+
+            const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
+            ambientLight.intensity = isNight ? 0.08 : 0.5; // Darker nights
         }
         function Chunk(cx, cz) {
             this.cx = cx;
@@ -2876,6 +2930,16 @@ self.onmessage = async function(e) {
             addToInventory(b, 1);
             addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b));
             safePlayAudio(soundBreak);
+
+            if (BLOCKS[b] && BLOCKS[b].light) {
+                var lightKey = `${wx},${wy},${wz}`;
+                if (torchLights.has(lightKey)) {
+                    var light = torchLights.get(lightKey);
+                    scene.remove(light);
+                    light.dispose();
+                    torchLights.delete(lightKey);
+                }
+            }
         }
         function placeBlockAt(wx, wy, wz, bid) {
             if (!bid) {
@@ -2921,6 +2985,13 @@ self.onmessage = async function(e) {
             addMessage('Placed ' + (BLOCKS[bid] ? BLOCKS[bid].name : bid));
             updateHotbarUI();
             safePlayAudio(soundPlace);
+
+            if (BLOCKS[bid] && BLOCKS[bid].light) {
+                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                light.position.set(wx, wy + 0.5, wz);
+                scene.add(light);
+                torchLights.set(`${wx},${wy},${wz}`, light);
+            }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
             var minX = player.x - player.width / 2;
@@ -5123,6 +5194,7 @@ function activateHost() {
                     console.log('[Login] Initializing Three.js');
                     initThree();
                     console.log('[Login] Three.js initialized');
+                    INVENTORY[0] = { id: 120, count: 8 };
                     initHotbar();
                     console.log('[Login] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
