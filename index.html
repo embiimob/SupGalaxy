@@ -2268,13 +2268,13 @@ self.onmessage = async function(e) {
 
             skyProps.suns.forEach(sun => {
                 const angle = timeAngle + sun.angleOffset;
-                sun.mesh.position.set(4000 * Math.cos(angle), 4000 * Math.sin(angle), 1500 * Math.sin(angle));
+                sun.mesh.position.set(camera.position.x + 4000 * Math.cos(angle), camera.position.y + 4000 * Math.sin(angle), camera.position.z + 1500 * Math.sin(angle));
                 sun.mesh.visible = Math.sin(angle) > -0.1;
             });
 
             skyProps.moons.forEach(moon => {
                 const angle = timeAngle + moon.angleOffset + Math.PI;
-                moon.mesh.position.set(3800 * Math.cos(angle), 3800 * Math.sin(angle), 1200 * Math.sin(angle));
+                moon.mesh.position.set(camera.position.x + 3800 * Math.cos(angle), camera.position.y + 3800 * Math.sin(angle), camera.position.z + 1200 * Math.sin(angle));
                 moon.mesh.visible = Math.sin(angle) > -0.1;
             });
 
@@ -5721,7 +5721,7 @@ function activateHost() {
                     player.onGround = false;
                 } else {
                     if (dy < 0) { // Moving down
-                        player.y = Math.ceil(newY);
+                        player.y = Math.ceil(newY) + 0.001; // Add tolerance
                         player.vy = 0;
                         player.onGround = true;
                     } else if (dy > 0) { // Moving up
@@ -5777,6 +5777,10 @@ function activateHost() {
                 chunkManager.update(player.x, player.z);
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
+
+                // Make skybox elements follow the camera
+                if (stars) stars.position.copy(camera.position);
+                if (clouds) clouds.position.copy(camera.position);
 
                 for (const [key, particleSystem] of torchParticles.entries()) {
                     const positions = particleSystem.geometry.attributes.position.array;
