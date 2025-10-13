@@ -799,6 +799,10 @@
         var lastFrame = performance.now();
         var mouseLocked = false;
         var deathScreenShown = false;
+        var lastPollPosition = new THREE.Vector3();
+        var pauseTimer = 0;
+        var lastMoveTime = 0;
+        var hasMovedSubstantially = false;
         var soundBreak = document.getElementById('soundBreak');
         var soundPlace = document.getElementById('soundPlace');
         var soundJump = document.getElementById('soundJump');
@@ -1919,58 +1923,60 @@ self.onmessage = async function(e) {
                 }
             }
         };
+        function triggerPoll() {
+            if (isPromptOpen) {
+                console.log('[Worker] Skipping poll, prompt open');
+                return;
+            }
+            var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
+            var pendingKeys = Array.from(pending);
+            if (pendingKeys.length > 0) {
+                worker.postMessage({
+                    type: 'cleanup_pending',
+                    pcx: pcx,
+                    pcz: pcz,
+                    pendingKeys: pendingKeys,
+                    chunksPerSide: CHUNKS_PER_SIDE,
+                    pollRadius: POLL_RADIUS
+                });
+            }
+
+            var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
+            var filteredKeys = chunkKeys.filter(function (key) {
+                var parsed = parseChunkKey(key);
+                if (!parsed) return false;
+                var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
+                var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
+                return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
+            });
+            var serverKeyword = 'MCServerJoin@' + worldName;
+            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            var answerKeywords = [];
+            for (var peer of peers) {
+                var peerUser = peer[0];
+                if (peerUser !== userName) {
+                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                }
+            }
+            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            worker.postMessage({
+                type: 'poll',
+                chunkKeys: filteredKeys,
+                masterKey: MASTER_WORLD_KEY,
+                userAddress: userAddress,
+                worldName: worldName,
+                serverKeyword: serverKeyword,
+                offerKeyword: offerKeyword,
+                answerKeywords: answerKeywords,
+                userName: userName
+            });
+        }
+
         function startWorker() {
             console.log('[Worker] Initializing worker with isHost:', isHost, 'userName:', userName, 'worldName:', worldName);
-            setInterval(function () {
-                if (isPromptOpen) {
-                    console.log('[Worker] Skipping poll, prompt open');
-                    return;
-                }
-                var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
-                var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
-
-                var pendingKeys = Array.from(pending);
-                if (pendingKeys.length > 0) {
-                    worker.postMessage({
-                        type: 'cleanup_pending',
-                        pcx: pcx,
-                        pcz: pcz,
-                        pendingKeys: pendingKeys,
-                        chunksPerSide: CHUNKS_PER_SIDE,
-                        pollRadius: POLL_RADIUS
-                    });
-                }
-
-                var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
-                var filteredKeys = chunkKeys.filter(function (key) {
-                    var parsed = parseChunkKey(key);
-                    if (!parsed) return false;
-                    var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
-                    var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
-                    return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
-                });
-                var serverKeyword = 'MCServerJoin@' + worldName;
-                var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
-                var answerKeywords = [];
-                for (var peer of peers) {
-                    var peerUser = peer[0];
-                    if (peerUser !== userName) {
-                        answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
-                    }
-                }
-                console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
-                worker.postMessage({
-                    type: 'poll',
-                    chunkKeys: filteredKeys,
-                    masterKey: MASTER_WORLD_KEY,
-                    userAddress: userAddress,
-                    worldName: worldName,
-                    serverKeyword: serverKeyword,
-                    offerKeyword: offerKeyword,
-                    answerKeywords: answerKeywords,
-                    userName: userName
-                });
-            }, POLL_INTERVAL);
+            // The polling is now triggered by player movement and pauses in the gameLoop.
         }
         function checkChunkOwnership(chunkKey, username) {
             const normalizedKey = chunkKey.replace(/^#/, '');
@@ -5761,6 +5767,7 @@ function activateHost() {
 
                 if (now - lastUpdateTime > 50 && (positionChanged || rotationChanged)) {
                     lastUpdateTime = now;
+                    lastMoveTime = now;
                     lastSentPosition = { x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch };
                     const message = {
                         type: 'player_move',
@@ -5875,6 +5882,21 @@ function activateHost() {
                         avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
                     }
                 }
+
+                if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
+                    hasMovedSubstantially = true;
+                }
+
+                if (isMoving) {
+                    lastMoveTime = now;
+                }
+
+                if (hasMovedSubstantially && now - lastMoveTime > 10000) {
+                    triggerPoll();
+                    lastPollPosition.copy(player);
+                    hasMovedSubstantially = false;
+                }
+
                 renderer.render(scene, camera);
             }
             requestAnimationFrame(gameLoop);
