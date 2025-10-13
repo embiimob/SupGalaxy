@@ -803,6 +803,11 @@
         var pauseTimer = 0;
         var lastMoveTime = 0;
         var hasMovedSubstantially = false;
+        var isConnecting = false;
+        var radarAngle = 0;
+        var pollQueue = [];
+        var lastPollTime = 0;
+        var isPlayerMoving = false;
         var soundBreak = document.getElementById('soundBreak');
         var soundPlace = document.getElementById('soundPlace');
         var soundJump = document.getElementById('soundJump');
@@ -1952,41 +1957,14 @@ self.onmessage = async function(e) {
                 });
             }
 
-            var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
-
-            var playerDirection = new THREE.Vector3();
-            camera.getWorldDirection(playerDirection);
-
-            chunkKeys.sort((a, b) => {
-                const parsedA = parseChunkKey(a);
-                const parsedB = parseChunkKey(b);
-                if (!parsedA || !parsedB) return 0;
-
-                const posA = new THREE.Vector3(parsedA.cx * CHUNK_SIZE, 0, parsedA.cz * CHUNK_SIZE);
-                const posB = new THREE.Vector3(parsedB.cx * CHUNK_SIZE, 0, parsedB.cz * CHUNK_SIZE);
-
-                const distA = posA.distanceTo(player);
-                const distB = posB.distanceTo(player);
-
-                const dirA = posA.sub(player).normalize();
-                const dirB = posB.sub(player).normalize();
-
-                const dotA = playerDirection.dot(dirA);
-                const dotB = playerDirection.dot(dirB);
-
-                if (dotA > 0.5 && dotB < 0.5) return -1;
-                if (dotB > 0.5 && dotA < 0.5) return 1;
-
-                return distA - distB;
-            });
-
-            var filteredKeys = chunkKeys.filter(function (key) {
+            var filteredKeys = pollQueue.length > 0 ? pollQueue : Array.from(chunkManager ? chunkManager.chunks.keys() : []).filter(function (key) {
                 var parsed = parseChunkKey(key);
                 if (!parsed) return false;
                 var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
                 var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
+            pollQueue = [];
             var serverKeyword = 'MCServerJoin@' + worldName;
             var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
             var answerKeywords = [];
@@ -3632,6 +3610,27 @@ self.onmessage = async function(e) {
                     minimapCtx.fillRect(px - 2, pz - 2, 4, 4);
                 }
             }
+
+            if (isConnecting) {
+                radarAngle += 0.05;
+                var gradient = minimapCtx.createRadialGradient(cx, cz, 0, cx, cz, canvas.width / 2);
+                gradient.addColorStop(0, 'rgba(0, 255, 0, 0.5)');
+                gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+
+                minimapCtx.save();
+                minimapCtx.translate(cx, cz);
+                minimapCtx.rotate(radarAngle);
+                minimapCtx.translate(-cx, -cz);
+
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(cx, cz);
+                minimapCtx.arc(cx, cz, canvas.width / 2, 0, Math.PI / 4);
+                minimapCtx.closePath();
+                minimapCtx.fillStyle = gradient;
+                minimapCtx.fill();
+
+                minimapCtx.restore();
+            }
         }
         var keys = {};
         function registerKeyEvents() {
@@ -3949,6 +3948,7 @@ self.onmessage = async function(e) {
                 return;
             }
             console.log('[WebRTC] Initiating connection to server:', hostUser);
+            isConnecting = true;
             connectionAttempts.set(hostUser, Date.now());
             const iceServers = await getTurnCredentials();
             var pc = new RTCPeerConnection({ iceServers });
@@ -4136,6 +4136,7 @@ self.onmessage = async function(e) {
            console.log(`[WebRTC] Setting up data channel for: ${user}`);
             dc.onopen = () => {
                 console.log(`[WebRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
+                isConnecting = false;
                 addMessage(`Connection established with ${user}`, 3000);
 
                 // Send initial player position
@@ -4461,8 +4462,10 @@ function activateHost() {
                 console.log('[WebRTC] Connection state for', clientUser, ':', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     addMessage('Connected to ' + clientUser, 3000);
+                    isConnecting = false;
                 } else if (pc.connectionState === 'failed') {
                     addMessage('Connection failed with ' + clientUser, 3000);
+                    isConnecting = false;
                     pc.close();
                     peers.delete(clientUser);
                 }
@@ -5921,22 +5924,62 @@ function activateHost() {
                     }
                 }
 
-                if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
-                    hasMovedSubstantially = true;
-                }
-
-                if (isMoving) {
-                    lastMoveTime = now;
-                }
-
-                if (hasMovedSubstantially && now - lastMoveTime > 10000) {
-                    triggerPoll();
-                    lastPollPosition.copy(player);
-                    hasMovedSubstantially = false;
-                }
 
                 renderer.render(scene, camera);
             }
+
+            // New polling logic
+            const now = performance.now();
+            isPlayerMoving = (Math.abs(player.vx) + Math.abs(player.vz)) > 0.01;
+
+            if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
+                hasMovedSubstantially = true;
+            }
+
+            if (isPlayerMoving) {
+                if (now - lastPollTime > 15000) {
+                    pollQueue = []; // Cancel pending polls
+                    // Poll 3 chunks ahead
+                    const lookahead = playerDirection.clone().multiplyScalar(CHUNK_SIZE * 3);
+                    const aheadPos = new THREE.Vector3(player.x, player.y, player.z).add(lookahead);
+                    const aheadCx = Math.floor(aheadPos.x / CHUNK_SIZE);
+                    const aheadCz = Math.floor(aheadPos.z / CHUNK_SIZE);
+                    for (let i = 0; i < 3; i++) {
+                        pollQueue.push(makeChunkKey(worldName, aheadCx + i, aheadCz));
+                    }
+                    triggerPoll();
+                    lastPollTime = now;
+                }
+            } else {
+                if (hasMovedSubstantially) {
+                    pollQueue = []; // Cancel pending polls
+                    // Immediately poll 3 chunks ahead
+                    const lookahead = playerDirection.clone().multiplyScalar(CHUNK_SIZE * 3);
+                    const aheadPos = new THREE.Vector3(player.x, player.y, player.z).add(lookahead);
+                    const aheadCx = Math.floor(aheadPos.x / CHUNK_SIZE);
+                    const aheadCz = Math.floor(aheadPos.z / CHUNK_SIZE);
+                    for (let i = 0; i < 3; i++) {
+                        pollQueue.push(makeChunkKey(worldName, aheadCx + i, aheadCz));
+                    }
+                    // Then poll in a square around the player
+                    for (let r = 1; r <= POLL_RADIUS; r++) {
+                        for (let dx = -r; dx <= r; dx++) {
+                            for (let dz = -r; dz <= r; dz++) {
+                                if (Math.abs(dx) === r || Math.abs(dz) === r) {
+                                    pollQueue.push(makeChunkKey(worldName, pcx + dx, pcz + dz));
+                                }
+                            }
+                        }
+                    }
+                    triggerPoll();
+                    hasMovedSubstantially = false;
+                } else if (now - lastPollTime > 30000) {
+                    // Refresh current area every 30 seconds if still
+                    triggerPoll();
+                    lastPollTime = now;
+                }
+            }
+
             requestAnimationFrame(gameLoop);
         }
         console.log('[Debug] Script loaded');
