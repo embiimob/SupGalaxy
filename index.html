@@ -2437,7 +2437,7 @@ self.onmessage = async function(e) {
                     var uvAttr = box.attributes.uv.array;
                     var idxAttr = box.index.array;
                     for (var vi = 0; vi < box.attributes.position.count; vi++) {
-                        positions.push(posAttr[vi * 3 + 0] + p.x, posAttr[vi * 3 + 1] + p.y, posAttr[vi * 3 + 2] + p.z);
+                        positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
                         normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
                         uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
                     }
@@ -2761,19 +2761,19 @@ self.onmessage = async function(e) {
             var headMat = new THREE.MeshStandardMaterial({ color: 0xf2c57c });
             var armMat = new THREE.MeshStandardMaterial({ color: 0xf2c57c });
 
-            var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4); // Shorter legs
+            var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             var bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
             var headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             var armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
 
             var leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0); // Adjusted Y position
+            leftLeg.position.set(-0.25, 0.4, 0);
             var rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0); // Adjusted Y position
+            rightLeg.position.set(0.25, 0.4, 0);
             var body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0); // Adjusted Y position
+            body.position.set(0, 1.4, 0);
             var head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0); // Adjusted Y position
+            head.position.set(0, 2.3, 0);
             var leftArm = new THREE.Mesh(armGeo, armMat);
             leftArm.position.set(-0.55, 1.5, 0);
             var rightArm = new THREE.Mesh(armGeo, armMat);
@@ -2792,19 +2792,19 @@ self.onmessage = async function(e) {
             const headMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
             const armMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
 
-            const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4); // Shorter legs
+            const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
             const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             const armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
 
             const leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0); // Adjusted Y position
+            leftLeg.position.set(-0.25, 0.4, 0);
             const rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0); // Adjusted Y position
+            rightLeg.position.set(0.25, 0.4, 0);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0); // Adjusted Y position
+            body.position.set(0, 1.4, 0);
             const head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0); // Adjusted Y position
+            head.position.set(0, 2.3, 0);
             const leftArm = new THREE.Mesh(armGeo, armMat);
             leftArm.position.set(-0.55, 1.5, 0);
             const rightArm = new THREE.Mesh(armGeo, armMat);
