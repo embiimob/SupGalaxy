@@ -1271,19 +1271,21 @@ async function getKeywordByPublicAddress(address) {
     }
 }
 async function fetchIPFS(hash) {
-    try {
-        await new Promise(resolve => setTimeout(resolve, apiDelay));
-        var response = await fetch("https://ipfs.io/ipfs/" + hash);
-        if (!response.ok) {
+    let attempts = 0;
+    while (attempts < 3) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
+            var response = await fetch("https://ipfs.io/ipfs/" + hash);
+            if (response.ok) {
+                return await response.json();
+            }
             console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
-            return null;
+        } catch (e) {
+            console.error('[Worker] Error fetching IPFS for hash:', hash, e);
         }
-        var data = await response.json();
-        return data;
-    } catch (e) {
-        console.error('[Worker] Error fetching IPFS for hash:', hash, e);
-        return null;
+        attempts++;
     }
+    return null;
 }
 self.onmessage = async function(e) {
     var data = e.data;
@@ -1951,6 +1953,33 @@ self.onmessage = async function(e) {
             }
 
             var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
+
+            var playerDirection = new THREE.Vector3();
+            camera.getWorldDirection(playerDirection);
+
+            chunkKeys.sort((a, b) => {
+                const parsedA = parseChunkKey(a);
+                const parsedB = parseChunkKey(b);
+                if (!parsedA || !parsedB) return 0;
+
+                const posA = new THREE.Vector3(parsedA.cx * CHUNK_SIZE, 0, parsedA.cz * CHUNK_SIZE);
+                const posB = new THREE.Vector3(parsedB.cx * CHUNK_SIZE, 0, parsedB.cz * CHUNK_SIZE);
+
+                const distA = posA.distanceTo(player);
+                const distB = posB.distanceTo(player);
+
+                const dirA = posA.sub(player).normalize();
+                const dirB = posB.sub(player).normalize();
+
+                const dotA = playerDirection.dot(dirA);
+                const dotB = playerDirection.dot(dirB);
+
+                if (dotA > 0.5 && dotB < 0.5) return -1;
+                if (dotB > 0.5 && dotA < 0.5) return 1;
+
+                return distA - distB;
+            });
+
             var filteredKeys = chunkKeys.filter(function (key) {
                 var parsed = parseChunkKey(key);
                 if (!parsed) return false;
@@ -5855,7 +5884,7 @@ function activateHost() {
                             // Interpolate rotation using quaternions for smooth slerp
                             const prevQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.prevPitch, userState.prevYaw, 0, 'YXZ'));
                             const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.targetPitch, userState.targetYaw, 0, 'YXZ'));
-                            THREE.Quaternion.slerp(prevQuaternion, targetQuaternion, avatar.quaternion, alpha);
+                            avatar.quaternion.slerpQuaternions(prevQuaternion, targetQuaternion, alpha);
 
                         } else if (userState.targetX !== undefined) {
                              // If no previous state, just jump to target
