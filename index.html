@@ -3733,30 +3733,6 @@ self.onmessage = async function(e) {
             }
         }
 
-async function announceServer() {
-    const modal = document.getElementById('joinScriptModal');
-    if (!modal) {
-        console.error('[WebRTC] joinScriptModal not found in DOM');
-        addMessage('UI error: Modal not found', 5000);
-        return;
-    }
-
-    const serverKeyword = 'MCServers@' + worldName;
-    let serverAddr = null;
-    try {
-        serverAddr = await GetPublicAddressByKeyword(serverKeyword);
-    } catch (e) {
-        console.error('[WebRTC] Failed to fetch server address:', e);
-    }
-
-    const addressText = serverAddr ? serverAddr.trim().replace(/"|'/g, '') : serverKeyword;
-    modal.querySelector('h3').innerText = 'Announce Server';
-    modal.querySelector('p').innerText = `Copy this address and paste it into a Sup!? message To: field and click 📢 to announce your server.`;
-    modal.querySelector('#joinScriptText').value = addressText;
-    modal.style.display = 'block';
-    isPromptOpen = true;
-    addMessage('Server announcement modal opened.', 3000);
-}
 
         async function connectToServer(hostUser, offer, iceCandidates) {
             if (peers.size >= MAX_PEERS) {
@@ -5290,7 +5266,6 @@ function activateHost() {
                     document.getElementById('joinScriptText').value = joinScript;
                     document.getElementById('joinScriptModal').style.display = 'block';
                 });
-                document.getElementById('announceBtn').addEventListener('click', announceServer);
                 document.getElementById('usersBtn').addEventListener('click', openUsersModal);
                 document.getElementById('closeCraft').addEventListener('click', function () {
                     isPromptOpen = false;
