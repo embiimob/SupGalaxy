@@ -692,7 +692,7 @@
         var MASTER_WORLD_KEY = 'MCWorlds';
         var PENDING_PERIOD = 30 * 24 * 60 * 60 * 1000;
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
-        var API_CALLS_PER_SECOND = 8;
+        var API_CALLS_PER_SECOND = 3;
         var POLL_RADIUS = 5;
         var LOAD_RADIUS = 8;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
@@ -1147,7 +1147,7 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
-var API_CALLS_PER_SECOND = 8;
+var API_CALLS_PER_SECOND = 3;
 var apiDelay = 350;
 async function fetchData(url) {
     try {
@@ -3579,26 +3579,6 @@ self.onmessage = async function(e) {
                 }
             }
             minimapCtx.fillStyle = '#ff6b6b';
-            for (const [key, particleSystem] of torchParticles.entries()) {
-                const positions = particleSystem.geometry.attributes.position.array;
-                const velocities = particleSystem.geometry.velocities;
-
-                for (let i = 0; i < velocities.length; i++) {
-                    positions[i * 3] += velocities[i].x;
-                    positions[i * 3 + 1] += velocities[i].y;
-                    positions[i * 3 + 2] += velocities[i].z;
-
-                    velocities[i].life -= dt;
-
-                    if (velocities[i].life <= 0) {
-                        positions[i * 3] = particleSystem.position.x;
-                        positions[i * 3 + 1] = particleSystem.position.y;
-                        positions[i * 3 + 2] = particleSystem.position.z;
-                        velocities[i].life = Math.random() * 1;
-                    }
-                }
-                particleSystem.geometry.attributes.position.needsUpdate = true;
-            }
             for (var entry of playerAvatars) {
                 var username = entry[0];
                 var avatar = entry[1];
@@ -5745,6 +5725,27 @@ function activateHost() {
                 chunkManager.update(player.x, player.z);
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
+
+                for (const [key, particleSystem] of torchParticles.entries()) {
+                    const positions = particleSystem.geometry.attributes.position.array;
+                    const velocities = particleSystem.geometry.velocities;
+
+                    for (let i = 0; i < velocities.length; i++) {
+                        positions[i * 3] += velocities[i].x;
+                        positions[i * 3 + 1] += velocities[i].y;
+                        positions[i * 3 + 2] += velocities[i].z;
+
+                        velocities[i].life -= dt;
+
+                        if (velocities[i].life <= 0) {
+                            positions[i * 3] = particleSystem.position.x;
+                            positions[i * 3 + 1] = particleSystem.position.y;
+                            positions[i * 3 + 2] = particleSystem.position.z;
+                            velocities[i].life = Math.random() * 1;
+                        }
+                    }
+                    particleSystem.geometry.attributes.position.needsUpdate = true;
+                }
                 updateMinimap();
                 var posLabel = document.getElementById('posLabel');
                 if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
