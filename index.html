@@ -780,7 +780,8 @@
         var worldName = 'KANYE';
         var userName = 'player';
         var userAddress = 'anonymous';
-        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false, health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
+        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false,
+health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
         var isAttacking = false;
         var attackStartTime = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -3464,33 +3465,30 @@ self.onmessage = async function(e) {
             }
             return false;
         }
-        function checkCollision(x, y, z) {
-            // x, y, z are the center-bottom coordinates of the player's hitbox
-            const minX = Math.floor(x - player.width / 2);
-            const maxX = Math.floor(x + player.width / 2);
-            const minY = Math.floor(y);
-            const maxY = Math.floor(y + player.height);
-            const minZ = Math.floor(z - player.depth / 2);
-            const maxZ = Math.floor(z + player.depth / 2);
-
-            // Iterate through every block the bounding box could be touching.
-            for (let iy = minY; iy <= maxY; iy++) {
-                for (let ix = minX; ix <= maxX; ix++) {
-                    for (let iz = minZ; iz <= maxZ; iz++) {
-                        if (isSolid(getBlockAt(ix, iy, iz))) {
-                            return true; // Collision detected
+        function checkCollision(newX, newY, newZ) {
+            var minX = newX - player.width / 2 + 0.001;
+            var minY = newY + 0.001;
+            var maxX = newX + player.width / 2 - 0.001;
+            var maxY = newY + player.height - 0.001;
+            var minZ = newZ - player.depth / 2 + 0.001;
+            var maxZ = newZ + player.depth / 2 - 0.001;
+            for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
+                for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
+                    for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+                        if (isSolid(getBlockAt(bx, by, bz))) {
+                            return true;
                         }
                     }
                 }
             }
-            return false; // No collision
+            return false;
         }
         function pushPlayerOut() {
             var directions = [
                 { dx: 0.2, dz: 0 }, { dx: -0.2, dz: 0 }, { dx: 0, dz: 0.2 }, { dx: 0, dz: -0.2 },
                 { dx: 0.2, dz: 0.2 }, { dx: 0.2, dz: -0.2 }, { dx: -0.2, dz: 0.2 }, { dx: -0.2, dz: -0.2 }
             ];
-        for (var yOffset = 0; yOffset <= player.height; yOffset += 0.2) {
+            for (var yOffset = 0; yOffset <= 2; yOffset += 0.2) {
                 for (var dir of directions) {
                     var newX = modWrap(player.x + dir.dx, MAP_SIZE);
                     var newZ = modWrap(player.z + dir.dz, MAP_SIZE);
@@ -5711,37 +5709,34 @@ function activateHost() {
                 moveVec.addScaledVector(rightDir, mvx);
                 const isMoving = moveVec.length() > 0.001;
                 if (isMoving) moveVec.normalize();
-                // --- Vertical Movement and Collision ---
-                player.vy -= 16.0 * dt; // Apply gravity
-                var dy = player.vy * dt;
-                var newY = player.y + dy;
-
-                if (!checkCollision(player.x, newY, newZ)) {
-                    player.y = newY;
-                    player.onGround = false;
-                } else {
-                    if (dy < 0) { // Moving down
-                        player.y = Math.ceil(newY) + 0.001; // Add tolerance
-                        player.vy = 0;
-                        player.onGround = true;
-                    } else if (dy > 0) { // Moving up
-                        player.y = Math.floor(newY + player.height) - player.height;
-                        player.vy = 0;
-                    }
-                }
-
-                // --- Horizontal Movement and Collision (Separated Axes) ---
                 var dx = moveVec.x * speed * dt;
+                var dz = moveVec.z * speed * dt;
+
                 var newX = modWrap(player.x + dx, MAP_SIZE);
                 if (!checkCollision(newX, player.y, player.z)) {
                     player.x = newX;
                 }
 
-                var dz = moveVec.z * speed * dt;
                 var newZ = modWrap(player.z + dz, MAP_SIZE);
-                // Use the (potentially updated) player.x for this check
                 if (!checkCollision(player.x, player.y, newZ)) {
                     player.z = newZ;
+                }
+
+                player.vy -= 16.0 * dt;
+                var dy = player.vy * dt;
+                var newY = player.y + dy;
+                if (!checkCollision(player.x, newY, newZ)) {
+                    player.y = newY;
+                    player.onGround = false;
+                } else {
+                    if (dy < 0) {
+                        player.y = Math.ceil(newY - 0.001);
+                        player.vy = 0;
+                        player.onGround = true;
+                    } else if (dy > 0) {
+                        player.y = Math.floor(newY + player.height) - player.height;
+                        player.vy = 0;
+                    }
                 }
                 if (checkCollision(player.x, player.y, player.z)) {
                     if (!pushPlayerOut()) {
