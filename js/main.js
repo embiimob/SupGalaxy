@@ -359,7 +359,7 @@ function gameLoop(now) {
                     // Interpolate rotation using quaternions for smooth slerp
                     const prevQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.prevPitch, userState.prevYaw, 0, 'YXZ'));
                     const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.targetPitch, userState.targetYaw, 0, 'YXZ'));
-                    THREE.Quaternion.slerp(prevQuaternion, targetQuaternion, avatar.quaternion, alpha);
+                            avatar.quaternion.slerpQuaternions(prevQuaternion, targetQuaternion, alpha);
 
                 } else if (userState.targetX !== undefined) {
                      // If no previous state, just jump to target

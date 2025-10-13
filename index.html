@@ -692,9 +692,9 @@
         var MASTER_WORLD_KEY = 'MCWorlds';
         var PENDING_PERIOD = 30 * 24 * 60 * 60 * 1000;
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
-        var API_CALLS_PER_SECOND = 8;
-        var POLL_RADIUS = 3;
-        var LOAD_RADIUS = 5;
+        var API_CALLS_PER_SECOND = 3;
+        var POLL_RADIUS = 5;
+        var LOAD_RADIUS = 8;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'Sup!? viewer v0.2.1';
         var POLL_INTERVAL = 30000;
@@ -737,6 +737,7 @@
             117: { name: 'Glass Tile', color: '#aeeaff', transparent: true },
             118: { name: 'Sandstone', color: '#e3c27d' },
             119: { name: 'Cobblestone', color: '#7d7d7d' },
+            120: { name: 'Torch', color: '#ff9900', light: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -767,6 +768,7 @@
             { id: 'glass_tile', out: { id: 117, count: 2 }, requires: { 100: 2 } },
             { id: 'sandstone', out: { id: 118, count: 2 }, requires: { 5: 2 } },
             { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
+            { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
         ];
         var scene, camera, renderer, controls;
         var meshGroup;
@@ -797,6 +799,15 @@
         var lastFrame = performance.now();
         var mouseLocked = false;
         var deathScreenShown = false;
+        var lastPollPosition = new THREE.Vector3();
+        var pauseTimer = 0;
+        var lastMoveTime = 0;
+        var hasMovedSubstantially = false;
+        var isConnecting = false;
+        var radarAngle = 0;
+        var pollQueue = [];
+        var lastPollTime = 0;
+        var isPlayerMoving = false;
         var soundBreak = document.getElementById('soundBreak');
         var soundPlace = document.getElementById('soundPlace');
         var soundJump = document.getElementById('soundJump');
@@ -814,6 +825,8 @@
         var apiCallTimestamps = [];
         var audioErrorLogged = false;
         var sun, moon, stars, clouds;
+        var torchLights = new Map();
+        var torchParticles = new Map();
         var INVENTORY = new Array(32).fill(null);
         var isPromptOpen = false;
         var userPositions = {};
@@ -855,7 +868,14 @@
             // Using a public STUN server as a fallback.
             // This will not work for all network configurations (symmetric NATs).
             console.warn("Using fallback STUN server. For production, a secure TURN server is recommended for robust connectivity.");
-            return [{ urls: 'stun:stun.l.google.com:19302' }];
+            return [
+                { urls: 'stun:stun.l.google.com:19302' },
+                {
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject",
+                },
+            ];
         }
 
         async function GetPublicAddressByKeyword(keyword) {
@@ -1009,6 +1029,7 @@ const BLOCKS = {
     115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
     117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
     119: { name: 'Cobblestone', color: '#7d7d7d' },
+    120: { name: 'Torch', color: '#ff9900', light: true },
 };
 
 const BIOMES = [
@@ -1142,7 +1163,7 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
-var API_CALLS_PER_SECOND = 8;
+var API_CALLS_PER_SECOND = 3;
 var apiDelay = 350;
 async function fetchData(url) {
     try {
@@ -1255,19 +1276,21 @@ async function getKeywordByPublicAddress(address) {
     }
 }
 async function fetchIPFS(hash) {
-    try {
-        await new Promise(resolve => setTimeout(resolve, apiDelay));
-        var response = await fetch("https://ipfs.io/ipfs/" + hash);
-        if (!response.ok) {
+    let attempts = 0;
+    while (attempts < 3) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
+            var response = await fetch("https://ipfs.io/ipfs/" + hash);
+            if (response.ok) {
+                return await response.json();
+            }
             console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
-            return null;
+        } catch (e) {
+            console.error('[Worker] Error fetching IPFS for hash:', hash, e);
         }
-        var data = await response.json();
-        return data;
-    } catch (e) {
-        console.error('[Worker] Error fetching IPFS for hash:', hash, e);
-        return null;
+        attempts++;
     }
+    return null;
 }
 self.onmessage = async function(e) {
     var data = e.data;
@@ -1914,58 +1937,60 @@ self.onmessage = async function(e) {
                 }
             }
         };
+        function triggerPoll() {
+            if (isPromptOpen) {
+                console.log('[Worker] Skipping poll, prompt open');
+                return;
+            }
+            var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
+            var pendingKeys = Array.from(pending);
+            if (pendingKeys.length > 0) {
+                worker.postMessage({
+                    type: 'cleanup_pending',
+                    pcx: pcx,
+                    pcz: pcz,
+                    pendingKeys: pendingKeys,
+                    chunksPerSide: CHUNKS_PER_SIDE,
+                    pollRadius: POLL_RADIUS
+                });
+            }
+
+            var filteredKeys = pollQueue.length > 0 ? pollQueue : Array.from(chunkManager ? chunkManager.chunks.keys() : []).filter(function (key) {
+                var parsed = parseChunkKey(key);
+                if (!parsed) return false;
+                var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
+                var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
+                return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
+            });
+            pollQueue = [];
+            var serverKeyword = 'MCServerJoin@' + worldName;
+            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            var answerKeywords = [];
+            for (var peer of peers) {
+                var peerUser = peer[0];
+                if (peerUser !== userName) {
+                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                }
+            }
+            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            worker.postMessage({
+                type: 'poll',
+                chunkKeys: filteredKeys,
+                masterKey: MASTER_WORLD_KEY,
+                userAddress: userAddress,
+                worldName: worldName,
+                serverKeyword: serverKeyword,
+                offerKeyword: offerKeyword,
+                answerKeywords: answerKeywords,
+                userName: userName
+            });
+        }
+
         function startWorker() {
             console.log('[Worker] Initializing worker with isHost:', isHost, 'userName:', userName, 'worldName:', worldName);
-            setInterval(function () {
-                if (isPromptOpen) {
-                    console.log('[Worker] Skipping poll, prompt open');
-                    return;
-                }
-                var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
-                var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
-
-                var pendingKeys = Array.from(pending);
-                if (pendingKeys.length > 0) {
-                    worker.postMessage({
-                        type: 'cleanup_pending',
-                        pcx: pcx,
-                        pcz: pcz,
-                        pendingKeys: pendingKeys,
-                        chunksPerSide: CHUNKS_PER_SIDE,
-                        pollRadius: POLL_RADIUS
-                    });
-                }
-
-                var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
-                var filteredKeys = chunkKeys.filter(function (key) {
-                    var parsed = parseChunkKey(key);
-                    if (!parsed) return false;
-                    var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
-                    var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
-                    return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
-                });
-                var serverKeyword = 'MCServerJoin@' + worldName;
-                var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
-                var answerKeywords = [];
-                for (var peer of peers) {
-                    var peerUser = peer[0];
-                    if (peerUser !== userName) {
-                        answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
-                    }
-                }
-                console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
-                worker.postMessage({
-                    type: 'poll',
-                    chunkKeys: filteredKeys,
-                    masterKey: MASTER_WORLD_KEY,
-                    userAddress: userAddress,
-                    worldName: worldName,
-                    serverKeyword: serverKeyword,
-                    offerKeyword: offerKeyword,
-                    answerKeywords: answerKeywords,
-                    userName: userName
-                });
-            }, POLL_INTERVAL);
+            // The polling is now triggered by player movement and pauses in the gameLoop.
         }
         function checkChunkOwnership(chunkKey, username) {
             const normalizedKey = chunkKey.replace(/^#/, '');
@@ -2104,70 +2129,180 @@ self.onmessage = async function(e) {
             y += 2;
             return { x: x, y: y, z: z };
         }
+        var skyProps;
+        function createCloudTexture(seed) {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const noise = makeNoise(seed + '_clouds');
+
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const value = fbm(noise, i / 32, j / 32, 4, 0.5) * 255;
+                    const alpha = Math.max(0, value - 128);
+                    context.fillStyle = `rgba(255, 255, 255, ${alpha / 128})`;
+                    context.fillRect(i, j, 1, 1);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
         function initSky() {
-            sun = new THREE.Mesh(
-                new THREE.SphereGeometry(10, 32, 32),
-                new THREE.MeshBasicMaterial({ color: 0xffff00 })
-            );
-            moon = new THREE.Mesh(
-                new THREE.SphereGeometry(8, 32, 32),
-                new THREE.MeshBasicMaterial({ color: 0xcccccc })
-            );
+            const skyRnd = makeSeededRandom(worldSeed + '_sky');
+            const baseHue = skyRnd();
+            const baseSat = 0.5 + skyRnd() * 0.5;
+            const dayLightness = 0.6 + skyRnd() * 0.2;
+            const nightLightness = 0.05 + skyRnd() * 0.05;
+
+            skyProps = {
+                dayColor: new THREE.Color().setHSL(baseHue, baseSat, dayLightness),
+                nightColor: new THREE.Color().setHSL(baseHue, baseSat * 0.8, nightLightness),
+                cloudColor: new THREE.Color().setHSL(skyRnd(), 0.2 + skyRnd() * 0.3, 0.8),
+                suns: [],
+                moons: []
+            };
+
+            const numSuns = 1 + Math.floor(skyRnd() * 3); // 1 to 3 suns
+            for (let i = 0; i < numSuns; i++) {
+                const sunSize = 10 + skyRnd() * 20;
+                const sunColor = new THREE.Color().setHSL(skyRnd(), 0.8 + skyRnd() * 0.2, 0.6 + skyRnd() * 0.2);
+                const sun = new THREE.Mesh(
+                    new THREE.SphereGeometry(sunSize, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: sunColor })
+                );
+                skyProps.suns.push({ mesh: sun, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(sun);
+            }
+
+            const numMoons = Math.floor(skyRnd() * 4); // 0 to 3 moons
+            for (let i = 0; i < numMoons; i++) {
+                const moonSize = 5 + skyRnd() * 15;
+                const moonColor = new THREE.Color().setHSL(skyRnd(), 0.1 + skyRnd() * 0.2, 0.7 + skyRnd() * 0.2);
+                const moonShape = skyRnd() > 0.5 ? new THREE.SphereGeometry(moonSize, 32, 32) : new THREE.BoxGeometry(moonSize, moonSize, moonSize);
+                const moon = new THREE.Mesh(
+                    moonShape,
+                    new THREE.MeshBasicMaterial({ color: moonColor })
+                );
+                skyProps.moons.push({ mesh: moon, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(moon);
+            }
+
             stars = new THREE.Group();
-            var starGeometry = new THREE.BufferGeometry();
-            var starVertices = [];
-            var starNoise = makeNoise(worldSeed + '_stars');
-            for (var i = 0; i < 1000; i++) {
-                var theta = Math.random() * Math.PI * 2;
-                var phi = Math.acos(2 * Math.random() - 1);
-                var x = 1000 * Math.sin(phi) * Math.cos(theta);
-                var y = 1000 * Math.sin(phi) * Math.sin(theta);
-                var z = 1000 * Math.cos(phi);
-                if (starNoise(x * 0.01, z * 0.01) > 0.7) {
+            const starGeometry = new THREE.BufferGeometry();
+            const starVertices = [];
+            const starNoise = makeNoise(worldSeed + '_stars');
+            for (let i = 0; i < 5000; i++) {
+                const theta = skyRnd() * Math.PI * 2;
+                const phi = Math.acos(2 * skyRnd() - 1);
+                const x = 4000 * Math.sin(phi) * Math.cos(theta);
+                const y = 4000 * Math.sin(phi) * Math.sin(theta);
+                const z = 4000 * Math.cos(phi);
+                if (starNoise(x * 0.005, z * 0.005) > 0.7) {
                     starVertices.push(x, y, z);
                 }
             }
             starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-            var starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 });
-            var starPoints = new THREE.Points(starGeometry, starMaterial);
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 + skyRnd() * 3 });
+            const starPoints = new THREE.Points(starGeometry, starMaterial);
             stars.add(starPoints);
+            scene.add(stars);
+
             clouds = new THREE.Group();
-            for (var i = 0; i < 20; i++) {
-                var cloud = new THREE.Mesh(
-                    new THREE.PlaneGeometry(50, 50),
-                    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+            const cloudTexture = createCloudTexture(worldSeed);
+            const numClouds = Math.floor(skyRnd() * 80);
+            for (let i = 0; i < numClouds; i++) {
+                const cloud = new THREE.Mesh(
+                    new THREE.PlaneGeometry(200 + skyRnd() * 300, 100 + skyRnd() * 150),
+                    new THREE.MeshBasicMaterial({
+                        map: cloudTexture,
+                        color: skyProps.cloudColor,
+                        transparent: true,
+                        opacity: 0.6 + skyRnd() * 0.3,
+                        side: THREE.DoubleSide
+                    })
                 );
                 cloud.position.set(
-                    (Math.random() - 0.5) * 2000,
-                    100 + Math.random() * 50,
-                    (Math.random() - 0.5) * 2000
+                    (skyRnd() - 0.5) * 8000,
+                    200 + skyRnd() * 150,
+                    (skyRnd() - 0.5) * 8000
                 );
+                cloud.rotation.y = skyRnd() * Math.PI * 2;
                 clouds.add(cloud);
             }
-            scene.add(sun, moon, stars, clouds);
+            scene.add(clouds);
         }
+
         function updateSky(dt) {
-            var now = new Date();
-            var hours = now.getHours() + now.getMinutes() / 60;
-            var t = (hours / 24) * Math.PI * 2;
-            var isNight = hours >= 18 || hours < 6;
-            var sunAngle = t;
-            var moonAngle = t + Math.PI;
-            sun.position.set(1000 * Math.cos(sunAngle), 1000 * Math.sin(sunAngle), 0);
-            moon.position.set(1000 * Math.cos(moonAngle), 1000 * Math.sin(moonAngle), 0);
-            stars.visible = isNight;
-            clouds.children.forEach(function (cloud) {
-                cloud.position.x = modWrap(cloud.position.x + dt * 10, 2000);
-                cloud.lookAt(camera.position);
+            const now = new Date();
+            const hours = now.getHours() + now.getMinutes() / 60;
+            const timeRatio = hours / 24;
+            const timeAngle = timeRatio * Math.PI * 2;
+
+            const sunAngleForLight = timeAngle + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0);
+            const sunY = Math.sin(sunAngleForLight);
+            const isNight = sunY < -0.1;
+
+            skyProps.suns.forEach(sun => {
+                const angle = timeAngle + sun.angleOffset;
+                sun.mesh.position.set(4000 * Math.cos(angle), 4000 * Math.sin(angle), 1500 * Math.sin(angle));
+                sun.mesh.visible = Math.sin(angle) > -0.1;
             });
-            var dayColor = new THREE.Color(0x87ceeb);
-            var nightColor = new THREE.Color(0x1c2526);
-            var tNorm = Math.sin(t) * 0.5 + 0.5;
-            scene.background = dayColor.lerp(nightColor, tNorm);
-            var ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
-            ambientLight.intensity = isNight ? 0.2 : 0.45;
-            sun.visible = !isNight;
-            moon.visible = isNight;
+
+            skyProps.moons.forEach(moon => {
+                const angle = timeAngle + moon.angleOffset + Math.PI;
+                moon.mesh.position.set(3800 * Math.cos(angle), 3800 * Math.sin(angle), 1200 * Math.sin(angle));
+                moon.mesh.visible = Math.sin(angle) > -0.1;
+            });
+
+            stars.visible = isNight;
+            stars.rotation.y += dt * 0.005;
+
+            clouds.children.forEach(cloud => {
+                cloud.position.x = modWrap(cloud.position.x + dt * (15 + Math.random() * 10), 8000);
+            });
+
+            const tNorm = Math.max(0, sunY);
+            scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
+
+            const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
+            ambientLight.intensity = isNight ? 0.05 : 0.6;
+        }
+
+        function createFlameParticles(x, y, z) {
+            const particleCount = 20;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 0.01,
+                    y: Math.random() * 0.05,
+                    z: (Math.random() - 0.5) * 0.01,
+                    life: Math.random() * 1
+                });
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.velocities = velocities;
+
+            const material = new THREE.PointsMaterial({
+                color: 0xffaa33,
+                size: 0.2,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const particleSystem = new THREE.Points(particles, material);
+            particleSystem.position.set(x, y, z);
+            return particleSystem;
         }
         function Chunk(cx, cz) {
             this.cx = cx;
@@ -2446,15 +2581,32 @@ self.onmessage = async function(e) {
                     this.preloadChunks(peerCx, peerCz, 2);
                 }
             }
-            for (var entry of this.chunks) {
-                var k = entry[0];
-                var ch = entry[1];
-                if (!needed.has(k)) {
-                    if (ch.mesh) {
-                        meshGroup.remove(ch.mesh);
-                        disposeObject(ch.mesh);
-                        ch.mesh = null;
+            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 1.5;
+            if (this.chunks.size > maxChunks) {
+                let chunks = Array.from(this.chunks.values());
+                chunks.sort((a, b) => {
+                    const distA = Math.hypot(a.cx - pcx, a.cz - pcz);
+                    const distB = Math.hypot(b.cx - pcx, b.cz - pcz);
+                    return distB - distA;
+                });
+
+                for (let i = 0; i < chunks.length && this.chunks.size > maxChunks; i++) {
+                    const ch = chunks[i];
+                    if (!needed.has(ch.key)) {
+                        if (ch.mesh) {
+                            meshGroup.remove(ch.mesh);
+                            disposeObject(ch.mesh);
+                        }
+                        this.chunks.delete(ch.key);
                     }
+                }
+            }
+
+            // Make all needed chunks visible
+            for (const key of needed) {
+                const chunk = this.chunks.get(key);
+                if (chunk && chunk.mesh) {
+                    chunk.mesh.visible = true;
                 }
             }
         };
@@ -2463,7 +2615,7 @@ self.onmessage = async function(e) {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87ceeb);
             console.log('[initThree] Scene created');
-            camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 2000);
+            camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 10000);
             camera.position.set(0, 34, 0);
             console.log('[initThree] Camera created');
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -2876,6 +3028,23 @@ self.onmessage = async function(e) {
             addToInventory(b, 1);
             addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b));
             safePlayAudio(soundBreak);
+
+            if (BLOCKS[b] && BLOCKS[b].light) {
+                var lightKey = `${wx},${wy},${wz}`;
+                if (torchLights.has(lightKey)) {
+                    var light = torchLights.get(lightKey);
+                    scene.remove(light);
+                    light.dispose();
+                    torchLights.delete(lightKey);
+                }
+                if (torchParticles.has(lightKey)) {
+                    var particles = torchParticles.get(lightKey);
+                    scene.remove(particles);
+                    particles.geometry.dispose();
+                    particles.material.dispose();
+                    torchParticles.delete(lightKey);
+                }
+            }
         }
         function placeBlockAt(wx, wy, wz, bid) {
             if (!bid) {
@@ -2921,6 +3090,17 @@ self.onmessage = async function(e) {
             addMessage('Placed ' + (BLOCKS[bid] ? BLOCKS[bid].name : bid));
             updateHotbarUI();
             safePlayAudio(soundPlace);
+
+            if (BLOCKS[bid] && BLOCKS[bid].light) {
+                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                light.position.set(wx, wy + 0.5, wz);
+                scene.add(light);
+                torchLights.set(`${wx},${wy},${wz}`, light);
+
+                var particles = createFlameParticles(wx, wy + 0.5, wz);
+                scene.add(particles);
+                torchParticles.set(`${wx},${wy},${wz}`, particles);
+            }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
             var minX = player.x - player.width / 2;
@@ -3430,6 +3610,27 @@ self.onmessage = async function(e) {
                     minimapCtx.fillRect(px - 2, pz - 2, 4, 4);
                 }
             }
+
+            if (isConnecting) {
+                radarAngle += 0.05;
+                var gradient = minimapCtx.createRadialGradient(cx, cz, 0, cx, cz, canvas.width / 2);
+                gradient.addColorStop(0, 'rgba(0, 255, 0, 0.5)');
+                gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+
+                minimapCtx.save();
+                minimapCtx.translate(cx, cz);
+                minimapCtx.rotate(radarAngle);
+                minimapCtx.translate(-cx, -cz);
+
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(cx, cz);
+                minimapCtx.arc(cx, cz, canvas.width / 2, 0, Math.PI / 4);
+                minimapCtx.closePath();
+                minimapCtx.fillStyle = gradient;
+                minimapCtx.fill();
+
+                minimapCtx.restore();
+            }
         }
         var keys = {};
         function registerKeyEvents() {
@@ -3747,9 +3948,11 @@ self.onmessage = async function(e) {
                 return;
             }
             console.log('[WebRTC] Initiating connection to server:', hostUser);
+            isConnecting = true;
             connectionAttempts.set(hostUser, Date.now());
             const iceServers = await getTurnCredentials();
             var pc = new RTCPeerConnection({ iceServers });
+            pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${hostUser}: ${pc.iceConnectionState}`);
             var dc = pc.createDataChannel('game');
             setupDataChannel(dc, hostUser);
             try {
@@ -3933,6 +4136,7 @@ self.onmessage = async function(e) {
            console.log(`[WebRTC] Setting up data channel for: ${user}`);
             dc.onopen = () => {
                 console.log(`[WebRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
+                isConnecting = false;
                 addMessage(`Connection established with ${user}`, 3000);
 
                 // Send initial player position
@@ -4225,6 +4429,7 @@ function activateHost() {
         try {
             const iceServers = await getTurnCredentials();
             const pc = new RTCPeerConnection({ iceServers });
+            pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
             peers.set(clientUser, { pc, dc: null, address: offer.profile ? offer.profile.Creators[0] : null });
             pc.ondatachannel = (e) => {
                 const dc = e.channel;
@@ -4257,8 +4462,10 @@ function activateHost() {
                 console.log('[WebRTC] Connection state for', clientUser, ':', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     addMessage('Connected to ' + clientUser, 3000);
+                    isConnecting = false;
                 } else if (pc.connectionState === 'failed') {
                     addMessage('Connection failed with ' + clientUser, 3000);
+                    isConnecting = false;
                     pc.close();
                     peers.delete(clientUser);
                 }
@@ -5123,6 +5330,7 @@ function activateHost() {
                     console.log('[Login] Initializing Three.js');
                     initThree();
                     console.log('[Login] Three.js initialized');
+                    INVENTORY[0] = { id: 120, count: 8 };
                     initHotbar();
                     console.log('[Login] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
@@ -5564,6 +5772,27 @@ function activateHost() {
                 chunkManager.update(player.x, player.z);
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
+
+                for (const [key, particleSystem] of torchParticles.entries()) {
+                    const positions = particleSystem.geometry.attributes.position.array;
+                    const velocities = particleSystem.geometry.velocities;
+
+                    for (let i = 0; i < velocities.length; i++) {
+                        positions[i * 3] += velocities[i].x;
+                        positions[i * 3 + 1] += velocities[i].y;
+                        positions[i * 3 + 2] += velocities[i].z;
+
+                        velocities[i].life -= dt;
+
+                        if (velocities[i].life <= 0) {
+                            positions[i * 3] = particleSystem.position.x;
+                            positions[i * 3 + 1] = particleSystem.position.y;
+                            positions[i * 3 + 2] = particleSystem.position.z;
+                            velocities[i].life = Math.random() * 1;
+                        }
+                    }
+                    particleSystem.geometry.attributes.position.needsUpdate = true;
+                }
                 updateMinimap();
                 var posLabel = document.getElementById('posLabel');
                 if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
@@ -5579,6 +5808,7 @@ function activateHost() {
 
                 if (now - lastUpdateTime > 50 && (positionChanged || rotationChanged)) {
                     lastUpdateTime = now;
+                    lastMoveTime = now;
                     lastSentPosition = { x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch };
                     const message = {
                         type: 'player_move',
@@ -5657,7 +5887,7 @@ function activateHost() {
                             // Interpolate rotation using quaternions for smooth slerp
                             const prevQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.prevPitch, userState.prevYaw, 0, 'YXZ'));
                             const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(userState.targetPitch, userState.targetYaw, 0, 'YXZ'));
-                            THREE.Quaternion.slerp(prevQuaternion, targetQuaternion, avatar.quaternion, alpha);
+                            avatar.quaternion.slerpQuaternions(prevQuaternion, targetQuaternion, alpha);
 
                         } else if (userState.targetX !== undefined) {
                              // If no previous state, just jump to target
@@ -5693,8 +5923,62 @@ function activateHost() {
                         avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
                     }
                 }
+
+
                 renderer.render(scene, camera);
             }
+
+            // New polling logic
+            isPlayerMoving = (Math.abs(player.vx) + Math.abs(player.vz)) > 0.01;
+
+            if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
+                hasMovedSubstantially = true;
+            }
+
+            if (isPlayerMoving) {
+                if (now - lastPollTime > 15000) {
+                    pollQueue = []; // Cancel pending polls
+                    // Poll 3 chunks ahead
+                    const lookahead = playerDirection.clone().multiplyScalar(CHUNK_SIZE * 3);
+                    const aheadPos = new THREE.Vector3(player.x, player.y, player.z).add(lookahead);
+                    const aheadCx = Math.floor(aheadPos.x / CHUNK_SIZE);
+                    const aheadCz = Math.floor(aheadPos.z / CHUNK_SIZE);
+                    for (let i = 0; i < 3; i++) {
+                        pollQueue.push(makeChunkKey(worldName, aheadCx + i, aheadCz));
+                    }
+                    triggerPoll();
+                    lastPollTime = now;
+                }
+            } else {
+                if (hasMovedSubstantially) {
+                    pollQueue = []; // Cancel pending polls
+                    // Immediately poll 3 chunks ahead
+                    const lookahead = playerDirection.clone().multiplyScalar(CHUNK_SIZE * 3);
+                    const aheadPos = new THREE.Vector3(player.x, player.y, player.z).add(lookahead);
+                    const aheadCx = Math.floor(aheadPos.x / CHUNK_SIZE);
+                    const aheadCz = Math.floor(aheadPos.z / CHUNK_SIZE);
+                    for (let i = 0; i < 3; i++) {
+                        pollQueue.push(makeChunkKey(worldName, aheadCx + i, aheadCz));
+                    }
+                    // Then poll in a square around the player
+                    for (let r = 1; r <= POLL_RADIUS; r++) {
+                        for (let dx = -r; dx <= r; dx++) {
+                            for (let dz = -r; dz <= r; dz++) {
+                                if (Math.abs(dx) === r || Math.abs(dz) === r) {
+                                    pollQueue.push(makeChunkKey(worldName, pcx + dx, pcz + dz));
+                                }
+                            }
+                        }
+                    }
+                    triggerPoll();
+                    hasMovedSubstantially = false;
+                } else if (now - lastPollTime > 30000) {
+                    // Refresh current area every 30 seconds if still
+                    triggerPoll();
+                    lastPollTime = now;
+                }
+            }
+
             requestAnimationFrame(gameLoop);
         }
         console.log('[Debug] Script loaded');
