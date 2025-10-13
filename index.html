@@ -693,8 +693,8 @@
         var PENDING_PERIOD = 30 * 24 * 60 * 60 * 1000;
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
         var API_CALLS_PER_SECOND = 8;
-        var POLL_RADIUS = 3;
-        var LOAD_RADIUS = 5;
+        var POLL_RADIUS = 5;
+        var LOAD_RADIUS = 8;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'Sup!? viewer v0.2.1';
         var POLL_INTERVAL = 30000;
@@ -817,6 +817,7 @@
         var audioErrorLogged = false;
         var sun, moon, stars, clouds;
         var torchLights = new Map();
+        var torchParticles = new Map();
         var INVENTORY = new Array(32).fill(null);
         var isPromptOpen = false;
         var userPositions = {};
@@ -2109,6 +2110,25 @@ self.onmessage = async function(e) {
             return { x: x, y: y, z: z };
         }
         var skyProps;
+        function createCloudTexture(seed) {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const noise = makeNoise(seed + '_clouds');
+
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const value = fbm(noise, i / 32, j / 32, 4, 0.5) * 255;
+                    const alpha = Math.max(0, value - 128);
+                    context.fillStyle = `rgba(255, 255, 255, ${alpha / 128})`;
+                    context.fillRect(i, j, 1, 1);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
         function initSky() {
             const skyRnd = makeSeededRandom(worldSeed + '_sky');
             const baseHue = skyRnd();
@@ -2153,34 +2173,42 @@ self.onmessage = async function(e) {
             const starGeometry = new THREE.BufferGeometry();
             const starVertices = [];
             const starNoise = makeNoise(worldSeed + '_stars');
-            for (let i = 0; i < 2000; i++) {
+            for (let i = 0; i < 5000; i++) {
                 const theta = skyRnd() * Math.PI * 2;
                 const phi = Math.acos(2 * skyRnd() - 1);
-                const x = 2000 * Math.sin(phi) * Math.cos(theta);
-                const y = 2000 * Math.sin(phi) * Math.sin(theta);
-                const z = 2000 * Math.cos(phi);
-                if (starNoise(x * 0.01, z * 0.01) > 0.6) {
+                const x = 4000 * Math.sin(phi) * Math.cos(theta);
+                const y = 4000 * Math.sin(phi) * Math.sin(theta);
+                const z = 4000 * Math.cos(phi);
+                if (starNoise(x * 0.005, z * 0.005) > 0.7) {
                     starVertices.push(x, y, z);
                 }
             }
             starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 + skyRnd() * 2 });
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 + skyRnd() * 3 });
             const starPoints = new THREE.Points(starGeometry, starMaterial);
             stars.add(starPoints);
             scene.add(stars);
 
             clouds = new THREE.Group();
-            const numClouds = Math.floor(skyRnd() * 50);
+            const cloudTexture = createCloudTexture(worldSeed);
+            const numClouds = Math.floor(skyRnd() * 80);
             for (let i = 0; i < numClouds; i++) {
                 const cloud = new THREE.Mesh(
-                    new THREE.PlaneGeometry(50 + skyRnd() * 100, 50 + skyRnd() * 50),
-                    new THREE.MeshBasicMaterial({ color: skyProps.cloudColor, transparent: true, opacity: 0.3 + skyRnd() * 0.4, side: THREE.DoubleSide })
+                    new THREE.PlaneGeometry(200 + skyRnd() * 300, 100 + skyRnd() * 150),
+                    new THREE.MeshBasicMaterial({
+                        map: cloudTexture,
+                        color: skyProps.cloudColor,
+                        transparent: true,
+                        opacity: 0.6 + skyRnd() * 0.3,
+                        side: THREE.DoubleSide
+                    })
                 );
                 cloud.position.set(
-                    (skyRnd() - 0.5) * 4000,
-                    150 + skyRnd() * 100,
-                    (skyRnd() - 0.5) * 4000
+                    (skyRnd() - 0.5) * 8000,
+                    200 + skyRnd() * 150,
+                    (skyRnd() - 0.5) * 8000
                 );
+                cloud.rotation.y = skyRnd() * Math.PI * 2;
                 clouds.add(cloud);
             }
             scene.add(clouds);
@@ -2192,36 +2220,69 @@ self.onmessage = async function(e) {
             const timeRatio = hours / 24;
             const timeAngle = timeRatio * Math.PI * 2;
 
-            // Determine if it's day or night for lighting purposes
             const sunAngleForLight = timeAngle + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0);
             const sunY = Math.sin(sunAngleForLight);
             const isNight = sunY < -0.1;
 
             skyProps.suns.forEach(sun => {
                 const angle = timeAngle + sun.angleOffset;
-                sun.mesh.position.set(2000 * Math.cos(angle), 2000 * Math.sin(angle), 800 * Math.sin(angle));
-                sun.mesh.visible = Math.sin(angle) > -0.1; // Visible when above horizon
+                sun.mesh.position.set(4000 * Math.cos(angle), 4000 * Math.sin(angle), 1500 * Math.sin(angle));
+                sun.mesh.visible = Math.sin(angle) > -0.1;
             });
 
             skyProps.moons.forEach(moon => {
-                const angle = timeAngle + moon.angleOffset + Math.PI; // Opposite to the first sun
-                moon.mesh.position.set(1800 * Math.cos(angle), 1800 * Math.sin(angle), 600 * Math.sin(angle));
-                moon.mesh.visible = Math.sin(angle) > -0.1; // Visible when above horizon
+                const angle = timeAngle + moon.angleOffset + Math.PI;
+                moon.mesh.position.set(3800 * Math.cos(angle), 3800 * Math.sin(angle), 1200 * Math.sin(angle));
+                moon.mesh.visible = Math.sin(angle) > -0.1;
             });
 
             stars.visible = isNight;
-            stars.rotation.y += dt * 0.01;
+            stars.rotation.y += dt * 0.005;
 
             clouds.children.forEach(cloud => {
-                cloud.position.x = modWrap(cloud.position.x + dt * (10 + Math.random() * 5), 4000);
-                cloud.lookAt(camera.position);
+                cloud.position.x = modWrap(cloud.position.x + dt * (15 + Math.random() * 10), 8000);
             });
 
-            const tNorm = Math.max(0, sunY); // Use the main sun's height for interpolation
+            const tNorm = Math.max(0, sunY);
             scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
 
             const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
-            ambientLight.intensity = isNight ? 0.08 : 0.5; // Darker nights
+            ambientLight.intensity = isNight ? 0.05 : 0.6;
+        }
+
+        function createFlameParticles(x, y, z) {
+            const particleCount = 20;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 0.01,
+                    y: Math.random() * 0.05,
+                    z: (Math.random() - 0.5) * 0.01,
+                    life: Math.random() * 1
+                });
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.velocities = velocities;
+
+            const material = new THREE.PointsMaterial({
+                color: 0xffaa33,
+                size: 0.2,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const particleSystem = new THREE.Points(particles, material);
+            particleSystem.position.set(x, y, z);
+            return particleSystem;
         }
         function Chunk(cx, cz) {
             this.cx = cx;
@@ -2500,15 +2561,32 @@ self.onmessage = async function(e) {
                     this.preloadChunks(peerCx, peerCz, 2);
                 }
             }
-            for (var entry of this.chunks) {
-                var k = entry[0];
-                var ch = entry[1];
-                if (!needed.has(k)) {
-                    if (ch.mesh) {
-                        meshGroup.remove(ch.mesh);
-                        disposeObject(ch.mesh);
-                        ch.mesh = null;
+            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 1.5;
+            if (this.chunks.size > maxChunks) {
+                let chunks = Array.from(this.chunks.values());
+                chunks.sort((a, b) => {
+                    const distA = Math.hypot(a.cx - pcx, a.cz - pcz);
+                    const distB = Math.hypot(b.cx - pcx, b.cz - pcz);
+                    return distB - distA;
+                });
+
+                for (let i = 0; i < chunks.length && this.chunks.size > maxChunks; i++) {
+                    const ch = chunks[i];
+                    if (!needed.has(ch.key)) {
+                        if (ch.mesh) {
+                            meshGroup.remove(ch.mesh);
+                            disposeObject(ch.mesh);
+                        }
+                        this.chunks.delete(ch.key);
                     }
+                }
+            }
+
+            // Make all needed chunks visible
+            for (const key of needed) {
+                const chunk = this.chunks.get(key);
+                if (chunk && chunk.mesh) {
+                    chunk.mesh.visible = true;
                 }
             }
         };
@@ -2517,7 +2595,7 @@ self.onmessage = async function(e) {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87ceeb);
             console.log('[initThree] Scene created');
-            camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 2000);
+            camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 10000);
             camera.position.set(0, 34, 0);
             console.log('[initThree] Camera created');
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -2939,6 +3017,13 @@ self.onmessage = async function(e) {
                     light.dispose();
                     torchLights.delete(lightKey);
                 }
+                if (torchParticles.has(lightKey)) {
+                    var particles = torchParticles.get(lightKey);
+                    scene.remove(particles);
+                    particles.geometry.dispose();
+                    particles.material.dispose();
+                    torchParticles.delete(lightKey);
+                }
             }
         }
         function placeBlockAt(wx, wy, wz, bid) {
@@ -2991,6 +3076,10 @@ self.onmessage = async function(e) {
                 light.position.set(wx, wy + 0.5, wz);
                 scene.add(light);
                 torchLights.set(`${wx},${wy},${wz}`, light);
+
+                var particles = createFlameParticles(wx, wy + 0.5, wz);
+                scene.add(particles);
+                torchParticles.set(`${wx},${wy},${wz}`, particles);
             }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
@@ -3490,6 +3579,26 @@ self.onmessage = async function(e) {
                 }
             }
             minimapCtx.fillStyle = '#ff6b6b';
+            for (const [key, particleSystem] of torchParticles.entries()) {
+                const positions = particleSystem.geometry.attributes.position.array;
+                const velocities = particleSystem.geometry.velocities;
+
+                for (let i = 0; i < velocities.length; i++) {
+                    positions[i * 3] += velocities[i].x;
+                    positions[i * 3 + 1] += velocities[i].y;
+                    positions[i * 3 + 2] += velocities[i].z;
+
+                    velocities[i].life -= dt;
+
+                    if (velocities[i].life <= 0) {
+                        positions[i * 3] = particleSystem.position.x;
+                        positions[i * 3 + 1] = particleSystem.position.y;
+                        positions[i * 3 + 2] = particleSystem.position.z;
+                        velocities[i].life = Math.random() * 1;
+                    }
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+            }
             for (var entry of playerAvatars) {
                 var username = entry[0];
                 var avatar = entry[1];
