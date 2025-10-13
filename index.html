@@ -5929,7 +5929,6 @@ function activateHost() {
             }
 
             // New polling logic
-            const now = performance.now();
             isPlayerMoving = (Math.abs(player.vx) + Math.abs(player.vz)) > 0.01;
 
             if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
