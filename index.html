@@ -5762,7 +5762,7 @@ function activateHost() {
                 }
                 var distFromSpawn = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
                 document.getElementById('homeIcon').style.display = distFromSpawn > 10 ? 'inline' : 'none';
-                avatarGroup.position.set(player.x, player.y - 0.9, player.z);
+                avatarGroup.position.set(player.x, player.y, player.z);
                 if (cameraMode === 'third') {
                     avatarGroup.rotation.y = player.yaw;
                 }
