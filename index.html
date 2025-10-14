@@ -645,17 +645,6 @@
         <p>You died! All items lost.</p>
         <button id="respawnBtn">Continue</button>
     </div>
-    <div id="mobileControls">
-        <div class="m-btn" id="mUp">↑</div>
-        <div class="m-btn" id="mLeft">←</div>
-        <div class="m-btn" id="mDown">↓</div>
-        <div class="m-btn" id="mRight">→</div>
-    </div>
-    <div id="mobileRight">
-        <div class="m-action" id="mJump">J</div>
-        <div class="m-action" id="mAttack">⚔</div>
-        <div class="m-action" id="mCam">T</div>
-    </div>
     <div id="crosshair">+</div>
     <div id="damageFlash" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0); pointer-events: none; z-index: 1000; transition: background 0.1s;"></div>
     <div id="pendingModal">
@@ -803,6 +792,10 @@ health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var lastDamageTime = 0;
         var lastRegenTime = 0;
         var joystick = { up: false, down: false, left: false, right: false };
+        var touches = {
+            move: { id: -1, x: 0, y: 0, dx: 0, dy: 0 },
+            look: { id: -1, x: 0, y: 0, dx: 0, dy: 0 }
+        };
         var lastFrame = performance.now();
         var mouseLocked = false;
         var deathScreenShown = false;
@@ -2794,51 +2787,55 @@ self.onmessage = async function(e) {
                 }
             });
 
-    let touchStartX = 0;
-    let touchStartY = 0;
     renderer.domElement.addEventListener('touchstart', e => {
-        let target = e.target;
-        let isButton = false;
-        while(target && target !== document.body) {
-            if (target.classList.contains('m-btn') || target.classList.contains('m-action')) {
-                isButton = true;
-                break;
+        e.preventDefault();
+        for (let touch of e.changedTouches) {
+            if (touch.clientX < window.innerWidth / 2 && touches.move.id === -1) {
+                touches.move.id = touch.identifier;
+                touches.move.x = touch.clientX;
+                touches.move.y = touch.clientY;
+            } else if (touch.clientX >= window.innerWidth / 2 && touches.look.id === -1) {
+                touches.look.id = touch.identifier;
+                touches.look.x = touch.clientX;
+                touches.look.y = touch.clientY;
             }
-            target = target.parentElement;
-        }
-
-        if (isButton) return;
-
-        if (cameraMode === 'first' && e.touches.length > 0) {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-            e.preventDefault(); // Prevent scrolling/zooming
         }
     }, { passive: false });
 
     renderer.domElement.addEventListener('touchmove', e => {
-        if (cameraMode === 'first' && e.touches.length > 0) {
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-
-            const deltaX = touchX - touchStartX;
-            const deltaY = touchY - touchStartY;
-
-            const sensitivity = 0.005; // Mobile sensitivity
-            player.yaw -= deltaX * sensitivity;
-            player.pitch -= deltaY * sensitivity;
-            player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
-            camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
-
-            if (avatarGroup && avatarGroup.children[3]) {
-                avatarGroup.children[3].rotation.set(player.pitch, 0, 0);
+        e.preventDefault();
+        for (let touch of e.changedTouches) {
+            if (touch.identifier === touches.move.id) {
+                touches.move.dx = touch.clientX - touches.move.x;
+                touches.move.dy = touch.clientY - touches.move.y;
+                joystick.up = touches.move.dy < -10;
+                joystick.down = touches.move.dy > 10;
+                joystick.left = touches.move.dx < -10;
+                joystick.right = touches.move.dx > 10;
+            } else if (touch.identifier === touches.look.id) {
+                const deltaX = touch.clientX - touches.look.x;
+                const deltaY = touch.clientY - touches.look.y;
+                touches.look.x = touch.clientX;
+                touches.look.y = touch.clientY;
+                const sensitivity = 0.005;
+                player.yaw -= deltaX * sensitivity;
+                player.pitch -= deltaY * sensitivity;
+                player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
             }
-
-            touchStartX = touchX;
-            touchStartY = touchY;
-            e.preventDefault(); // Prevent scrolling/zooming
         }
     }, { passive: false });
+
+    renderer.domElement.addEventListener('touchend', e => {
+        e.preventDefault();
+        for (let touch of e.changedTouches) {
+            if (touch.identifier === touches.move.id) {
+                touches.move.id = -1;
+                joystick.up = joystick.down = joystick.left = joystick.right = false;
+            } else if (touch.identifier === touches.look.id) {
+                touches.look.id = -1;
+            }
+        }
+    });
             document.addEventListener('pointerlockchange', function () {
                 mouseLocked = document.pointerLockElement === renderer.domElement;
                 document.getElementById('crosshair').style.display = mouseLocked && cameraMode === 'first' ? 'block' : 'none';
@@ -4117,21 +4114,6 @@ self.onmessage = async function(e) {
             updateHudButtons();
         }
         function isMobile() { return /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent); }
-        function setupMobile() {
-            if (!isMobile()) return;
-            var up = document.getElementById('mUp'), down = document.getElementById('mDown'), left = document.getElementById('mLeft'), right = document.getElementById('mRight');
-            up.addEventListener('touchstart', function (e) { joystick.up = true; e.preventDefault(); });
-            up.addEventListener('touchend', function (e) { joystick.up = false; e.preventDefault(); });
-            down.addEventListener('touchstart', function (e) { joystick.down = true; e.preventDefault(); });
-            down.addEventListener('touchend', function (e) { joystick.down = false; e.preventDefault(); });
-            left.addEventListener('touchstart', function (e) { joystick.left = true; e.preventDefault(); });
-            left.addEventListener('touchend', function (e) { joystick.left = false; e.preventDefault(); });
-            right.addEventListener('touchstart', function (e) { joystick.right = true; e.preventDefault(); });
-            right.addEventListener('touchend', function (e) { joystick.right = false; e.preventDefault(); });
-            document.getElementById('mJump').addEventListener('touchstart', function (e) { playerJump(); safePlayAudio(soundJump); e.preventDefault(); });
-            document.getElementById('mAttack').addEventListener('touchstart', function (e) { performAttack(); e.preventDefault(); });
-            document.getElementById('mCam').addEventListener('touchstart', function (e) { toggleCameraMode(); e.preventDefault(); });
-        }
         function updateLoginUI() {
             try {
                 console.log('[Debug] updateLoginUI started, knownWorlds:', knownWorlds.size, 'knownUsers:', knownUsers.size);
@@ -5648,7 +5630,6 @@ function activateHost() {
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
                     console.log('[Login] Preloading initial chunks');
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
-                    setupMobile();
                     initMinimap();
                     updateHotbarUI();
                     selectedBlockId = null;
