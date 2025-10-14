@@ -741,7 +741,7 @@
             117: { name: 'Glass Tile', color: '#aeeaff', transparent: true },
             118: { name: 'Sandstone', color: '#e3c27d' },
             119: { name: 'Cobblestone', color: '#7d7d7d' },
-            120: { name: 'Torch', color: '#ff9900', light: true },
+            120: { name: 'Torch', color: '#ff9900', light: true, transparent: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -826,6 +826,7 @@ health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var audioErrorLogged = false;
         var sun, moon, stars, clouds;
         var emberTexture;
+        var textureCache = new Map();
         var torchLights = new Map();
         var torchParticles = new Map();
         var INVENTORY = new Array(32).fill(null);
@@ -999,7 +1000,6 @@ var isMuted = false;
             }
             if (data.profile && fromAddress === userAddress) {
                 lastSavedPosition = new THREE.Vector3(data.profile.x, data.profile.y, data.profile.z);
-                INVENTORY = data.profile.inventory || new Array(32).fill(null);
                 updateHotbarUI();
             }
         }
@@ -1085,12 +1085,34 @@ function fbm(noiseFn, x, y, oct, persistence) {
 }
 
 function placeTree(chunkData, lx, cy, lz, rnd) {
-    var h = 5 + Math.floor(rnd() * 3);
-    for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 7;
-    for (var dx = -2; dx <= 2; dx++) for (var dz = -2; dz <= 2; dz++) for (var dy = 0; dy <= 3; dy++) {
-        var rx = lx + dx, ry = cy + h - 2 + dy, rz = lz + dz;
-        if (ry < MAX_HEIGHT && rx >= 0 && rx < CHUNK_SIZE && rz >= 0 && rz < CHUNK_SIZE) {
-            if (Math.abs(dx) + Math.abs(dz) + Math.abs(dy) <= 4 && chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] === BLOCK_AIR) chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] = 8;
+    const treeHeight = 5 + Math.floor(rnd() * 6);
+    const canopySize = 2 + Math.floor(rnd() * 2);
+    const trunkBlock = 7; // Wood
+    const leafBlock = 8; // Leaves
+
+    // Trunk
+    for (let i = 0; i < treeHeight; i++) {
+        if (cy + i < MAX_HEIGHT) {
+            chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = trunkBlock;
+        }
+    }
+
+    // Canopy
+    for (let dy = -canopySize; dy <= canopySize; dy++) {
+        for (let dx = -canopySize; dx <= canopySize; dx++) {
+            for (let dz = -canopySize; dz <= canopySize; dz++) {
+                const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (d <= canopySize + 0.5 * rnd()) {
+                    const rx = lx + dx;
+                    const ry = cy + treeHeight + dy;
+                    const rz = lz + dz;
+                    if (ry < MAX_HEIGHT && rx >= 0 && rx < CHUNK_SIZE && rz >= 0 && rz < CHUNK_SIZE) {
+                        if (chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] === BLOCK_AIR) {
+                            chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] = leafBlock;
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1104,18 +1126,28 @@ function placeCactus(chunkData, lx, cy, lz, rnd) {
     for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 9;
 }
 
-function pickBiome(n) {
-    if (n > 0.68) return BIOMES.find(b => b.key === 'snow') || BIOMES[0];
-    if (n < 0.25) return BIOMES.find(b => b.key === 'desert') || BIOMES[1];
-    if (n > 0.45) return BIOMES.find(b => b.key === 'forest') || BIOMES[2];
-    if (n > 0.60) return BIOMES.find(b => b.key === 'mountain') || BIOMES[4];
-    if (n < 0.35) return BIOMES.find(b => b.key === 'swamp') || BIOMES[5];
-    return BIOMES.find(b => b.key === 'plains') || BIOMES[0];
+function pickBiome(n, biomes) {
+    if (n > 0.68) return biomes.find(b => b.key === 'snow') || biomes[0];
+    if (n < 0.25) return biomes.find(b => b.key === 'desert') || biomes[1];
+    if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
+    if (n > 0.60) return biomes.find(b => b.key === 'mountain') || biomes[4];
+    if (n < 0.35) return biomes.find(b => b.key === 'swamp') || biomes[5];
+    return biomes.find(b => b.key === 'plains') || biomes[0];
 }
 
 function generateChunkData(chunkKey) {
-    const noise = makeNoise(chunkKey.split(':')[0]);
-    const blockNoise = makeNoise(chunkKey.split(':')[0] + '_block');
+    const worldSeed = chunkKey.split(':')[0];
+    const biomeRnd = makeSeededRandom(worldSeed + '_biomes');
+
+    const modifiedBiomes = BIOMES.map(biome => ({
+        ...biome,
+        heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
+        roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
+        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5)
+    }));
+
+    const noise = makeNoise(worldSeed);
+    const blockNoise = makeNoise(worldSeed + '_block');
     const chunkRnd = makeSeededRandom(chunkKey);
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
@@ -1130,7 +1162,7 @@ function generateChunkData(chunkKey) {
             var nx = (wx % MAP_SIZE) / MAP_SIZE * 10000;
             var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
             var n = fbm(noise, nx * 0.005, nz * 0.005, 5, 0.6);
-            var biome = pickBiome(n);
+            var biome = pickBiome(n, modifiedBiomes);
             var heightScale = biome.heightScale;
             var roughness = biome.roughness;
             var height = Math.floor(n * 40 * heightScale + 8);
@@ -2167,11 +2199,12 @@ self.onmessage = async function(e) {
             const noise = makeNoise(seed + '_ember');
             const imageData = context.createImageData(size, size);
             const data = imageData.data;
+            const rnd = makeSeededRandom(seed + '_ember_color');
 
             const colorRamp = [
-                { r: 60, g: 0, b: 0 },    // Dark red base
-                { r: 255, g: 100, b: 0 }, // Orange
-                { r: 255, g: 255, b: 150 } // Bright yellow/white
+                { r: Math.floor(rnd() * 100), g: 0, b: 0 },    // Dark base
+                { r: 255, g: Math.floor(rnd() * 150), b: 0 }, // Mid color
+                { r: 255, g: 255, b: Math.floor(rnd() * 200) } // Bright tip
             ];
 
             for (let x = 0; x < size; x++) {
@@ -2193,12 +2226,94 @@ self.onmessage = async function(e) {
                     data[index] = r;
                     data[index + 1] = g;
                     data[index + 2] = b;
-                    data[index + 3] = 255;
+                    data[index + 3] = value > 0.3 ? 255 : 0; // Make parts of the flame transparent
                 }
             }
             context.putImageData(imageData, 0, 0);
             return new THREE.CanvasTexture(canvas);
         }
+
+        function createBlockTexture(seed, blockId) {
+    if (textureCache.has(blockId)) {
+        return textureCache.get(blockId);
+    }
+
+    const size = 16;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+
+    const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
+    const baseColor = new THREE.Color(BLOCKS[blockId].color);
+    const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+
+    // Base fill
+    context.fillStyle = baseColor.getStyle();
+    context.fillRect(0, 0, size, size);
+
+    // Seed-driven pattern selection
+    const patternType = Math.floor(rnd() * 5); // Added new patterns
+    const patternNoise = makeNoise(seed + '_pattern_noise_' + blockId);
+
+    context.strokeStyle = secondaryColor.getStyle();
+    context.lineWidth = 1 + Math.floor(rnd() * 2);
+
+    // Draw patterns
+    if (patternType === 0) { // Broken Horizontal Lines
+        for (let y = 2; y < size; y += 4) {
+            for (let x = 0; x < size; x++) {
+                if (patternNoise(x / 8, y / 8) > 0.4) {
+                    context.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+    } else if (patternType === 1) { // Broken Vertical Lines
+        for (let x = 2; x < size; x += 4) {
+            for (let y = 0; y < size; y++) {
+                if (patternNoise(x / 8, y / 8) > 0.4) {
+                    context.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+    } else if (patternType === 2) { // Broken Diagonal Lines
+        for (let i = -size; i < size; i += 3) {
+            for (let j = 0; j < size * 2; j++) {
+                if (patternNoise(i / 8, j / 8) > 0.6) {
+                    context.fillRect(i + j, j, 1, 1);
+                }
+            }
+        }
+    } else if (patternType === 3) { // Wavy Lines
+        for (let y = 0; y < size; y += 4) {
+            context.beginPath();
+            context.moveTo(0, y);
+            for (let x = 0; x < size; x++) {
+                const wave = Math.sin(x / 4 + rnd() * 10) * 2;
+                if (patternNoise(x / 8, y / 8) > 0.3) {
+                    context.lineTo(x, y + wave);
+                } else {
+                    context.moveTo(x, y + wave);
+                }
+            }
+            context.stroke();
+        }
+    } // Type 4 is just base color + border (or no border)
+
+    // Border logic: apply border to only a few seed-selected block types
+    if (rnd() > 0.8) { // ~20% of block types will have a border
+        const borderColor = baseColor.clone().multiplyScalar(0.7);
+        context.strokeStyle = borderColor.getStyle();
+        context.lineWidth = 1;
+        context.strokeRect(0.5, 0.5, size - 1, size - 1);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    textureCache.set(blockId, texture);
+    return texture;
+}
 
         function createCloudTexture(seed) {
             const size = 256;
@@ -2263,13 +2378,17 @@ self.onmessage = async function(e) {
                 for (let j = 0; j < positions.count; j++) {
                     vertex.fromBufferAttribute(positions, j);
 
-                    const noiseFactor = 0.4; // Controls how irregular the shape is
+                    const noiseFactor = 0.8; // Controls how irregular the shape is
                     const noise = fbm(moonNoise, vertex.x * 0.05, vertex.y * 0.05, 3, 0.5) +
                                   fbm(moonNoise, vertex.y * 0.05, vertex.z * 0.05, 3, 0.5) +
                                   fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
 
+                    // Add a second layer of noise for craters
+                    const craterNoise = fbm(moonNoise, vertex.x * 0.3, vertex.y * 0.3, 3, 0.5);
+                    const craterDepth = 0.15 * craterNoise;
+
                     // Average the noise and apply it to the vertex, pushing it outwards from the center.
-                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor);
+                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor - craterDepth);
                     positions.setXYZ(j, vertex.x, vertex.y, vertex.z);
                 }
                 moonShape.computeVertexNormals(); // Recalculate normals for correct lighting after displacement.
@@ -2549,11 +2668,12 @@ self.onmessage = async function(e) {
                 // A light-emitting block should not be affected by scene lighting.
                 // We use a basic material with a procedural ember texture to make it glow.
                 if (info.light) {
-                    mat = new THREE.MeshBasicMaterial({ map: emberTexture });
+                    mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
                 } else if (info.transparent) {
                     mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
                 } else {
-                    mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(info.color) });
+                    const blockTexture = createBlockTexture(worldSeed, id);
+                    mat = new THREE.MeshLambertMaterial({ map: blockTexture });
                 }
                 var mesh = new THREE.Mesh(geom, mat);
                 group.add(mesh);
@@ -2754,10 +2874,10 @@ self.onmessage = async function(e) {
             controls.maxDistance = 100;
             controls.enabled = false;
             console.log('[initThree] Controls created');
-            var dir = new THREE.DirectionalLight(0xffffff, 0.95);
+            var dir = new THREE.DirectionalLight(0xffffff, 0.75); // Reduced intensity
             dir.position.set(100, 200, 100);
             scene.add(dir);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // Reduced intensity
             console.log('[initThree] Lights added');
 
             // Create the procedural ember texture for torches
@@ -3352,7 +3472,6 @@ self.onmessage = async function(e) {
                     player.pitch = 0;
                 }
             }
-            INVENTORY = new Array(32).fill(null);
             updateHotbarUI();
             updateHealthBar();
             document.getElementById('health').innerText = player.health;
@@ -5520,6 +5639,22 @@ function activateHost() {
                     worldName = worldInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
                     userName = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                     worldSeed = worldName;
+
+                    const colorRnd = makeSeededRandom(worldSeed + '_colors');
+                    for (const blockId in BLOCKS) {
+                        if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
+                            const block = BLOCKS[blockId];
+                            const baseColor = new THREE.Color(block.color);
+                            const hsv = {};
+                            baseColor.getHSL(hsv);
+                            const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05); // Less hue shift
+                            const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2)); // Saturate a bit
+                            const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2)); // Darker
+                            baseColor.setHSL(newHue, newSat, newLight);
+                            block.color = '#' + baseColor.getHexString();
+                        }
+                    }
+
                     var userWorldKey = userName + '@' + worldName;
                     var profile = await GetProfileByURN(userName);
                     userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
@@ -5542,7 +5677,10 @@ function activateHost() {
                     initMusicPlayer();
                     console.log('[Login] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
+                    selectedHotIndex = 0; // Auto-select torch
+                    selectedBlockId = 120; // Explicitly set selected block
                     initHotbar();
+                    updateHotbarUI(); // Explicitly update UI and selectedBlockId
                     console.log('[Login] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
                     console.log('[Login] Populating spawn chunks');
@@ -5566,7 +5704,6 @@ function activateHost() {
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
-                    selectedBlockId = null;
                     cameraMode = 'first';
                     controls.enabled = false;
                     avatarGroup.visible = false;
