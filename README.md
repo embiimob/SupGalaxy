@@ -1,7 +1,7 @@
-# 🌌 SupGalaxy v0.3.0-beta
+# 🌌 SupGalaxy v0.3.1-beta
 [Infinite Voxel World Adventure]
 
-Welcome to **SupGalaxy v0.3.0-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+Welcome to **SupGalaxy v0.3.1-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
 
 > **Public Domain (CC0)**: Free to use, modify, and share. No attribution required, but we’d love a nod to embii4u, Grok, kattacomi, Jules, and ChatGPT for sparking this cosmic creation. *May your worlds be infinite and your adventures legendary!*
 
@@ -15,9 +15,9 @@ SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seam
 - **Procedural Suns & Moons**: Each world now features a unique, procedurally generated sky with a variable number of suns and moons. Moon shapes are also randomized, creating asteroid-like celestial bodies for a truly unique cosmic experience.
 - **Infinite Worlds**: Procedural generation for boundless exploration.
 
-**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.3.0-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
+**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.3.1-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
 
-*Version: v0.3.0-beta (Fully Tested & Live – October 2025)*
+*Version: v0.3.1-beta (Fully Tested & Live – October 2025)*
 
 ### 🎵 IPFS Music Streamer
 SupGalaxy now features a built-in music streamer that plays a curated soundtrack directly from the decentralized web. Here’s how it works:
