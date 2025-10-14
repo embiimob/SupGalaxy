@@ -3331,7 +3331,7 @@ self.onmessage = async function(e) {
             }
             chunkManager.update(player.x, player.z);
             if (cameraMode === 'first') {
-                camera.position.set(player.x, player.y + 1.62, player.z);
+                camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
                 camera.rotation.set(0, 0, 0, 'YXZ');
                 try {
                     renderer.domElement.requestPointerLock();
@@ -3342,7 +3342,7 @@ self.onmessage = async function(e) {
                 }
             } else {
                 camera.position.set(player.x, player.y + 5, player.z + 10);
-                controls.target.set(player.x, player.y + 0.6, player.z);
+                controls.target.set(player.x + player.width / 2, player.y + 0.6, player.z + player.depth / 2);
                 controls.update();
             }
             document.getElementById('deathScreen').style.display = 'none';
@@ -5885,7 +5885,7 @@ function activateHost() {
                 }
                 var distFromSpawn = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
                 document.getElementById('homeIcon').style.display = distFromSpawn > 10 ? 'inline' : 'none';
-                avatarGroup.position.set(player.x, player.y, player.z);
+                avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2);
                 if (cameraMode === 'third') {
                     avatarGroup.rotation.y = player.yaw;
                 }
@@ -5922,10 +5922,10 @@ function activateHost() {
                 var posLabel = document.getElementById('posLabel');
                 if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
                 if (cameraMode === 'third') {
-                    controls.target.set(player.x, player.y + 0.6, player.z);
+                    controls.target.set(player.x + player.width / 2, player.y + 0.6, player.z + player.depth / 2);
                     controls.update();
                 } else {
-                    var headPos = new THREE.Vector3(player.x, player.y + 1.62, player.z);
+                    var headPos = new THREE.Vector3(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
                     camera.position.copy(headPos);
                 }
                 const positionChanged = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > 0.1;
