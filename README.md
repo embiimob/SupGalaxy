@@ -172,6 +172,16 @@ For **ultimate freedom**, host your own p2fk.io API and etch via Sup!?. Sync inf
 - **Polish**: Optimized chunk loading, UI, audio, and mobile controls.
 - **Stability**: Fully tested for robust cross-platform play.
 
+### 🎵 IPFS Music Streamer
+SupGalaxy now features a built-in music streamer that plays a curated soundtrack directly from the decentralized web. Here’s how it works:
+
+-   **Decentralized Playlist:** At launch, the game searches the `p2fk.io` network for messages tagged with the keyword `#game`.
+-   **IPFS-Powered:** It finds IPFS links to `.mp3` and `.wav` files within those messages.
+-   **Always Fresh:** The player loads the 10 most recent audio files found, creating a dynamic, community-curated soundtrack for your adventures.
+-   **In-Game Controls:** A mini-player in the bottom-right corner of the screen displays the current track and provides controls to play/pause, skip, or mute the music.
+
+This feature adds another layer of decentralization and community interaction to the SupGalaxy experience, allowing the soundscape of the universe to be shaped by its players.
+
 *Thanks to embii4u, Grok, Jules, and ChatGPT for this open-source gift! Star, fork, contribute—the cosmos is yours!*
 
 ---
