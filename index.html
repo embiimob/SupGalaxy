@@ -1000,7 +1000,6 @@ var isMuted = false;
             }
             if (data.profile && fromAddress === userAddress) {
                 lastSavedPosition = new THREE.Vector3(data.profile.x, data.profile.y, data.profile.z);
-                INVENTORY = data.profile.inventory || new Array(32).fill(null);
                 updateHotbarUI();
             }
         }
