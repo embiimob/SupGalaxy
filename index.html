@@ -5839,17 +5839,14 @@ function activateHost() {
 
                 // Apply Z-axis movement and check for collision
                 let potentialZ = player.z + dz;
-                if (!checkCollision(player.x, player.y, potentialZ)) {
+                if (!checkCollision(player.x, player.y, potentialZ)) { // Use the (potentially updated) player.x
                     player.z = potentialZ;
                 }
-
-                player.x = modWrap(player.x, MAP_SIZE);
-                player.z = modWrap(player.z, MAP_SIZE);
 
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
                 var newY = player.y + dy;
-                if (!checkCollision(player.x, newY, newZ)) {
+                if (!checkCollision(player.x, newY, player.z)) {
                     player.y = newY;
                     player.onGround = false;
                 } else {
