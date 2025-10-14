@@ -3804,6 +3804,13 @@ self.onmessage = async function(e) {
                     playerJump();
                     safePlayAudio(soundJump);
                 }
+
+                if (e.key.toLowerCase() === 'q') {
+                    onPointerDown({ button: 0, preventDefault: () => {} });
+                }
+                if (e.key.toLowerCase() === 'e') {
+                    onPointerDown({ button: 2, preventDefault: () => {} });
+                }
             }
             function keyupHandler(e) { keys[e.key.toLowerCase()] = false; }
             window.addEventListener('keydown', keydownHandler);
@@ -5831,34 +5838,41 @@ function activateHost() {
                     if (joystick.left) mvx -= 1;
                     if (joystick.right) mvx += 1;
                 } else {
-                    if (keys['s']) mvz -= 1;
                     if (keys['w']) mvz += 1;
+                    if (keys['s']) mvz -= 1;
                     if (keys['a']) mvx -= 1;
                     if (keys['d']) mvx += 1;
 
-                    // Arrow key camera controls
-                    if (keys['arrowup']) player.pitch += 0.02;
-                    if (keys['arrowdown']) player.pitch -= 0.02;
-                    if (keys['arrowleft']) player.yaw += 0.02;
-                    if (keys['arrowright']) player.yaw -= 0.02;
-                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
-                    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+                    if (cameraMode === 'first') {
+                        // Arrow key camera controls for first person
+                        if (keys['arrowup']) player.pitch += 0.02;
+                        if (keys['arrowdown']) player.pitch -= 0.02;
+                        if (keys['arrowleft']) player.yaw += 0.02;
+                        if (keys['arrowright']) player.yaw -= 0.02;
+                        player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+                        camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+                    }
                 }
                 var forwardDir, rightDir;
                 if (cameraMode === 'first') {
-                    forwardDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
-                    forwardDir.y = 0;
-                    forwardDir.normalize();
-                    rightDir = new THREE.Vector3().crossVectors(forwardDir, new THREE.Vector3(0, 1, 0)).normalize();
-                } else {
-                    forwardDir = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize();
-                    rightDir = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forwardDir).normalize();
+                    forwardDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, 'YXZ'));
+                } else { // third-person
+                    forwardDir = new THREE.Vector3();
+                    camera.getWorldDirection(forwardDir);
                 }
+                forwardDir.y = 0;
+                forwardDir.normalize();
+                rightDir = new THREE.Vector3().crossVectors(forwardDir, new THREE.Vector3(0, 1, 0));
+
                 var moveVec = new THREE.Vector3();
                 moveVec.addScaledVector(forwardDir, mvz);
                 moveVec.addScaledVector(rightDir, mvx);
+
                 const isMoving = moveVec.length() > 0.001;
-                if (isMoving) moveVec.normalize();
+                if (isMoving) {
+                    moveVec.normalize();
+                    player.yaw = Math.atan2(moveVec.x, moveVec.z);
+                }
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
 
