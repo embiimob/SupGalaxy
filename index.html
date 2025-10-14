@@ -3030,9 +3030,10 @@ self.onmessage = async function(e) {
             avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
             scene.add(avatarGroup);
         }
-        function createAvatar(username) {
+        function createAvatar(username, initialYaw) {
             console.log('[WebRTC] Creating avatar for:', username);
             const avatar = new THREE.Group();
+            if (initialYaw) avatar.rotation.y = initialYaw;
             const rnd = makeSeededRandom(username);
 
             const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
@@ -4497,9 +4498,8 @@ self.onmessage = async function(e) {
 
                     // All peers (host and clients) process the message to update their local state
                     let avatar = playerAvatars.get(sender);
-                    if (!avatar && sender) {
-                        avatar = createAvatar(sender);
-                    }
+                    // Avatar is now created inside the state_update/player_move handlers
+                    // to ensure initial yaw is available.
 
                     switch (data.type) {
                         case 'state_update':
@@ -4514,7 +4514,7 @@ self.onmessage = async function(e) {
                                     }
                                     if (!userPositions[remoteUser]) {
                                         userPositions[remoteUser] = {};
-                                        createAvatar(remoteUser);
+                                        createAvatar(remoteUser, playerData.yaw);
                                     }
                                     const userState = userPositions[remoteUser];
                                     if (!data.timestamp || data.timestamp > (userState.lastTimestamp || 0)) {
