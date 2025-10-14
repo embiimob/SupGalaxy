@@ -2234,63 +2234,86 @@ self.onmessage = async function(e) {
         }
 
         function createBlockTexture(seed, blockId) {
-            if (textureCache.has(blockId)) {
-                return textureCache.get(blockId);
-            }
-            const size = 16;
-            const canvas = document.createElement('canvas');
-            canvas.width = size;
-            canvas.height = size;
-            const context = canvas.getContext('2d');
-            const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
-            const baseColor = new THREE.Color(BLOCKS[blockId].color);
-            const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+    if (textureCache.has(blockId)) {
+        return textureCache.get(blockId);
+    }
 
-            // Base fill
-            context.fillStyle = baseColor.getStyle();
-            context.fillRect(0, 0, size, size);
+    const size = 16;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
 
-            // Pattern
-            const patternType = Math.floor(rnd() * 4);
-            context.strokeStyle = secondaryColor.getStyle();
-            context.lineWidth = 1 + rnd() * 2;
+    const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
+    const baseColor = new THREE.Color(BLOCKS[blockId].color);
+    const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
 
-            if (patternType === 0) { // Horizontal lines
-                for (let y = 0; y < size; y += 4) {
-                    context.beginPath();
-                    context.moveTo(0, y);
-                    context.lineTo(size, y);
-                    context.stroke();
-                }
-            } else if (patternType === 1) { // Vertical lines
-                for (let x = 0; x < size; x += 4) {
-                    context.beginPath();
-                    context.moveTo(x, 0);
-                    context.lineTo(x, size);
-                    context.stroke();
-                }
-            } else if (patternType === 2) { // Diagonal lines
-                 for (let i = -size; i < size; i += 4) {
-                    context.beginPath();
-                    context.moveTo(i, 0);
-                    context.lineTo(i + size, size);
-                    context.stroke();
+    // Base fill
+    context.fillStyle = baseColor.getStyle();
+    context.fillRect(0, 0, size, size);
+
+    // Seed-driven pattern selection
+    const patternType = Math.floor(rnd() * 5); // Added new patterns
+    const patternNoise = makeNoise(seed + '_pattern_noise_' + blockId);
+
+    context.strokeStyle = secondaryColor.getStyle();
+    context.lineWidth = 1 + Math.floor(rnd() * 2);
+
+    // Draw patterns
+    if (patternType === 0) { // Broken Horizontal Lines
+        for (let y = 2; y < size; y += 4) {
+            for (let x = 0; x < size; x++) {
+                if (patternNoise(x / 8, y / 8) > 0.4) {
+                    context.fillRect(x, y, 1, 1);
                 }
             }
-            // No pattern for type 3, just the base color with a border
-
-            // Border
-            const borderColor = baseColor.clone().multiplyScalar(0.7);
-            context.strokeStyle = borderColor.getStyle();
-            context.lineWidth = 1;
-            context.strokeRect(0.5, 0.5, size - 1, size - 1);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.magFilter = THREE.NearestFilter;
-            texture.minFilter = THREE.NearestFilter;
-            textureCache.set(blockId, texture);
-            return texture;
         }
+    } else if (patternType === 1) { // Broken Vertical Lines
+        for (let x = 2; x < size; x += 4) {
+            for (let y = 0; y < size; y++) {
+                if (patternNoise(x / 8, y / 8) > 0.4) {
+                    context.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+    } else if (patternType === 2) { // Broken Diagonal Lines
+        for (let i = -size; i < size; i += 3) {
+            for (let j = 0; j < size * 2; j++) {
+                if (patternNoise(i / 8, j / 8) > 0.6) {
+                    context.fillRect(i + j, j, 1, 1);
+                }
+            }
+        }
+    } else if (patternType === 3) { // Wavy Lines
+        for (let y = 0; y < size; y += 4) {
+            context.beginPath();
+            context.moveTo(0, y);
+            for (let x = 0; x < size; x++) {
+                const wave = Math.sin(x / 4 + rnd() * 10) * 2;
+                if (patternNoise(x / 8, y / 8) > 0.3) {
+                    context.lineTo(x, y + wave);
+                } else {
+                    context.moveTo(x, y + wave);
+                }
+            }
+            context.stroke();
+        }
+    } // Type 4 is just base color + border (or no border)
+
+    // Border logic: apply border to only a few seed-selected block types
+    if (rnd() > 0.8) { // ~20% of block types will have a border
+        const borderColor = baseColor.clone().multiplyScalar(0.7);
+        context.strokeStyle = borderColor.getStyle();
+        context.lineWidth = 1;
+        context.strokeRect(0.5, 0.5, size - 1, size - 1);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    textureCache.set(blockId, texture);
+    return texture;
+}
 
         function createCloudTexture(seed) {
             const size = 256;
@@ -2361,8 +2384,8 @@ self.onmessage = async function(e) {
                                   fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
 
                     // Add a second layer of noise for craters
-                    const craterNoise = fbm(moonNoise, vertex.x * 0.2, vertex.y * 0.2, 2, 0.5);
-                    const craterDepth = 0.1 * craterNoise;
+                    const craterNoise = fbm(moonNoise, vertex.x * 0.3, vertex.y * 0.3, 3, 0.5);
+                    const craterDepth = 0.15 * craterNoise;
 
                     // Average the noise and apply it to the vertex, pushing it outwards from the center.
                     vertex.multiplyScalar(1 + (noise / 3) * noiseFactor - craterDepth);
@@ -5626,6 +5649,7 @@ function activateHost() {
                     console.log('[Login] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
                     selectedHotIndex = 0; // Auto-select torch
+                    selectedBlockId = 120; // Explicitly set selected block
                     initHotbar();
                     updateHotbarUI(); // Explicitly update UI and selectedBlockId
                     console.log('[Login] Creating ChunkManager');
@@ -5651,7 +5675,6 @@ function activateHost() {
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
-                    selectedBlockId = null;
                     cameraMode = 'first';
                     controls.enabled = false;
                     avatarGroup.visible = false;
