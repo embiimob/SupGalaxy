@@ -2430,6 +2430,7 @@ self.onmessage = async function(e) {
             this.mesh = null;
             this.generated = false;
             this.needsRebuild = true;
+            this.mobsSpawned = false;
         }
         Chunk.prototype.idx = function (x, y, z) { return (y * CHUNK_SIZE + z) * CHUNK_SIZE + x; };
         Chunk.prototype.get = function (x, y, z) {
@@ -2695,7 +2696,10 @@ self.onmessage = async function(e) {
                     var ch = this.getChunk(cx, cz);
                     needed.add(ch.key);
                     if (!ch.generating && !ch.generated) this.generateChunk(ch);
-                    if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+                    if (ch.generated && (ch.needsRebuild || !ch.mesh)) {
+                        this.buildChunkMesh(ch);
+                        spawnMobsInChunk(ch);
+                    }
                 }
             }
             for (var peerUser in userPositions) {
@@ -3636,6 +3640,43 @@ self.onmessage = async function(e) {
                 }
             }
         };
+
+        function spawnMobsInChunk(chunk) {
+            if (!isHost || chunk.mobsSpawned) return;
+
+            const chunkRnd = makeSeededRandom(chunk.key + '_mobs');
+
+            // 15% chance to have mobs in a chunk
+            if (chunkRnd() > 0.15) {
+                chunk.mobsSpawned = true;
+                return;
+            }
+
+            const mobCount = 1 + Math.floor(chunkRnd() * 5); // 1 to 5 mobs
+
+            for (let i = 0; i < mobCount; i++) {
+                let attempts = 0;
+                while (attempts < 5) {
+                    const lx = Math.floor(chunkRnd() * CHUNK_SIZE);
+                    const lz = Math.floor(chunkRnd() * CHUNK_SIZE);
+
+                    const wx = chunk.cx * CHUNK_SIZE + lx;
+                    const wz = chunk.cz * CHUNK_SIZE + lz;
+
+                    const wrappedX = modWrap(wx, MAP_SIZE);
+                    const wrappedZ = modWrap(wz, MAP_SIZE);
+
+                    const surfaceY = chunkManager.getSurfaceY(wrappedX, wrappedZ);
+                    if (surfaceY > SEA_LEVEL) { // Ensure it's on land
+                        var m = new Mob(wrappedX, wrappedZ);
+                        mobs.push(m);
+                        break; // Found a valid spot
+                    }
+                    attempts++;
+                }
+            }
+            chunk.mobsSpawned = true;
+        }
         function spawnMobs(count, rnd) {
             if (!isHost) return; // Only the host can spawn mobs.
             if (!rnd) {
@@ -3647,7 +3688,7 @@ self.onmessage = async function(e) {
                 let attempts = 0;
                 while (attempts < 10) {
                     const angle = rnd() * 2 * Math.PI;
-                    const distance = 50 + rnd() * 150; // 50 to 200 blocks
+                    const distance = 20 + rnd() * 40; // 20 to 60 blocks
                     const x = player.x + Math.cos(angle) * distance;
                     const z = player.z + Math.sin(angle) * distance;
 
@@ -5607,9 +5648,6 @@ function activateHost() {
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
                     console.log('[Login] Preloading initial chunks');
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
-                    console.log('[Login] Spawning mobs');
-                    const mobRnd = makeSeededRandom(worldSeed + '_mobs');
-                    spawnMobs(12, mobRnd);
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
@@ -5934,7 +5972,7 @@ function activateHost() {
                 if (scoreElement) scoreElement.innerText = player.score;
                 renderer.render(scene, camera);
             } else {
-                var speed = 4.3;
+                var speed = keys['control'] ? 6.0 : 3.0;
                 var mvx = 0, mvz = 0;
                 if (isMobile()) {
                     if (joystick.up) mvz -= 1;
