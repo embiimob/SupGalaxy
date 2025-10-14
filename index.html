@@ -73,6 +73,42 @@
                 font-weight: 700;
                 cursor: pointer;
             }
+
+        #worldNameInputContainer {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #worldNameInputContainer input {
+            flex-grow: 1;
+        }
+
+        #emojiBtn {
+            width: auto;
+            margin-top: 0;
+            background: #0d1620;
+            font-weight: normal;
+        }
+
+        #emojiModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            z-index: 210;
+            background: rgba(0,0,0,0.7);
+        }
+
+        #emojiGrid {
+            background: var(--panel);
+            padding: 14px;
+            border-radius: 10px;
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+        }
         .autocomplete {
             position: relative;
         }
@@ -262,6 +298,15 @@
             display: none;
             gap: 8px;
             flex-direction: column;
+        }
+
+        @media (max-width:700px) {
+            #emojiGrid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            #emojiBtn {
+                padding: 6px 10px;
+            }
         }
         .m-action {
             width: 56px;
@@ -547,8 +592,9 @@
         <div id="loginCard">
             <h2>SupGalaxy</h2>
             <label>World name</label>
-            <div class="autocomplete">
+            <div id="worldNameInputContainer" class="autocomplete">
                 <input id="worldNameInput" placeholder="Type world name" autocomplete="off" />
+                <button id="emojiBtn">😀</button>
                 <div id="worldSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
             </div>
             <label>Username</label>
@@ -559,8 +605,11 @@
             <button id="startBtn">Start — spawn world</button>
             <button id="announceLoginBtn" style="margin-top: 20px;">Announce Server</button>
             <button id="newUserJoinScriptBtn" style="margin-top: 20px;">Create Join Script</button>
-            <small style="display:block;margin-top:8px;opacity:0.78;">Type world (max 8 chars)/user (max 20 chars). Seed: <code>worldName</code>.</small>
+            <small style="display:block;margin-top:8px;opacity:0.78;">Enter a world name (8 characters, case-sensitive, UTF-8 supported) and a username (max 20 chars).</small>
         </div>
+    </div>
+    <div id="emojiModal">
+        <div id="emojiGrid"></div>
     </div>
     <div id="hud" style="display:none;">
         <div class="row">
@@ -1831,7 +1880,7 @@ self.onmessage = async function(e) {
         var pcx = data.pcx, pcz = data.pcz, pendingKeys = data.pendingKeys, chunksPerSide = data.chunksPerSide, pollRadius = data.pollRadius;
         var keysToDelete = [];
         for (var key of pendingKeys) {
-            var match = key.match(/^([A-Z]{1,8}):(\d{1,5}):(\d{1,5})$/);
+            var match = key.match(/^(.{1,8}):(\d{1,5}):(\d{1,5})$/);
             if (match) {
                 var cx = parseInt(match[2]);
                 var cz = parseInt(match[3]);
@@ -2146,11 +2195,11 @@ self.onmessage = async function(e) {
             return ((n % m) + m) % m;
         }
         function makeChunkKey(world, cx, cz) {
-            var clean = ('' + world).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+            var clean = ('' + world).slice(0, 8);
             return clean + ':' + cx + ':' + cz;
         }
         function parseJsonChunkKey(key) {
-            var match = key.match(/^#?([A-Z]{1,8}):(\d{1,5}):(\d{1,5})$/);
+            var match = key.match(/^#?(.{1,8}):(\d{1,5}):(\d{1,5})$/);
             if (match) {
                 return {
                     world: match[1],
@@ -2161,7 +2210,7 @@ self.onmessage = async function(e) {
             return null;
         }
         function parseChunkKey(key) {
-            var match = key.match(/^([A-Z]{1,8}):(\d{1,5}):(\d{1,5})$/);
+            var match = key.match(/^(.{1,8}):(\d{1,5}):(\d{1,5})$/);
             if (match) {
                 return {
                     world: match[1],
@@ -5636,7 +5685,7 @@ function activateHost() {
                         addMessage('Please enter a world and username', 3000);
                         return;
                     }
-                    worldName = worldInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+                    worldName = worldInput.slice(0, 8);
                     userName = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                     worldSeed = worldName;
 
@@ -5753,7 +5802,7 @@ function activateHost() {
                         addMessage('Please enter a world and username', 3000);
                         return;
                     }
-                    var cleanWorld = worldInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+                    var cleanWorld = worldInput.slice(0, 8);
                     var cleanUser = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                     var serverKeyword = 'MCServerJoin@' + cleanWorld;
                     var serverAddr = await GetPublicAddressByKeyword(serverKeyword);
@@ -5780,7 +5829,7 @@ function activateHost() {
                         addMessage('Please enter a world and username', 3000);
                         return;
                     }
-                    var cleanWorld = worldInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+                    var cleanWorld = worldInput.slice(0, 8);
                     var cleanUser = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                     var userWorldKey = cleanUser + '@' + cleanWorld;
                     var existingWorld = knownWorlds.get(cleanWorld);
@@ -5911,12 +5960,50 @@ function activateHost() {
                 }
                 initWorldsAndUsers();
                 updateLoginUI();
+                setupEmojiPicker();
                 console.log('[Debug] DOMContentLoaded completed, button listeners attached');
             } catch (error) {
                 console.error('[Debug] Error in DOMContentLoaded:', error);
                 addMessage('Failed to initialize login system', 3000);
             }
         });
+
+        function setupEmojiPicker() {
+            const emojiBtn = document.getElementById('emojiBtn');
+            const emojiModal = document.getElementById('emojiModal');
+            const emojiGrid = document.getElementById('emojiGrid');
+            const worldNameInput = document.getElementById('worldNameInput');
+
+            const emojis = ['😀', '🌎', '🚀', '⭐', '💎', '🌳', '🏰', '⚔️', '👽', '🤖', '👻', '🍕', '🎉', '🔥', '💧', '🌱', '🍄', '🍎'];
+
+            emojis.forEach(emoji => {
+                const emojiElement = document.createElement('div');
+                emojiElement.innerText = emoji;
+                emojiElement.style.cursor = 'pointer';
+                emojiElement.style.padding = '8px';
+                emojiElement.style.borderRadius = '4px';
+                emojiElement.style.textAlign = 'center';
+                emojiElement.style.fontSize = '24px';
+                emojiElement.onmouseover = () => emojiElement.style.background = '#1a2632';
+                emojiElement.onmouseout = () => emojiElement.style.background = 'transparent';
+                emojiElement.addEventListener('click', () => {
+                    worldNameInput.value += emoji;
+                    emojiModal.style.display = 'none';
+                });
+                emojiGrid.appendChild(emojiElement);
+            });
+
+            emojiBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                emojiModal.style.display = 'flex';
+            });
+
+            emojiModal.addEventListener('click', (e) => {
+                if (e.target === emojiModal) {
+                    emojiModal.style.display = 'none';
+                }
+            });
+        }
         function animateAttack() {
             if (!isAttacking) {
                 isAttacking = true;
