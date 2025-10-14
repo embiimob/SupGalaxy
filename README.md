@@ -1,7 +1,7 @@
-# 🌌 SupGalaxy v0.2.1-beta
+# 🌌 SupGalaxy v0.2.2-beta
 [Infinite Voxel World Adventure]
 
-Welcome to **SupGalaxy v0.2.1-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+Welcome to **SupGalaxy v0.2.2-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
 
 > **Public Domain (CC0)**: Free to use, modify, and share. No attribution required, but we’d love a nod to embii4u, Grok, Jules, and ChatGPT for sparking this cosmic creation. *May your worlds be infinite and your adventures legendary!*
 
@@ -13,9 +13,9 @@ SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seam
 - **Decentralized Worlds**: Saves as JSON deltas on IPFS, secured via P2FK on Bitcoin testnet3. Worlds sync globally without central servers.
 - **Multiplayer Cosmos**: Connect via WebRTC (TURN server required) for real-time collaboration; positions and builds sync via blockchain polls.
 
-**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.2.1-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
+**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.2.2-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
 
-*Version: v0.2.1-beta (Fully Tested & Live – October 2025)*
+*Version: v0.2.2-beta (Fully Tested & Live – October 2025)*
 
 ## 🎮 How to Play
 ### Quick Start (Local Mode)
@@ -165,7 +165,8 @@ For **ultimate freedom**, host your own p2fk.io API and etch via Sup!?. Sync inf
 
 ---
 
-## 🌟 Changelog (v0.2.1-beta)
+## 🌟 Changelog (v0.2.2-beta)
+- **Procedural Suns & Moons**: Each world now features a unique, procedurally generated sky with a variable number of suns and moons. Moon shapes are also randomized, creating asteroid-like celestial bodies for a truly unique cosmic experience.
 - **Infinite Worlds**: Procedural generation for boundless exploration.
 - **WebRTC**: TURN-supported P2P multiplayer for cosmic teamwork.
 - **Polish**: Optimized chunk loading, UI, audio, and mobile controls.
