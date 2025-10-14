@@ -781,7 +781,7 @@
         var userName = 'player';
         var userAddress = 'anonymous';
         var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false,
-health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
+health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var isAttacking = false;
         var attackStartTime = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -3226,13 +3226,28 @@ self.onmessage = async function(e) {
             }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
-            var minX = player.x - player.width / 2;
-            var maxX = player.x + player.width / 2;
-            var minY = player.y;
-            var maxY = player.y + player.height;
-            var minZ = player.z - player.width / 2;
-            var maxZ = player.z + player.width / 2;
-            return wx >= minX && wx <= maxX && wy >= minY && wy <= maxY && wz >= minZ && wz <= maxZ;
+            // Player's bounding box
+            const pMinX = player.x;
+            const pMaxX = player.x + player.width;
+            const pMinY = player.y;
+            const pMaxY = player.y + player.height;
+            const pMinZ = player.z;
+            const pMaxZ = player.z + player.depth;
+
+            // Block's bounding box (a 1x1x1 cube at the given integer coords)
+            const bMinX = wx;
+            const bMaxX = wx + 1;
+            const bMinY = wy;
+            const bMaxY = wy + 1;
+            const bMinZ = wz;
+            const bMaxZ = wz + 1;
+
+            // Check for overlap on all three axes
+            return (
+                pMinX < bMaxX && pMaxX > bMinX &&
+                pMinY < bMaxY && pMaxY > bMinY &&
+                pMinZ < bMaxZ && pMaxZ > bMinZ
+            );
         }
         function getBlockAt(wx, wy, wz) {
             var wrappedWx = modWrap(Math.floor(wx), MAP_SIZE);
@@ -3566,22 +3581,26 @@ self.onmessage = async function(e) {
             return false;
         }
         function checkCollision(newX, newY, newZ) {
-            var minX = newX - player.width / 2 + 0.001;
-            var minY = newY + 0.001;
-            var maxX = newX + player.width / 2 - 0.001;
-            var maxY = newY + player.height - 0.001;
-            var minZ = newZ - player.depth / 2 + 0.001;
-            var maxZ = newZ + player.depth / 2 - 0.001;
-            for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
-                for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
-                    for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+            // Determine the integer coordinates of all blocks the hitbox touches.
+            const minBx = Math.floor(newX);
+            const maxBx = Math.floor(newX + player.width);
+            const minBy = Math.floor(newY);
+            const maxBy = Math.floor(newY + player.height);
+            const minBz = Math.floor(newZ);
+            const maxBz = Math.floor(newZ + player.depth);
+
+            // Loop through every potentially colliding block.
+            for (let bx = minBx; bx <= maxBx; bx++) {
+                for (let by = minBy; by <= maxBy; by++) {
+                    for (let bz = minBz; bz <= maxBz; bz++) {
                         if (isSolid(getBlockAt(bx, by, bz))) {
-                            return true;
+                            return true; // Collision found!
                         }
                     }
                 }
             }
-            return false;
+
+            return false; // No collisions found.
         }
         function pushPlayerOut() {
             var directions = [
@@ -5812,15 +5831,20 @@ function activateHost() {
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
 
-                var newX = modWrap(player.x + dx, MAP_SIZE);
-                if (!checkCollision(newX, player.y, player.z)) {
-                    player.x = newX;
+                // Apply X-axis movement and check for collision
+                let potentialX = player.x + dx;
+                if (!checkCollision(potentialX, player.y, player.z)) {
+                    player.x = potentialX;
                 }
 
-                var newZ = modWrap(player.z + dz, MAP_SIZE);
-                if (!checkCollision(player.x, player.y, newZ)) {
-                    player.z = newZ;
+                // Apply Z-axis movement and check for collision
+                let potentialZ = player.z + dz;
+                if (!checkCollision(player.x, player.y, potentialZ)) {
+                    player.z = potentialZ;
                 }
+
+                player.x = modWrap(player.x, MAP_SIZE);
+                player.z = modWrap(player.z, MAP_SIZE);
 
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
