@@ -2243,25 +2243,34 @@ self.onmessage = async function(e) {
             canvas.width = size;
             canvas.height = size;
             const context = canvas.getContext('2d');
-            const noise = makeNoise(seed + '_block_' + blockId);
-            const imageData = context.createImageData(size, size);
-            const data = imageData.data;
-            const rnd = makeSeededRandom(seed + '_block_color_' + blockId);
+            const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
             const baseColor = new THREE.Color(BLOCKS[blockId].color);
 
-            for (let x = 0; x < size; x++) {
-                for (let y = 0; y < size; y++) {
-                    const value = fbm(noise, x / 4, y / 4, 2, 0.5);
-                    const index = (y * size + x) * 4;
-                    const brightness = 0.8 + value * 0.4;
-                    data[index] = baseColor.r * 255 * brightness;
-                    data[index + 1] = baseColor.g * 255 * brightness;
-                    data[index + 2] = baseColor.b * 255 * brightness;
-                    data[index + 3] = 255;
+            // Base fill
+            context.fillStyle = baseColor.getStyle();
+            context.fillRect(0, 0, size, size);
+
+            // 8-bit dithering/pattern
+            const patternSize = 2;
+            for (let y = 0; y < size; y += patternSize) {
+                for (let x = 0; x < size; x += patternSize) {
+                    if (rnd() > 0.5) {
+                        const brightness = 0.1 + rnd() * 0.2;
+                        context.fillStyle = `rgba(0,0,0,${brightness})`;
+                        context.fillRect(x, y, patternSize, patternSize);
+                    }
                 }
             }
-            context.putImageData(imageData, 0, 0);
+
+            // Border
+            const borderColor = baseColor.clone().multiplyScalar(0.7);
+            context.strokeStyle = borderColor.getStyle();
+            context.lineWidth = 1;
+            context.strokeRect(0, 0, size, size);
+
             const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
             textureCache.set(blockId, texture);
             return texture;
         }
@@ -2820,10 +2829,10 @@ self.onmessage = async function(e) {
             controls.maxDistance = 100;
             controls.enabled = false;
             console.log('[initThree] Controls created');
-            var dir = new THREE.DirectionalLight(0xffffff, 0.95);
+            var dir = new THREE.DirectionalLight(0xffffff, 0.75); // Reduced intensity
             dir.position.set(100, 200, 100);
             scene.add(dir);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // Reduced intensity
             console.log('[initThree] Lights added');
 
             // Create the procedural ember texture for torches
@@ -3418,7 +3427,6 @@ self.onmessage = async function(e) {
                     player.pitch = 0;
                 }
             }
-            INVENTORY = new Array(32).fill(null);
             updateHotbarUI();
             updateHealthBar();
             document.getElementById('health').innerText = player.health;
@@ -5566,9 +5574,9 @@ function activateHost() {
                             const baseColor = new THREE.Color(block.color);
                             const hsv = {};
                             baseColor.getHSL(hsv);
-                            const newHue = (hsv.h + (colorRnd() - 0.5) * 0.1) % 1;
-                            const newSat = Math.max(0.3, Math.min(1, hsv.s + (colorRnd() - 0.5) * 0.2));
-                            const newLight = Math.max(0.2, Math.min(0.8, hsv.l + (colorRnd() - 0.5) * 0.2));
+                            const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05); // Less hue shift
+                            const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2)); // Saturate a bit
+                            const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2)); // Darker
                             baseColor.setHSL(newHue, newSat, newLight);
                             block.color = '#' + baseColor.getHexString();
                         }
@@ -5596,6 +5604,7 @@ function activateHost() {
                     initMusicPlayer();
                     console.log('[Login] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
+                    selectedHotIndex = 0; // Auto-select torch
                     initHotbar();
                     console.log('[Login] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
