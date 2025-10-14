@@ -589,6 +589,14 @@
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
         <div id="versionLabel">SupGalaxy v0.2.2-beta</div>
+        <div id="musicPlayer" style="margin-top: 8px; width: 100%;">
+            <div id="currentTrack" style="font-size: 10px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #eaf6ff; opacity: 0.9;">No music loaded</div>
+            <div style="display: flex; justify-content: space-around; margin-top: 4px;">
+                <button id="playPauseBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
+                <button id="skipBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
+                <button id="muteBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔇</button>
+            </div>
+        </div>
     </div>
     <div id="craftModal">
         <h3>Crafting</h3>
@@ -659,20 +667,16 @@
         </div>
     </div>
     <audio id="soundBreak" preload="auto">
-        <source src="https://freesound.org/data/previews/249/249938_4357575-lq.mp3" type="audio/mpeg">
-        <source src="https://freesound.org/data/previews/249/249938_4357575-lq.ogg" type="audio/ogg">
+        <source src="sounds/break.wav" type="audio/wav">
     </audio>
     <audio id="soundPlace" preload="auto">
-        <source src="https://freesound.org/data/previews/337/337101_34094-lq.mp3" type="audio/mpeg">
-        <source src="https://freesound.org/data/previews/337/337101_34094-lq.ogg" type="audio/ogg">
+        <source src="sounds/place.wav" type="audio/wav">
     </audio>
     <audio id="soundJump" preload="auto">
-        <source src="https://freesound.org/data/previews/331/331381_34094-lq.mp3" type="audio/mpeg">
-        <source src="https://freesound.org/data/previews/331/331381_34094-lq.ogg" type="audio/ogg">
+        <source src="sounds/jump.wav" type="audio/wav">
     </audio>
     <audio id="soundHit" preload="auto">
-        <source src="https://freesound.org/data/previews/276/276947_34094-lq.mp3" type="audio/mpeg">
-        <source src="https://freesound.org/data/previews/276/276947_34094-lq.ogg" type="audio/ogg">
+        <source src="sounds/hit.wav" type="audio/wav">
     </audio>
     <script>
         var knownWorlds = new Map();
@@ -835,6 +839,13 @@ health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
+
+// Music Player state
+var musicPlaylist = [];
+var currentTrackIndex = 0;
+var musicAudioElement = new Audio();
+var isMusicPlaying = false;
+var isMuted = false;
 
         const AVATAR_COLORS = [
             { body: 0x8338ec, leg: 0xff6b6b, head: 0xffd166 },
@@ -5464,6 +5475,7 @@ function activateHost() {
                     updateHudButtons();
                     console.log('[Login] Initializing Three.js');
                     initThree();
+                    initMusicPlayer();
                     console.log('[Login] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
                     initHotbar();
@@ -6093,6 +6105,143 @@ function activateHost() {
                 renderer.render(scene, camera);
             }
             requestAnimationFrame(gameLoop);
+        }
+        // Music Player Logic
+        function initMusicPlayer() {
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const skipBtn = document.getElementById('skipBtn');
+            const muteBtn = document.getElementById('muteBtn');
+
+            if(playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
+            if(skipBtn) skipBtn.addEventListener('click', skipMusic);
+            if(muteBtn) muteBtn.addEventListener('click', muteMusic);
+
+            musicAudioElement.addEventListener('ended', () => {
+                skipMusic();
+            });
+
+            fetchAndPlayMusic();
+        }
+
+        async function fetchAndPlayMusic() {
+            const musicStatus = document.getElementById('currentTrack');
+            if (!musicStatus) return;
+            musicStatus.innerText = 'Finding music...';
+
+            try {
+                const gameAddress = await GetPublicAddressByKeyword('game');
+                if (!gameAddress) {
+                    musicStatus.innerText = 'Music channel not found';
+                    return;
+                }
+
+                const messages = await GetPublicMessagesByAddress(gameAddress, 0, 100);
+                if (!messages || messages.length === 0) {
+                    musicStatus.innerText = 'No music tracks found';
+                    return;
+                }
+
+                const audioRegex = /(\b[a-zA-Z0-9\-_]+\.(mp3|wav))\b/i;
+                const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+
+                for (const msg of messages) {
+                    if (musicPlaylist.length >= 10) break;
+
+                    const messageText = msg.Message || '';
+                    const audioMatch = messageText.match(audioRegex);
+                    const ipfsMatch = messageText.match(ipfsRegex);
+
+                    if (audioMatch && ipfsMatch) {
+                        const filename = audioMatch[0];
+                        const hash = ipfsMatch[1];
+                        if (!musicPlaylist.some(track => track.url.includes(hash))) {
+                             musicPlaylist.push({
+                                name: filename,
+                                url: `https://ipfs.io/ipfs/${hash}`
+                             });
+                        }
+                    }
+                }
+
+                if (musicPlaylist.length === 0) {
+                    musicStatus.innerText = 'No valid music found';
+                } else {
+                    playTrack(currentTrackIndex);
+                }
+            } catch (error) {
+                console.error("Failed to fetch music:", error);
+                musicStatus.innerText = 'Error loading music';
+            }
+        }
+
+        function playTrack(index) {
+            const musicStatus = document.getElementById('currentTrack');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            if (!musicStatus || !playPauseBtn) return;
+
+            if (musicPlaylist.length === 0 || index < 0 || index >= musicPlaylist.length) {
+                musicStatus.innerText = 'Playlist finished';
+                isMusicPlaying = false;
+                playPauseBtn.innerText = '▶';
+                return;
+            }
+
+            currentTrackIndex = index;
+            const track = musicPlaylist[currentTrackIndex];
+            musicStatus.innerText = track.name;
+            musicAudioElement.src = track.url;
+            musicAudioElement.load();
+
+            const playPromise = musicAudioElement.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isMusicPlaying = true;
+                    playPauseBtn.innerText = '⏸';
+                }).catch(error => {
+                    console.error(`Audio playback for ${track.name} failed:`, error);
+                    isMusicPlaying = false;
+                    playPauseBtn.innerText = '▶';
+                    setTimeout(skipMusic, 2000);
+                });
+            }
+        }
+
+        function playPauseMusic() {
+            if (musicPlaylist.length === 0) return;
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            if (isMusicPlaying) {
+                musicAudioElement.pause();
+                isMusicPlaying = false;
+                if(playPauseBtn) playPauseBtn.innerText = '▶';
+            } else {
+                if (musicAudioElement.src) {
+                    const playPromise = musicAudioElement.play();
+                     if (playPromise !== undefined) {
+                         playPromise.then(() => {
+                            isMusicPlaying = true;
+                            if(playPauseBtn) playPauseBtn.innerText = '⏸';
+                         }).catch(error => {
+                             console.error("Audio playback failed on resume:", error);
+                         });
+                    }
+                } else {
+                    playTrack(currentTrackIndex);
+                }
+            }
+        }
+
+        function skipMusic() {
+            if (musicPlaylist.length > 0) {
+                const nextIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+                playTrack(nextIndex);
+            }
+        }
+
+        function muteMusic() {
+            const muteBtn = document.getElementById('muteBtn');
+            isMuted = !isMuted;
+            musicAudioElement.muted = isMuted;
+            if(muteBtn) muteBtn.innerText = isMuted ? '🔊' : '🔇';
         }
         console.log('[Debug] Script loaded');
     </script>
