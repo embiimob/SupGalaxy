@@ -657,6 +657,7 @@
         <div class="m-action" id="mCam">T</div>
     </div>
     <div id="crosshair">+</div>
+    <div id="damageFlash" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0); pointer-events: none; z-index: 1000; transition: background 0.1s;"></div>
     <div id="pendingModal">
         <h3>Pending Connections</h3>
         <div id="pendingList"></div>
@@ -798,6 +799,7 @@ health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var hotbarOffset = 0;
         var cameraMode = 'third';
         var mobs = [];
+        var worldMobColor;
         var lastDamageTime = 0;
         var lastRegenTime = 0;
         var joystick = { up: false, down: false, left: false, right: false };
@@ -3109,11 +3111,21 @@ self.onmessage = async function(e) {
                 });
             }
         }
+        function flashDamageEffect() {
+            const flashElement = document.getElementById('damageFlash');
+            if (flashElement) {
+                flashElement.style.background = 'rgba(255, 0, 0, 0.5)';
+                setTimeout(() => {
+                    flashElement.style.background = 'rgba(255, 0, 0, 0)';
+                }, 100);
+            }
+        }
+
         function handleMobHit(mob) {
             // This function is only for the local player's attack action.
             // The server/host will be the one to actually process the damage.
             if (isHost) {
-                mob.hurt(4, userName); // Host hits a mob, passing their own name as the attacker
+                mob.hurt(4, userName, player); // Host hits a mob
             } else {
                 // Client sends hit notification to its peer (the host).
                 for (const [peerUser, peerData] of peers.entries()) {
@@ -3123,7 +3135,9 @@ self.onmessage = async function(e) {
                             type: 'mob_hit',
                             id: mob.id,
                             damage: 4,
-                            username: userName // Let the host know who is attacking
+                            username: userName, // Let the host know who is attacking
+                            attackerX: player.x,
+                            attackerZ: player.z
                         }));
                     }
                 }
@@ -3406,21 +3420,32 @@ self.onmessage = async function(e) {
         }
         function Mob(x, z, id) {
             this.id = id || Date.now();
-            this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
-            this.hp = 6;
-            this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color: 0x9bff9b }));
+            const mobRnd = makeSeededRandom(worldSeed + '_mob' + this.id);
+            const size = 0.25 + mobRnd() * 49.75; // 0.25 to 50
+            this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + size / 2 + 0.1, z);
+
+            this.hp = Math.floor(size * 2); // HP linked to size
+
+            this.mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshLambertMaterial({ color: worldMobColor }));
             this.mesh.position.copy(this.pos);
-            this.originalColor = new THREE.Color(0x9bff9b);
+            this.originalColor = baseColor;
             scene.add(this.mesh);
-            this.speed = 0.02 + Math.random() * 0.03;
+            this.speed = 0.02 + mobRnd() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
+            this.vx = 0;
+            this.vz = 0;
         }
         Mob.prototype.update = function (dt) {
+            const distToPlayer = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+
             // Only the host runs the mob AI and state changes.
             if (!isHost) {
-                // On clients, just update the mesh position smoothly.
-                this.mesh.position.lerp(this.pos, 0.1);
+                // On clients, just update the mesh position smoothly if visible.
+                this.mesh.visible = distToPlayer <= 250;
+                if (this.mesh.visible) {
+                    this.mesh.position.lerp(this.pos, 0.1);
+                }
                 // Update flash effect on clients too
                 if (Date.now() < this.flashEnd) {
                     this.mesh.material.color.set(0xff0000);
@@ -3430,17 +3455,35 @@ self.onmessage = async function(e) {
                 return;
             }
 
-            this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + Math.sin(Date.now() * 0.003 + this.mesh.id) * 0.4 + 0.5;
+            // Host logic starts here
+            if (distToPlayer > 200) {
+                // Mob is too far away, remove it.
+                this.hp = 0;
+                this.die("despawn");
+                return;
+            }
+
+            if (distToPlayer > 50) {
+                // Mob is idle, don't animate or run AI
+                return;
+            }
+
+            // Apply friction to knockback velocity
+            this.vx *= 0.9;
+            this.vz *= 0.9;
+
+            let moveVx = 0;
+            let moveVz = 0;
 
             // Find the closest player to target
             let closestPlayer = null;
             let minDistance = Infinity;
 
             // Consider the host player
-            let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+            let hostDist = distToPlayer;
             if (hostDist < minDistance) {
                 minDistance = hostDist;
-                closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                closestPlayer = { x: player.x, y: player.y, z: player.z, health: player.health, username: userName };
             }
 
             // Consider all connected peers
@@ -3450,38 +3493,36 @@ self.onmessage = async function(e) {
                     const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
                     if (dist < minDistance) {
                         minDistance = dist;
-                        closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username }; // Assume full health for peers for now
+                        closestPlayer = { x: peerPos.x, y: peerPos.y, z: peerPos.z, health: 20, username: username };
                     }
                 }
             }
 
-            if (closestPlayer && minDistance < 10) {
+            if (closestPlayer && minDistance < 30) {
                 const dx = closestPlayer.x - this.pos.x;
                 const dz = closestPlayer.z - this.pos.z;
-                const vx = dx / minDistance * this.speed;
-                const vz = dz / minDistance * this.speed;
-                const newX = modWrap(this.pos.x + vx * dt * 60, MAP_SIZE);
-                const newZ = modWrap(this.pos.z + vz * dt * 60, MAP_SIZE);
-
-                if (!checkCollisionWithBlock(newX, this.pos.y, newZ) && !checkCollisionWithPlayer(newX, this.pos.y, newZ)) {
-                    this.pos.x = newX;
-                    this.pos.z = newZ;
+                if (minDistance > 0) {
+                    moveVx = dx / minDistance * this.speed;
+                    moveVz = dz / minDistance * this.speed;
                 }
 
-                if (minDistance < 1.2 && Date.now() - this.attackCooldown > 800) {
+                if (minDistance < (this.mesh.geometry.parameters.width / 2 + player.width / 2 + 0.5) && Date.now() - this.attackCooldown > 800) {
                     this.attackCooldown = Date.now();
-                    // Host sends a message to the targeted player to inflict damage
+                    const knockbackStrength = 5;
                     const targetPeer = peers.get(closestPlayer.username);
                     if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
-                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1 }));
+                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, mobX: this.pos.x, mobZ: this.pos.z }));
                     } else if (closestPlayer.username === userName) {
-                        // The mob is attacking the host player
                         if (Date.now() - lastDamageTime > 800) {
                             player.health = Math.max(0, player.health - 1);
                             lastDamageTime = Date.now();
                             document.getElementById('health').innerText = player.health;
                             updateHealthBar();
                             addMessage('Hit! HP: ' + player.health, 1000);
+                            flashDamageEffect();
+                            const angle = Math.atan2(player.x - this.pos.x, player.z - this.pos.z);
+                            player.vx += Math.sin(angle) * knockbackStrength;
+                            player.vz += Math.cos(angle) * knockbackStrength;
                             if (player.health <= 0) {
                                 handlePlayerDeath();
                             }
@@ -3489,18 +3530,32 @@ self.onmessage = async function(e) {
                     }
                 }
             } else {
-                // Wander aimlessly if no player is near
-                const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
-                const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
-                if (!checkCollisionWithBlock(newX, this.pos.y, newZ) && !checkCollisionWithPlayer(newX, this.pos.y, newZ)) {
-                    this.pos.x = newX;
-                    this.pos.z = newZ;
-                }
+                moveVx = (Math.sin(Date.now() * 0.001 + this.id) * this.speed * 0.5);
+                moveVz = (Math.cos(Date.now() * 0.001 + this.id) * this.speed * 0.5);
             }
+
+            this.vx += moveVx;
+            this.vz += moveVz;
+
+            // Slide collision
+            let newPosX = modWrap(this.pos.x + this.vx * dt * 60, MAP_SIZE);
+            if (!checkMobCollision(this, newPosX, this.pos.y, this.pos.z)) {
+                this.pos.x = newPosX;
+            } else {
+                this.vx = 0;
+            }
+            let newPosZ = modWrap(this.pos.z + this.vz * dt * 60, MAP_SIZE);
+            if (!checkMobCollision(this, this.pos.x, this.pos.y, newPosZ)) {
+                this.pos.z = newPosZ;
+            } else {
+                this.vz = 0;
+            }
+
+            const size = this.mesh.geometry.parameters.width;
+            this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + size / 2 + 0.1;
 
             this.mesh.position.copy(this.pos);
 
-            // Host broadcasts the mob's state to all clients.
             const updateMessage = JSON.stringify({
                 type: 'mob_update',
                 id: this.id,
@@ -3516,12 +3571,19 @@ self.onmessage = async function(e) {
                 }
             }
         };
-        Mob.prototype.hurt = function (dmg, attackerName) {
+        Mob.prototype.hurt = function (dmg, attackerName, attacker) {
             if (!isHost) return; // Only host can process damage
 
             this.hp -= dmg;
             this.flashEnd = Date.now() + 200; // Trigger flash effect
             safePlayAudio(soundHit);
+
+            if (attacker) {
+                const knockbackStrength = 5;
+                const angle = Math.atan2(this.pos.x - attacker.x, this.pos.z - attacker.z);
+                this.vx += Math.sin(angle) * knockbackStrength;
+                this.vz += Math.cos(angle) * knockbackStrength;
+            }
 
             if (this.hp <= 0) {
                 this.die(attackerName);
@@ -3581,37 +3643,43 @@ self.onmessage = async function(e) {
                 return;
             }
 
-            var loadedChunks = Array.from(chunkManager.chunks.keys());
-            if (loadedChunks.length === 0) return;
-            for (var i = 0; i < count; i++) {
-                var randomChunkKey = loadedChunks[Math.floor(rnd() * loadedChunks.length)];
-                var parsed = parseChunkKey(randomChunkKey);
-                if (!parsed) continue;
-                var cx = parsed.cx;
-                var cz = parsed.cz;
-                var baseX = cx * CHUNK_SIZE;
-                var baseZ = cz * CHUNK_SIZE;
-                var lx = rnd() * CHUNK_SIZE;
-                var lz = rnd() * CHUNK_SIZE;
-                var x = modWrap(baseX + lx, MAP_SIZE);
-                var z = modWrap(baseZ + lz, MAP_SIZE);
-                var m = new Mob(x, z);
-                mobs.push(m);
+            for (let i = 0; i < count; i++) {
+                let attempts = 0;
+                while (attempts < 10) {
+                    const angle = rnd() * 2 * Math.PI;
+                    const distance = 50 + rnd() * 150; // 50 to 200 blocks
+                    const x = player.x + Math.cos(angle) * distance;
+                    const z = player.z + Math.sin(angle) * distance;
+
+                    const wrappedX = modWrap(x, MAP_SIZE);
+                    const wrappedZ = modWrap(z, MAP_SIZE);
+
+                    const surfaceY = chunkManager.getSurfaceY(wrappedX, wrappedZ);
+                    if (surfaceY > SEA_LEVEL) { // Ensure it's on land
+                        var m = new Mob(wrappedX, wrappedZ);
+                        mobs.push(m);
+                        break; // Found a valid spot
+                    }
+                    attempts++;
+                }
             }
         }
         function isSolid(id) {
             return id !== 0 && id !== 6 && id !== 12 && id !== 8 && id !== 16 && id !== 17 && id !== 100 && id !== 101 && id !== 102 && id !== 103 && id !== 104 && id !== 111 && id !== 112 && id !== 113 && id !== 114 && id !== 116 && id !== 117;
         }
-        function checkCollisionWithBlock(newX, newY, newZ) {
-            var minX = newX - 0.45;
-            var minY = newY;
-            var minZ = newZ - 0.45;
-            var maxX = newX + 0.45;
-            var maxY = newY + 0.9;
-            var maxZ = newZ + 0.45;
-            for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
-                for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
-                    for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+        function checkMobCollision(mob, newX, newY, newZ) {
+            const size = mob.mesh.geometry.parameters.width;
+            const halfSize = size / 2;
+            const minX = newX - halfSize;
+            const minY = newY - halfSize;
+            const minZ = newZ - halfSize;
+            const maxX = newX + halfSize;
+            const maxY = newY + halfSize;
+            const maxZ = newZ + halfSize;
+
+            for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
+                for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
+                    for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
                         if (isSolid(getBlockAt(bx, by, bz))) {
                             return true;
                         }
@@ -4501,7 +4569,7 @@ self.onmessage = async function(e) {
                             if (isHost) {
                                 const mobToHit = mobs.find(m => m.id === data.id);
                                 if (mobToHit) {
-                                    mobToHit.hurt(data.damage || 4, data.username);
+                                    mobToHit.hurt(data.damage || 4, data.username, { x: data.attackerX, z: data.attackerZ });
                                 }
                             }
                             break;
@@ -4513,6 +4581,11 @@ self.onmessage = async function(e) {
                                 document.getElementById('health').innerText = player.health;
                                 updateHealthBar();
                                 addMessage('Hit! HP: ' + player.health, 1000);
+                                flashDamageEffect();
+                                const knockbackStrength = 5;
+                                const angle = Math.atan2(player.x - data.mobX, player.z - data.mobZ);
+                                player.vx += Math.sin(angle) * knockbackStrength;
+                                player.vz += Math.cos(angle) * knockbackStrength;
                                 if (player.health <= 0) {
                                     handlePlayerDeath();
                                 }
@@ -5491,6 +5564,8 @@ function activateHost() {
                     worldName = worldInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
                     userName = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                     worldSeed = worldName;
+                    const mobColorRnd = makeSeededRandom(worldSeed + '_mob_color');
+                    worldMobColor = new THREE.Color().setHSL(mobColorRnd(), 0.7, 0.5);
                     var userWorldKey = userName + '@' + worldName;
                     var profile = await GetProfileByURN(userName);
                     userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
@@ -5903,19 +5978,28 @@ function activateHost() {
                         player.yaw = Math.atan2(moveVec.x, moveVec.z);
                     }
                 }
-                var dx = moveVec.x * speed * dt;
-                var dz = moveVec.z * speed * dt;
+                player.vx += moveVec.x * speed * dt;
+                player.vz += moveVec.z * speed * dt;
+
+                // Apply friction
+                player.vx *= 0.9;
+                player.vz *= 0.9;
+
 
                 // Apply X-axis movement and check for collision
-                let potentialX = player.x + dx;
+                let potentialX = player.x + player.vx;
                 if (!checkCollision(potentialX, player.y, player.z)) {
                     player.x = potentialX;
+                } else {
+                    player.vx = 0;
                 }
 
                 // Apply Z-axis movement and check for collision
-                let potentialZ = player.z + dz;
-                if (!checkCollision(player.x, player.y, potentialZ)) { // Use the (potentially updated) player.x
+                let potentialZ = player.z + player.vz;
+                if (!checkCollision(player.x, player.y, potentialZ)) {
                     player.z = potentialZ;
+                } else {
+                    player.vz = 0;
                 }
 
                 player.vy -= 16.0 * dt;
