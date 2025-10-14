@@ -831,6 +831,7 @@ health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0 };
         var processedMessages = new Set();
         var initialPollDone = false;
         var isHost = false;
+        var isConnecting = false;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
@@ -3752,6 +3753,22 @@ self.onmessage = async function(e) {
                     minimapCtx.fillRect(px - 2, pz - 2, 4, 4);
                 }
             }
+            if (isConnecting) {
+                const radius = canvas.width / 2;
+                const angle = (performance.now() / 500) % (Math.PI * 2);
+
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(cx, cz);
+                minimapCtx.lineTo(cx + radius * Math.cos(angle), cz + radius * Math.sin(angle));
+
+                const gradient = minimapCtx.createLinearGradient(cx, cz, cx + radius * Math.cos(angle), cz + radius * Math.sin(angle));
+                gradient.addColorStop(0, 'rgba(100, 255, 100, 0)');
+                gradient.addColorStop(1, 'rgba(100, 255, 100, 0.9)');
+
+                minimapCtx.strokeStyle = gradient;
+                minimapCtx.lineWidth = 2;
+                minimapCtx.stroke();
+            }
         }
         var keys = {};
         function registerKeyEvents() {
@@ -5352,6 +5369,7 @@ function activateHost() {
                 e.stopPropagation();
             });
             modal.querySelector('#connectFriend').onclick = function () {
+                isConnecting = true;
                 var handle = document.getElementById('friendHandle').value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
                 if (!handle) {
                     addMessage('Please enter a friend’s handle', 3000);
@@ -5598,6 +5616,7 @@ function activateHost() {
                 });
                 document.getElementById('closeJoinScript').addEventListener('click', function () {
                     isPromptOpen = false;
+                    isConnecting = false;
                     document.getElementById('joinScriptModal').style.display = 'none';
                 });
                 document.getElementById('closeDownloadModal').addEventListener('click', function () {
