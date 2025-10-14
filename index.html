@@ -5871,7 +5871,9 @@ function activateHost() {
                 const isMoving = moveVec.length() > 0.001;
                 if (isMoving) {
                     moveVec.normalize();
-                    player.yaw = Math.atan2(moveVec.x, moveVec.z);
+                    if (cameraMode === 'third') {
+                        player.yaw = Math.atan2(moveVec.x, moveVec.z);
+                    }
                 }
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
