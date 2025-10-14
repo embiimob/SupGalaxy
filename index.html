@@ -3014,19 +3014,20 @@ self.onmessage = async function(e) {
             const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
             const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const leftEye = new THREE.Mesh(eyeGeo, faceMat);
-            leftEye.position.set(-0.15, 2.4, 0.3);
+            leftEye.position.set(-0.15, 0.1, 0.3);
             const rightEye = new THREE.Mesh(eyeGeo, faceMat);
-            rightEye.position.set(0.15, 2.4, 0.3);
+            rightEye.position.set(0.15, 0.1, 0.3);
 
             const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const nose = new THREE.Mesh(noseGeo, faceMat);
-            nose.position.set(0, 2.3, 0.3);
+            nose.position.set(0, 0, 0.3);
 
             const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
             const mouth = new THREE.Mesh(mouthGeo, faceMat);
-            mouth.position.set(0, 2.2, 0.3);
+            mouth.position.set(0, -0.1, 0.3);
 
-            avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye, nose, mouth);
+            head.add(leftEye, rightEye, nose, mouth);
+            avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
             scene.add(avatarGroup);
         }
         function createAvatar(username) {
@@ -3060,19 +3061,20 @@ self.onmessage = async function(e) {
             const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
             const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const leftEye = new THREE.Mesh(eyeGeo, faceMat);
-            leftEye.position.set(-0.15, 2.4, 0.3);
+            leftEye.position.set(-0.15, 0.1, 0.3);
             const rightEye = new THREE.Mesh(eyeGeo, faceMat);
-            rightEye.position.set(0.15, 2.4, 0.3);
+            rightEye.position.set(0.15, 0.1, 0.3);
 
             const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const nose = new THREE.Mesh(noseGeo, faceMat);
-            nose.position.set(0, 2.3, 0.3);
+            nose.position.set(0, 0, 0.3);
 
             const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
             const mouth = new THREE.Mesh(mouthGeo, faceMat);
-            mouth.position.set(0, 2.2, 0.3);
+            mouth.position.set(0, -0.1, 0.3);
 
-            avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye, nose, mouth);
+            head.add(leftEye, rightEye, nose, mouth);
+            avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
             scene.add(avatar);
             playerAvatars.set(username, avatar);
             console.log('[WebRTC] Avatar created and added to scene for:', username);
