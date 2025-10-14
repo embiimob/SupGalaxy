@@ -847,22 +847,6 @@ var musicAudioElement = new Audio();
 var isMusicPlaying = false;
 var isMuted = false;
 
-        const AVATAR_COLORS = [
-            // A vibrant and diverse palette for player avatars. Each color scheme is designed to be distinct.
-            // Each object defines hex color codes for different parts of the avatar model.
-            // The 'face' property is reserved for facial features like eyes, ensuring they stand out.
-            { body: 0x8338ec, leg: 0xff6b6b, head: 0xffd166, arm: 0x48bfe3, face: 0x000000 },
-            { body: 0x3a86ff, leg: 0xffbe0b, head: 0xfb5607, arm: 0x560bad, face: 0xffffff },
-            { body: 0x588157, leg: 0x3a5a40, head: 0xa3b18a, arm: 0x344e41, face: 0x000000 },
-            { body: 0xff006e, leg: 0x8338ec, head: 0xffbe0b, arm: 0x72efdd, face: 0xffffff },
-            { body: 0x118ab2, leg: 0x073b4c, head: 0xef476f, arm: 0x06d6a0, face: 0x000000 },
-            { body: 0xf94144, leg: 0xf3722c, head: 0xf8961e, arm: 0xf9c74f, face: 0x000000 },
-            { body: 0x43aa8b, leg: 0x277da1, head: 0x577590, arm: 0x4d908e, face: 0xffffff },
-            { body: 0x003049, leg: 0xd62828, head: 0xf77f00, arm: 0xfcbf49, face: 0x000000 },
-            { body: 0x6a040f, leg: 0x9d0208, head: 0xd00000, arm: 0xdc2f02, face: 0xffffff },
-            { body: 0x2ec4b6, leg: 0xe71d36, head: 0xff9f1c, arm: 0x011627, face: 0x000000 },
-        ];
-
         function simpleHash(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -2876,12 +2860,17 @@ self.onmessage = async function(e) {
         }
         var avatarGroup;
         function createPlayerAvatar() {
+            if (avatarGroup) {
+                scene.remove(avatarGroup);
+                disposeObject(avatarGroup);
+            }
             avatarGroup = new THREE.Group();
-            const colorScheme = AVATAR_COLORS[simpleHash(userName) % AVATAR_COLORS.length];
-            var legMat = new THREE.MeshStandardMaterial({ color: colorScheme.leg });
-            var bodyMat = new THREE.MeshStandardMaterial({ color: colorScheme.body });
-            var headMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
-            var armMat = new THREE.MeshStandardMaterial({ color: colorScheme.arm });
+            const rnd = makeSeededRandom(userName);
+
+            const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.5 + rnd() * 0.2) });
+            const armMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const legMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.4 + rnd() * 0.2) });
 
             var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             var bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
@@ -2901,25 +2890,33 @@ self.onmessage = async function(e) {
             var rightArm = new THREE.Mesh(armGeo, armMat);
             rightArm.position.set(0.55, 1.5, 0);
 
-            const faceMat = new THREE.MeshStandardMaterial({ color: colorScheme.face });
+            const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
             const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const leftEye = new THREE.Mesh(eyeGeo, faceMat);
             leftEye.position.set(-0.15, 2.4, 0.3);
             const rightEye = new THREE.Mesh(eyeGeo, faceMat);
             rightEye.position.set(0.15, 2.4, 0.3);
 
-            avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye);
+            const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const nose = new THREE.Mesh(noseGeo, faceMat);
+            nose.position.set(0, 2.3, 0.3);
+
+            const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
+            const mouth = new THREE.Mesh(mouthGeo, faceMat);
+            mouth.position.set(0, 2.2, 0.3);
+
+            avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye, nose, mouth);
             scene.add(avatarGroup);
         }
         function createAvatar(username) {
             console.log('[WebRTC] Creating avatar for:', username);
             const avatar = new THREE.Group();
-            const colorScheme = AVATAR_COLORS[simpleHash(username) % AVATAR_COLORS.length];
+            const rnd = makeSeededRandom(username);
 
-            const legMat = new THREE.MeshStandardMaterial({ color: colorScheme.leg });
-            const bodyMat = new THREE.MeshStandardMaterial({ color: colorScheme.body });
-            const headMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
-            const armMat = new THREE.MeshStandardMaterial({ color: colorScheme.arm });
+            const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.5 + rnd() * 0.2) });
+            const armMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const legMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.4 + rnd() * 0.2) });
 
             const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
@@ -2939,14 +2936,22 @@ self.onmessage = async function(e) {
             const rightArm = new THREE.Mesh(armGeo, armMat);
             rightArm.position.set(0.55, 1.5, 0);
 
-            const faceMat = new THREE.MeshStandardMaterial({ color: colorScheme.face });
+            const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
             const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const leftEye = new THREE.Mesh(eyeGeo, faceMat);
             leftEye.position.set(-0.15, 2.4, 0.3);
             const rightEye = new THREE.Mesh(eyeGeo, faceMat);
             rightEye.position.set(0.15, 2.4, 0.3);
 
-            avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye);
+            const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const nose = new THREE.Mesh(noseGeo, faceMat);
+            nose.position.set(0, 2.3, 0.3);
+
+            const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
+            const mouth = new THREE.Mesh(mouthGeo, faceMat);
+            mouth.position.set(0, 2.2, 0.3);
+
+            avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm, leftEye, rightEye, nose, mouth);
             scene.add(avatar);
             playerAvatars.set(username, avatar);
             console.log('[WebRTC] Avatar created and added to scene for:', username);
