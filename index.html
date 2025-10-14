@@ -74,19 +74,23 @@
                 cursor: pointer;
             }
 
-        #worldNameInputContainer {
+        .inputContainer {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
-        #worldNameInputContainer input {
+        .inputContainer input {
             flex-grow: 1;
         }
 
-        #emojiBtn {
-            width: auto;
+        .emojiBtn {
+            width: 32px;
+            height: 32px;
+            padding: 2px;
+            font-size: 16px;
             margin-top: 0;
+            flex-shrink: 0;
             background: #0d1620;
             font-weight: normal;
         }
@@ -304,7 +308,7 @@
             #emojiGrid {
                 grid-template-columns: repeat(4, 1fr);
             }
-            #emojiBtn {
+            .emojiBtn {
                 padding: 6px 10px;
             }
         }
@@ -592,14 +596,15 @@
         <div id="loginCard">
             <h2>SupGalaxy</h2>
             <label>World name</label>
-            <div id="worldNameInputContainer" class="autocomplete">
+            <div class="inputContainer autocomplete">
                 <input id="worldNameInput" placeholder="Type world name" autocomplete="off" />
-                <button id="emojiBtn">😀</button>
+                <button id="emojiBtn" class="emojiBtn">😀</button>
                 <div id="worldSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
             </div>
             <label>Username</label>
-            <div class="autocomplete">
+            <div class="inputContainer autocomplete">
                 <input id="userInput" placeholder="Type username" autocomplete="off" />
+                <button id="emojiBtnUser" class="emojiBtn">😀</button>
                 <div id="userSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
             </div>
             <button id="startBtn">Start — spawn world</button>
@@ -5686,7 +5691,7 @@ function activateHost() {
                         return;
                     }
                     worldName = worldInput.slice(0, 8);
-                    userName = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+                    userName = userInput.slice(0, 20);
                     worldSeed = worldName;
 
                     const colorRnd = makeSeededRandom(worldSeed + '_colors');
@@ -5803,7 +5808,7 @@ function activateHost() {
                         return;
                     }
                     var cleanWorld = worldInput.slice(0, 8);
-                    var cleanUser = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+                    var cleanUser = userInput.slice(0, 20);
                     var serverKeyword = 'MCServerJoin@' + cleanWorld;
                     var serverAddr = await GetPublicAddressByKeyword(serverKeyword);
                     document.getElementById('joinScriptText').value = serverAddr ? serverAddr.trim().replace(/^"|"$/g, '') : serverKeyword;
@@ -5830,7 +5835,7 @@ function activateHost() {
                         return;
                     }
                     var cleanWorld = worldInput.slice(0, 8);
-                    var cleanUser = userInput.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+                    var cleanUser = userInput.slice(0, 20);
                     var userWorldKey = cleanUser + '@' + cleanWorld;
                     var existingWorld = knownWorlds.get(cleanWorld);
                     if (existingWorld && existingWorld.users.has(cleanUser)) {
@@ -5970,32 +5975,63 @@ function activateHost() {
 
         function setupEmojiPicker() {
             const emojiBtn = document.getElementById('emojiBtn');
+            const emojiBtnUser = document.getElementById('emojiBtnUser');
             const emojiModal = document.getElementById('emojiModal');
             const emojiGrid = document.getElementById('emojiGrid');
             const worldNameInput = document.getElementById('worldNameInput');
+            const userInput = document.getElementById('userInput');
+            let activeInput = null;
 
-            const emojis = ['😀', '🌎', '🚀', '⭐', '💎', '🌳', '🏰', '⚔️', '👽', '🤖', '👻', '🍕', '🎉', '🔥', '💧', '🌱', '🍄', '🍎'];
+            const emojiCategories = {
+                'Faces': ['😀', '😂', '😍', '🤔', '😎', '😭', '😡', '😱', '😇', '😈', '👻', '👽', '🤖'],
+                'Objects': ['⭐', '💎', '🌳', '🏰', '⚔️', '🍕', '🎉', '🔥', '💧', '🌱', '🍄', '🍎', '🚬', '💣', '🔫', '🔑', '❤️'],
+                'Animals': ['🐶', '🐱', '🐭', '🦊', '🐻', '🐼', '🐨', '🐵', '🦁', '🐸', '🐢', '🐍', '🦄', '🦅', '🦋'],
+                'Travel': ['🌎', '🚀', '✈️', '🚗', '⛵️', '⛰️', '🏝️', '🏜️', '🏞️', '🏛️', '🏠', '⛺️']
+            };
 
-            emojis.forEach(emoji => {
-                const emojiElement = document.createElement('div');
-                emojiElement.innerText = emoji;
-                emojiElement.style.cursor = 'pointer';
-                emojiElement.style.padding = '8px';
-                emojiElement.style.borderRadius = '4px';
-                emojiElement.style.textAlign = 'center';
-                emojiElement.style.fontSize = '24px';
-                emojiElement.onmouseover = () => emojiElement.style.background = '#1a2632';
-                emojiElement.onmouseout = () => emojiElement.style.background = 'transparent';
-                emojiElement.addEventListener('click', () => {
-                    worldNameInput.value += emoji;
-                    emojiModal.style.display = 'none';
+            emojiGrid.innerHTML = '';
+
+            for (const category in emojiCategories) {
+                const categoryHeader = document.createElement('div');
+                categoryHeader.innerText = category;
+                categoryHeader.style.gridColumn = '1 / -1';
+                categoryHeader.style.fontWeight = 'bold';
+                categoryHeader.style.marginTop = '10px';
+                emojiGrid.appendChild(categoryHeader);
+
+                emojiCategories[category].forEach(emoji => {
+                    const emojiElement = document.createElement('div');
+                    emojiElement.innerText = emoji;
+                    emojiElement.style.cursor = 'pointer';
+                    emojiElement.style.padding = '8px';
+                    emojiElement.style.borderRadius = '4px';
+                    emojiElement.style.textAlign = 'center';
+                    emojiElement.style.fontSize = '24px';
+                    emojiElement.onmouseover = () => emojiElement.style.background = '#1a2632';
+                    emojiElement.onmouseout = () => emojiElement.style.background = 'transparent';
+                    emojiElement.addEventListener('click', () => {
+                        if (activeInput) {
+                            activeInput.value += emoji;
+                        }
+                        emojiModal.style.display = 'none';
+                    });
+                    emojiGrid.appendChild(emojiElement);
                 });
-                emojiGrid.appendChild(emojiElement);
-            });
+            }
+
+            function openModal(inputElement) {
+                activeInput = inputElement;
+                emojiModal.style.display = 'flex';
+            }
 
             emojiBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                emojiModal.style.display = 'flex';
+                openModal(worldNameInput);
+            });
+
+            emojiBtnUser.addEventListener('click', (e) => {
+                e.preventDefault();
+                openModal(userInput);
             });
 
             emojiModal.addEventListener('click', (e) => {
