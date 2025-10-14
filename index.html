@@ -2244,28 +2244,46 @@ self.onmessage = async function(e) {
             const context = canvas.getContext('2d');
             const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
             const baseColor = new THREE.Color(BLOCKS[blockId].color);
+            const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
 
             // Base fill
             context.fillStyle = baseColor.getStyle();
             context.fillRect(0, 0, size, size);
 
-            // 8-bit dithering/pattern
-            const patternSize = 2;
-            for (let y = 0; y < size; y += patternSize) {
-                for (let x = 0; x < size; x += patternSize) {
-                    if (rnd() > 0.5) {
-                        const brightness = 0.1 + rnd() * 0.2;
-                        context.fillStyle = `rgba(0,0,0,${brightness})`;
-                        context.fillRect(x, y, patternSize, patternSize);
-                    }
+            // Pattern
+            const patternType = Math.floor(rnd() * 4);
+            context.strokeStyle = secondaryColor.getStyle();
+            context.lineWidth = 1 + rnd() * 2;
+
+            if (patternType === 0) { // Horizontal lines
+                for (let y = 0; y < size; y += 4) {
+                    context.beginPath();
+                    context.moveTo(0, y);
+                    context.lineTo(size, y);
+                    context.stroke();
+                }
+            } else if (patternType === 1) { // Vertical lines
+                for (let x = 0; x < size; x += 4) {
+                    context.beginPath();
+                    context.moveTo(x, 0);
+                    context.lineTo(x, size);
+                    context.stroke();
+                }
+            } else if (patternType === 2) { // Diagonal lines
+                 for (let i = -size; i < size; i += 4) {
+                    context.beginPath();
+                    context.moveTo(i, 0);
+                    context.lineTo(i + size, size);
+                    context.stroke();
                 }
             }
+            // No pattern for type 3, just the base color with a border
 
             // Border
             const borderColor = baseColor.clone().multiplyScalar(0.7);
             context.strokeStyle = borderColor.getStyle();
             context.lineWidth = 1;
-            context.strokeRect(0, 0, size, size);
+            context.strokeRect(0.5, 0.5, size - 1, size - 1);
 
             const texture = new THREE.CanvasTexture(canvas);
             texture.magFilter = THREE.NearestFilter;
@@ -2342,8 +2360,12 @@ self.onmessage = async function(e) {
                                   fbm(moonNoise, vertex.y * 0.05, vertex.z * 0.05, 3, 0.5) +
                                   fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
 
+                    // Add a second layer of noise for craters
+                    const craterNoise = fbm(moonNoise, vertex.x * 0.2, vertex.y * 0.2, 2, 0.5);
+                    const craterDepth = 0.1 * craterNoise;
+
                     // Average the noise and apply it to the vertex, pushing it outwards from the center.
-                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor);
+                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor - craterDepth);
                     positions.setXYZ(j, vertex.x, vertex.y, vertex.z);
                 }
                 moonShape.computeVertexNormals(); // Recalculate normals for correct lighting after displacement.
@@ -5605,6 +5627,7 @@ function activateHost() {
                     INVENTORY[0] = { id: 120, count: 8 };
                     selectedHotIndex = 0; // Auto-select torch
                     initHotbar();
+                    updateHotbarUI(); // Explicitly update UI and selectedBlockId
                     console.log('[Login] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
                     console.log('[Login] Populating spawn chunks');
