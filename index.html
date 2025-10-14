@@ -2598,6 +2598,7 @@ self.onmessage = async function(e) {
                 const message = JSON.stringify({
                     type: 'block_change',
                     wx: wx, wy: wy, wz: wz, bid: bid,
+                    prevBid: prev, // Include the previous block ID
                     username: userName // Let the server know who made the change
                 });
 
@@ -4472,8 +4473,36 @@ self.onmessage = async function(e) {
                                 }
                             }
                             // All peers (including host) apply the change locally.
-                            // `doBroadcast` is false to prevent clients from re-broadcasting.
                             chunkManager.setBlockGlobal(data.wx, data.wy, data.wz, data.bid, false);
+
+                            // Handle light removal for the previous block
+                            if (data.prevBid && BLOCKS[data.prevBid] && BLOCKS[data.prevBid].light) {
+                                var lightKey = `${data.wx},${data.wy},${data.wz}`;
+                                if (torchLights.has(lightKey)) {
+                                    var light = torchLights.get(lightKey);
+                                    scene.remove(light);
+                                    light.dispose();
+                                    torchLights.delete(lightKey);
+                                }
+                                if (torchParticles.has(lightKey)) {
+                                    var particles = torchParticles.get(lightKey);
+                                    scene.remove(particles);
+                                    particles.geometry.dispose();
+                                    particles.material.dispose();
+                                    torchParticles.delete(lightKey);
+                                }
+                            }
+
+                            // Handle light creation for the new block
+                            if (data.bid && BLOCKS[data.bid] && BLOCKS[data.bid].light) {
+                                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                                light.position.set(data.wx, data.wy + 0.5, data.wz);
+                                scene.add(light);
+                                torchLights.set(`${data.wx},${data.wy},${data.wz}`, light);
+                                var particles = createFlameParticles(data.wx, data.wy + 0.5, data.wz);
+                                scene.add(particles);
+                                torchParticles.set(`${data.wx},${data.wy},${data.wz}`, particles);
+                            }
                             break;
                         case 'mob_update':
                             // Received from host. Update local mob state.
