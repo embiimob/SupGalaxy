@@ -2189,7 +2189,7 @@ self.onmessage = async function(e) {
 
             const numSuns = 1 + Math.floor(skyRnd() * 3); // 1 to 3 suns
             for (let i = 0; i < numSuns; i++) {
-                const sunSize = 10 + skyRnd() * 20;
+                const sunSize = 80 + skyRnd() * 120;
                 const sunColor = new THREE.Color().setHSL(skyRnd(), 0.8 + skyRnd() * 0.2, 0.6 + skyRnd() * 0.2);
                 const sun = new THREE.Mesh(
                     new THREE.SphereGeometry(sunSize, 32, 32),
@@ -2201,9 +2201,32 @@ self.onmessage = async function(e) {
 
             const numMoons = Math.floor(skyRnd() * 4); // 0 to 3 moons
             for (let i = 0; i < numMoons; i++) {
-                const moonSize = 5 + skyRnd() * 15;
+                const moonSize = 40 + skyRnd() * 60;
                 const moonColor = new THREE.Color().setHSL(skyRnd(), 0.1 + skyRnd() * 0.2, 0.7 + skyRnd() * 0.2);
-                const moonShape = skyRnd() > 0.5 ? new THREE.SphereGeometry(moonSize, 32, 32) : new THREE.BoxGeometry(moonSize, moonSize, moonSize);
+
+                // Create a base sphere geometry for the moon
+                const moonShape = new THREE.SphereGeometry(moonSize, 32, 32);
+                const moonNoise = makeNoise(worldSeed + '_moon_' + i);
+                const positions = moonShape.attributes.position;
+                const vertex = new THREE.Vector3();
+
+                // Apply noise to vertices to create an irregular, asteroid-like shape
+                // We use Fractional Brownian Motion (fbm) for a more natural, craggy look.
+                // By combining 2D noise on different axes, we can simulate a 3D noise field.
+                for (let j = 0; j < positions.count; j++) {
+                    vertex.fromBufferAttribute(positions, j);
+
+                    const noiseFactor = 0.4; // Controls how irregular the shape is
+                    const noise = fbm(moonNoise, vertex.x * 0.05, vertex.y * 0.05, 3, 0.5) +
+                                  fbm(moonNoise, vertex.y * 0.05, vertex.z * 0.05, 3, 0.5) +
+                                  fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
+
+                    // Average the noise and apply it to the vertex, pushing it outwards from the center.
+                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor);
+                    positions.setXYZ(j, vertex.x, vertex.y, vertex.z);
+                }
+                moonShape.computeVertexNormals(); // Recalculate normals for correct lighting after displacement.
+
                 const moon = new THREE.Mesh(
                     moonShape,
                     new THREE.MeshBasicMaterial({ color: moonColor })
@@ -2289,8 +2312,21 @@ self.onmessage = async function(e) {
             const tNorm = Math.max(0, sunY);
             scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
 
+            // Adjust scene lighting based on whether it's day or night
             const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
-            ambientLight.intensity = isNight ? 0.05 : 0.6;
+            const directionalLight = scene.getObjectByProperty('type', 'DirectionalLight');
+
+            if (isNight) {
+                // At night, it should be very dark. The primary light sources will be
+                // torches and potentially bright moons. We turn off the main sunlight
+                // and reduce ambient light to a minimum.
+                ambientLight.intensity = 0.02; // Just enough to see outlines
+                if (directionalLight) directionalLight.intensity = 0;
+            } else {
+                // During the day, restore the normal lighting.
+                ambientLight.intensity = 0.6;
+                if (directionalLight) directionalLight.intensity = 0.95;
+            }
         }
 
         function createFlameParticles(x, y, z) {
@@ -2452,9 +2488,16 @@ self.onmessage = async function(e) {
                 geom.setIndex(indices);
                 geom.computeBoundingSphere();
                 var info = BLOCKS[id] || { color: '#ff00ff' };
-                var mat = info.transparent ?
-                    new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide }) :
-                    new THREE.MeshLambertMaterial({ color: new THREE.Color(info.color) });
+                var mat;
+                // A light-emitting block should not be affected by scene lighting, so it uses a basic material.
+                // This will make the torch block itself appear to glow from all sides, rather than having one side shaded.
+                if (info.light) {
+                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color) });
+                } else if (info.transparent) {
+                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                } else {
+                    mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(info.color) });
+                }
                 var mesh = new THREE.Mesh(geom, mat);
                 group.add(mesh);
             }
