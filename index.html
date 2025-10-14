@@ -821,6 +821,7 @@ health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
         var apiCallTimestamps = [];
         var audioErrorLogged = false;
         var sun, moon, stars, clouds;
+        var emberTexture;
         var torchLights = new Map();
         var torchParticles = new Map();
         var INVENTORY = new Array(32).fill(null);
@@ -2153,6 +2154,48 @@ self.onmessage = async function(e) {
             return { x: x, y: y, z: z };
         }
         var skyProps;
+        function createEmberTexture(seed) {
+            const size = 32;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const noise = makeNoise(seed + '_ember');
+            const imageData = context.createImageData(size, size);
+            const data = imageData.data;
+
+            const colorRamp = [
+                { r: 60, g: 0, b: 0 },    // Dark red base
+                { r: 255, g: 100, b: 0 }, // Orange
+                { r: 255, g: 255, b: 150 } // Bright yellow/white
+            ];
+
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    const value = fbm(noise, x / 8, y / 8, 3, 0.6);
+                    const index = (y * size + x) * 4;
+                    let r, g, b;
+                    if (value < 0.5) {
+                        const t = value / 0.5;
+                        r = colorRamp[0].r + (colorRamp[1].r - colorRamp[0].r) * t;
+                        g = colorRamp[0].g + (colorRamp[1].g - colorRamp[0].g) * t;
+                        b = colorRamp[0].b + (colorRamp[1].b - colorRamp[0].b) * t;
+                    } else {
+                        const t = (value - 0.5) / 0.5;
+                        r = colorRamp[1].r + (colorRamp[2].r - colorRamp[1].r) * t;
+                        g = colorRamp[1].g + (colorRamp[2].g - colorRamp[1].g) * t;
+                        b = colorRamp[1].b + (colorRamp[2].b - colorRamp[1].b) * t;
+                    }
+                    data[index] = r;
+                    data[index + 1] = g;
+                    data[index + 2] = b;
+                    data[index + 3] = 255;
+                }
+            }
+            context.putImageData(imageData, 0, 0);
+            return new THREE.CanvasTexture(canvas);
+        }
+
         function createCloudTexture(seed) {
             const size = 256;
             const canvas = document.createElement('canvas');
@@ -2189,7 +2232,7 @@ self.onmessage = async function(e) {
 
             const numSuns = 1 + Math.floor(skyRnd() * 3); // 1 to 3 suns
             for (let i = 0; i < numSuns; i++) {
-                const sunSize = 10 + skyRnd() * 20;
+                const sunSize = 80 + skyRnd() * 120;
                 const sunColor = new THREE.Color().setHSL(skyRnd(), 0.8 + skyRnd() * 0.2, 0.6 + skyRnd() * 0.2);
                 const sun = new THREE.Mesh(
                     new THREE.SphereGeometry(sunSize, 32, 32),
@@ -2201,9 +2244,32 @@ self.onmessage = async function(e) {
 
             const numMoons = Math.floor(skyRnd() * 4); // 0 to 3 moons
             for (let i = 0; i < numMoons; i++) {
-                const moonSize = 5 + skyRnd() * 15;
+                const moonSize = 40 + skyRnd() * 60;
                 const moonColor = new THREE.Color().setHSL(skyRnd(), 0.1 + skyRnd() * 0.2, 0.7 + skyRnd() * 0.2);
-                const moonShape = skyRnd() > 0.5 ? new THREE.SphereGeometry(moonSize, 32, 32) : new THREE.BoxGeometry(moonSize, moonSize, moonSize);
+
+                // Create a base sphere geometry for the moon
+                const moonShape = new THREE.SphereGeometry(moonSize, 32, 32);
+                const moonNoise = makeNoise(worldSeed + '_moon_' + i);
+                const positions = moonShape.attributes.position;
+                const vertex = new THREE.Vector3();
+
+                // Apply noise to vertices to create an irregular, asteroid-like shape
+                // We use Fractional Brownian Motion (fbm) for a more natural, craggy look.
+                // By combining 2D noise on different axes, we can simulate a 3D noise field.
+                for (let j = 0; j < positions.count; j++) {
+                    vertex.fromBufferAttribute(positions, j);
+
+                    const noiseFactor = 0.4; // Controls how irregular the shape is
+                    const noise = fbm(moonNoise, vertex.x * 0.05, vertex.y * 0.05, 3, 0.5) +
+                                  fbm(moonNoise, vertex.y * 0.05, vertex.z * 0.05, 3, 0.5) +
+                                  fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
+
+                    // Average the noise and apply it to the vertex, pushing it outwards from the center.
+                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor);
+                    positions.setXYZ(j, vertex.x, vertex.y, vertex.z);
+                }
+                moonShape.computeVertexNormals(); // Recalculate normals for correct lighting after displacement.
+
                 const moon = new THREE.Mesh(
                     moonShape,
                     new THREE.MeshBasicMaterial({ color: moonColor })
@@ -2289,8 +2355,31 @@ self.onmessage = async function(e) {
             const tNorm = Math.max(0, sunY);
             scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
 
+            // Create a gradual transition for lighting during dusk and dawn.
+            // We define a transition range based on the sun's vertical position (sunY).
+            const transitionStart = -0.2; // Sun is below horizon
+            const transitionEnd = 0.2;   // Sun is above horizon
+
+            // Calculate a factor from 0 (full night) to 1 (full day)
+            let lightFactor = (sunY - transitionStart) / (transitionEnd - transitionStart);
+            lightFactor = Math.max(0, Math.min(1, lightFactor)); // Clamp between 0 and 1
+
             const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
-            ambientLight.intensity = isNight ? 0.05 : 0.6;
+            const directionalLight = scene.getObjectByProperty('type', 'DirectionalLight');
+
+            const dayAmbient = 0.6;
+            const nightAmbient = 0.02;
+            const dayDirectional = 0.95;
+            const nightDirectional = 0;
+
+            // Interpolate the light intensities using the calculated factor.
+            // This creates a smooth fade between day and night lighting.
+            if (ambientLight) {
+                ambientLight.intensity = nightAmbient + (dayAmbient - nightAmbient) * lightFactor;
+            }
+            if (directionalLight) {
+                directionalLight.intensity = nightDirectional + (dayDirectional - nightDirectional) * lightFactor;
+            }
         }
 
         function createFlameParticles(x, y, z) {
@@ -2452,9 +2541,16 @@ self.onmessage = async function(e) {
                 geom.setIndex(indices);
                 geom.computeBoundingSphere();
                 var info = BLOCKS[id] || { color: '#ff00ff' };
-                var mat = info.transparent ?
-                    new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide }) :
-                    new THREE.MeshLambertMaterial({ color: new THREE.Color(info.color) });
+                var mat;
+                // A light-emitting block should not be affected by scene lighting.
+                // We use a basic material with a procedural ember texture to make it glow.
+                if (info.light) {
+                    mat = new THREE.MeshBasicMaterial({ map: emberTexture });
+                } else if (info.transparent) {
+                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                } else {
+                    mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(info.color) });
+                }
                 var mesh = new THREE.Mesh(geom, mat);
                 group.add(mesh);
             }
@@ -2658,6 +2754,10 @@ self.onmessage = async function(e) {
             scene.add(dir);
             scene.add(new THREE.AmbientLight(0xffffff, 0.45));
             console.log('[initThree] Lights added');
+
+            // Create the procedural ember texture for torches
+            emberTexture = createEmberTexture(worldSeed);
+
             meshGroup = new THREE.Group();
             scene.add(meshGroup);
             console.log('[initThree] Mesh group created');
