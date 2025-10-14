@@ -780,7 +780,8 @@
         var worldName = 'KANYE';
         var userName = 'player';
         var userAddress = 'anonymous';
-        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false, health: 20, score: 0, width: 0.6, height: 1.8, yaw: 0, pitch: 0 };
+        var player = { x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false,
+health: 20, score: 0, width: 1.41, height: 2.6, depth: 0.9, yaw: 0, pitch: 0 };
         var isAttacking = false;
         var attackStartTime = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -2268,13 +2269,13 @@ self.onmessage = async function(e) {
 
             skyProps.suns.forEach(sun => {
                 const angle = timeAngle + sun.angleOffset;
-                sun.mesh.position.set(4000 * Math.cos(angle), 4000 * Math.sin(angle), 1500 * Math.sin(angle));
+                sun.mesh.position.set(camera.position.x + 4000 * Math.cos(angle), camera.position.y + 4000 * Math.sin(angle), camera.position.z + 1500 * Math.sin(angle));
                 sun.mesh.visible = Math.sin(angle) > -0.1;
             });
 
             skyProps.moons.forEach(moon => {
                 const angle = timeAngle + moon.angleOffset + Math.PI;
-                moon.mesh.position.set(3800 * Math.cos(angle), 3800 * Math.sin(angle), 1200 * Math.sin(angle));
+                moon.mesh.position.set(camera.position.x + 3800 * Math.cos(angle), camera.position.y + 3800 * Math.sin(angle), camera.position.z + 1200 * Math.sin(angle));
                 moon.mesh.visible = Math.sin(angle) > -0.1;
             });
 
@@ -2437,7 +2438,7 @@ self.onmessage = async function(e) {
                     var uvAttr = box.attributes.uv.array;
                     var idxAttr = box.index.array;
                     for (var vi = 0; vi < box.attributes.position.count; vi++) {
-                        positions.push(posAttr[vi * 3 + 0] + p.x, posAttr[vi * 3 + 1] + p.y, posAttr[vi * 3 + 2] + p.z);
+                        positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
                         normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
                         uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
                     }
@@ -2761,19 +2762,19 @@ self.onmessage = async function(e) {
             var headMat = new THREE.MeshStandardMaterial({ color: 0xf2c57c });
             var armMat = new THREE.MeshStandardMaterial({ color: 0xf2c57c });
 
-            var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4); // Shorter legs
+            var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             var bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
             var headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             var armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
 
             var leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0); // Adjusted Y position
+            leftLeg.position.set(-0.25, 0.4, 0);
             var rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0); // Adjusted Y position
+            rightLeg.position.set(0.25, 0.4, 0);
             var body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0); // Adjusted Y position
+            body.position.set(0, 1.4, 0);
             var head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0); // Adjusted Y position
+            head.position.set(0, 2.3, 0);
             var leftArm = new THREE.Mesh(armGeo, armMat);
             leftArm.position.set(-0.55, 1.5, 0);
             var rightArm = new THREE.Mesh(armGeo, armMat);
@@ -2792,19 +2793,19 @@ self.onmessage = async function(e) {
             const headMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
             const armMat = new THREE.MeshStandardMaterial({ color: colorScheme.head });
 
-            const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4); // Shorter legs
+            const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
             const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
             const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             const armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
 
             const leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0); // Adjusted Y position
+            leftLeg.position.set(-0.25, 0.4, 0);
             const rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0); // Adjusted Y position
+            rightLeg.position.set(0.25, 0.4, 0);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0); // Adjusted Y position
+            body.position.set(0, 1.4, 0);
             const head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0); // Adjusted Y position
+            head.position.set(0, 2.3, 0);
             const leftArm = new THREE.Mesh(armGeo, armMat);
             leftArm.position.set(-0.55, 1.5, 0);
             const rightArm = new THREE.Mesh(armGeo, armMat);
@@ -3009,17 +3010,17 @@ self.onmessage = async function(e) {
             var h = ints[0];
             var p = h.point;
             var norm = h.face.normal;
-            var wx = Math.round(p.x - norm.x * 0.01);
-            var wy = Math.round(p.y - norm.y * 0.01);
-            var wz = Math.round(p.z - norm.z * 0.01);
+            var wx = Math.floor(p.x - norm.x * 0.5);
+            var wy = Math.floor(p.y - norm.y * 0.5);
+            var wz = Math.floor(p.z - norm.z * 0.5);
             if (e.button === 0) {
                 animateAttack();
                 removeBlockAt(wx, wy, wz);
                 safePlayAudio(soundBreak);
             } else if (e.button === 2) {
-                var placeX = Math.round(p.x + norm.x * 0.51);
-                var placeY = Math.round(p.y + norm.y * 0.51);
-                var placeZ = Math.round(p.z + norm.z * 0.51);
+                var placeX = Math.floor(p.x + norm.x * 0.5);
+                var placeY = Math.floor(p.y + norm.y * 0.5);
+                var placeZ = Math.floor(p.z + norm.z * 0.5);
                 placeBlockAt(placeX, placeY, placeZ, selectedBlockId);
             }
         }
@@ -3469,8 +3470,8 @@ self.onmessage = async function(e) {
             var minY = newY + 0.001;
             var maxX = newX + player.width / 2 - 0.001;
             var maxY = newY + player.height - 0.001;
-            var minZ = newZ - player.width / 2 + 0.001;
-            var maxZ = newZ + player.width / 2 - 0.001;
+            var minZ = newZ - player.depth / 2 + 0.001;
+            var maxZ = newZ + player.depth / 2 - 0.001;
             for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
                 for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
                     for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
@@ -5710,15 +5711,17 @@ function activateHost() {
                 if (isMoving) moveVec.normalize();
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
+
                 var newX = modWrap(player.x + dx, MAP_SIZE);
-                var newZ = modWrap(player.z + dz, MAP_SIZE);
-                if (!checkCollision(newX, player.y, newZ)) {
+                if (!checkCollision(newX, player.y, player.z)) {
                     player.x = newX;
-                    player.z = newZ;
-                } else {
-                    if (!checkCollision(newX, player.y, player.z)) player.x = newX;
-                    if (!checkCollision(player.x, player.y, newZ)) player.z = newZ;
                 }
+
+                var newZ = modWrap(player.z + dz, MAP_SIZE);
+                if (!checkCollision(player.x, player.y, newZ)) {
+                    player.z = newZ;
+                }
+
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
                 var newY = player.y + dy;
@@ -5761,7 +5764,7 @@ function activateHost() {
                 }
                 var distFromSpawn = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
                 document.getElementById('homeIcon').style.display = distFromSpawn > 10 ? 'inline' : 'none';
-                avatarGroup.position.set(player.x, player.y - 0.9, player.z);
+                avatarGroup.position.set(player.x, player.y, player.z);
                 if (cameraMode === 'third') {
                     avatarGroup.rotation.y = player.yaw;
                 }
@@ -5769,6 +5772,10 @@ function activateHost() {
                 chunkManager.update(player.x, player.z);
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
+
+                // Make skybox elements follow the camera
+                if (stars) stars.position.copy(camera.position);
+                if (clouds) clouds.position.copy(camera.position);
 
                 for (const [key, particleSystem] of torchParticles.entries()) {
                     const positions = particleSystem.geometry.attributes.position.array;
@@ -5876,7 +5883,7 @@ function activateHost() {
 
                             const interpolatedPosition = new THREE.Vector3(
                                 userState.prevX + (userState.targetX - userState.prevX) * alpha,
-                                userState.prevY + (userState.targetY - userState.prevY) * alpha - 0.9,
+                                userState.prevY + (userState.targetY - userState.prevY) * alpha,
                                 userState.prevZ + (userState.targetZ - userState.prevZ) * alpha
                             );
                             avatar.position.copy(interpolatedPosition);
