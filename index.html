@@ -4609,6 +4609,10 @@ self.onmessage = async function(e) {
                             // Host processes this to update its state for the client
                             if (!isHost) break;
 
+                            if (!playerAvatars.has(sender)) {
+                                createAvatar(sender, data.yaw);
+                            }
+
                             if (!userPositions[sender]) {
                                 userPositions[sender] = {
                                     lastTimestamp: 0,
