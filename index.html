@@ -3365,10 +3365,10 @@ self.onmessage = async function(e) {
                             peerData.dc.send(message);
                         }
                     }
+                    // Client gets optimistic feedback
+                    safePlayAudio(soundHit);
+                    addMessage('Hit ' + hitPlayer.username + '!', 800);
                 }
-
-                safePlayAudio(soundHit);
-                addMessage('Hit ' + hitPlayer.username + '!', 800);
                 return;
             }
             var ints = raycaster.intersectObject(meshGroup, true);
@@ -3392,6 +3392,10 @@ self.onmessage = async function(e) {
 
                 const dist = Math.hypot(attackerX - targetX, attackerY - targetY, attackerZ - targetZ);
                 if (dist < 6) { // 6 blocks validation
+                    if (attackerUsername === userName) {
+                        safePlayAudio(soundHit);
+                        addMessage('Hit ' + targetUsername + '!', 800);
+                    }
                     const targetPeer = peers.get(data.target);
                     if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
                         targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username }));
@@ -3423,6 +3427,8 @@ self.onmessage = async function(e) {
                             }
                         }
                     }
+                } else if (attackerUsername === userName) {
+                    addMessage('Miss! Target is out of range.', 800);
                 }
             }
             if (ints.length === 0) return;
