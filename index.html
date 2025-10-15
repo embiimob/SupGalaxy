@@ -3369,9 +3369,25 @@ self.onmessage = async function(e) {
                     safePlayAudio(soundHit);
                     addMessage('Hit ' + hitPlayer.username + '!', 800);
                 }
-                return;
             }
             var ints = raycaster.intersectObject(meshGroup, true);
+            if (ints.length === 0) return;
+            var h = ints[0];
+            var p = h.point;
+            var norm = h.face.normal;
+            var wx = Math.floor(p.x - norm.x * 0.5);
+            var wy = Math.floor(p.y - norm.y * 0.5);
+            var wz = Math.floor(p.z - norm.z * 0.5);
+            if (e.button === 0) {
+                animateAttack();
+                removeBlockAt(wx, wy, wz);
+                safePlayAudio(soundBreak);
+            } else if (e.button === 2) {
+                var placeX = Math.floor(p.x + norm.x * 0.5);
+                var placeY = Math.floor(p.y + norm.y * 0.5);
+                var placeZ = Math.floor(p.z + norm.z * 0.5);
+                placeBlockAt(placeX, placeY, placeZ, selectedBlockId);
+            }
         }
 
         function handlePlayerHit(data) {
@@ -3430,23 +3446,6 @@ self.onmessage = async function(e) {
                 } else if (attackerUsername === userName) {
                     addMessage('Miss! Target is out of range.', 800);
                 }
-            }
-            if (ints.length === 0) return;
-            var h = ints[0];
-            var p = h.point;
-            var norm = h.face.normal;
-            var wx = Math.floor(p.x - norm.x * 0.5);
-            var wy = Math.floor(p.y - norm.y * 0.5);
-            var wz = Math.floor(p.z - norm.z * 0.5);
-            if (e.button === 0) {
-                animateAttack();
-                removeBlockAt(wx, wy, wz);
-                safePlayAudio(soundBreak);
-            } else if (e.button === 2) {
-                var placeX = Math.floor(p.x + norm.x * 0.5);
-                var placeY = Math.floor(p.y + norm.y * 0.5);
-                var placeZ = Math.floor(p.z + norm.z * 0.5);
-                placeBlockAt(placeX, placeY, placeZ, selectedBlockId);
             }
         }
         function attackAtPoint(point) {
