@@ -3349,20 +3349,82 @@ self.onmessage = async function(e) {
 
             if (playerHitAvatars.length > 0) {
                 const hitPlayer = playerHitAvatars[0];
-                for (const [peerUser, peerData] of peers.entries()) {
-                    if (peerData.dc && peerData.dc.readyState === 'open') {
-                        peerData.dc.send(JSON.stringify({
-                            type: 'player_hit',
-                            target: hitPlayer.username,
-                            username: userName
-                        }));
+                const message = JSON.stringify({
+                    type: 'player_hit',
+                    target: hitPlayer.username,
+                    username: userName
+                });
+
+                if (isHost) {
+                    // Host hitting a client, process it directly
+                    handlePlayerHit(JSON.parse(message));
+                } else {
+                    // Client hitting another player, send to host for validation
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(message);
+                        }
                     }
                 }
+
                 safePlayAudio(soundHit);
                 addMessage('Hit ' + hitPlayer.username + '!', 800);
                 return;
             }
             var ints = raycaster.intersectObject(meshGroup, true);
+        }
+
+        function handlePlayerHit(data) {
+            const attackerUsername = data.username;
+            const targetUsername = data.target;
+
+            const attacker = attackerUsername === userName ? player : userPositions[attackerUsername];
+            const target = targetUsername === userName ? player : userPositions[targetUsername];
+
+            if (attacker && target) {
+                const attackerX = attackerUsername === userName ? attacker.x : attacker.targetX;
+                const attackerY = attackerUsername === userName ? attacker.y : attacker.targetY;
+                const attackerZ = attackerUsername === userName ? attacker.z : attacker.targetZ;
+
+                const targetX = targetUsername === userName ? target.x : (target.targetX || target.x);
+                const targetY = targetUsername === userName ? target.y : (target.targetY || target.y);
+                const targetZ = targetUsername === userName ? target.z : (target.targetZ || target.z);
+
+                const dist = Math.hypot(attackerX - targetX, attackerY - targetY, attackerZ - targetZ);
+                if (dist < 6) { // 6 blocks validation
+                    const targetPeer = peers.get(data.target);
+                    if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username }));
+                    } else if (data.target === userName) {
+                        // The host was hit
+                        if (Date.now() - lastDamageTime > 800) {
+                            player.health = Math.max(0, player.health - 1);
+                            lastDamageTime = Date.now();
+                            document.getElementById('health').innerText = player.health;
+                            updateHealthBar();
+                            addMessage('Hit by ' + data.username + '! HP: ' + player.health, 1000);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+
+                            const attackerPos = userPositions[data.username];
+                            if (attackerPos) {
+                                const dx = player.x - attackerPos.targetX;
+                                const dz = player.z - attackerPos.targetZ;
+                                const dist = Math.hypot(dx, dz);
+                                if (dist > 0) {
+                                    const knockback = 5;
+                                    player.vx += (dx / dist) * knockback;
+                                    player.vz += (dz / dist) * knockback;
+                                }
+                            }
+
+                            if (player.health <= 0) {
+                                handlePlayerDeath();
+                            }
+                        }
+                    }
+                }
+            }
             if (ints.length === 0) return;
             var h = ints[0];
             var p = h.point;
@@ -3519,16 +3581,45 @@ self.onmessage = async function(e) {
         }
         function handlePlayerDeath() {
             if (!deathScreenShown) {
-                document.getElementById('deathScreen').style.display = 'flex';
+                deathScreenShown = true; // Set flag immediately to prevent re-triggering
+
+                // Simple death animation: fall over
+                const fallDuration = 1000; // 1 second
+                const startRotation = avatarGroup.rotation.clone();
+                const endRotation = new THREE.Euler(Math.PI / 2, startRotation.y, startRotation.z);
+
+                let startTime = null;
+
+                function animateFall(timestamp) {
+                    if (!startTime) startTime = timestamp;
+                    const progress = Math.min(1, (timestamp - startTime) / fallDuration);
+
+                    avatarGroup.rotation.x = startRotation.x + (endRotation.x - startRotation.x) * progress;
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animateFall);
+                    } else {
+                        // After animation, show death screen
+                        document.getElementById('deathScreen').style.display = 'flex';
+                    }
+                }
+                requestAnimationFrame(animateFall);
+
                 INVENTORY = new Array(32).fill(null);
                 player.score = 0;
-                var scoreElement = document.getElementById('score');
-                if (scoreElement) scoreElement.innerText = player.score;
+                document.getElementById('score').innerText = player.score;
                 player.health = 0;
                 updateHealthBar();
                 updateHotbarUI();
                 addMessage('You died! All items and score lost.', 5000);
-                deathScreenShown = true;
+
+                // Notify other players of the death
+                const message = JSON.stringify({ type: 'player_death', username: userName });
+                 for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message);
+                    }
+                }
             }
         }
         function respawnPlayer(x, y, z) {
@@ -4755,56 +4846,7 @@ self.onmessage = async function(e) {
                         case 'player_hit':
                             // Received from a client. Only the host processes this.
                             if (isHost) {
-                                const attackerUsername = data.username;
-                                const targetUsername = data.target;
-
-                                const attacker = attackerUsername === userName ? player : userPositions[attackerUsername];
-                                const target = targetUsername === userName ? player : userPositions[targetUsername];
-
-                                if (attacker && target) {
-                                    const attackerX = attackerUsername === userName ? attacker.x : attacker.targetX;
-                                    const attackerY = attackerUsername === userName ? attacker.y : attacker.targetY;
-                                    const attackerZ = attackerUsername === userName ? attacker.z : attacker.targetZ;
-
-                                    const targetX = targetUsername === userName ? target.x : target.targetX;
-                                    const targetY = targetUsername === userName ? target.y : target.targetY;
-                                    const targetZ = targetUsername === userName ? target.z : target.targetZ;
-
-                                    const dist = Math.hypot(attackerX - targetX, attackerY - targetY, attackerZ - targetZ);
-                                    if (dist < 6) { // 6 blocks validation
-                                        const targetPeer = peers.get(data.target);
-                                        if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
-                                            targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username }));
-                                        } else if (data.target === userName) {
-                                            // The host was hit
-                                            if (Date.now() - lastDamageTime > 800) {
-                                                player.health = Math.max(0, player.health - 1);
-                                                lastDamageTime = Date.now();
-                                                document.getElementById('health').innerText = player.health;
-                                                updateHealthBar();
-                                                addMessage('Hit by ' + data.username + '! HP: ' + player.health, 1000);
-                                                flashDamageEffect();
-                                                safePlayAudio(soundHit);
-
-                                                const attackerPos = userPositions[data.username];
-                                                if (attackerPos) {
-                                                    const dx = player.x - attackerPos.targetX;
-                                                    const dz = player.z - attackerPos.targetZ;
-                                                    const dist = Math.hypot(dx, dz);
-                                                    if (dist > 0) {
-                                                        const knockback = 5;
-                                                        player.vx += (dx / dist) * knockback;
-                                                        player.vz += (dz / dist) * knockback;
-                                                    }
-                                                }
-
-                                                if (player.health <= 0) {
-                                                    handlePlayerDeath();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                handlePlayerHit(data);
                             }
                             break;
                         case 'player_damage':
@@ -4842,6 +4884,13 @@ self.onmessage = async function(e) {
                             player.score += data.amount || 0;
                             document.getElementById('score').innerText = player.score;
                             addMessage(`+${data.amount} score`, 1500);
+                            break;
+                        case 'player_death':
+                            // Received from host. Animate remote player's death.
+                            const deadPlayerAvatar = playerAvatars.get(data.username);
+                            if (deadPlayerAvatar) {
+                                animateRemoteFall(deadPlayerAvatar);
+                            }
                             break;
                     }
                 } catch (err) {
@@ -6170,6 +6219,26 @@ function activateHost() {
                 isAttacking = true;
                 attackStartTime = performance.now();
             }
+        }
+
+        function animateRemoteFall(avatar) {
+            const fallDuration = 1000; // 1 second
+            const startRotation = avatar.rotation.clone();
+            const endRotation = new THREE.Euler(Math.PI / 2, startRotation.y, startRotation.z);
+
+            let startTime = null;
+
+            function animateFall(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const progress = Math.min(1, (timestamp - startTime) / fallDuration);
+
+                avatar.rotation.x = startRotation.x + (endRotation.x - startRotation.x) * progress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateFall);
+                }
+            }
+            requestAnimationFrame(animateFall);
         }
 
         function updateAvatarAnimation(now, isMoving) {
