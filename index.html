@@ -4825,7 +4825,7 @@ function activateHost() {
             const iceServers = await getTurnCredentials();
             const pc = new RTCPeerConnection({ iceServers });
             pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
-            peers.set(clientUser, { pc, dc: null, address: offer.profile ? offer.profile.Creators[0] : null });
+            peers.set(clientUser, { pc, dc: null, address: offer.profile && offer.profile.Creators ? offer.profile.Creators[0] : null });
             pc.ondatachannel = (e) => {
                 const dc = e.channel;
                 const peerData = peers.get(clientUser);
