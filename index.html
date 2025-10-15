@@ -4755,11 +4755,22 @@ self.onmessage = async function(e) {
                         case 'player_hit':
                             // Received from a client. Only the host processes this.
                             if (isHost) {
-                                const attacker = userPositions[data.username];
-                                const target = data.target === userName ? player : userPositions[data.target];
+                                const attackerUsername = data.username;
+                                const targetUsername = data.target;
+
+                                const attacker = attackerUsername === userName ? player : userPositions[attackerUsername];
+                                const target = targetUsername === userName ? player : userPositions[targetUsername];
 
                                 if (attacker && target) {
-                                    const dist = Math.hypot(attacker.targetX - target.x, attacker.targetY - target.y, attacker.targetZ - target.z);
+                                    const attackerX = attackerUsername === userName ? attacker.x : attacker.targetX;
+                                    const attackerY = attackerUsername === userName ? attacker.y : attacker.targetY;
+                                    const attackerZ = attackerUsername === userName ? attacker.z : attacker.targetZ;
+
+                                    const targetX = targetUsername === userName ? target.x : target.targetX;
+                                    const targetY = targetUsername === userName ? target.y : target.targetY;
+                                    const targetZ = targetUsername === userName ? target.z : target.targetZ;
+
+                                    const dist = Math.hypot(attackerX - targetX, attackerY - targetY, attackerZ - targetZ);
                                     if (dist < 6) { // 6 blocks validation
                                         const targetPeer = peers.get(data.target);
                                         if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
@@ -4771,7 +4782,22 @@ self.onmessage = async function(e) {
                                                 lastDamageTime = Date.now();
                                                 document.getElementById('health').innerText = player.health;
                                                 updateHealthBar();
-                                                addMessage('Hit! HP: ' + player.health, 1000);
+                                                addMessage('Hit by ' + data.username + '! HP: ' + player.health, 1000);
+                                                flashDamageEffect();
+                                                safePlayAudio(soundHit);
+
+                                                const attackerPos = userPositions[data.username];
+                                                if (attackerPos) {
+                                                    const dx = player.x - attackerPos.targetX;
+                                                    const dz = player.z - attackerPos.targetZ;
+                                                    const dist = Math.hypot(dx, dz);
+                                                    if (dist > 0) {
+                                                        const knockback = 5;
+                                                        player.vx += (dx / dist) * knockback;
+                                                        player.vz += (dz / dist) * knockback;
+                                                    }
+                                                }
+
                                                 if (player.health <= 0) {
                                                     handlePlayerDeath();
                                                 }
