@@ -1695,19 +1695,49 @@ self.onmessage = async function(e) {
                         processedMessages.add(msg.TransactionId);
                         processedIds.push(msg.TransactionId);
                         try {
+                            // Efficiently handle IPFS data and user profiles
                             var fromProfile = await getProfileByAddress(msg.FromAddress);
-                            if (!fromProfile || !fromProfile.URN) {
-                                console.log('[Worker] Skipping offer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
-                                continue;
+                            var clientUser = 'anonymous';
+                            var data = null;
+                            var hash = null;
+                            var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+
+                            if (match) {
+                                hash = match[1];
+                                var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                                if (cidRegex.test(hash)) {
+                                    data = await fetchIPFS(hash);
+                                    if (data && data.user) {
+                                        clientUser = data.user.replace(/[^a-zA-Z0-9]/g, "");
+                                    }
+                                } else {
+                                    console.log('[Worker] Invalid CID in offer message:', hash, 'txId:', msg.TransactionId);
+                                    hash = null; // Invalidate hash to prevent further processing
+                                }
                             }
-                            var clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+
+                            if (clientUser === 'anonymous' && fromProfile && fromProfile.URN) {
+                                clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                            }
+
                             if (clientUser === userName) {
                                 console.log('[Worker] Skipping offer from self:', clientUser, 'txId:', msg.TransactionId);
                                 continue;
                             }
+
+                            // Security check: If the claimed username is a registered user, verify the sender is an authorized creator.
                             var userProfile = await getProfileByURN(clientUser);
-                            if (!userProfile) {
-                                console.log('[Worker] No profile for client user:', clientUser, 'txId:', msg.TransactionId);
+                            if (userProfile) {
+                                if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                                    console.log('[Worker] Skipping offer: Sender is not an authorized creator for registered user:', clientUser, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                            }
+
+                            if (!hash || !data) {
+                                if (!hash) console.log('[Worker] No valid IPFS hash in offer message:', msg.Message, 'txId:', msg.TransactionId);
+                                else if (!data) console.log('[Worker] No data fetched from IPFS for hash:', hash, 'txId:', msg.TransactionId);
+
                                 offers.push({
                                     clientUser: clientUser,
                                     offer: null,
@@ -1718,38 +1748,16 @@ self.onmessage = async function(e) {
                                 });
                                 continue;
                             }
-                            if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                                console.log('[Worker] Skipping offer message, invalid creators for user:', clientUser, 'txId:', msg.TransactionId);
+
+                            if (!data.world || data.world !== worldName) {
+                                console.log('[Worker] Invalid IPFS data for offer message: wrong world.', 'txId:', msg.TransactionId);
                                 continue;
                             }
-                            var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                            if (!match) {
-                                console.log('[Worker] No IPFS hash in offer message:', msg.Message, 'txId:', msg.TransactionId);
-                                offers.push({
-                                    clientUser: clientUser,
-                                    offer: null,
-                                    iceCandidates: [],
-                                    transactionId: msg.TransactionId,
-                                    timestamp: new Date(msg.BlockDate).getTime(),
-                                    profile: fromProfile
-                                });
-                                continue;
-                            }
-                            var hash = match[1];
-                            var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
-                            if (!cidRegex.test(hash)) {
-                                console.log('[Worker] Invalid CID in offer message:', hash, 'txId:', msg.TransactionId);
-                                continue;
-                            }
-                            var data = await fetchIPFS(hash);
-                            if (!data || !data.world || data.world !== worldName) {
-                                console.log('[Worker] Invalid IPFS data for offer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
-                                continue;
-                            }
+
                             if (data.offer || data.answer) {
                                 if (!offerMap.has(clientUser)) {
                                     offerMap.set(clientUser, {
-                                        clientUser: data.user || clientUser,
+                                        clientUser: clientUser,
                                         offer: data.offer || data.answer,
                                         iceCandidates: data.iceCandidates || [],
                                         transactionId: msg.TransactionId,
@@ -1758,7 +1766,7 @@ self.onmessage = async function(e) {
                                     });
                                 }
                             } else {
-                                console.log('[Worker] No offer or answer in IPFS data:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
+                                console.log('[Worker] No offer or answer in IPFS data:', hash, 'txId:', msg.TransactionId);
                                 offers.push({
                                     clientUser: clientUser,
                                     offer: null,
@@ -4601,6 +4609,10 @@ self.onmessage = async function(e) {
                             // Host processes this to update its state for the client
                             if (!isHost) break;
 
+                            if (!playerAvatars.has(sender)) {
+                                createAvatar(sender, data.yaw);
+                            }
+
                             if (!userPositions[sender]) {
                                 userPositions[sender] = {
                                     lastTimestamp: 0,
@@ -4817,7 +4829,7 @@ function activateHost() {
             const iceServers = await getTurnCredentials();
             const pc = new RTCPeerConnection({ iceServers });
             pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
-            peers.set(clientUser, { pc, dc: null, address: offer.profile ? offer.profile.Creators[0] : null });
+            peers.set(clientUser, { pc, dc: null, address: offer.profile && offer.profile.Creators ? offer.profile.Creators[0] : null });
             pc.ondatachannel = (e) => {
                 const dc = e.channel;
                 const peerData = peers.get(clientUser);
