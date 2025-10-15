@@ -712,6 +712,7 @@
         <div class="m-action" id="mCam">T</div>
     </div>
     <div id="crosshair">+</div>
+    <div id="damageFlash" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0); pointer-events: none; z-index: 9999; transition: background 0.1s;"></div>
     <div id="pendingModal">
         <h3>Pending Connections</h3>
         <div id="pendingList"></div>
@@ -3332,6 +3333,35 @@ self.onmessage = async function(e) {
                 handleMobHit(mob);
                 return;
             }
+
+            // Add player hit detection
+            var playerHitAvatars = [];
+            for (const [username, avatar] of playerAvatars.entries()) {
+                if (username !== userName) {
+                    const intersect = raycaster.intersectObject(avatar, true)[0];
+                    if (intersect) {
+                        playerHitAvatars.push({ username, intersect });
+                    }
+                }
+            }
+
+            playerHitAvatars.sort((a, b) => a.intersect.distance - b.intersect.distance);
+
+            if (playerHitAvatars.length > 0) {
+                const hitPlayer = playerHitAvatars[0];
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(JSON.stringify({
+                            type: 'player_hit',
+                            target: hitPlayer.username,
+                            username: userName
+                        }));
+                    }
+                }
+                safePlayAudio(soundHit);
+                addMessage('Hit ' + hitPlayer.username + '!', 800);
+                return;
+            }
             var ints = raycaster.intersectObject(meshGroup, true);
             if (ints.length === 0) return;
             var h = ints[0];
@@ -3659,7 +3689,7 @@ self.onmessage = async function(e) {
                     // Host sends a message to the targeted player to inflict damage
                     const targetPeer = peers.get(closestPlayer.username);
                     if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
-                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1 }));
+                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
                     } else if (closestPlayer.username === userName) {
                         // The mob is attacking the host player
                         if (Date.now() - lastDamageTime > 800) {
@@ -4722,6 +4752,35 @@ self.onmessage = async function(e) {
                                 }
                             }
                             break;
+                        case 'player_hit':
+                            // Received from a client. Only the host processes this.
+                            if (isHost) {
+                                const attacker = userPositions[data.username];
+                                const target = data.target === userName ? player : userPositions[data.target];
+
+                                if (attacker && target) {
+                                    const dist = Math.hypot(attacker.targetX - target.x, attacker.targetY - target.y, attacker.targetZ - target.z);
+                                    if (dist < 6) { // 6 blocks validation
+                                        const targetPeer = peers.get(data.target);
+                                        if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                                            targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username }));
+                                        } else if (data.target === userName) {
+                                            // The host was hit
+                                            if (Date.now() - lastDamageTime > 800) {
+                                                player.health = Math.max(0, player.health - 1);
+                                                lastDamageTime = Date.now();
+                                                document.getElementById('health').innerText = player.health;
+                                                updateHealthBar();
+                                                addMessage('Hit! HP: ' + player.health, 1000);
+                                                if (player.health <= 0) {
+                                                    handlePlayerDeath();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            break;
                         case 'player_damage':
                             // Received from host. Apply damage to self.
                             if (Date.now() - lastDamageTime > 800) {
@@ -4730,6 +4789,23 @@ self.onmessage = async function(e) {
                                 document.getElementById('health').innerText = player.health;
                                 updateHealthBar();
                                 addMessage('Hit! HP: ' + player.health, 1000);
+                                flashDamageEffect();
+                                safePlayAudio(soundHit);
+
+                                if (data.attacker) {
+                                    const attackerPos = userPositions[data.attacker];
+                                    if (attackerPos) {
+                                        const dx = player.x - attackerPos.targetX;
+                                        const dz = player.z - attackerPos.targetZ;
+                                        const dist = Math.hypot(dx, dz);
+                                        if (dist > 0) {
+                                            const knockback = 5;
+                                            player.vx += (dx / dist) * knockback;
+                                            player.vz += (dz / dist) * knockback;
+                                        }
+                                    }
+                                }
+
                                 if (player.health <= 0) {
                                     handlePlayerDeath();
                                 }
@@ -6055,6 +6131,14 @@ function activateHost() {
                 }
             });
         }
+        function flashDamageEffect() {
+            const flash = document.getElementById('damageFlash');
+            flash.style.background = 'rgba(255, 0, 0, 0.5)';
+            setTimeout(() => {
+                flash.style.background = 'rgba(255, 0, 0, 0)';
+            }, 100);
+        }
+
         function animateAttack() {
             if (!isAttacking) {
                 isAttacking = true;
