@@ -192,7 +192,7 @@
             gap: 8px;
             width: 520px;
             overflow-x: auto;
-            scroll-behavior: auto;
+            scroll-behavior: smooth;
             scrollbar-width: none;
             -ms-overflow-style: none;
             overscroll-behavior-x: none;
@@ -216,8 +216,9 @@
             flex-shrink: 0;
         }
             .hot-slot.active {
-                outline: 3px solid rgba(255,209,102,0.22);
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                border-color: var(--accent);
+                transform: scale(1.1);
+                box-shadow: 0 0 15px var(--accent);
             }
         .hot-label {
             font-size: 12px;
@@ -2956,8 +2957,11 @@ self.onmessage = async function(e) {
                 e.preventDefault();
                 if (cameraMode === 'first') {
                     var delta = e.deltaY > 0 ? 1 : -1;
-                    selectedHotIndex = (selectedHotIndex + delta + INVENTORY.length) % INVENTORY.length;
-                    updateHotbarUI();
+                    var newIndex = selectedHotIndex + delta;
+                    if (newIndex >= 0 && newIndex < INVENTORY.length) {
+                        selectedHotIndex = newIndex;
+                        updateHotbarUI();
+                    }
                 }
             });
             renderer.domElement.addEventListener('click', function () {
@@ -3189,8 +3193,9 @@ self.onmessage = async function(e) {
                 s.classList.toggle('active', idx === selectedHotIndex);
             });
             selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
-            var slotWidth = 56 + 8;
-            hotbar.scrollLeft = (selectedHotIndex - 4) * slotWidth;
+            var slotWidth = 56 + 8; // 56px width + 8px gap
+            var scrollPos = (selectedHotIndex * slotWidth) - (hotbar.offsetWidth / 2) + (slotWidth / 2);
+            hotbar.scrollLeft = scrollPos;
         }
         function addToInventory(id, count) {
             for (var i = 0; i < INVENTORY.length; i++) {
