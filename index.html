@@ -3627,6 +3627,14 @@ self.onmessage = async function(e) {
                     addMessage('Hit ' + hitPlayer.username + '!', 800);
                 }
                 animateAttack();
+
+                // Apply recoil to the attacker
+                const recoilStrength = 2;
+                const backDir = new THREE.Vector3();
+                camera.getWorldDirection(backDir);
+                player.vx -= backDir.x * recoilStrength;
+                player.vz -= backDir.z * recoilStrength;
+
                 return;
             }
             var ints = raycaster.intersectObject(meshGroup, true);
@@ -3671,9 +3679,21 @@ self.onmessage = async function(e) {
                         safePlayAudio(soundHit);
                         addMessage('Hit ' + targetUsername + '!', 800);
                     }
+
+                    // Calculate knockback direction
+                    const dx = targetX - attackerX;
+                    const dz = targetZ - attackerZ;
+                    const knockbackDist = Math.hypot(dx, dz);
+                    const knockbackStrength = 5;
+                    let kx = 0, kz = 0;
+                    if (knockbackDist > 0) {
+                        kx = (dx / knockbackDist) * knockbackStrength;
+                        kz = (dz / knockbackDist) * knockbackStrength;
+                    }
+
                     const targetPeer = peers.get(data.target);
                     if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
-                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username }));
+                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username, kx: kx, kz: kz }));
                     } else if (data.target === userName) {
                         // The host was hit
                         if (Date.now() - lastDamageTime > 800) {
@@ -3685,17 +3705,8 @@ self.onmessage = async function(e) {
                             flashDamageEffect();
                             safePlayAudio(soundHit);
 
-                            const attackerPos = userPositions[data.username];
-                            if (attackerPos) {
-                                const dx = player.x - attackerPos.targetX;
-                                const dz = player.z - attackerPos.targetZ;
-                                const dist = Math.hypot(dx, dz);
-                                if (dist > 0) {
-                                    const knockback = 5;
-                                    player.vx += (dx / dist) * knockback;
-                                    player.vz += (dz / dist) * knockback;
-                                }
-                            }
+                            player.vx += kx;
+                            player.vz += kz;
 
                             if (player.health <= 0) {
                                 handlePlayerDeath();
@@ -3978,6 +3989,8 @@ self.onmessage = async function(e) {
         function Mob(x, z, id) {
             this.id = id || Date.now();
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
+            this.vx = 0;
+            this.vz = 0;
             this.hp = 6;
             this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color: 0x9bff9b }));
             this.mesh.position.copy(this.pos);
@@ -4000,6 +4013,15 @@ self.onmessage = async function(e) {
                 }
                 return;
             }
+
+            // Apply velocity from knockback
+            this.pos.x += this.vx * dt;
+            this.pos.z += this.vz * dt;
+
+            // Friction
+            this.vx *= (1 - 2 * dt);
+            this.vz *= (1 - 2 * dt);
+
 
             this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + Math.sin(Date.now() * 0.003 + this.mesh.id) * 0.4 + 0.5;
 
@@ -4093,6 +4115,22 @@ self.onmessage = async function(e) {
             this.hp -= dmg;
             this.flashEnd = Date.now() + 200; // Trigger flash effect
             safePlayAudio(soundHit);
+
+            // Apply knockback
+            const attacker = (attackerName === userName) ? player : userPositions[attackerName];
+            if (attacker) {
+                const attackerX = (attackerName === userName) ? attacker.x : attacker.targetX;
+                const attackerZ = (attackerName === userName) ? attacker.z : attacker.targetZ;
+                const dx = this.pos.x - attackerX;
+                const dz = this.pos.z - attackerZ;
+                const dist = Math.hypot(dx, dz);
+                const knockbackStrength = 8;
+                if (dist > 0) {
+                    this.vx += (dx / dist) * knockbackStrength;
+                    this.vz += (dz / dist) * knockbackStrength;
+                }
+            }
+
 
             if (this.hp <= 0) {
                 this.die(attackerName);
@@ -5146,18 +5184,10 @@ self.onmessage = async function(e) {
                                 flashDamageEffect();
                                 safePlayAudio(soundHit);
 
-                                if (data.attacker) {
-                                    const attackerPos = userPositions[data.attacker];
-                                    if (attackerPos) {
-                                        const dx = player.x - attackerPos.targetX;
-                                        const dz = player.z - attackerPos.targetZ;
-                                        const dist = Math.hypot(dx, dz);
-                                        if (dist > 0) {
-                                            const knockback = 5;
-                                            player.vx += (dx / dist) * knockback;
-                                            player.vz += (dz / dist) * knockback;
-                                        }
-                                    }
+                                // Apply knockback from host
+                                if (data.kx !== undefined && data.kz !== undefined) {
+                                    player.vx += data.kx;
+                                    player.vz += data.kz;
                                 }
 
                                 if (player.health <= 0) {
@@ -6218,7 +6248,7 @@ self.onmessage = async function(e) {
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
                     console.log('[Login] Spawning mobs');
                     const mobRnd = makeSeededRandom(worldSeed + '_mobs');
-                    spawnMobs(12, mobRnd);
+                    // spawnMobs(12, mobRnd);
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
@@ -6695,16 +6725,28 @@ self.onmessage = async function(e) {
                 var dx = moveVec.x * speed * dt;
                 var dz = moveVec.z * speed * dt;
 
+                // Combine user input with knockback velocity
+                dx += player.vx * dt;
+                dz += player.vz * dt;
+
+                // Apply friction to knockback velocity
+                player.vx *= (1 - 2 * dt);
+                player.vz *= (1 - 2 * dt);
+
                 // Apply X-axis movement and check for collision
                 let potentialX = player.x + dx;
                 if (!checkCollision(potentialX, player.y, player.z)) {
                     player.x = potentialX;
+                } else {
+                    player.vx = 0; // Stop velocity on collision
                 }
 
                 // Apply Z-axis movement and check for collision
                 let potentialZ = player.z + dz;
                 if (!checkCollision(player.x, player.y, potentialZ)) { // Use the (potentially updated) player.x
                     player.z = potentialZ;
+                } else {
+                    player.vz = 0; // Stop velocity on collision
                 }
 
                 player.vy -= 16.0 * dt;
