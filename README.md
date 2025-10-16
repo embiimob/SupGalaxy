@@ -63,7 +63,7 @@ This feature adds another layer of decentralization and community interaction to
 **Tips**:
 - Mine grass/stone for basics; craft for advanced materials (e.g., 2 sand → 4 glass).
 - Mobs spawn in loaded chunks; defeat for +10 score.
-- Worlds load in a 5-chunk radius; explore to generate infinite terrain.
+- Worlds load in a 8-chunk radius; explore to generate infinite terrain.
 - **WebRTC Multiplayer**: TURN server ensures smooth peer-to-peer connections.
 
 ### ⚔️ Multiplayer & PvP: The Drag-and-Drop Dance
