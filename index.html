@@ -1015,6 +1015,8 @@ var lastWPress = 0;
         var lastFrame = performance.now();
         var mouseLocked = false;
         var deathScreenShown = false;
+        var isDying = false;
+        var deathAnimationStart = 0;
         var lastPollPosition = new THREE.Vector3();
         var pauseTimer = 0;
         var lastMoveTime = 0;
@@ -3855,45 +3857,32 @@ self.onmessage = async function(e) {
             return chunk.get(lx, wy, lz);
         }
         function handlePlayerDeath() {
-            if (!deathScreenShown) {
-                deathScreenShown = true; // Set flag immediately to prevent re-triggering
+            if (deathScreenShown || isDying) return;
 
-                // Simple death animation: fall over
-                const fallDuration = 1000; // 1 second
-                const startRotation = avatarGroup.rotation.clone();
-                const endRotation = new THREE.Euler(Math.PI / 2, startRotation.y, startRotation.z);
+            // Make avatar visible for the animation, even in first-person mode
+            if (avatarGroup) {
+                avatarGroup.visible = true;
+            }
 
-                let startTime = null;
+            isDying = true;
+            deathAnimationStart = performance.now();
 
-                function animateFall(timestamp) {
-                    if (!startTime) startTime = timestamp;
-                    const progress = Math.min(1, (timestamp - startTime) / fallDuration);
+            // The actual animation and showing the death screen will be handled in the gameLoop.
+            // We still handle the inventory/score loss and network message here.
 
-                    avatarGroup.rotation.x = startRotation.x + (endRotation.x - startRotation.x) * progress;
+            INVENTORY = new Array(36).fill(null);
+            player.score = 0;
+            document.getElementById('score').innerText = player.score;
+            player.health = 0;
+            updateHealthBar();
+            updateHotbarUI();
+            addMessage('You died! All items and score lost.', 5000);
 
-                    if (progress < 1) {
-                        requestAnimationFrame(animateFall);
-                    } else {
-                        // After animation, show death screen
-                        document.getElementById('deathScreen').style.display = 'flex';
-                    }
-                }
-                requestAnimationFrame(animateFall);
-
-                INVENTORY = new Array(36).fill(null);
-                player.score = 0;
-                document.getElementById('score').innerText = player.score;
-                player.health = 0;
-                updateHealthBar();
-                updateHotbarUI();
-                addMessage('You died! All items and score lost.', 5000);
-
-                // Notify other players of the death
-                const message = JSON.stringify({ type: 'player_death', username: userName });
-                for (const [peerUser, peerData] of peers.entries()) {
-                    if (peerData.dc && peerData.dc.readyState === 'open') {
-                        peerData.dc.send(message);
-                    }
+            // Notify other players of the death
+            const message = JSON.stringify({ type: 'player_death', username: userName });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(message);
                 }
             }
         }
@@ -3969,6 +3958,12 @@ self.onmessage = async function(e) {
             }
             document.getElementById('deathScreen').style.display = 'none';
             deathScreenShown = false;
+
+            // Reset avatar state after death animation
+            avatarGroup.rotation.set(0, 0, 0);
+            avatarGroup.position.set(player.x, player.y, player.z);
+
+
             addMessage('Respawned at ' + Math.floor(targetX) + ', ' + Math.floor(player.y) + ', ' + Math.floor(targetZ), 3000);
             for (var peer of peers) {
                 var peerUser = peer[0];
@@ -6659,9 +6654,42 @@ self.onmessage = async function(e) {
             console.log('[Minimap] Events attached: double-click and drag-and-drop enabled');
         }
         function gameLoop(now) {
+            if (isDying) {
+                const fallDuration = 1500; // 1.5 seconds for a more dramatic fall
+                const sinkDuration = 1000; // 1 second to sink
+                const totalDuration = fallDuration + sinkDuration;
+                const elapsedTime = now - deathAnimationStart;
+                const progress = Math.min(1.0, elapsedTime / totalDuration);
+
+                // Animate Fall (first part of the animation)
+                if (elapsedTime < fallDuration) {
+                    const fallProgress = elapsedTime / fallDuration;
+                    avatarGroup.rotation.x = (Math.PI / 2) * fallProgress;
+                } else {
+                     avatarGroup.rotation.x = Math.PI / 2; // Ensure it's fully fallen
+                }
+
+                // Animate Sink (second part of the animation)
+                if (elapsedTime > fallDuration) {
+                    const sinkProgress = (elapsedTime - fallDuration) / sinkDuration;
+                    avatarGroup.position.y -= 0.05 * sinkProgress; // Sink into the ground
+                }
+
+
+                if (progress >= 1.0) {
+                    isDying = false;
+                    deathScreenShown = true;
+                    document.getElementById('deathScreen').style.display = 'flex';
+                }
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(gameLoop);
+                return; // Stop the rest of the game loop
+            }
+
             var dt = Math.min(0.06, (now - lastFrame) / 1000);
             lastFrame = now;
-            if (player.health <= 0) {
+            if (player.health <= 0 && !isDying) {
                 handlePlayerDeath();
             }
             if (deathScreenShown) {
