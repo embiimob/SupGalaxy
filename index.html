@@ -3214,63 +3214,23 @@ self.onmessage = async function(e) {
                 renderer.setSize(innerWidth, innerHeight);
                 updateMinimap();
             });
-            createPlayerAvatar();
+            createAndSetupAvatar(userName, true);
         }
         var avatarGroup;
-        function createPlayerAvatar() {
-            if (avatarGroup) {
-                scene.remove(avatarGroup);
-                disposeObject(avatarGroup);
+        function createAndSetupAvatar(username, isPlayerOne, initialYaw = 0) {
+            // Clean up existing avatar if it exists
+            const existingAvatar = isPlayerOne ? avatarGroup : playerAvatars.get(username);
+            if (existingAvatar) {
+                scene.remove(existingAvatar);
+                disposeObject(existingAvatar);
+                if (!isPlayerOne) {
+                    playerAvatars.delete(username);
+                }
             }
-            avatarGroup = new THREE.Group();
-            const rnd = makeSeededRandom(userName);
 
-            const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
-            const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.5 + rnd() * 0.2) });
-            const armMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
-            const legMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.4 + rnd() * 0.2) });
-
-            var legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
-            var bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
-            var headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-            var armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
-
-            var leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0);
-            var rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0);
-            var body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0);
-            var head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0);
-            var leftArm = new THREE.Mesh(armGeo, armMat);
-            leftArm.position.set(-0.55, 1.5, 0);
-            var rightArm = new THREE.Mesh(armGeo, armMat);
-            rightArm.position.set(0.55, 1.5, 0);
-
-            const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
-            const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-            const leftEye = new THREE.Mesh(eyeGeo, faceMat);
-            leftEye.position.set(-0.15, 0.1, -0.3);
-            const rightEye = new THREE.Mesh(eyeGeo, faceMat);
-            rightEye.position.set(0.15, 0.1, -0.3);
-
-            const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-            const nose = new THREE.Mesh(noseGeo, faceMat);
-            nose.position.set(0, 0, -0.3);
-
-            const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
-            const mouth = new THREE.Mesh(mouthGeo, faceMat);
-            mouth.position.set(0, -0.1, -0.3);
-
-            head.add(leftEye, rightEye, nose, mouth);
-            avatarGroup.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
-            scene.add(avatarGroup);
-        }
-        function createAvatar(username, initialYaw) {
-            console.log('[WebRTC] Creating avatar for:', username);
             const avatar = new THREE.Group();
             if (initialYaw) avatar.rotation.y = initialYaw;
+
             const rnd = makeSeededRandom(username);
 
             const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
@@ -3278,44 +3238,69 @@ self.onmessage = async function(e) {
             const armMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
             const legMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.4 + rnd() * 0.2) });
 
-            const legGeo = new THREE.BoxGeometry(0.4, 0.8, 0.4);
-            const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
-            const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-            const armGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
+            // Player height is 1.8. Let's scale the avatar to match.
+            const scale = 1.8 / 2.6; // Original visual height was 2.6
+
+            const legHeight = 0.8 * scale;
+            const bodyHeight = 1.2 * scale;
+            const headSize = 0.6 * scale;
+            const armHeight = 1.2 * scale;
+
+            const legWidth = 0.4 * scale;
+            const bodyWidth = 0.8 * scale;
+            const armWidth = 0.3 * scale;
+
+            const legGeo = new THREE.BoxGeometry(legWidth, legHeight, legWidth);
+            const bodyGeo = new THREE.BoxGeometry(bodyWidth, bodyHeight, 0.4 * scale);
+            const headGeo = new THREE.BoxGeometry(headSize, headSize, headSize);
+            const armGeo = new THREE.BoxGeometry(armWidth, armHeight, armWidth);
 
             const leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.25, 0.4, 0);
+            leftLeg.position.set(-bodyWidth / 4, legHeight / 2, 0);
             const rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.25, 0.4, 0);
+            rightLeg.position.set(bodyWidth / 4, legHeight / 2, 0);
+
             const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.set(0, 1.4, 0);
+            body.position.set(0, legHeight + bodyHeight / 2, 0);
+
             const head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 2.3, 0);
+            head.position.set(0, legHeight + bodyHeight + headSize / 2, 0);
+
             const leftArm = new THREE.Mesh(armGeo, armMat);
-            leftArm.position.set(-0.55, 1.5, 0);
+            leftArm.position.set(-(bodyWidth / 2 + armWidth / 2), legHeight + bodyHeight / 2, 0);
             const rightArm = new THREE.Mesh(armGeo, armMat);
-            rightArm.position.set(0.55, 1.5, 0);
+            rightArm.position.set((bodyWidth / 2 + armWidth / 2), legHeight + bodyHeight / 2, 0);
 
+            // Face components, scaled down and positioned relative to the new head size
             const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
-            const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const eyeSize = 0.1 * scale;
+            const mouthWidth = 0.3 * scale;
+            const mouthHeight = 0.05 * scale;
+            const faceZ = -headSize / 2 - 0.01;
+
+            const eyeGeo = new THREE.BoxGeometry(eyeSize, eyeSize, eyeSize);
             const leftEye = new THREE.Mesh(eyeGeo, faceMat);
-            leftEye.position.set(-0.15, 0.1, -0.3);
+            leftEye.position.set(-headSize * 0.25, headSize * 0.15, faceZ);
             const rightEye = new THREE.Mesh(eyeGeo, faceMat);
-            rightEye.position.set(0.15, 0.1, -0.3);
+            rightEye.position.set(headSize * 0.25, headSize * 0.15, faceZ);
 
-            const noseGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const noseGeo = new THREE.BoxGeometry(eyeSize, eyeSize, eyeSize);
             const nose = new THREE.Mesh(noseGeo, faceMat);
-            nose.position.set(0, 0, -0.3);
+            nose.position.set(0, 0, faceZ);
 
-            const mouthGeo = new THREE.BoxGeometry(0.3, 0.05, 0.1);
+            const mouthGeo = new THREE.BoxGeometry(mouthWidth, mouthHeight, eyeSize);
             const mouth = new THREE.Mesh(mouthGeo, faceMat);
-            mouth.position.set(0, -0.1, -0.3);
+            mouth.position.set(0, -headSize * 0.2, faceZ);
 
             head.add(leftEye, rightEye, nose, mouth);
             avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
+
+            if (isPlayerOne) {
+                avatarGroup = avatar;
+            } else {
+                playerAvatars.set(username, avatar);
+            }
             scene.add(avatar);
-            playerAvatars.set(username, avatar);
-            console.log('[WebRTC] Avatar created and added to scene for:', username);
             return avatar;
         }
         function initHotbar() {
@@ -3867,9 +3852,6 @@ self.onmessage = async function(e) {
             isDying = true;
             deathAnimationStart = performance.now();
 
-            // The actual animation and showing the death screen will be handled in the gameLoop.
-            // We still handle the inventory/score loss and network message here.
-
             INVENTORY = new Array(36).fill(null);
             player.score = 0;
             document.getElementById('score').innerText = player.score;
@@ -3959,13 +3941,12 @@ self.onmessage = async function(e) {
             document.getElementById('deathScreen').style.display = 'none';
             deathScreenShown = false;
 
-            // Reset avatar state after death animation
-            avatarGroup.rotation.set(0, 0, 0);
-            avatarGroup.position.set(player.x, player.y, player.z);
+            // Recreate the avatar to reset its state and visibility
+            createAndSetupAvatar(userName, true);
             avatarGroup.visible = cameraMode === 'third';
 
-
             addMessage('Respawned at ' + Math.floor(targetX) + ', ' + Math.floor(player.y) + ', ' + Math.floor(targetZ), 3000);
+
             // Notify other players of the respawn
             const message = JSON.stringify({
                 type: 'player_respawn',
@@ -5018,7 +4999,7 @@ self.onmessage = async function(e) {
                                     }
                                     if (!userPositions[remoteUser]) {
                                         userPositions[remoteUser] = {};
-                                        createAvatar(remoteUser, playerData.yaw);
+                                        createAndSetupAvatar(remoteUser, false, playerData.yaw);
                                     }
                                     const userState = userPositions[remoteUser];
                                     if (!data.timestamp || data.timestamp > (userState.lastTimestamp || 0)) {
@@ -5052,20 +5033,17 @@ self.onmessage = async function(e) {
                             const respawnedUser = data.username;
                             if (userPositions[respawnedUser]) {
                                 userPositions[respawnedUser].isDying = false;
-                                const avatar = playerAvatars.get(respawnedUser);
-                                if (avatar) {
-                                    avatar.rotation.set(0, 0, 0);
-                                    avatar.position.set(data.x, data.y, data.z);
-                                    avatar.visible = true;
-                                }
                             }
+                            // Recreate the remote avatar to ensure it's reset correctly
+                            const newAvatar = createAndSetupAvatar(respawnedUser, false);
+                            newAvatar.position.set(data.x, data.y, data.z);
                             break;
                         case 'player_move':
                             // Host processes this to update its state for the client
                             if (!isHost) break;
 
                             if (!playerAvatars.has(sender)) {
-                                createAvatar(sender, data.yaw);
+                                createAndSetupAvatar(sender, false, data.yaw);
                             }
 
                             if (!userPositions[sender]) {
