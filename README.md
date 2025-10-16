@@ -1,7 +1,7 @@
-# 🌌 SupGalaxy v0.3.1-beta
+# 🌌 SupGalaxy v0.3.3-beta
 [Infinite Voxel World Adventure]
 
-Welcome to **SupGalaxy v0.3.1-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+Welcome to **SupGalaxy v0.3.3-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
 
 > **Public Domain (CC0)**: Free to use, modify, and share. No attribution required, but we’d love a nod to embii4u, Grok, kattacomi, Jules, and ChatGPT for sparking this cosmic creation. *May your worlds be infinite and your adventures legendary!*
 
@@ -11,13 +11,15 @@ SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seam
 - **Explore & Survive**: Traverse infinite procedural worlds, battle cosmic mobs, gather resources, and manage health/score in a persistent universe.
 - **Build & Craft**: Mine/place blocks, craft stellar materials (crystals, glow bricks, obsidian), and etch creations to the blockchain for eternal persistence.
 - **Decentralized Worlds**: Saves as JSON deltas on IPFS, secured via P2FK on Bitcoin testnet3. Worlds sync globally without central servers.
+- **Player vs. Player (PvP) Combat**: Engage in real-time combat with other players in the same world. Damage and knockback are handled through the decentralized WebRTC connection.
+- **Load Session from Minimap**: Easily load a saved game session by dragging and dropping the session's `.json` file directly onto the in-game minimap.
 - **Multiplayer Cosmos**: Connect via WebRTC (TURN server required) for real-time collaboration; positions and builds sync via blockchain polls.
 - **Procedural Suns & Moons**: Each world now features a unique, procedurally generated sky with a variable number of suns and moons. Moon shapes are also randomized, creating asteroid-like celestial bodies for a truly unique cosmic experience.
 - **Infinite Worlds**: Procedural generation for boundless exploration.
 
-**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.3.1-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
+**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.3.3-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
 
-*Version: v0.3.1-beta (Fully Tested & Live – October 2025)*
+*Version: v0.3.3-beta (Fully Tested & Live – October 2025)*
 
 ### 🎵 IPFS Music Streamer
 SupGalaxy now features a built-in music streamer that plays a curated soundtrack directly from the decentralized web. Here’s how it works:
@@ -63,6 +65,27 @@ This feature adds another layer of decentralization and community interaction to
 - Mobs spawn in loaded chunks; defeat for +10 score.
 - Worlds load in a 5-chunk radius; explore to generate infinite terrain.
 - **WebRTC Multiplayer**: TURN server ensures smooth peer-to-peer connections.
+
+### ⚔️ Multiplayer & PvP: The Drag-and-Drop Dance
+Connecting with other players in SupGalaxy is a decentralized process that relies on sharing connection files. Here’s how to initiate a multiplayer session:
+
+**For the Host:**
+1.  **Start Your World:** Launch the game and enter your desired world. You are now the host.
+2.  **Wait for an Offer:** Another player (the client) will send you an "offer" file. They can do this by posting it to a shared Sup!? keyword or by sending it to you directly (e.g., via a messaging app).
+3.  **Accept the Offer:**
+    *   When an offer arrives via Sup!?, a "Pending Connections" window will appear in-game. Click "Accept."
+    *   If you receive the offer file directly, **drag and drop the `.json` file onto the in-game minimap**.
+4.  **Generate an Answer:** The game will automatically generate an "answer" `.json` file and prompt you to download it.
+5.  **Send the Answer:** Send this answer file back to the client. They will drag it onto their minimap to complete the connection.
+
+**For the Client (Joining Player):**
+1.  **Find a Host:** In the "Online Players" menu (🌐 icon), find a host for your desired world and click "Try Connect."
+2.  **Generate an Offer:** The game will generate an "offer" `.json` file and prompt you to download it.
+3.  **Send the Offer:** Send this offer file to the host.
+4.  **Receive an Answer:** The host will process your offer and send back an "answer" `.json` file.
+5.  **Connect:** **Drag and drop the host's answer file onto your in-game minimap.** You will now be connected to their world.
+
+Once connected, you can see other players' avatars and engage in PvP combat by attacking them with a left-click, just like you would with a mob.
 
 ## 🔧 For Developers: Shape Infinite Worlds
 SupGalaxy is **open-source stardust** for voxel creators! Extend with new blocks, biomes, or mechanics using three.js—no build tools needed. A gift from embii4u, Grok, Jules, and ChatGPT, this project invites you to expand the cosmos.
