@@ -190,13 +190,6 @@
             z-index: 190;
             display: flex;
             gap: 8px;
-            width: 520px;
-            overflow-x: auto;
-            scroll-behavior: smooth;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-            overscroll-behavior-x: none;
-            -webkit-overflow-scrolling: auto;
         }
             #hotbar::-webkit-scrollbar {
                 display: none;
@@ -235,6 +228,24 @@
             padding: 2px 4px;
             font-size: 10px;
             color: #fff;
+        }
+        .inventory-slot {
+            width: 56px;
+            height: 56px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.45);
+            border: 2px solid rgba(255,255,255,0.06);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .inventory-slot.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
         }
         #rightPanel {
             position: fixed;
@@ -660,6 +671,12 @@
         <div style="margin-top:10px;text-align:right;">
             <button id="closeCraft">Close</button>
         </div>
+    </div>
+    <div id="inventoryModal" style="display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 225; background: var(--panel); padding: 14px; border-radius: 10px; flex-direction: column; gap: 10px;">
+        <h3>Inventory</h3>
+        <div id="inventoryGrid" style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px;"></div>
+        <div id="inventoryHotbar" style="display: flex; gap: 8px;"></div>
+        <button id="closeInventory" style="align-self: flex-end;">Close</button>
     </div>
     <div id="trashConfirm">
         <h3>Trash Item?</h3>
@@ -2958,11 +2975,8 @@ self.onmessage = async function(e) {
                 e.preventDefault();
                 if (cameraMode === 'first') {
                     var delta = e.deltaY > 0 ? 1 : -1;
-                    var newIndex = selectedHotIndex + delta;
-                    if (newIndex >= 0 && newIndex < INVENTORY.length) {
-                        selectedHotIndex = newIndex;
-                        updateHotbarUI();
-                    }
+                    selectedHotIndex = (selectedHotIndex + delta + 9) % 9;
+                    updateHotbarUI();
                 }
             });
             renderer.domElement.addEventListener('click', function () {
@@ -3152,7 +3166,7 @@ self.onmessage = async function(e) {
         function initHotbar() {
             var hotbar = document.getElementById('hotbar');
             hotbar.innerHTML = '';
-            for (var i = 0; i < 32; i++) {
+            for (var i = 0; i < 9; i++) {
                 var slot = document.createElement('div');
                 slot.className = 'hot-slot';
                 slot.dataset.index = i;
@@ -3164,22 +3178,13 @@ self.onmessage = async function(e) {
                 slot.appendChild(count);
                 hotbar.appendChild(slot);
                 slot.addEventListener('click', function () {
-                    document.querySelectorAll('.hot-slot').forEach(function (x) { x.classList.remove('active'); });
-                    this.classList.add('active');
                     selectedHotIndex = parseInt(this.dataset.index);
                     updateHotbarUI();
-                });
-                slot.addEventListener('contextmenu', function (e) {
-                    e.preventDefault();
-                    if (INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0) {
-                        trashIndex = this.dataset.index;
-                        document.getElementById('trashItemName').innerText = 'Trash ' + BLOCKS[INVENTORY[trashIndex].id].name + ' x' + INVENTORY[trashIndex].count + ' ? ';
-                        document.getElementById('trashConfirm').style.display = 'block';
-                    }
                 });
             }
             updateHotbarUI();
         }
+
         function updateHotbarUI() {
             var hotbar = document.getElementById('hotbar');
             var slots = hotbar.querySelectorAll('.hot-slot');
@@ -3194,9 +3199,91 @@ self.onmessage = async function(e) {
                 s.classList.toggle('active', idx === selectedHotIndex);
             });
             selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
-            var slotWidth = 56 + 8; // 56px width + 8px gap
-            var scrollPos = (selectedHotIndex * slotWidth) - (hotbar.offsetWidth / 2) + (slotWidth / 2);
-            hotbar.scrollLeft = scrollPos;
+        }
+
+        function openInventoryMenu() {
+            isPromptOpen = true;
+            document.getElementById('inventoryModal').style.display = 'flex';
+            renderInventoryMenu();
+            if (mouseLocked) {
+                document.exitPointerLock();
+            }
+        }
+
+        function closeInventoryMenu() {
+            isPromptOpen = false;
+            document.getElementById('inventoryModal').style.display = 'none';
+        }
+
+        let selectedInventoryIndex = -1;
+
+        function renderInventoryMenu() {
+            const inventoryGrid = document.getElementById('inventoryGrid');
+            const inventoryHotbar = document.getElementById('inventoryHotbar');
+            inventoryGrid.innerHTML = '';
+            inventoryHotbar.innerHTML = '';
+
+            for (let i = 9; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                const slot = createInventorySlot(i, item);
+                inventoryGrid.appendChild(slot);
+            }
+
+            for (let i = 0; i < 9; i++) {
+                const item = INVENTORY[i];
+                const slot = createInventorySlot(i, item);
+                inventoryHotbar.appendChild(slot);
+            }
+        }
+
+        function createInventorySlot(index, item) {
+            const slot = document.createElement('div');
+            slot.className = 'inventory-slot';
+            slot.dataset.index = index;
+            if (index === selectedInventoryIndex) {
+                slot.classList.add('selected');
+            }
+
+            const label = document.createElement('div');
+            label.className = 'hot-label';
+            const count = document.createElement('div');
+            count.className = 'hot-count';
+
+            if (item) {
+                const color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [0, 0, 0];
+                slot.style.background = `rgba(${color.join(',')}, 0.45)`;
+                label.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name : '';
+                count.innerText = item.count > 0 ? item.count : '';
+            } else {
+                slot.style.background = 'rgba(0,0,0,0.2)';
+            }
+
+            slot.appendChild(label);
+            slot.appendChild(count);
+
+            slot.addEventListener('click', () => {
+                if (selectedInventoryIndex === -1) {
+                    selectedInventoryIndex = index;
+                } else {
+                    const temp = INVENTORY[selectedInventoryIndex];
+                    INVENTORY[selectedInventoryIndex] = INVENTORY[index];
+                    INVENTORY[index] = temp;
+                    selectedInventoryIndex = -1;
+                }
+                renderInventoryMenu();
+                updateHotbarUI();
+            });
+
+            slot.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                if (INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0) {
+                    trashIndex = this.dataset.index;
+                    document.getElementById('trashItemName').innerText = 'Trash ' + BLOCKS[INVENTORY[trashIndex].id].name + ' x' + INVENTORY[trashIndex].count + ' ? ';
+                    document.getElementById('trashConfirm').style.display = 'block';
+                }
+            });
+
+            return slot;
         }
         function addToInventory(id, count) {
             for (var i = 0; i < INVENTORY.length; i++) {
@@ -3326,6 +3413,7 @@ self.onmessage = async function(e) {
         }
 
         function onPointerDown(e) {
+            if (isPromptOpen) return;
             if (cameraMode !== 'first') return;
             e.preventDefault();
             raycaster.setFromCamera(pointer, camera);
@@ -4154,7 +4242,11 @@ self.onmessage = async function(e) {
                     onPointerDown({ button: 0, preventDefault: () => {} });
                 }
                 if (e.key.toLowerCase() === 'e') {
-                    onPointerDown({ button: 2, preventDefault: () => {} });
+                    if (isPromptOpen) {
+                        closeInventoryMenu();
+                    } else {
+                        openInventoryMenu();
+                    }
                 }
             }
             function keyupHandler(e) { keys[e.key.toLowerCase()] = false; }
@@ -6085,6 +6177,7 @@ function activateHost() {
                 document.getElementById('respawnBtn').addEventListener('click', function () {
                     respawnPlayer();
                 });
+                document.getElementById('closeInventory').addEventListener('click', closeInventoryMenu);
                 document.getElementById('acceptPending').addEventListener('click', acceptPendingOffers);
                 document.getElementById('closePending').addEventListener('click', function () {
                     document.getElementById('pendingModal').style.display = 'none';
