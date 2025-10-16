@@ -7012,8 +7012,7 @@ self.onmessage = async function(e) {
                                 avatar.position.y -= 0.05 * sinkProgress;
                             }
                             if (progress >= 1.0) {
-                                userState.isDying = false; // Animation finished
-                                avatar.visible = false; // Hide avatar after animation
+                                userState.isDying = false; // Animation finished, body remains.
                             }
                         } else {
                              avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
