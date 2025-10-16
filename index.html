@@ -3445,9 +3445,11 @@ self.onmessage = async function(e) {
                     handlePlayerHit(JSON.parse(message));
                 } else {
                     // Client hitting another player, send to host for validation
+                    const attackMessage = JSON.stringify({ type: 'player_attack', username: userName });
                     for (const [peerUser, peerData] of peers.entries()) {
                         if (peerData.dc && peerData.dc.readyState === 'open') {
                             peerData.dc.send(message);
+                            peerData.dc.send(attackMessage);
                         }
                     }
                     // Client gets optimistic feedback
@@ -4823,9 +4825,11 @@ self.onmessage = async function(e) {
                                         userState.lastUpdate = performance.now();
                                         userState.lastTimestamp = data.timestamp;
 
-                                        if (playerData.isAttacking && !userState.isAttacking) {
-                                            userState.isAttacking = true;
-                                            userState.attackStartTime = performance.now();
+                                        userState.isAttacking = playerData.isAttacking;
+                                        // Only trigger a new animation if the start time from the host is new
+                                        if (playerData.attackStartTime && playerData.attackStartTime !== userState.attackStartTime) {
+                                            userState.attackStartTime = playerData.attackStartTime; // Store the host's timestamp
+                                            userState.localAnimStartTime = performance.now(); // Start animation based on local time
                                         }
                                     }
                                 }
@@ -4870,10 +4874,6 @@ self.onmessage = async function(e) {
                                 userState.lastUpdate = performance.now();
                                 userState.lastTimestamp = data.timestamp;
 
-                                if (data.isAttacking && !userState.isAttacking) {
-                                    userState.isAttacking = true;
-                                    userState.attackStartTime = performance.now();
-                                }
                             }
                             break;
                         case 'block_change':
@@ -4989,6 +4989,16 @@ self.onmessage = async function(e) {
                             player.score += data.amount || 0;
                             document.getElementById('score').innerText = player.score;
                             addMessage(`+${data.amount} score`, 1500);
+                            break;
+                        case 'player_attack':
+                            // Received from a client. Host processes this.
+                            if (isHost) {
+                                const attackerState = userPositions[sender];
+                                if (attackerState) {
+                                    attackerState.isAttacking = true;
+                                    attackerState.attackStartTime = performance.now();
+                                }
+                            }
                             break;
                         case 'player_death':
                             // Received from host. Animate remote player's death.
@@ -6630,16 +6640,22 @@ self.onmessage = async function(e) {
                         username: userName,
                         x: player.x, y: player.y, z: player.z,
                         yaw: player.yaw, pitch: player.pitch,
-                        isMoving: isMoving, isAttacking: isAttacking
+                        isMoving: isMoving, isAttacking: isAttacking,
+                        attackStartTime: attackStartTime
                     });
                     // Add clients' states
                     for (const [username, positionData] of Object.entries(userPositions)) {
                         if (peers.has(username)) { // Ensure the user is still connected
+                            // Host checks if the attack animation should end
+                            if (positionData.isAttacking && now - positionData.attackStartTime > 500) {
+                                positionData.isAttacking = false;
+                            }
                             playersData.push({
                                 username: username,
                                 x: positionData.targetX, y: positionData.targetY, z: positionData.targetZ,
                                 yaw: positionData.targetYaw, pitch: positionData.targetPitch,
-                                isMoving: positionData.isMoving, isAttacking: positionData.isAttacking
+                                isMoving: positionData.isMoving, isAttacking: positionData.isAttacking,
+                                attackStartTime: positionData.attackStartTime
                             });
                         }
                     }
@@ -6698,15 +6714,19 @@ self.onmessage = async function(e) {
 
 
                         const now = performance.now();
-                        if (userState.isAttacking) {
-                            const elapsedTime = now - userState.attackStartTime;
-                            const attackDuration = 500;
+                        // The isAttacking flag is now authoritatively set by the host.
+                        // The client just needs to play the animation if the flag is true.
+                        if (userState.isAttacking && userState.localAnimStartTime) {
+                            const elapsedTime = now - userState.localAnimStartTime;
+                            const attackDuration = 500; // Animation plays for 500ms
                             if (elapsedTime < attackDuration) {
                                 const angle = Math.sin((elapsedTime / attackDuration) * Math.PI) * 1.5;
                                 avatar.children[4].rotation.x = angle; // left arm
                                 avatar.children[5].rotation.x = angle; // right arm
                             } else {
-                                userState.isAttacking = false;
+                                // Animation is over, but we let the host reset the isAttacking flag.
+                                // This prevents the animation from re-triggering until the next state_update.
+                                userState.localAnimStartTime = null;
                             }
                         } else if (userState.isMoving) {
                             const angle = Math.sin(now * 0.005) * 0.5;
