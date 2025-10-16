@@ -3962,6 +3962,7 @@ self.onmessage = async function(e) {
             // Reset avatar state after death animation
             avatarGroup.rotation.set(0, 0, 0);
             avatarGroup.position.set(player.x, player.y, player.z);
+            avatarGroup.visible = cameraMode === 'third';
 
 
             addMessage('Respawned at ' + Math.floor(targetX) + ', ' + Math.floor(player.y) + ', ' + Math.floor(targetZ), 3000);
