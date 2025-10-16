@@ -4208,8 +4208,10 @@ self.onmessage = async function(e) {
         var keys = {};
         function registerKeyEvents() {
             function keydownHandler(e) {
-                keys[e.key.toLowerCase()] = true;
-                if (e.key.toLowerCase() === 'w' && !e.repeat) {
+                const key = e.key.toLowerCase();
+
+                // Sprint logic: only trigger on the *first* keydown event.
+                if (key === 'w' && !keys[key]) {
                     const now = performance.now();
                     if (now - lastWPress < 300) { // 300ms for a double tap
                         isSprinting = !isSprinting;
@@ -4217,6 +4219,9 @@ self.onmessage = async function(e) {
                     }
                     lastWPress = now;
                 }
+
+                keys[key] = true;
+
                 if (e.key === 'Escape' && mouseLocked) {
                     document.exitPointerLock();
                     mouseLocked = false;
