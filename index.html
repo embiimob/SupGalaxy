@@ -3414,6 +3414,7 @@ self.onmessage = async function(e) {
                 .sort(function (a, b) { return a.intersect.distance - b.intersect.distance; });
             if (mobHits.length > 0) {
                 var mob = mobHits[0].mob;
+                animateAttack();
                 handleMobHit(mob);
                 return;
             }
@@ -3453,6 +3454,8 @@ self.onmessage = async function(e) {
                     safePlayAudio(soundHit);
                     addMessage('Hit ' + hitPlayer.username + '!', 800);
                 }
+                animateAttack();
+                return;
             }
             var ints = raycaster.intersectObject(meshGroup, true);
             if (ints.length === 0) return;
