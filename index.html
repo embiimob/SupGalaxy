@@ -1040,6 +1040,7 @@ var lastWPress = 0;
         var textureCache = new Map();
         var torchLights = new Map();
         var torchParticles = new Map();
+        var foreignBlockOrigins = new Map();
         var INVENTORY = new Array(36).fill(null);
         var isPromptOpen = false;
         var userPositions = {};
@@ -1189,7 +1190,14 @@ var lastWPress = 0;
             }
         }
         async function applySaveFile(data, fromAddress, blockDate) {
-            if (!data || !data.deltas) return;
+            if (!data) return;
+
+            if (data.foreignBlockOrigins) {
+                foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+                addMessage(`Loaded ${foreignBlockOrigins.size} foreign blocks.`, 2000);
+            }
+
+            if (!data.deltas) return;
             var fromProfile = await GetProfileByAddress(fromAddress);
             var username = fromProfile && fromProfile.URN ? fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '') : 'anonymous';
             var now = Date.now();
@@ -2453,8 +2461,9 @@ self.onmessage = async function(e) {
         }
 
         function createBlockTexture(seed, blockId) {
-            if (textureCache.has(blockId)) {
-                return textureCache.get(blockId);
+            const cacheKey = `${seed}:${blockId}`;
+            if (textureCache.has(cacheKey)) {
+                return textureCache.get(cacheKey);
             }
 
             const size = 16;
@@ -2539,7 +2548,7 @@ self.onmessage = async function(e) {
             const texture = new THREE.CanvasTexture(canvas);
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
-            textureCache.set(blockId, texture);
+            textureCache.set(cacheKey, texture);
             return texture;
         }
 
@@ -2860,19 +2869,32 @@ self.onmessage = async function(e) {
                             this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z - 1) === BLOCK_AIR
                         );
                         if (!exposed) continue;
-                        if (!lists[id]) lists[id] = [];
-                        lists[id].push({ x: wx, y: y, z: wz });
+
+                        const coordKey = `${wx},${y},${wz}`;
+                        const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                        const materialKey = `${id}-${blockOriginSeed}`;
+
+                        if (!lists[materialKey]) {
+                            lists[materialKey] = {
+                                positions: [],
+                                seed: blockOriginSeed,
+                                blockId: id
+                            };
+                        }
+                        lists[materialKey].positions.push({ x: wx, y: y, z: wz });
                     }
                 }
             }
             var group = new THREE.Group();
-            for (var idStr in lists) {
-                var arr = lists[idStr];
-                if (!arr || arr.length === 0) continue;
-                var id = parseInt(idStr);
+            for (var matKey in lists) {
+                const list = lists[matKey];
+                if (!list.positions || list.positions.length === 0) continue;
+
+                var id = list.blockId;
+                var seed = list.seed;
                 var box = new THREE.BoxGeometry(1, 1, 1);
                 var positions = []; var normals = []; var uvs = []; var indices = []; var vertOffset = 0;
-                for (var p of arr) {
+                for (var p of list.positions) {
                     var posAttr = box.attributes.position.array;
                     var normAttr = box.attributes.normal.array;
                     var uvAttr = box.attributes.uv.array;
@@ -2893,14 +2915,13 @@ self.onmessage = async function(e) {
                 geom.computeBoundingSphere();
                 var info = BLOCKS[id] || { color: '#ff00ff' };
                 var mat;
-                // A light-emitting block should not be affected by scene lighting.
-                // We use a basic material with a procedural ember texture to make it glow.
+
                 if (info.light) {
                     mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
                 } else if (info.transparent) {
                     mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
                 } else {
-                    const blockTexture = createBlockTexture(worldSeed, id);
+                    const blockTexture = createBlockTexture(seed, id);
                     mat = new THREE.MeshLambertMaterial({ map: blockTexture });
                 }
                 var mesh = new THREE.Mesh(geom, mat);
@@ -3362,25 +3383,40 @@ self.onmessage = async function(e) {
             });
             selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
         }
-        function addToInventory(id, count) {
+        function addToInventory(id, count, originSeed = null) {
+            // If the block is native, its originSeed is the current world's seed.
+            const itemOriginSeed = originSeed || worldSeed;
+
+            // First, try to stack with existing items of the same ID and origin.
             for (var i = 0; i < INVENTORY.length; i++) {
-                if (INVENTORY[i] && INVENTORY[i].id === id && INVENTORY[i].count < 64) {
-                    var space = 64 - INVENTORY[i].count;
-                    INVENTORY[i].count += Math.min(count, space);
-                    count -= space;
-                    updateHotbarUI();
-                    if (count <= 0) return;
+                const item = INVENTORY[i];
+                if (item && item.id === id && item.originSeed === itemOriginSeed && item.count < 64) {
+                    const space = 64 - item.count;
+                    const amountToAdd = Math.min(count, space);
+                    item.count += amountToAdd;
+                    count -= amountToAdd;
+                    if (count <= 0) {
+                        updateHotbarUI();
+                        return;
+                    }
                 }
             }
+
+            // Next, find an empty slot to place the new item(s).
             for (var i = 0; i < INVENTORY.length; i++) {
                 if (!INVENTORY[i] || INVENTORY[i].count === 0) {
-                    INVENTORY[i] = { id: id, count: Math.min(count, 64) };
-                    count -= 64;
-                    updateHotbarUI();
-                    if (count <= 0) return;
+                    const amountToAdd = Math.min(count, 64);
+                    INVENTORY[i] = { id: id, count: amountToAdd, originSeed: itemOriginSeed };
+                    count -= amountToAdd;
+                    if (count <= 0) {
+                        updateHotbarUI();
+                        return;
+                    }
                 }
             }
+
             addMessage('Inventory full');
+            updateHotbarUI(); // Update UI even if inventory is full to reflect partial additions.
         }
         function hexToRgb(hex) {
             hex = hex.replace('#', '');
@@ -3741,9 +3777,17 @@ self.onmessage = async function(e) {
                 addMessage('Cannot break block in chunk ' + chunkKey + ': owned by another user');
                 return;
             }
+            const coordKey = `${wx},${wy},${wz}`;
+            const originSeed = foreignBlockOrigins.get(coordKey);
+
             chunkManager.setBlockGlobal(wx, wy, wz, BLOCK_AIR, userName);
-            addToInventory(b, 1);
-            addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b));
+
+            if (originSeed) {
+                foreignBlockOrigins.delete(coordKey);
+            }
+
+            addToInventory(b, 1, originSeed);
+            addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b) + (originSeed ? ` from ${originSeed}`: ''));
             safePlayAudio(soundBreak);
 
             if (BLOCKS[b] && BLOCKS[b].light) {
@@ -3802,9 +3846,18 @@ self.onmessage = async function(e) {
                 return;
             }
             chunkManager.setBlockGlobal(wx, wy, wz, bid, userName);
+
+            // If the block is from another world, record its origin.
+            if (item.originSeed && item.originSeed !== worldSeed) {
+                const coordKey = `${wx},${wy},${wz}`;
+                foreignBlockOrigins.set(coordKey, item.originSeed);
+                addMessage(`Placed ${BLOCKS[bid] ? BLOCKS[bid].name : bid} from ${item.originSeed}`);
+            } else {
+                addMessage('Placed ' + (BLOCKS[bid] ? BLOCKS[bid].name : bid));
+            }
+
             item.count -= 1;
             if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
-            addMessage('Placed ' + (BLOCKS[bid] ? BLOCKS[bid].name : bid));
             updateHotbarUI();
             safePlayAudio(soundPlace);
 
@@ -4544,6 +4597,7 @@ self.onmessage = async function(e) {
                 user: userName,
                 savedAt: new Date().toISOString(),
                 deltas: [],
+                foreignBlockOrigins: Array.from(foreignBlockOrigins.entries()),
                 profile: {
                     x: player.x,
                     y: player.y,
