@@ -776,6 +776,7 @@
             <button id="camToggle">Toggle (T)</button>
             <button id="openCraft">Craft (R)</button>
             <button id="teleportBtn">Teleport (P)</button>
+            <button id="switchWorldBtn">Switch World</button>
             <button id="saveChangesBtn" style="display:none;">Save (X)</button>
             <button id="joinScriptBtn" style="display:none;">Join (J)</button>
             <button id="usersBtn" style="display:none;">🌐 0</button>
@@ -6411,6 +6412,11 @@ self.onmessage = async function(e) {
                 document.getElementById('teleportBtn').addEventListener('click', function () {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
+                });
+                document.getElementById('switchWorldBtn').addEventListener('click', switchWorld);
+                document.getElementById('saveChangesBtn').addEventListener('click', downloadSession);
+                document.getElementById('joinScriptBtn').addEventListener('click', async function () {
+                    isPromptOpen = true;
                     document.getElementById('teleportX').value = '';
                     document.getElementById('teleportY').value = '';
                     document.getElementById('teleportZ').value = '';
@@ -6604,6 +6610,44 @@ self.onmessage = async function(e) {
                 isAttacking = true;
                 attackStartTime = performance.now();
             }
+        }
+
+        function switchWorld() {
+            const newWorldName = prompt("Enter the name of the world to switch to:");
+            if (!newWorldName || newWorldName.trim() === "") {
+                addMessage("World name cannot be empty.", 3000);
+                return;
+            }
+
+            // Reset game state
+            worldName = newWorldName.slice(0, 8);
+            worldSeed = worldName;
+            chunkManager.chunks.clear();
+            meshGroup.children.forEach(disposeObject);
+            meshGroup.children = [];
+            foreignBlockOrigins.clear();
+            CHUNK_DELTAS.clear();
+            mobs.forEach(m => scene.remove(m.mesh));
+            mobs = [];
+
+            // Re-initialize world
+            document.getElementById('worldLabel').textContent = worldName;
+            const userWorldKey = userName + '@' + worldName;
+            const spawn = calculateSpawnPoint(userWorldKey);
+            player.x = spawn.x;
+            player.y = spawn.y;
+            player.z = spawn.z;
+            spawnPoint = { x: player.x, y: player.y, z: player.z };
+
+            // Re-create the chunk manager for the new world
+            chunkManager = new ChunkManager(worldSeed);
+
+            // Initial chunk loading
+            const spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
+            const spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
+            chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
+
+            addMessage(`Switched to world: ${worldName}`, 4000);
         }
 
         function animateRemoteFall(avatar) {
