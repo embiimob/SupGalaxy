@@ -4241,12 +4241,15 @@ self.onmessage = async function(e) {
                 if (e.key.toLowerCase() === 'q') {
                     onPointerDown({ button: 0, preventDefault: () => {} });
                 }
-                if (e.key.toLowerCase() === 'e') {
+                if (e.key.toLowerCase() === 'i') {
                     if (isPromptOpen) {
                         closeInventoryMenu();
                     } else {
                         openInventoryMenu();
                     }
+                }
+                if (e.key.toLowerCase() === 'e') {
+                    onPointerDown({ button: 2, preventDefault: () => {} });
                 }
             }
             function keyupHandler(e) { keys[e.key.toLowerCase()] = false; }
