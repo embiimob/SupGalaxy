@@ -1191,7 +1191,7 @@ var lastWPress = 0;
         async function applySaveFile(data, fromAddress, blockDate) {
             if (!data || !data.deltas) return;
             var fromProfile = await GetProfileByAddress(fromAddress);
-            var username = fromProfile ? fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '') : 'anonymous';
+            var username = fromProfile && fromProfile.URN ? fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '') : 'anonymous';
             var now = Date.now();
             for (var delta of data.deltas) {
                 var chunkKey = delta.chunk.replace(/^#/, '');
@@ -4795,11 +4795,21 @@ self.onmessage = async function(e) {
             try {
                 const text = await file.text();
                 const data = JSON.parse(text);
+
+                // Check if it's a save session file
+                if (data.deltas && data.profile) {
+                    console.log('[Minimap] Save session file detected, applying...', data);
+                    await applySaveFile(data, userAddress, new Date().toISOString());
+                    addMessage('Save session loaded successfully!', 3000);
+                    return;
+                }
+
                 if (!data.world || data.world !== worldName) {
                     addMessage('Invalid file: wrong world', 3000);
                     console.log('[WebRTC] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
                     return;
                 }
+
                 if (data.offer) {
                     // Server mode: Process offer
                     const clientUser = data.user || 'anonymous';
