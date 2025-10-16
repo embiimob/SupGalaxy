@@ -915,6 +915,8 @@
         };
         var isAttacking = false;
         var attackStartTime = 0;
+var isSprinting = false;
+var lastWPress = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
         var lastUpdateTime = 0;
         var lastStateUpdateTime = 0;
@@ -4207,6 +4209,14 @@ self.onmessage = async function(e) {
         function registerKeyEvents() {
             function keydownHandler(e) {
                 keys[e.key.toLowerCase()] = true;
+                if (e.key.toLowerCase() === 'w' && !e.repeat) {
+                    const now = performance.now();
+                    if (now - lastWPress < 300) { // 300ms for a double tap
+                        isSprinting = !isSprinting;
+                        addMessage(isSprinting ? 'Sprinting enabled' : 'Sprinting disabled', 1500);
+                    }
+                    lastWPress = now;
+                }
                 if (e.key === 'Escape' && mouseLocked) {
                     document.exitPointerLock();
                     mouseLocked = false;
@@ -4244,7 +4254,7 @@ self.onmessage = async function(e) {
         }
         function playerJump() {
             if (player.onGround) {
-                player.vy = 8.5;
+                player.vy = isSprinting ? 8.5 * 3 : 8.5;
                 player.onGround = false;
                 safePlayAudio(soundJump);
             }
@@ -6428,7 +6438,7 @@ self.onmessage = async function(e) {
                 if (scoreElement) scoreElement.innerText = player.score;
                 renderer.render(scene, camera);
             } else {
-                var speed = 4.3;
+                var speed = isSprinting ? 4.3 * 3 : 4.3;
                 var mvx = 0, mvz = 0;
                 if (isMobile()) {
                     if (joystick.up) mvz -= 1;
@@ -6440,6 +6450,11 @@ self.onmessage = async function(e) {
                     if (keys['s']) mvz -= 1;
                     if (keys['a']) mvx -= 1;
                     if (keys['d']) mvx += 1;
+
+                    if (mvz <= 0 && isSprinting) {
+                        isSprinting = false;
+                        addMessage('Sprinting disabled', 1500);
+                    }
 
                     if (cameraMode === 'first') {
                         // Arrow key camera controls for first person
