@@ -3965,19 +3965,17 @@ self.onmessage = async function(e) {
 
 
             addMessage('Respawned at ' + Math.floor(targetX) + ', ' + Math.floor(player.y) + ', ' + Math.floor(targetZ), 3000);
-            for (var peer of peers) {
-                var peerUser = peer[0];
-                var peerData = peer[1];
+            // Notify other players of the respawn
+            const message = JSON.stringify({
+                type: 'player_respawn',
+                username: userName,
+                x: player.x,
+                y: player.y,
+                z: player.z
+            });
+            for (const [peerUser, peerData] of peers.entries()) {
                 if (peerData.dc && peerData.dc.readyState === 'open') {
-                    peerData.dc.send(JSON.stringify({
-                        type: 'player_move',
-                        username: userName,
-                        x: player.x,
-                        y: player.y,
-                        z: player.z,
-                        yaw: player.yaw,
-                        pitch: player.pitch
-                    }));
+                    peerData.dc.send(message);
                 }
             }
         }
@@ -5049,6 +5047,18 @@ self.onmessage = async function(e) {
                                 }
                             }
                             break;
+                        case 'player_respawn':
+                            const respawnedUser = data.username;
+                            if (userPositions[respawnedUser]) {
+                                userPositions[respawnedUser].isDying = false;
+                                const avatar = playerAvatars.get(respawnedUser);
+                                if (avatar) {
+                                    avatar.rotation.set(0, 0, 0);
+                                    avatar.position.set(data.x, data.y, data.z);
+                                    avatar.visible = true;
+                                }
+                            }
+                            break;
                         case 'player_move':
                             // Host processes this to update its state for the client
                             if (!isHost) break;
@@ -5209,10 +5219,15 @@ self.onmessage = async function(e) {
                             }
                             break;
                         case 'player_death':
-                            // Received from host. Animate remote player's death.
-                            const deadPlayerAvatar = playerAvatars.get(data.username);
-                            if (deadPlayerAvatar) {
-                                animateRemoteFall(deadPlayerAvatar);
+                            // Received from a peer. Animate remote player's death.
+                            const deadPlayerUsername = data.username;
+                            if (userPositions[deadPlayerUsername]) {
+                                userPositions[deadPlayerUsername].isDying = true;
+                                userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
+                                const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
+                                if (deadPlayerAvatar) {
+                                    deadPlayerAvatar.visible = true; // Ensure avatar is visible for animation
+                                }
                             }
                             break;
                     }
@@ -6935,8 +6950,10 @@ self.onmessage = async function(e) {
                     if (username !== userName && userPositions[username]) {
                         const userState = userPositions[username];
 
-                        // Interpolate position
-                        if (userState.prevX !== undefined) {
+                        // Skip position updates if the player is in a death animation
+                        if (userState.isDying) {
+                            // The animation logic below will handle the position
+                        } else if (userState.prevX !== undefined) {
                             const now = performance.now();
                             const timeSinceUpdate = now - userState.lastUpdate;
                             const interpolationDelay = 100; // ms
@@ -6997,7 +7014,31 @@ self.onmessage = async function(e) {
                             avatar.children[5].rotation.x = 0;
                         }
 
-                        avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                        // Handle remote player death animation
+                        if (userState.isDying) {
+                            const fallDuration = 1500;
+                            const sinkDuration = 1000;
+                            const totalDuration = fallDuration + sinkDuration;
+                            const elapsedTime = now - userState.deathAnimationStart;
+                            const progress = Math.min(1.0, elapsedTime / totalDuration);
+
+                            if (elapsedTime < fallDuration) {
+                                const fallProgress = elapsedTime / fallDuration;
+                                avatar.rotation.x = (Math.PI / 2) * fallProgress;
+                            } else {
+                                avatar.rotation.x = Math.PI / 2;
+                            }
+                            if (elapsedTime > fallDuration) {
+                                const sinkProgress = (elapsedTime - fallDuration) / sinkDuration;
+                                avatar.position.y -= 0.05 * sinkProgress;
+                            }
+                            if (progress >= 1.0) {
+                                userState.isDying = false; // Animation finished
+                                avatar.visible = false; // Hide avatar after animation
+                            }
+                        } else {
+                             avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                        }
                     }
                 }
 
