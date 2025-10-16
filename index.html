@@ -895,7 +895,7 @@
         var knownServers = [];
         var isInitialLoad = false;
         var CHUNK_SIZE = 16;
-        var MAX_HEIGHT = 64;
+        var MAX_HEIGHT = 256;
         var SEA_LEVEL = 16;
         var MAP_SIZE = 16384;
         var BLOCK_AIR = 0;
@@ -1216,7 +1216,7 @@ var lastWPress = 0;
         }
         var worker = new Worker(URL.createObjectURL(new Blob([`
 const CHUNK_SIZE = 16;
-const MAX_HEIGHT = 64;
+const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
