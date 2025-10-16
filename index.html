@@ -685,6 +685,23 @@
                 width: 48px;
                 height: 48px;
             }
+
+            #inventoryModal {
+                width: 95vw;
+                min-width: unset;
+                padding: 8px;
+            }
+
+            #inventoryGrid, #inventoryHotbar {
+                grid-template-columns: repeat(9, 1fr);
+                gap: 2px;
+            }
+
+            .inv-slot {
+                width: auto;
+                height: 38px; /* Adjust height to be reasonable */
+                font-size: 8px;
+            }
         }
 
         #crosshair {
