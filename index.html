@@ -4996,7 +4996,9 @@ self.onmessage = async function(e) {
                                 const attackerState = userPositions[sender];
                                 if (attackerState) {
                                     attackerState.isAttacking = true;
-                                    attackerState.attackStartTime = performance.now();
+                                    const now = performance.now();
+                                    attackerState.attackStartTime = now;
+                                    attackerState.localAnimStartTime = now; // Trigger animation locally on host
                                 }
                             }
                             break;
