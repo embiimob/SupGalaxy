@@ -2481,27 +2481,36 @@ self.onmessage = async function(e) {
             // Draw patterns
             if (patternType === 0) { // Broken Horizontal Lines
                 for (let y = 2; y < size; y += 4) {
+                    context.beginPath();
                     for (let x = 0; x < size; x++) {
                         if (patternNoise(x / 8, y / 8) > 0.4) {
-                            context.fillRect(x, y, 1, 1);
+                            context.moveTo(x, y);
+                            context.lineTo(x + 1, y);
                         }
                     }
+                    context.stroke();
                 }
             } else if (patternType === 1) { // Broken Vertical Lines
                 for (let x = 2; x < size; x += 4) {
+                    context.beginPath();
                     for (let y = 0; y < size; y++) {
                         if (patternNoise(x / 8, y / 8) > 0.4) {
-                            context.fillRect(x, y, 1, 1);
+                            context.moveTo(x, y);
+                            context.lineTo(x, y + 1);
                         }
                     }
+                    context.stroke();
                 }
             } else if (patternType === 2) { // Broken Diagonal Lines
-                for (let i = -size; i < size; i += 3) {
+                for (let i = -size; i < size; i += 4) {
+                     context.beginPath();
                     for (let j = 0; j < size * 2; j++) {
                         if (patternNoise(i / 8, j / 8) > 0.6) {
-                            context.fillRect(i + j, j, 1, 1);
+                            context.moveTo(i + j, j);
+                            context.lineTo(i + j + 1, j + 1);
                         }
                     }
+                    context.stroke();
                 }
             } else if (patternType === 3) { // Wavy Lines
                 for (let y = 0; y < size; y += 4) {
