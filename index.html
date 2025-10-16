@@ -305,6 +305,66 @@
                 margin: 0 0 8px 0;
             }
 
+        #inventoryModal {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 220;
+            display: none;
+            background: var(--panel);
+            padding: 14px;
+            border-radius: 10px;
+            min-width: 480px;
+            color: #fff;
+        }
+
+        #inventoryGrid {
+            display: grid;
+            grid-template-columns: repeat(9, 50px);
+            gap: 4px;
+            margin-bottom: 10px;
+        }
+
+        #inventoryHotbar {
+            display: grid;
+            grid-template-columns: repeat(9, 50px);
+            gap: 4px;
+            border-top: 2px solid rgba(255,255,255,0.1);
+            padding-top: 10px;
+        }
+
+        .inv-slot {
+            width: 50px;
+            height: 50px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            text-align: center;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .inv-slot.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+        }
+
+        .inv-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
+
         #mobileControls {
             position: fixed;
             left: 12px;
@@ -729,6 +789,14 @@
             <button id="closeCraft">Close</button>
         </div>
     </div>
+        <div id="inventoryModal">
+            <h3>Inventory</h3>
+            <div id="inventoryGrid"></div>
+            <div id="inventoryHotbar"></div>
+             <div style="margin-top:10px;text-align:right;">
+                <button id="closeInventory">Close (I)</button>
+            </div>
+        </div>
     <div id="trashConfirm">
         <h3>Trash Item?</h3>
         <p id="trashItemName"></p>
@@ -924,6 +992,7 @@ var lastWPress = 0;
         var lastSavedPosition = new THREE.Vector3(0, 24, 0);
         var selectedBlockId = null;
         var selectedHotIndex = 0;
+        var selectedInventoryIndex = -1;
         var hotbarOffset = 0;
         var cameraMode = 'third';
         var mobs = [];
@@ -958,7 +1027,7 @@ var lastWPress = 0;
         var textureCache = new Map();
         var torchLights = new Map();
         var torchParticles = new Map();
-        var INVENTORY = new Array(32).fill(null);
+        var INVENTORY = new Array(36).fill(null);
         var isPromptOpen = false;
         var userPositions = {};
         var peers = new Map();
@@ -3037,11 +3106,8 @@ self.onmessage = async function(e) {
                 e.preventDefault();
                 if (cameraMode === 'first') {
                     var delta = e.deltaY > 0 ? 1 : -1;
-                    var newIndex = selectedHotIndex + delta;
-                    if (newIndex >= 0 && newIndex < INVENTORY.length) {
-                        selectedHotIndex = newIndex;
-                        updateHotbarUI();
-                    }
+                    selectedHotIndex = (selectedHotIndex + delta + 9) % 9;
+                    updateHotbarUI();
                 }
             });
             renderer.domElement.addEventListener('click', function () {
@@ -3231,7 +3297,7 @@ self.onmessage = async function(e) {
         function initHotbar() {
             var hotbar = document.getElementById('hotbar');
             hotbar.innerHTML = '';
-            for (var i = 0; i < 32; i++) {
+            for (var i = 0; i < 9; i++) {
                 var slot = document.createElement('div');
                 slot.className = 'hot-slot';
                 slot.dataset.index = i;
@@ -3404,8 +3470,93 @@ self.onmessage = async function(e) {
             addMessage('Hit mob!', 800); // Give local feedback
         }
 
+        function toggleInventory() {
+            var invModal = document.getElementById('inventoryModal');
+            var isVisible = invModal.style.display === 'block';
+            invModal.style.display = isVisible ? 'none' : 'block';
+            isPromptOpen = !isVisible;
+
+            if (!isVisible) {
+                updateInventoryUI();
+            } else {
+                selectedInventoryIndex = -1; // Clear selection when closing
+            }
+        }
+
+        function updateInventoryUI() {
+            var grid = document.getElementById('inventoryGrid');
+            var hotbar = document.getElementById('inventoryHotbar');
+            grid.innerHTML = '';
+            hotbar.innerHTML = '';
+
+            // Main inventory (27 slots)
+            for (var i = 9; i < 36; i++) {
+                grid.appendChild(createInventorySlot(i));
+            }
+
+            // Hotbar (9 slots)
+            for (var i = 0; i < 9; i++) {
+                hotbar.appendChild(createInventorySlot(i));
+            }
+        }
+
+        function createInventorySlot(index) {
+            var slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.dataset.index = index;
+
+            var item = INVENTORY[index];
+            if (item && item.id) {
+                var color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [128, 128, 128];
+                slot.style.backgroundColor = `rgba(${color.join(',')}, 0.6)`;
+                slot.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : 'Unknown';
+
+                if (item.count > 1) {
+                    var countEl = document.createElement('div');
+                    countEl.className = 'inv-count';
+                    countEl.innerText = item.count;
+                    slot.appendChild(countEl);
+                }
+            }
+
+            if (index === selectedInventoryIndex) {
+                slot.classList.add('selected');
+            }
+
+            slot.addEventListener('click', function() {
+                var clickedIndex = parseInt(this.dataset.index);
+
+                if (selectedInventoryIndex === -1) {
+                    // Nothing selected, so select this slot
+                    selectedInventoryIndex = clickedIndex;
+                } else {
+                    // Something is already selected, so swap items
+                    var temp = INVENTORY[selectedInventoryIndex];
+                    INVENTORY[selectedInventoryIndex] = INVENTORY[clickedIndex];
+                    INVENTORY[clickedIndex] = temp;
+
+                    // Reset selection
+                    selectedInventoryIndex = -1;
+                }
+                updateInventoryUI();
+                updateHotbarUI(); // Also update the main game hotbar
+            });
+
+            slot.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                var clickedIndex = parseInt(this.dataset.index);
+                if (INVENTORY[clickedIndex] && INVENTORY[clickedIndex].count > 0) {
+                    trashIndex = clickedIndex;
+                    document.getElementById('trashItemName').innerText = 'Trash ' + BLOCKS[INVENTORY[trashIndex].id].name + ' x' + INVENTORY[trashIndex].count + ' ? ';
+                    document.getElementById('trashConfirm').style.display = 'block';
+                }
+            });
+
+            return slot;
+        }
+
         function onPointerDown(e) {
-            if (cameraMode !== 'first') return;
+            if (cameraMode !== 'first' || isPromptOpen) return;
             e.preventDefault();
             raycaster.setFromCamera(pointer, camera);
             raycaster.far = 5;
@@ -3694,7 +3845,7 @@ self.onmessage = async function(e) {
                 }
                 requestAnimationFrame(animateFall);
 
-                INVENTORY = new Array(32).fill(null);
+                INVENTORY = new Array(36).fill(null);
                 player.score = 0;
                 document.getElementById('score').innerText = player.score;
                 player.health = 0;
@@ -4228,6 +4379,7 @@ self.onmessage = async function(e) {
                 }
                 if (e.key.toLowerCase() === 't') toggleCameraMode();
                 if (e.key.toLowerCase() === 'r') openCrafting();
+                if (e.key.toLowerCase() === 'i') toggleInventory();
                 if (e.key.toLowerCase() === 'p') {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
@@ -6149,6 +6301,9 @@ self.onmessage = async function(e) {
                     isPromptOpen = false;
                     document.getElementById('craftModal').style.display = 'none';
                 });
+        document.getElementById('closeInventory').addEventListener('click', function () {
+            toggleInventory();
+        });
                 document.getElementById('closeJoinScript').addEventListener('click', function () {
                     isPromptOpen = false;
                     isConnecting = false;
