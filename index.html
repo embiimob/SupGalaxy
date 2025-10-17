@@ -82,6 +82,7 @@
             background: var(--panel);
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            margin-top: 100px;
         }
 
             #loginCard input, #loginCard button {
@@ -760,19 +761,18 @@
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r134/examples/js/controls/OrbitControls.js"></script>
     <div id="loginOverlay">
         <div id="loginCard">
-            <h2>Welcome to SupGalaxy</h2>
             <label>World name</label>
             <div class="inputContainer autocomplete">
                 <input id="worldNameInput" placeholder="Type world name" autocomplete="off" />
                 <button id="emojiBtn" class="emojiBtn">😀</button>
                 <div id="worldSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
-            </div>
+            </div><br>
             <label>Username</label>
             <div class="inputContainer autocomplete">
                 <input id="userInput" placeholder="Type username" autocomplete="off" />
                 <button id="emojiBtnUser" class="emojiBtn">😀</button>
                 <div id="userSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
-            </div>
+            </div><br>
             <button id="startBtn">Spawn World</button>
             <button id="announceLoginBtn" style="margin-top: 20px;">Announce Server</button>
             <button id="newUserJoinScriptBtn" style="margin-top: 20px;">Join Script</button>
