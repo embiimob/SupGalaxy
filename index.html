@@ -64,7 +64,16 @@
             align-items: center;
             justify-content: center;
             z-index: 200;
+            background: url('SupGalaxy.jpg') no-repeat center center;
+            background-size: cover;
+        }
+
+        #loginOverlay::before {
+            content: '';
+            position: absolute;
+            inset: 0;
             background: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.8));
+            z-index: -1;
         }
 
         #loginCard {
@@ -768,6 +777,11 @@
             <button id="announceLoginBtn" style="margin-top: 20px;">Announce Server</button>
             <button id="newUserJoinScriptBtn" style="margin-top: 20px;">Create Join Script</button>
             <small style="display:block;margin-top:8px;opacity:0.78;">Enter a world name (8 characters, case-sensitive, UTF-8 supported) and a username (max 20 chars).</small>
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="https://github.com/embiimob/SupGalaxy" target="_blank" title="Contribute on GitHub">
+                    <img src="https://brand.github.com/_next/static/media/logo-04.9a1517f0.png" alt="GitHub" style="height: 32px; filter: invert(1);">
+                </a>
+            </div>
         </div>
     </div>
     <div id="emojiModal">
