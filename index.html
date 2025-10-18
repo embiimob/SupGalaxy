@@ -4899,7 +4899,7 @@ self.onmessage = async function(e) {
 
                 // Check if it's a save session file
                 if (data.deltas && data.profile) {
-                    console.log('[Minimap] Save session file detected, applying...', data);
+                    console.log('[MINIMAP] Save session file detected, applying...');
                     await applySaveFile(data, userAddress, new Date().toISOString());
                     addMessage('Save session loaded successfully!', 3000);
                     return;
@@ -4907,7 +4907,7 @@ self.onmessage = async function(e) {
 
                 if (!data.world || data.world !== worldName) {
                     addMessage('Invalid file: wrong world', 3000);
-                    console.log('[WebRTC] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
+                    console.log('[MINIMAP] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
                     return;
                 }
 
@@ -4916,7 +4916,7 @@ self.onmessage = async function(e) {
                     const clientUser = data.user || 'anonymous';
                     if (clientUser === userName) {
                         addMessage('Cannot process offer from self', 3000);
-                        console.log('[WebRTC] Skipping offer from self:', clientUser);
+                        console.log('[WEBRTC] Skipping offer from self:', clientUser);
                         return;
                     }
                     const profile = await GetProfileByURN(clientUser);
@@ -4928,7 +4928,7 @@ self.onmessage = async function(e) {
                         timestamp: Date.now(),
                         profile: profile || { URN: clientUser, Creators: [null] }
                     });
-                    console.log('[WebRTC] Added local offer from:', clientUser);
+                    console.log('[WEBRTC] Added local offer from:', clientUser);
                     addMessage(`Connection request from ${clientUser} via file`, 5000);
                     setupPendingModal();
                     document.getElementById('pendingModal').style.display = 'block';
@@ -4939,7 +4939,7 @@ self.onmessage = async function(e) {
                     const peer = peers.get(hostUser);
                     if (!peer || !peer.pc) {
                         addMessage('No active connection for ' + hostUser, 3000);
-                        console.log('[WebRTC] No peer connection for:', hostUser);
+                        console.log('[WEBRTC] No peer connection for:', hostUser);
                         return;
                     }
                     try {
@@ -4948,16 +4948,16 @@ self.onmessage = async function(e) {
                             try {
                                 await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
                             } catch (e) {
-                                console.error('[WebRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
+                                console.error('[WEBRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
                             }
                         }
-                        console.log('[WebRTC] Successfully processed answer for:', hostUser);
+                        console.log('[WEBRTC] Successfully processed answer for:', hostUser);
                         addMessage('Connected to ' + hostUser + ' via file', 5000);
                         updateHudButtons();
                         clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
                         answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
                     } catch (e) {
-                        console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
+                        console.error('[WEBRTC] Failed to process answer for:', hostUser, 'error:', e);
                         addMessage('Failed to connect to ' + hostUser, 3000);
                     }
                 } else if (data.batch && !isHost) {
@@ -4966,13 +4966,13 @@ self.onmessage = async function(e) {
                     const peer = peers.get(hostUser);
                     if (!peer || !peer.pc) {
                         addMessage('No active connection for ' + hostUser, 3000);
-                        console.log('[WebRTC] No peer connection for:', hostUser);
+                        console.log('[WEBRTC] No peer connection for:', hostUser);
                         return;
                     }
                     const answerEntry = data.batch.find(entry => entry.user === userName);
                     if (!answerEntry) {
                         addMessage('No answer for you in batch from ' + hostUser, 3000);
-                        console.log('[WebRTC] No answer for user:', userName, 'in batch from:', hostUser);
+                        console.log('[WEBRTC] No answer for user:', userName, 'in batch from:', hostUser);
                         return;
                     }
                     try {
@@ -4981,31 +4981,31 @@ self.onmessage = async function(e) {
                             try {
                                 await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
                             } catch (e) {
-                                console.error('[WebRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
+                                console.error('[WEBRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
                             }
                         }
-                        console.log('[WebRTC] Successfully processed batch answer for:', hostUser);
+                        console.log('[WEBRTC] Successfully processed batch answer for:', hostUser);
                         addMessage('Connected to ' + hostUser + ' via batch file', 5000);
                         updateHudButtons();
                         clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
                         answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
                     } catch (e) {
-                        console.error('[WebRTC] Failed to process batch answer for:', hostUser, 'error:', e);
+                        console.error('[WEBRTC] Failed to process batch answer for:', hostUser, 'error:', e);
                         addMessage('Failed to connect to ' + hostUser, 3000);
                     }
                 } else {
                     addMessage('Invalid file format', 3000);
-                    console.log('[WebRTC] Invalid file: no offer, answer, or batch');
+                    console.log('[MINIMAP] Invalid file: no offer, answer, or batch');
                 }
             } catch (e) {
-                console.error('[WebRTC] Error processing file:', e);
+                console.error('[MINIMAP] Error processing file:', e);
                 addMessage('Failed to process file', 3000);
             }
         }
         function setupDataChannel(dc, user) {
-            console.log(`[WebRTC] Setting up data channel for: ${user}`);
+            console.log(`[WEBRTC] Setting up data channel for: ${user}`);
             dc.onopen = () => {
-                console.log(`[WebRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
+                console.log(`[WEBRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
                 addMessage(`Connection established with ${user}`, 3000);
 
                 // Send initial player position
@@ -5024,7 +5024,7 @@ self.onmessage = async function(e) {
 
                 // If this is the host, send the current state of all mobs to the new client
                 if (isHost) {
-                    console.log(`[WebRTC] Host sending initial mob state to ${user}`);
+                    console.log(`[WEBRTC] Host sending initial mob state to ${user}`);
                     for (const mob of mobs) {
                         dc.send(JSON.stringify({
                             type: 'mob_update',
@@ -5040,7 +5040,7 @@ self.onmessage = async function(e) {
                 updateHudButtons();
             };
             dc.onmessage = e => {
-                console.log(`[WebRTC] Message from ${user}:`, e.data.substring(0, 100));
+                console.log(`[WEBRTC] Message from ${user}`);
 
                 try {
                     const data = JSON.parse(e.data);
@@ -5161,7 +5161,7 @@ self.onmessage = async function(e) {
                         case 'block_change':
                             // Received a block change. If host, relay to other clients.
                             if (isHost) {
-                                console.log(`[WebRTC] Host relaying block change from ${sender} to other peers.`);
+                                console.log(`[WEBRTC] Host relaying block change from ${sender} to other peers.`);
                                 for (const [peerUser, peerData] of peers.entries()) {
                                     if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
                                         peerData.dc.send(e.data);
@@ -5290,11 +5290,11 @@ self.onmessage = async function(e) {
                             break;
                     }
                 } catch (err) {
-                    console.error(`[WebRTC] Failed to process message from ${user}:`, err);
+                    console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
                 }
             };
             dc.onclose = () => {
-                console.log(`[WebRTC] Data channel with ${user} closed. State: ${dc.readyState}`);
+                console.log(`[WEBRTC] Data channel with ${user} closed. State: ${dc.readyState}`);
                 addMessage(`Connection with ${user} lost`, 3000);
                 peers.delete(user);
                 const avatar = playerAvatars.get(user);
@@ -5332,7 +5332,7 @@ self.onmessage = async function(e) {
         function activateHost() {
             if (!isHost) {
                 isHost = true;
-                console.log('[WebRTC] Hosting activated.');
+                console.log('[SYSTEM] Hosting activated.');
                 addMessage('Host mode activated!', 3000);
                 startOfferPolling();
                 const usersBtn = document.getElementById('usersBtn');
@@ -5346,12 +5346,12 @@ self.onmessage = async function(e) {
             const checkboxes = document.querySelectorAll('.selectOffer:checked');
             if (checkboxes.length === 0) {
                 addMessage('No offers selected', 3000);
-                console.log('[WebRTC] No offers selected for acceptance');
+                console.log('[SYSTEM] No offers selected for acceptance');
                 return;
             }
             const modal = document.getElementById('joinScriptModal');
             if (!modal) {
-                console.error('[WebRTC] joinScriptModal not found in DOM');
+                console.error('[SYSTEM] joinScriptModal not found in DOM');
                 addMessage('UI error: Modal not found', 5000);
                 return;
             }
@@ -5362,11 +5362,11 @@ self.onmessage = async function(e) {
                 const clientUser = checkbox.dataset.user;
                 const offer = pendingOffers.find(o => o.clientUser === clientUser);
                 if (!offer) {
-                    console.log('[WebRTC] No offer found for user:', clientUser);
+                    console.log('[WEBRTC] No offer found for user:', clientUser);
                     continue;
                 }
                 if (!offer.offer || !offer.offer.sdp || !offer.offer.type) {
-                    console.error('[WebRTC] Invalid offer data for:', clientUser, 'txId:', offer.transactionId);
+                    console.error('[WEBRTC] Invalid offer data for:', clientUser, 'txId:', offer.transactionId);
                     addMessage(`Invalid connection offer from ${clientUser || 'Unknown'}`, 3000);
                     continue;
                 }
@@ -5375,7 +5375,7 @@ self.onmessage = async function(e) {
                 try {
                     const iceServers = await getTurnCredentials();
                     const pc = new RTCPeerConnection({ iceServers });
-                    pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
+                    pc.oniceconnectionstatechange = () => console.log(`[WEBRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
                     peers.set(clientUser, { pc, dc: null, address: offer.profile && offer.profile.Creators ? offer.profile.Creators[0] : null });
                     pc.ondatachannel = (e) => {
                         const dc = e.channel;
@@ -5390,7 +5390,7 @@ self.onmessage = async function(e) {
                         try {
                             await pc.addIceCandidate(new RTCIceCandidate(candidate));
                         } catch (e) {
-                            console.error('[WebRTC] Failed to add ICE candidate for:', clientUser, 'error:', e);
+                            console.error('[WEBRTC] Failed to add ICE candidate for:', clientUser, 'error:', e);
                         }
                     }
                     answer = await pc.createAnswer();
@@ -5405,7 +5405,7 @@ self.onmessage = async function(e) {
                     });
                     // Add state monitoring
                     pc.onconnectionstatechange = () => {
-                        console.log('[WebRTC] Connection state for', clientUser, ':', pc.connectionState);
+                        console.log('[WEBRTC] Connection state for', clientUser, ':', pc.connectionState);
                         if (pc.connectionState === 'connected') {
                             addMessage('Connected to ' + clientUser, 3000);
                         } else if (pc.connectionState === 'failed') {
@@ -5415,7 +5415,7 @@ self.onmessage = async function(e) {
                         }
                     };
                     pc.onsignalingstatechange = () => {
-                        console.log('[WebRTC] Signaling state for', clientUser, ':', pc.signalingState);
+                        console.log('[WEBRTC] Signaling state for', clientUser, ':', pc.signalingState);
                     };
                     batch.push({
                         user: clientUser,
@@ -5424,7 +5424,7 @@ self.onmessage = async function(e) {
                     });
                     users.push(clientUser);
                 } catch (e) {
-                    console.error('[WebRTC] Failed to process offer for:', clientUser, 'error:', e);
+                    console.error('[WEBRTC] Failed to process offer for:', clientUser, 'error:', e);
                     addMessage(`Failed to connect to ${clientUser || 'Unknown'}`, 3000);
                 }
             }
@@ -5444,9 +5444,9 @@ self.onmessage = async function(e) {
                     a.click();
                     a.remove();
                     URL.revokeObjectURL(url);
-                    console.log('[WebRTC] Batch JSON downloaded successfully for users:', users);
+                    console.log('[SYSTEM] Batch JSON downloaded successfully for users:', users.join(', '));
                 } catch (e) {
-                    console.error('[WebRTC] Failed to download batch JSON:', e);
+                    console.error('[SYSTEM] Failed to download batch JSON:', e);
                     addMessage('Failed to download batch JSON', 5000);
                 }
                 const batchKeyword = 'MCBatch@' + userName + '@' + worldName;
@@ -5454,7 +5454,7 @@ self.onmessage = async function(e) {
                 try {
                     batchAddr = await GetPublicAddressByKeyword(batchKeyword);
                 } catch (e) {
-                    console.error('[WebRTC] Failed to fetch batch address:', e);
+                    console.error('[SYSTEM] Failed to fetch batch address:', e);
                 }
                 const addressText = batchAddr ? batchAddr.trim().replace(/"|'/g, '') : batchKeyword;
                 modal.querySelector('h3').innerText = 'Batch Connection';
@@ -5463,20 +5463,20 @@ self.onmessage = async function(e) {
                 modal.style.display = 'block';
                 isPromptOpen = true;
                 addMessage('Batch connections processed for ' + users.join(', '), 5000);
-                console.log('[WebRTC] Join script modal opened for batch with address:', addressText, 'users:', users);
+                console.log('[MODAL] Join script modal opened for batch');
                 pendingOffers = pendingOffers.filter(o => !users.includes(o.clientUser));
                 updatePendingModal();
             } else {
                 addMessage('No valid offers processed', 3000);
-                console.log('[WebRTC] No valid offers were processed for batch');
+                console.log('[SYSTEM] No valid offers were processed for batch');
             }
         }
         function setupPendingModal() {
-            console.log('[Modal] Setting up pendingModal, pendingOffers:', pendingOffers.length);
+            console.log('[MODAL] Setting up pendingModal');
             const existingModal = document.getElementById('pendingModal');
             if (existingModal) {
                 existingModal.remove();
-                console.log('[Modal] Removed existing pendingModal');
+                console.log('[MODAL] Removed existing pendingModal');
             }
             const modal = document.createElement('div');
             modal.id = 'pendingModal';
@@ -5500,7 +5500,7 @@ self.onmessage = async function(e) {
             </div>
         `;
             document.body.appendChild(modal);
-            console.log('[Modal] pendingModal added to DOM');
+            console.log('[MODAL] pendingModal added to DOM');
             const list = modal.querySelector('#pendingList');
             list.style.maxHeight = 'calc(80vh - 100px)';
             list.style.overflow = 'auto';
@@ -5509,7 +5509,7 @@ self.onmessage = async function(e) {
             const offerMap = new Map();
             for (const offer of pendingOffers) {
                 if (offer.clientUser === userName) {
-                    console.log('[Modal] Skipping offer from self:', offer.clientUser, 'txId:', offer.transactionId);
+                    console.log('[MODAL] Skipping offer from self:', offer.clientUser);
                     continue;
                 }
                 if (!offerMap.has(offer.clientUser)) {
@@ -5518,7 +5518,7 @@ self.onmessage = async function(e) {
             }
             const latestOffers = Array.from(offerMap.values());
             for (const offer of latestOffers) {
-                console.log('[Modal] Rendering pending offer from:', offer.clientUser, 'txId:', offer.transactionId);
+                console.log('[MODAL] Rendering pending offer from:', offer.clientUser);
                 const row = document.createElement('div');
                 row.className = 'row';
                 row.style.maxHeight = '80px';
@@ -5543,7 +5543,7 @@ self.onmessage = async function(e) {
                 acceptBtn.innerText = 'Accept';
                 acceptBtn.style.marginRight = '8px';
                 acceptBtn.onclick = () => {
-                    console.log('[WebRTC] Accepting offer from:', offer.clientUser, 'txId:', offer.transactionId);
+                    console.log('[WEBRTC] Accepting offer from:', offer.clientUser);
                     checkbox.checked = true;
                     acceptPendingOffers();
                 };
@@ -5552,7 +5552,7 @@ self.onmessage = async function(e) {
                 rejectBtn.style.background = 'var(--danger)';
                 rejectBtn.style.color = '#111';
                 rejectBtn.onclick = () => {
-                    console.log('[WebRTC] Rejecting offer from:', offer.clientUser, 'txId:', offer.transactionId);
+                    console.log('[WEBRTC] Rejecting offer from:', offer.clientUser);
                     pendingOffers = pendingOffers.filter(o => o.clientUser !== offer.clientUser);
                     addMessage(`Rejected connection from ${offer.clientUser || 'Unknown'}`, 3000);
                     setupPendingModal();
@@ -5565,7 +5565,7 @@ self.onmessage = async function(e) {
                 hasEntries = true;
             }
             if (!hasEntries) {
-                console.log('[Modal] No pending offers to render');
+                console.log('[MODAL] No pending offers to render');
                 const empty = document.createElement('div');
                 empty.style.marginTop = '8px';
                 empty.innerText = 'No pending connection requests';
@@ -5575,34 +5575,34 @@ self.onmessage = async function(e) {
             if (acceptAll) {
                 acceptAll.addEventListener('change', e => {
                     document.querySelectorAll('.selectOffer').forEach(ch => { ch.checked = e.target.checked; });
-                    console.log('[Modal] Accept All checkbox changed');
+                    console.log('[MODAL] Accept All checkbox changed');
                 });
             }
             const acceptPending = modal.querySelector('#acceptPending');
             if (acceptPending) {
                 acceptPending.onclick = async () => {
-                    console.log('[Modal] Accept Pending clicked');
+                    console.log('[MODAL] Accept Pending clicked');
                     await acceptPendingOffers();
                 };
             }
             modal.querySelector('#closePending').onclick = () => {
-                console.log('[Modal] Closing pendingModal');
+                console.log('[MODAL] Closing pendingModal');
                 modal.style.display = 'none';
                 isPromptOpen = false;
             };
         }
         function startOfferPolling() {
             if (!isHost) {
-                console.log('[WebRTC] Not hosting, skipping offer polling');
+                console.log('[SYSTEM] Not hosting, skipping offer polling');
                 return;
             }
-            console.log('[WebRTC] Starting offer polling for:', userName);
+            console.log('[SYSTEM] Starting offer polling for:', userName);
             var offerKeyword = 'MCConn@' + userName + '@' + worldName;
             var apiDelay = 350;
             var interval = setInterval(async function () {
                 try {
                     await new Promise(resolve => setTimeout(resolve, apiDelay));
-                    console.log('[WebRTC] Polling offers for:', offerKeyword);
+                    console.log('[SYSTEM] Polling offers for:', offerKeyword);
                     worker.postMessage({
                         type: 'poll',
                         chunkKeys: [],
@@ -5615,7 +5615,7 @@ self.onmessage = async function(e) {
                         userName: userName
                     });
                 } catch (e) {
-                    console.error('[WebRTC] Error in offer polling:', e);
+                    console.error('[SYSTEM] Error in offer polling:', e);
                 }
             }, 30000);
             offerPollingIntervals.set(offerKeyword, interval);
@@ -5623,7 +5623,7 @@ self.onmessage = async function(e) {
         function startAnswerPolling(hostUser) {
             var keyword = 'MCAnswer@' + userName + '@' + worldName;
             if (answerPollingIntervals.has(keyword)) return;
-            console.log('[WebRTC] Starting answer polling for:', hostUser);
+            console.log('[SYSTEM] Starting answer polling for:', hostUser);
             answerPollingIntervals.set(keyword, setInterval(function () {
                 worker.postMessage({
                     type: 'poll',
@@ -5637,7 +5637,7 @@ self.onmessage = async function(e) {
                     userName: userName
                 });
                 if (Date.now() - connectionAttempts.get(hostUser) > 1800000) {
-                    console.log('[WebRTC] Answer polling timeout for:', hostUser);
+                    console.log('[SYSTEM] Answer polling timeout for:', hostUser);
                     addMessage('Connection to ' + hostUser + ' timed out after 30 minutes.', 5000);
                     clearInterval(answerPollingIntervals.get(keyword));
                     answerPollingIntervals.delete(keyword);
@@ -5656,10 +5656,10 @@ self.onmessage = async function(e) {
         }
         async function pollServers() {
             if (isInitialLoad) {
-                console.log('[WebRTC] Skipping poll, initial load not complete');
+                console.log('[SYSTEM] Skipping poll, initial load not complete');
                 return;
             }
-            console.log('[WebRTC] Polling server announcements for:', 'MCServerJoin@' + worldName);
+            console.log('[SYSTEM] Polling server announcements for:', 'MCServerJoin@' + worldName);
             var serverKeyword = 'MCServerJoin@' + worldName;
             var retries = 0;
             var maxRetries = 3;
@@ -5671,7 +5671,7 @@ self.onmessage = async function(e) {
                     await new Promise(resolve => setTimeout(resolve, apiDelay));
                     serverAddr = await GetPublicAddressByKeyword(serverKeyword);
                 } catch (e) {
-                    console.error('[WebRTC] Failed to fetch server address:', e);
+                    console.error('[SYSTEM] Failed to fetch server address:', e);
                 }
                 if (!serverAddr) {
                     if (retries < maxRetries) {
@@ -5679,7 +5679,7 @@ self.onmessage = async function(e) {
                         setTimeout(tryFetchMessages, retryDelay * Math.pow(2, retries));
                     } else {
                         addMessage('Failed to fetch server announcements', 3000);
-                        console.error('[WebRTC] Max retries reached for server announcements');
+                        console.error('[SYSTEM] Max retries reached for server announcements');
                     }
                     return;
                 }
@@ -5695,7 +5695,7 @@ self.onmessage = async function(e) {
                         if (response.length < qty) break;
                         skip += qty;
                     } catch (e) {
-                        console.error('[WebRTC] Failed to fetch server messages, skip:', skip, 'error:', e);
+                        console.error('[SYSTEM] Failed to fetch server messages, skip:', skip, 'error:', e);
                         break;
                     }
                 }
@@ -5705,7 +5705,7 @@ self.onmessage = async function(e) {
                 for (var msg of messages) {
                     if (!msg.TransactionId || processedMessages.has(msg.TransactionId)) {
                         if (msg.TransactionId) {
-                            console.log('[WebRTC] Stopping server message processing at cached ID:', msg.TransactionId);
+                            console.log('[SYSTEM] Stopping server message processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
                         continue;
@@ -5725,16 +5725,16 @@ self.onmessage = async function(e) {
                         await new Promise(resolve => setTimeout(resolve, apiDelay));
                         var fromProfile = await GetProfileByAddress(msg.FromAddress);
                         if (!fromProfile || !fromProfile.URN) {
-                            console.log('[WebRTC] Skipping server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
+                            console.log('[USERS] Skipping server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
                             continue;
                         }
                         var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
                         await new Promise(resolve => setTimeout(resolve, apiDelay));
                         var userProfile = await GetProfileByURN(hostUser);
                         if (!userProfile) {
-                            console.log('[WebRTC] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
+                            console.log('[USERS] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
                         } else if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                            console.log('[WebRTC] Skipping server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
+                            console.log('[USERS] Skipping server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
                             continue;
                         }
                         var spawn = calculateSpawnPoint(hostUser + '@' + worldName);
@@ -5753,7 +5753,7 @@ self.onmessage = async function(e) {
                                         iceCandidates = data.iceCandidates || [];
                                     }
                                 } catch (e) {
-                                    console.error('[WebRTC] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
+                                    console.error('[SYSTEM] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
                                 }
                             }
                         }
@@ -5771,10 +5771,10 @@ self.onmessage = async function(e) {
                             processedMessages.add(msg.TransactionId);
                         }
                     } catch (e) {
-                        console.error('[WebRTC] Error processing server message:', msg.TransactionId, e);
+                        console.error('[SYSTEM] Error processing server message:', msg.TransactionId, e);
                     }
                 }
-                console.log('[WebRTC] New server announcements:', transactionIds);
+                console.log('[SYSTEM] New server announcements found:', newServers.length);
                 var serverMap = new Map();
                 for (var server of knownServers.concat(newServers)) {
                     if (!serverMap.has(server.hostUser) || serverMap.get(server.hostUser).timestamp < server.timestamp) {
@@ -5790,20 +5790,20 @@ self.onmessage = async function(e) {
             tryFetchMessages();
         }
         async function initServers() {
-            console.log('[WebRTC] Initializing servers for:', worldName);
+            console.log('[SYSTEM] Initializing servers for:', worldName);
             var serverKeyword = 'MCServerJoin@' + worldName;
             var responseKeywords = [];
             var serverAddr;
             try {
                 serverAddr = await GetPublicAddressByKeyword(serverKeyword);
             } catch (e) {
-                console.error('[WebRTC] Failed to fetch initial server address:', e);
+                console.error('[SYSTEM] Failed to fetch initial server address:', e);
             }
             if (!serverAddr) {
-                console.error('[WebRTC] No server address for:', serverKeyword);
+                console.error('[SYSTEM] No server address for:', serverKeyword);
                 return;
             }
-            console.log('[WebRTC] Fetching initial server announcements for:', serverKeyword);
+            console.log('[SYSTEM] Fetching initial server announcements for:', serverKeyword);
             var messages = [];
             var skip = 0;
             var qty = 5000;
@@ -5817,16 +5817,16 @@ self.onmessage = async function(e) {
                     if (response.length < qty) break;
                     skip += qty;
                 } catch (e) {
-                    console.error('[WebRTC] Failed to fetch initial server messages, skip:', skip, 'error:', e);
+                    console.error('[SYSTEM] Failed to fetch initial server messages, skip:', skip, 'error:', e);
                     break;
                 }
             }
-            console.log('[WebRTC] Initial poll: Cached server announcements:', messages.map(m => m.TransactionId));
+            console.log('[SYSTEM] Initial poll: Found', messages.length, 'server announcements');
             var messageMap = new Map();
             for (var msg of messages) {
                 if (!msg.TransactionId || processedMessages.has(msg.TransactionId)) {
                     if (msg.TransactionId) {
-                        console.log('[WebRTC] Stopping server message processing at cached ID:', msg.TransactionId);
+                        console.log('[SYSTEM] Stopping server message processing at cached ID:', msg.TransactionId);
                         break; // Stop processing as all remaining messages are older
                     }
                     continue;
@@ -5845,16 +5845,16 @@ self.onmessage = async function(e) {
                     await new Promise(resolve => setTimeout(resolve, apiDelay));
                     var fromProfile = await GetProfileByAddress(msg.FromAddress);
                     if (!fromProfile || !fromProfile.URN) {
-                        console.log('[WebRTC] Skipping initial server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
+                        console.log('[USERS] Skipping initial server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
                         continue;
                     }
                     var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
                     await new Promise(resolve => setTimeout(resolve, apiDelay));
                     var userProfile = await GetProfileByURN(hostUser);
                     if (!userProfile) {
-                        console.log('[WebRTC] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
+                        console.log('[USERS] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
                     } else if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                        console.log('[WebRTC] Skipping initial server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
+                        console.log('[USERS] Skipping initial server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
                         continue;
                     }
                     var spawn = calculateSpawnPoint(hostUser + '@' + worldName);
@@ -5873,7 +5873,7 @@ self.onmessage = async function(e) {
                                     iceCandidates = data.iceCandidates || [];
                                 }
                             } catch (e) {
-                                console.error('[WebRTC] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
+                                console.error('[SYSTEM] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
                             }
                         }
                     }
@@ -5891,7 +5891,7 @@ self.onmessage = async function(e) {
                     }
                     responseKeywords.push('MCConn@' + hostUser + '@' + worldName);
                 } catch (e) {
-                    console.error('[WebRTC] Error processing initial server message:', msg.TransactionId, e);
+                    console.error('[SYSTEM] Error processing initial server message:', msg.TransactionId, e);
                 }
             }
             var serverMap = new Map();
@@ -5910,7 +5910,7 @@ self.onmessage = async function(e) {
                     await new Promise(resolve => setTimeout(resolve, apiDelay));
                     responseAddr = await GetPublicAddressByKeyword(responseKeyword);
                 } catch (e) {
-                    console.error('[WebRTC] Failed to fetch initial response address for:', responseKeyword, e);
+                    console.error('[SYSTEM] Failed to fetch initial response address for:', responseKeyword, e);
                 }
                 if (responseAddr) {
                     var messages = [];
@@ -5925,19 +5925,19 @@ self.onmessage = async function(e) {
                             if (response.length < qty) break;
                             skip += qty;
                         } catch (e) {
-                            console.error('[WebRTC] Failed to fetch initial response messages for:', responseKeyword, 'skip:', skip, 'error:', e);
+                            console.error('[SYSTEM] Failed to fetch initial response messages for:', responseKeyword, 'skip:', skip, 'error:', e);
                             break;
                         }
                     }
-                    console.log('[WebRTC] Initial poll: Cached', messages.length, 'existing responses for:', responseKeyword, messages.map(m => m.TransactionId));
+                    console.log('[SYSTEM] Initial poll: Found', messages.length, 'existing responses for:', responseKeyword);
                     for (var msg of messages) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[WebRTC] Stopping response message processing at cached ID:', msg.TransactionId);
+                            console.log('[SYSTEM] Stopping response message processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
                         if (msg.TransactionId) {
                             processedMessages.add(msg.TransactionId);
-                            console.log('[WebRTC] Caching transactionId on initial load:', msg.TransactionId, 'for:', responseKeyword);
+                            console.log('[SYSTEM] Caching transactionId on initial load:', msg.TransactionId, 'for:', responseKeyword);
                         }
                     }
                     var requestCount = messages.length;
@@ -5967,14 +5967,14 @@ self.onmessage = async function(e) {
                             if (response.length < qty) break;
                             skip += qty;
                         } catch (e) {
-                            console.error('[WebRTC] Failed to fetch initial host offer messages for:', hostKeyword, 'skip:', skip, 'error:', e);
+                            console.error('[SYSTEM] Failed to fetch initial host offer messages for:', hostKeyword, 'skip:', skip, 'error:', e);
                             break;
                         }
                     }
                     var newOffers = [];
                     for (var msg of messages) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[WebRTC] Stopping host offer processing at cached ID:', msg.TransactionId);
+                            console.log('[SYSTEM] Stopping host offer processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
                         if (!msg.TransactionId) continue;
@@ -5982,35 +5982,35 @@ self.onmessage = async function(e) {
                         try {
                             var fromProfile = await GetProfileByAddress(msg.FromAddress);
                             if (!fromProfile || !fromProfile.URN) {
-                                console.log('[WebRTC] Skipping initial offer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                                console.log('[USERS] Skipping initial offer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
                                 continue;
                             }
                             var clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
                             var userProfile = await GetProfileByURN(clientUser);
                             if (!userProfile) {
-                                console.log('[WebRTC] No profile for user:', clientUser, 'txId:', msg.TransactionId);
+                                console.log('[USERS] No profile for user:', clientUser, 'txId:', msg.TransactionId);
                                 continue;
                             }
                             if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                                console.log('[WebRTC] Skipping initial offer message, invalid creators for user:', clientUser, 'txId:', msg.TransactionId);
+                                console.log('[USERS] Skipping initial offer message, invalid creators for user:', clientUser, 'txId:', msg.TransactionId);
                                 continue;
                             }
                             var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
                             if (!match) {
-                                console.log('[WebRTC] No IPFS hash in initial offer message:', msg.Message, 'txId:', msg.TransactionId);
+                                console.log('[SYSTEM] No IPFS hash in initial offer message:', msg.Message, 'txId:', msg.TransactionId);
                                 continue;
                             }
                             var hash = match[1];
                             var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                             if (!cidRegex.test(hash)) {
-                                console.log('[WebRTC] Invalid CID in initial offer message:', hash, 'txId:', msg.TransactionId);
+                                console.log('[SYSTEM] Invalid CID in initial offer message:', hash, 'txId:', msg.TransactionId);
                                 continue;
                             }
                             try {
                                 await new Promise(resolve => setTimeout(resolve, apiDelay));
                                 var data = await fetchIPFS(hash);
                                 if (!data || !data.world || data.world !== worldName) {
-                                    console.log('[WebRTC] Invalid IPFS data for initial offer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
+                                    console.log('[SYSTEM] Invalid IPFS data for initial offer message:', hash, 'txId:', msg.TransactionId);
                                     continue;
                                 }
                                 if (data.offer || data.answer) {
@@ -6024,10 +6024,10 @@ self.onmessage = async function(e) {
                                     });
                                 }
                             } catch (e) {
-                                console.error('[WebRTC] Failed to fetch IPFS for initial offer hash:', hash, 'error:', e, 'txId:', msg.TransactionId);
+                                console.error('[SYSTEM] Failed to fetch IPFS for initial offer hash:', hash, 'error:', e, 'txId:', msg.TransactionId);
                             }
                         } catch (e) {
-                            console.error('[WebRTC] Error processing initial offer message:', msg.TransactionId, e);
+                            console.error('[SYSTEM] Error processing initial offer message:', msg.TransactionId, e);
                         }
                     }
                     if (newOffers.length > 0) {
@@ -6036,16 +6036,16 @@ self.onmessage = async function(e) {
                     }
                 }
             }
-            console.log('[WebRTC] Initial load complete, processedMessages:', Array.from(processedMessages));
+            console.log('[SYSTEM] Initial load complete.');
             worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
             isInitialLoad = false;
         }
         function openUsersModal() {
-            console.log('[Modal] Opening users modal, knownServers:', knownServers.length, 'peers:', Array.from(peers.keys()), 'pendingOffers:', pendingOffers.length);
+            console.log('[MODAL] Opening users modal');
             var existingModal = document.getElementById('usersModal');
             if (existingModal) {
                 existingModal.remove();
-                console.log('[Modal] Removed existing usersModal');
+                console.log('[MODAL] Removed existing usersModal');
             }
             var modal = document.createElement('div');
             modal.id = 'usersModal';
@@ -6072,7 +6072,7 @@ self.onmessage = async function(e) {
             </div>
         `;
             document.body.appendChild(modal);
-            console.log('[Modal] Modal added to DOM');
+            console.log('[MODAL] Modal added to DOM');
             var list = modal.querySelector('#usersList');
             list.innerHTML = '';
             var hasEntries = false;
@@ -6084,7 +6084,7 @@ self.onmessage = async function(e) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
                     hasEntries = true;
-                    console.log('[Modal] Rendering peer:', peerUser);
+                    console.log('[MODAL] Rendering peer:', peerUser);
                     var spawn = calculateSpawnPoint(peerUser + '@' + worldName);
                     var row = document.createElement('div');
                     row.style.display = 'flex';
@@ -6096,7 +6096,7 @@ self.onmessage = async function(e) {
                     var btn = document.createElement('button');
                     btn.innerText = 'Visit Spawn';
                     btn.onclick = function () {
-                        console.log('[Modal] Teleporting to spawn of:', peerUser);
+                        console.log('[MODAL] Teleporting to spawn of:', peerUser);
                         respawnPlayer(spawn.x, 100, spawn.z);
                         modal.style.display = 'none';
                         isPromptOpen = false;
@@ -6119,7 +6119,7 @@ self.onmessage = async function(e) {
             var uniqueServers = Array.from(serverMap.values()).sort(function (a, b) { return b.timestamp - a.timestamp; }).slice(0, 10);
             for (var server of uniqueServers) {
                 hasEntries = true;
-                console.log('[Modal] Rendering server:', server.hostUser, 'at:', JSON.stringify(server.spawn));
+                console.log('[MODAL] Rendering server:', server.hostUser);
                 var row = document.createElement('div');
                 row.style.display = 'flex';
                 row.style.gap = '8px';
@@ -6133,7 +6133,7 @@ self.onmessage = async function(e) {
                     var btn = document.createElement('button');
                     btn.innerText = 'Try Connect';
                     btn.onclick = async function () {
-                        console.log('[WebRTC] Attempting to connect to server:', server.hostUser);
+                        console.log('[WEBRTC] Attempting to connect to server:', server.hostUser);
                         addMessage("Finding a route to " + server.hostUser + "...", 5000);
                         await connectToServer(server.hostUser, server.offer, server.iceCandidates);
                         modal.style.display = 'none';
@@ -6164,14 +6164,14 @@ self.onmessage = async function(e) {
                 }
             }
             if (!hasEntries) {
-                console.log('[Modal] No servers or peers to render in modal');
+                console.log('[MODAL] No servers or peers to render in modal');
                 var empty = document.createElement('div');
                 empty.style.marginTop = '8px';
                 empty.innerText = 'No players available';
                 list.appendChild(empty);
             }
             modal.querySelector('#closeUsers').onclick = function () {
-                console.log('[Modal] Closing users modal');
+                console.log('[MODAL] Closing users modal');
                 modal.remove();
                 isPromptOpen = false;
             };
@@ -6189,7 +6189,7 @@ self.onmessage = async function(e) {
                     addMessage('Cannot connect to yourself', 3000);
                     return;
                 }
-                console.log('[WebRTC] Attempting to connect to friend:', handle);
+                console.log('[WEBRTC] Attempting to connect to friend:', handle);
                 // Add friend to knownServers with a temporary entry
                 var spawn = calculateSpawnPoint(handle + '@' + worldName);
                 knownServers.push({
@@ -6209,7 +6209,7 @@ self.onmessage = async function(e) {
         }
         document.addEventListener('DOMContentLoaded', function () {
             try {
-                console.log('[Debug] DOMContentLoaded fired, initializing login elements');
+                console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
                 var announceLoginBtn = document.getElementById('announceLoginBtn');
                 var newUserJoinScriptBtn = document.getElementById('newUserJoinScriptBtn');
@@ -6217,26 +6217,26 @@ self.onmessage = async function(e) {
                 var pendingModal = document.getElementById('pendingModal');
                 var loginOverlay = document.getElementById('loginOverlay');
                 if (!startBtn || !announceLoginBtn || !newUserJoinScriptBtn || !loginOverlay) {
-                    console.error('[Debug] Login buttons or overlay not found in DOM');
+                    console.error('[SYSTEM] Login buttons or overlay not found in DOM');
                     addMessage('UI initialization failed: buttons or overlay missing', 3000);
                     return;
                 }
                 if (acceptAll) {
                     acceptAll.addEventListener('change', function (e) {
                         document.querySelectorAll('.selectOffer').forEach(function (ch) { ch.checked = e.target.checked; });
-                        console.log('[Debug] Accept All checkbox changed');
+                        console.log('[MODAL] Accept All checkbox changed');
                     });
                 } else {
-                    console.warn('[Debug] acceptAll element not found');
+                    console.warn('[MODAL] acceptAll element not found');
                 }
                 if (pendingModal) {
                     pendingModal.addEventListener('click', function (e) { e.stopPropagation(); });
-                    console.log('[Debug] Pending modal click listener added');
+                    console.log('[MODAL] Pending modal click listener added');
                 } else {
-                    console.warn('[Debug] pendingModal element not found');
+                    console.warn('[MODAL] pendingModal element not found');
                 }
                 startBtn.addEventListener('click', async function () {
-                    console.log('[Login] Start button clicked');
+                    console.log('[LOGIN] Start button clicked');
                     isPromptOpen = false;
                     var worldInput = document.getElementById('worldNameInput').value;
                     var userInput = document.getElementById('userInput').value;
@@ -6288,20 +6288,20 @@ self.onmessage = async function(e) {
                     document.getElementById('worldLabel').textContent = worldName;
                     document.getElementById('seedLabel').textContent = 'User ' + userName;
                     updateHudButtons();
-                    console.log('[Login] Initializing Three.js');
+                    console.log('[LOGIN] Initializing Three.js');
                     initThree();
                     initMusicPlayer();
-                    console.log('[Login] Three.js initialized');
+                    console.log('[LOGIN] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
                     selectedHotIndex = 0; // Auto-select torch
                     selectedBlockId = 120; // Explicitly set selected block
                     initHotbar();
                     updateHotbarUI(); // Explicitly update UI and selectedBlockId
-                    console.log('[Login] Creating ChunkManager');
+                    console.log('[LOGIN] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
-                    console.log('[Login] Populating spawn chunks');
+                    console.log('[LOGIN] Populating spawn chunks');
                     populateSpawnChunks();
-                    console.log('[Login] Calculating spawn point');
+                    console.log('[LOGIN] Calculating spawn point');
                     var spawn = calculateSpawnPoint(userWorldKey);
                     player.x = spawn.x;
                     player.y = spawn.y;
@@ -6312,9 +6312,9 @@ self.onmessage = async function(e) {
                     var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
                     var spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
-                    console.log('[Login] Preloading initial chunks');
+                    console.log('[LOGIN] Preloading initial chunks');
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
-                    console.log('[Login] Spawning mobs');
+                    console.log('[LOGIN] Spawning mobs');
                     const mobRnd = makeSeededRandom(worldSeed + '_mobs');
                     // spawnMobs(12, mobRnd);
                     setupMobile();
@@ -6339,7 +6339,7 @@ self.onmessage = async function(e) {
                     lastFrame = performance.now();
                     lastRegenTime = lastFrame;
                     var unregisterKeyEvents = registerKeyEvents();
-                    console.log('[Login] Starting game loop');
+                    console.log('[LOGIN] Starting game loop');
                     requestAnimationFrame(gameLoop);
                     addMessage('Welcome — world wraps at edges. Toggle camera with T. Good luck!', 5000);
                     var healthElement = document.getElementById('health');
@@ -6353,7 +6353,7 @@ self.onmessage = async function(e) {
                     addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
                 });
                 announceLoginBtn.addEventListener('click', async function () {
-                    console.log('[Login] Announce Server button clicked');
+                    console.log('[LOGIN] Announce Server button clicked');
                     isPromptOpen = true;
                     var worldInput = document.getElementById('worldNameInput').value;
                     var userInput = document.getElementById('userInput').value;
@@ -6380,7 +6380,7 @@ self.onmessage = async function(e) {
                     addMessage('Prepare to announce server after starting', 3000);
                 });
                 newUserJoinScriptBtn.addEventListener('click', async function () {
-                    console.log('[Login] Create Join Script button clicked');
+                    console.log('[LOGIN] Create Join Script button clicked');
                     isPromptOpen = true;
                     var worldInput = document.getElementById('worldNameInput').value;
                     var userInput = document.getElementById('userInput').value;
@@ -6486,37 +6486,37 @@ self.onmessage = async function(e) {
                     updatePendingModal();
                 });
                 async function initWorldsAndUsers() {
-                    console.log('[Users] Initializing worlds and users for:', MASTER_WORLD_KEY);
+                    console.log('[USERS] Initializing worlds and users');
                     var masterAddr = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
                     if (masterAddr) {
                         var messages = await GetPublicMessagesByAddress(masterAddr);
                         for (var msg of messages || []) {
                             if (msg.TransactionId && !processedMessages.has(msg.TransactionId)) {
-                                console.log('[Users] Processing message:', msg.TransactionId);
+                                console.log('[USERS] Processing message:', msg.TransactionId);
                                 var fromProfile = await GetProfileByAddress(msg.FromAddress);
                                 if (!fromProfile || !fromProfile.URN) {
-                                    console.log('[Users] Skipping: No valid URN for address:', msg.FromAddress);
+                                    console.log('[USERS] Skipping message: No valid URN for address:', msg.FromAddress);
                                     continue;
                                 }
                                 var user = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
                                 var userProfile = await GetProfileByURN(user);
                                 if (!userProfile || !userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                                    console.log('[Users] Skipping: Invalid profile for user:', user);
+                                    console.log('[USERS] Skipping message: Invalid profile for user:', user);
                                     continue;
                                 }
                                 var toKeywordRaw = await GetKeywordByPublicAddress(msg.ToAddress);
                                 if (!toKeywordRaw) {
-                                    console.log('[Users] Skipping: No keyword for address:', msg.ToAddress);
+                                    console.log('[USERS] Skipping message: No keyword for address:', msg.ToAddress);
                                     continue;
                                 }
                                 var toKeyword = toKeywordRaw.replace(/^"|"$/g, '');
                                 if (!toKeyword.includes('MCUserJoin@')) {
-                                    console.log('[Users] Skipping: Invalid keyword:', toKeyword);
+                                    console.log('[USERS] Skipping message: Invalid keyword:', toKeyword);
                                     continue;
                                 }
                                 var world = toKeyword.split('@')[1].replace(/[^a-zA-Z0-9]/g, '');
                                 if (user && world) {
-                                    console.log('[Users] Adding user:', user, 'to world:', world);
+                                    console.log('[USERS] Adding user:', user, 'to world:', world);
                                     if (!knownWorlds.has(world)) {
                                         knownWorlds.set(world, { discoverer: user, users: new Set([user]), toAddress: msg.ToAddress });
                                     } else {
@@ -6527,18 +6527,18 @@ self.onmessage = async function(e) {
                                     processedMessages.add(msg.TransactionId);
                                 }
                             } else if (msg.TransactionId) {
-                                console.log('[Users] Skipping processed message:', msg.TransactionId);
+                                console.log('[USERS] Skipping already processed message:', msg.TransactionId);
                             }
                         }
-                        console.log('[Users] Discovered worlds:', knownWorlds.size, 'users:', knownUsers.size);
+                        console.log('[USERS] Discovered worlds:', knownWorlds.size, 'and users:', knownUsers.size);
                     }
                 }
                 initWorldsAndUsers();
                 updateLoginUI();
                 setupEmojiPicker();
-                console.log('[Debug] DOMContentLoaded completed, button listeners attached');
+                console.log('[SYSTEM] DOMContentLoaded completed, all listeners attached');
             } catch (error) {
-                console.error('[Debug] Error in DOMContentLoaded:', error);
+                console.error('[SYSTEM] Error in DOMContentLoaded:', error);
                 addMessage('Failed to initialize login system', 3000);
             }
         });
@@ -6731,7 +6731,7 @@ self.onmessage = async function(e) {
             document.body.appendChild(fileInput);
             // Double-click handler to trigger file selection
             canvas.addEventListener('dblclick', function () {
-                console.log('[Minimap] Double-click detected, triggering file upload');
+                console.log('[MINIMAP] Double-click detected, triggering file upload');
                 fileInput.click();
             });
             // Drag-and-drop handlers
@@ -6749,11 +6749,11 @@ self.onmessage = async function(e) {
                 const files = e.dataTransfer.files;
                 for (const file of files) {
                     if (file && file.type === 'application/json') {
-                        console.log('[Minimap] File dropped:', file.name);
+                        console.log('[MINIMAP] File dropped:', file.name);
                         await handleMinimapFile(file);
                     } else {
                         addMessage('Skipped non-JSON file: ' + (file ? file.name : 'unknown'), 3000);
-                        console.log('[Minimap] Invalid file dropped:', file ? file.type : 'no file');
+                        console.log('[MINIMAP] Invalid file dropped:', file ? file.type : 'no file');
                     }
                 }
             });
@@ -6761,13 +6761,13 @@ self.onmessage = async function(e) {
             fileInput.addEventListener('change', async function () {
                 if (fileInput.files.length > 0) {
                     for (const file of fileInput.files) {
-                        console.log('[Minimap] File selected via double-click:', file.name);
+                        console.log('[MINIMAP] File selected via double-click:', file.name);
                         await handleMinimapFile(file);
                     }
                     fileInput.value = ''; // Reset input
                 }
             });
-            console.log('[Minimap] Events attached: double-click and drag-and-drop enabled');
+            console.log('[MINIMAP] Events attached: double-click and drag-and-drop enabled');
         }
         function gameLoop(now) {
             if (isDying) {
@@ -7297,7 +7297,7 @@ self.onmessage = async function(e) {
             musicAudioElement.muted = isMuted;
             if (muteBtn) muteBtn.innerText = isMuted ? '🔊' : '🔇';
         }
-        console.log('[Debug] Script loaded');
+        console.log('[SYSTEM] Script loaded');
     </script>
 </body>
 </html>
