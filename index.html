@@ -1101,18 +1101,6 @@ var lastWPress = 0;
             return Math.abs(hash);
         }
 
-        async function getTurnCredentials() {
-           
-//public STUN and TURN servers provided by the Sup!? project.
-            return [
-                { urls: 'stun:supturn.com:3478' },
-                {
-                    urls: "turn:supturn.com:3478",
-                    username: "supgalaxy",
-                    credential: "supgalaxy",
-                },
-            ];
-        }
 
         async function GetPublicAddressByKeyword(keyword) {
             try {
