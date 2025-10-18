@@ -2,11 +2,4 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/.vs/slnx.sqlite
-/.vs/SupGalaxy12/config/applicationhost.config
-/.vs/SupGalaxy12/FileContentIndex/60816df5-fed6-4fa9-83be-03bbff8108d1.vsidx
-/.vs/SupGalaxy12/FileContentIndex/8e1413f4-f125-4621-8aad-e9dafeeb5791.vsidx
-/.vs/SupGalaxy12/FileContentIndex/e15b1036-59a0-4d14-88fd-aa0e6260df51.vsidx
-/.vs/SupGalaxy12/v17/.wsuo
-/.vs/VSWorkspaceState.json
-*.vsidx
+/.vs
