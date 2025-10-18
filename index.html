@@ -2181,13 +2181,11 @@ self.onmessage = async function(e) {
                     }
                 }
             } else if (data.type === "chunk_updates") {
-                console.log('[Worker] Received chunk_updates:', data.updates);
                 for (var update of data.updates || []) {
                     applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
                 }
             } else if (data.type === "chunk_ownership") {
-                console.log('[Worker] Received chunk_ownership:', data.chunkKey, data.username, data.timestamp);
-                updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+               updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
             } else if (data.type === "user_update") {
                 console.log('[Worker] Received user_update:', data.transactionId);
                 if (data.data.profile) {
