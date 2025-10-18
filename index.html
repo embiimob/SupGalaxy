@@ -2309,16 +2309,13 @@ self.onmessage = async function(e) {
         }
         var chunkOwnership = new Map();
         function updateChunkOwnership(chunkKey, username, timestamp) {
-            console.log('[ChunkManager] Updating ownership for:', chunkKey, 'to:', username, 'at:', timestamp);
             try {
                 chunkOwnership.set(chunkKey, { username, timestamp });
-                console.log('[ChunkManager] Ownership updated:', chunkKey, chunkOwnership.get(chunkKey));
             } catch (e) {
                 console.error('[ChunkManager] Failed to update chunk ownership:', e);
             }
         }
         function applyChunkUpdates(changes, address, timestamp, transactionId) {
-            console.log('[ChunkManager] Applying chunk updates:', changes, 'from:', address, 'at:', timestamp, 'txId:', transactionId);
             try {
                 for (var delta of changes) {
                     var chunkKey = delta.chunk;
@@ -2326,7 +2323,6 @@ self.onmessage = async function(e) {
                     if (chunkManager) {
                         chunkManager.applyDeltasToChunk(chunkKey, chunkChanges);
                         chunkManager.markDirty(chunkKey);
-                        console.log('[ChunkManager] Applied deltas to chunk:', chunkKey);
                     } else {
                         console.error('[ChunkManager] chunkManager not defined');
                     }
@@ -5705,7 +5701,6 @@ self.onmessage = async function(e) {
                 for (var msg of messages) {
                     if (!msg.TransactionId || processedMessages.has(msg.TransactionId)) {
                         if (msg.TransactionId) {
-                            console.log('[SYSTEM] Stopping server message processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
                         continue;
@@ -5937,7 +5932,6 @@ self.onmessage = async function(e) {
                         }
                         if (msg.TransactionId) {
                             processedMessages.add(msg.TransactionId);
-                            console.log('[SYSTEM] Caching transactionId on initial load:', msg.TransactionId, 'for:', responseKeyword);
                         }
                     }
                     var requestCount = messages.length;
