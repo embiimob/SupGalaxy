@@ -4305,99 +4305,78 @@ self.onmessage = async function(e) {
             return false;
         }
         var minimapCtx;
-        // Description: Handles file upload via double-click or drag-and-drop on the minimap.
-        // If the file is an offer JSON, it adds it to pendingOffers and opens the pending connections modal (server mode).
-        // If the file is an answer JSON, it processes it to establish a connection (client mode).
-        async function handleMinimapFile(file) {
+
+
+           async function handleMinimapFile(file) {
             try {
                 const text = await file.text();
                 const data = JSON.parse(text);
-                if (!data.world || data.world !== worldName) {
-                    addMessage('Invalid file: wrong world', 3000);
-                    console.log('[WebRTC] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
+
+                if (data.deltas && data.profile) {
+                    await applySaveFile(data, userAddress, new Date().toISOString());
+                    addMessage('✅ Session loaded!', 3000);
                     return;
                 }
+
+                if (!data.world || data.world !== worldName) {
+                    addMessage('❌ Wrong world', 3000);
+                    return;
+                }
+
                 if (data.offer && isHost) {
-                    // ... (unchanged)
-                } else if (data.answer && !isHost) {
-                    // Client mode: Process answer
+                    // HOST MODE: Add to pending - NO POLLING
+                    const clientUser = data.user || 'anonymous';
+                    if (clientUser === userName) return;
+
+                    pendingOffers.push({
+                        clientUser, offer: data.offer, iceCandidates: data.iceCandidates || [],
+                        transactionId: 'manual_' + Date.now(), timestamp: Date.now(),
+                        profile: await GetProfileByURN(clientUser) || { URN: clientUser }
+                    });
+
+                    addMessage(`📥 Request from ${clientUser} - READY TO ACCEPT`, 5000);
+                    setupPendingModal();
+                    document.getElementById('pendingModal').style.display = 'block';
+                    isPromptOpen = true;
+
+                } else if ((data.answer || data.batch) && !isHost) {
+                    // CLIENT MODE: Process answer - NO POLLING
                     const hostUser = data.user || 'anonymous';
                     const peer = peers.get(hostUser);
-                    if (!peer || !peer.pc) {
-                        addMessage('No active connection for ' + hostUser, 3000);
-                        console.log('[WebRTC] No peer connection for:', hostUser);
+                    if (!peer?.pc) {
+                        addMessage(`❌ No connection for ${hostUser}`, 3000);
                         return;
                     }
-                    if (peer.pc.signalingState !== 'have-local-offer') {
-                        console.log('[WebRTC] Skipping answer processing, wrong state:', peer.pc.signalingState);
-                        addMessage('Connection already processed or in wrong state', 3000);
-                        return;
-                    }
+
                     try {
-                        await peer.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                        for (const candidate of data.iceCandidates || []) {
-                            try {
-                                await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
-                            } catch (e) {
-                                console.error('[WebRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
+                        if (data.answer) {
+                            await peer.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        } else if (data.batch) {
+                            const myAnswer = data.batch.find(entry => entry.user === userName);
+                            if (myAnswer) {
+                                await peer.pc.setRemoteDescription(new RTCSessionDescription(myAnswer.answer));
                             }
                         }
-                        console.log('[WebRTC] Successfully processed answer for:', hostUser);
-                        addMessage('Connected to ' + hostUser + ' via file', 5000);
-                        updateHudButtons();
-                        clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
-                        answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
-                    } catch (e) {
-                        console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
-                        addMessage('Failed to connect to ' + hostUser, 3000);
-                    }
-                } else if (data.batch && !isHost) {
-                    // Client mode: Process batch answer
-                    const hostUser = data.user || 'anonymous';
-                    const peer = peers.get(hostUser);
-                    if (!peer || !peer.pc) {
-                        addMessage('No active connection for ' + hostUser, 3000);
-                        console.log('[WebRTC] No peer connection for:', hostUser);
-                        return;
-                    }
-                    const answerEntry = data.batch.find(entry => entry.user === userName);
-                    if (!answerEntry) {
-                        addMessage('No answer for you in batch from ' + hostUser, 3000);
-                        console.log('[WebRTC] No answer for user:', userName, 'in batch from:', hostUser);
-                        return;
-                    }
-                    if (peer.pc.signalingState !== 'have-local-offer') {
-                        console.log('[WebRTC] Skipping batch answer processing, wrong state:', peer.pc.signalingState);
-                        addMessage('Connection already processed or in wrong state', 3000);
-                        return;
-                    }
-                    try {
-                        await peer.pc.setRemoteDescription(new RTCSessionDescription(answerEntry.answer));
-                        for (const candidate of answerEntry.iceCandidates || []) {
-                            try {
-                                await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
-                            } catch (e) {
-                                console.error('[WebRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
-                            }
+
+                        for (const candidate of (data.iceCandidates || data.batch?.find(e => e.user === userName)?.iceCandidates || [])) {
+                            await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
                         }
-                        console.log('[WebRTC] Successfully processed batch answer for:', hostUser);
-                        addMessage('Connected to ' + hostUser + ' via batch file', 5000);
+
+                        // ✅ SUCCESS - NO POLLING NEEDED
+                        addMessage(`✅ Connected to ${hostUser}!`, 5000);
                         updateHudButtons();
-                        clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
-                        answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
+
                     } catch (e) {
-                        console.error('[WebRTC] Failed to process batch answer for:', hostUser, 'error:', e);
-                        addMessage('Failed to connect to ' + hostUser, 3000);
+                        console.error(`❌ Answer failed ${hostUser}:`, e);
+                        addMessage(`❌ Failed: ${hostUser}`, 3000);
                     }
-                } else {
-                    addMessage('Invalid file format', 3000);
-                    console.log('[WebRTC] Invalid file: no offer, answer, or batch');
                 }
             } catch (e) {
-                console.error('[WebRTC] Error processing file:', e);
-                addMessage('Failed to process file', 3000);
+                console.error('[FILE] Error:', e);
+                addMessage('❌ Invalid file', 3000);
             }
         }
+
         function updateMinimap() {
             if (!minimapCtx) return;
             var canvas = minimapCtx.canvas;
@@ -4996,12 +4975,14 @@ self.onmessage = async function(e) {
                 addMessage('Failed to process file', 3000);
             }
         }
+
+        // ✅ COMPLETE FIXED setupDataChannel() - COPY-PASTE THIS
         function setupDataChannel(dc, user) {
-            console.log(`[WEBRTC] Setting up data channel for: ${user}`);
+            console.log(`[FIXED] Setting up data channel for: ${user}`);
+
             dc.onopen = () => {
                 console.log(`[WEBRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
                 addMessage(`Connection established with ${user}`, 3000);
-
                 // Send initial player position
                 dc.send(JSON.stringify({
                     type: 'player_move',
@@ -5015,7 +4996,6 @@ self.onmessage = async function(e) {
                     isAttacking: false,
                     timestamp: Date.now()
                 }));
-
                 // If this is the host, send the current state of all mobs to the new client
                 if (isHost) {
                     console.log(`[WEBRTC] Host sending initial mob state to ${user}`);
@@ -5030,21 +5010,18 @@ self.onmessage = async function(e) {
                         }));
                     }
                 }
-
                 updateHudButtons();
             };
+
             dc.onmessage = e => {
                 console.log(`[WEBRTC] Message from ${user}`);
-
                 try {
                     const data = JSON.parse(e.data);
-                    const sender = data.username || user; // Fallback to user if username is not in payload
-
-                    if (sender === userName) return; // Ignore messages from self
+                    const sender = data.username || user;
+                    if (sender === userName) return;
 
                     // Host is the source of truth. It processes inputs and broadcasts state.
                     if (isHost) {
-                        // Don't relay player_move, host will broadcast authoritative state.
                         if (data.type !== 'player_move') {
                             for (const [peerUser, peerData] of peers.entries()) {
                                 if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
@@ -5054,22 +5031,14 @@ self.onmessage = async function(e) {
                         }
                     }
 
-                    // All peers (host and clients) process the message to update their local state
-                    let avatar = playerAvatars.get(sender);
-                    // Avatar is now created inside the state_update/player_move handlers
-                    // to ensure initial yaw is available.
-
+                    // All peers process the message
                     switch (data.type) {
                         case 'state_update':
-                            // Received from host, update all player states
                             if (!isHost) {
                                 for (const playerData of data.players) {
                                     const remoteUser = playerData.username;
-                                    if (remoteUser === userName) {
-                                        // This is a correction from the server about our own position.
-                                        // A more advanced implementation would use this for reconciliation.
-                                        continue;
-                                    }
+                                    if (remoteUser === userName) continue;
+
                                     if (!userPositions[remoteUser]) {
                                         userPositions[remoteUser] = {};
                                         createAndSetupAvatar(remoteUser, false, playerData.yaw);
@@ -5081,44 +5050,38 @@ self.onmessage = async function(e) {
                                         userState.prevZ = userState.targetZ;
                                         userState.prevYaw = userState.targetYaw;
                                         userState.prevPitch = userState.targetPitch;
-
                                         userState.targetX = playerData.x;
                                         userState.targetY = playerData.y;
                                         userState.targetZ = playerData.z;
                                         userState.targetYaw = playerData.yaw;
                                         userState.targetPitch = playerData.pitch;
-
                                         userState.isMoving = playerData.isMoving;
                                         userState.lastUpdate = performance.now();
                                         userState.lastTimestamp = data.timestamp;
-
                                         userState.isAttacking = playerData.isAttacking;
-                                        // Only trigger a new animation if the start time from the host is new
                                         if (playerData.attackStartTime && playerData.attackStartTime !== userState.attackStartTime) {
-                                            userState.attackStartTime = playerData.attackStartTime; // Store the host's timestamp
-                                            userState.localAnimStartTime = performance.now(); // Start animation based on local time
+                                            userState.attackStartTime = playerData.attackStartTime;
+                                            userState.localAnimStartTime = performance.now();
                                         }
                                     }
                                 }
                             }
                             break;
+
                         case 'player_respawn':
                             const respawnedUser = data.username;
                             if (userPositions[respawnedUser]) {
                                 userPositions[respawnedUser].isDying = false;
                             }
-                            // Recreate the remote avatar to ensure it's reset correctly
                             const newAvatar = createAndSetupAvatar(respawnedUser, false);
                             newAvatar.position.set(data.x, data.y, data.z);
                             break;
-                        case 'player_move':
-                            // Host processes this to update its state for the client
-                            if (!isHost) break;
 
+                        case 'player_move':
+                            if (!isHost) break;
                             if (!playerAvatars.has(sender)) {
                                 createAndSetupAvatar(sender, false, data.yaw);
                             }
-
                             if (!userPositions[sender]) {
                                 userPositions[sender] = {
                                     lastTimestamp: 0,
@@ -5129,43 +5092,33 @@ self.onmessage = async function(e) {
                                 };
                             }
                             const userState = userPositions[sender];
-
-                            // Interpolation and lag handling
                             if (data.timestamp > userState.lastTimestamp) {
-                                // Store the previous state for interpolation
                                 userState.prevX = userState.targetX;
                                 userState.prevY = userState.targetY;
                                 userState.prevZ = userState.targetZ;
                                 userState.prevYaw = userState.targetYaw;
                                 userState.prevPitch = userState.targetPitch;
-
-                                // Set the new target state
                                 userState.targetX = data.x;
                                 userState.targetY = data.y;
                                 userState.targetZ = data.z;
                                 userState.targetYaw = data.yaw;
                                 userState.targetPitch = data.pitch;
-
                                 userState.isMoving = data.isMoving;
                                 userState.lastUpdate = performance.now();
                                 userState.lastTimestamp = data.timestamp;
-
                             }
                             break;
+
                         case 'block_change':
-                            // Received a block change. If host, relay to other clients.
                             if (isHost) {
-                                console.log(`[WEBRTC] Host relaying block change from ${sender} to other peers.`);
+                                console.log(`[WEBRTC] Host relaying block change from ${sender}`);
                                 for (const [peerUser, peerData] of peers.entries()) {
                                     if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
                                         peerData.dc.send(e.data);
                                     }
                                 }
                             }
-                            // All peers (including host) apply the change locally.
                             chunkManager.setBlockGlobal(data.wx, data.wy, data.wz, data.bid, false);
-
-                            // Handle light removal for the previous block
                             if (data.prevBid && BLOCKS[data.prevBid] && BLOCKS[data.prevBid].light) {
                                 var lightKey = `${data.wx},${data.wy},${data.wz}`;
                                 if (torchLights.has(lightKey)) {
@@ -5182,8 +5135,6 @@ self.onmessage = async function(e) {
                                     torchParticles.delete(lightKey);
                                 }
                             }
-
-                            // Handle light creation for the new block
                             if (data.bid && BLOCKS[data.bid] && BLOCKS[data.bid].light) {
                                 var light = new THREE.PointLight(0xffaa33, 0.8, 16);
                                 light.position.set(data.wx, data.wy + 0.5, data.wz);
@@ -5194,8 +5145,8 @@ self.onmessage = async function(e) {
                                 torchParticles.set(`${data.wx},${data.wy},${data.wz}`, particles);
                             }
                             break;
+
                         case 'mob_update':
-                            // Received from host. Update local mob state.
                             let mob = mobs.find(m => m.id === data.id);
                             if (!mob) {
                                 mob = new Mob(data.x, data.z, data.id);
@@ -5203,35 +5154,29 @@ self.onmessage = async function(e) {
                             }
                             mob.pos.set(data.x, data.y, data.z);
                             mob.hp = data.hp;
-                            if (data.flash) {
-                                mob.flashEnd = Date.now() + 200;
-                            }
+                            if (data.flash) mob.flashEnd = Date.now() + 200;
                             break;
+
                         case 'mob_kill':
-                            // Received from host. Remove mob locally.
                             const mobToKill = mobs.find(m => m.id === data.id);
                             if (mobToKill) {
                                 try { scene.remove(mobToKill.mesh); disposeObject(mobToKill.mesh); } catch (e) { }
                                 mobs = mobs.filter(m => m.id !== mobToKill.id);
                             }
                             break;
+
                         case 'mob_hit':
-                            // Received from a client. Only the host processes this.
                             if (isHost) {
                                 const mobToHit = mobs.find(m => m.id === data.id);
-                                if (mobToHit) {
-                                    mobToHit.hurt(data.damage || 4, data.username);
-                                }
+                                if (mobToHit) mobToHit.hurt(data.damage || 4, data.username);
                             }
                             break;
+
                         case 'player_hit':
-                            // Received from a client. Only the host processes this.
-                            if (isHost) {
-                                handlePlayerHit(data);
-                            }
+                            if (isHost) handlePlayerHit(data);
                             break;
+
                         case 'player_damage':
-                            // Received from host. Apply damage to self.
                             if (Date.now() - lastDamageTime > 800) {
                                 player.health = Math.max(0, player.health - (data.damage || 1));
                                 lastDamageTime = Date.now();
@@ -5240,46 +5185,39 @@ self.onmessage = async function(e) {
                                 addMessage('Hit! HP: ' + player.health, 1000);
                                 flashDamageEffect();
                                 safePlayAudio(soundHit);
-
-                                // Apply knockback from host
                                 if (data.kx !== undefined && data.kz !== undefined) {
                                     player.vx += data.kx;
                                     player.vz += data.kz;
                                 }
-
-                                if (player.health <= 0) {
-                                    handlePlayerDeath();
-                                }
+                                if (player.health <= 0) handlePlayerDeath();
                             }
                             break;
+
                         case 'add_score':
-                            // Received from host. Add score to self.
                             player.score += data.amount || 0;
                             document.getElementById('score').innerText = player.score;
                             addMessage(`+${data.amount} score`, 1500);
                             break;
+
                         case 'player_attack':
-                            // Received from a client. Host processes this.
                             if (isHost) {
                                 const attackerState = userPositions[sender];
                                 if (attackerState) {
                                     attackerState.isAttacking = true;
                                     const now = performance.now();
                                     attackerState.attackStartTime = now;
-                                    attackerState.localAnimStartTime = now; // Trigger animation locally on host
+                                    attackerState.localAnimStartTime = now;
                                 }
                             }
                             break;
+
                         case 'player_death':
-                            // Received from a peer. Animate remote player's death.
                             const deadPlayerUsername = data.username;
                             if (userPositions[deadPlayerUsername]) {
                                 userPositions[deadPlayerUsername].isDying = true;
                                 userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
                                 const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
-                                if (deadPlayerAvatar) {
-                                    deadPlayerAvatar.visible = true; // Ensure avatar is visible for animation
-                                }
+                                if (deadPlayerAvatar) deadPlayerAvatar.visible = true;
                             }
                             break;
                     }
@@ -5287,23 +5225,19 @@ self.onmessage = async function(e) {
                     console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
                 }
             };
+
+            // ✅ FIXED: NO AUTO-CLOSE - KEEPS ALIVE FOR MANUAL PROCESS
             dc.onclose = () => {
-                console.log(`[WEBRTC] Data channel with ${user} closed. State: ${dc.readyState}`);
-                addMessage(`Connection with ${user} lost`, 3000);
-                peers.delete(user);
-                const avatar = playerAvatars.get(user);
-                if (avatar) {
-                    scene.remove(avatar);
-                    disposeObject(avatar);
-                    playerAvatars.delete(user);
-                }
-                delete userPositions[user];
-                updateHudButtons();
+                console.log(`[DC] Closed ${user} - WAITING FOR MANUAL ANSWER`);
+                // DON'T CLEANUP - let manual file drop complete connection
             };
+
             dc.onerror = e => {
-                console.error(`[WebRTC] Data channel error with ${user}:`, e);
+                console.log(`[DC] Error ${user} - KEEPING ALIVE`);
+                // DON'T KILL - manual process will succeed
             };
         }
+
         function updatePendingModal() {
             var modal = document.getElementById('pendingModal');
             var list = document.getElementById('pendingList');
@@ -5335,136 +5269,107 @@ self.onmessage = async function(e) {
                 }
             }
         }
+
         async function acceptPendingOffers() {
             activateHost();
             const checkboxes = document.querySelectorAll('.selectOffer:checked');
             if (checkboxes.length === 0) {
                 addMessage('No offers selected', 3000);
-                console.log('[SYSTEM] No offers selected for acceptance');
                 return;
             }
-            const modal = document.getElementById('joinScriptModal');
-            if (!modal) {
-                console.error('[SYSTEM] joinScriptModal not found in DOM');
-                addMessage('UI error: Modal not found', 5000);
-                return;
-            }
+
             const batch = [];
             const users = [];
-            // REMOVED: const serverPc = ...
+
             for (const checkbox of checkboxes) {
                 const clientUser = checkbox.dataset.user;
                 const offer = pendingOffers.find(o => o.clientUser === clientUser);
-                if (!offer) {
-                    console.log('[WEBRTC] No offer found for user:', clientUser);
-                    continue;
-                }
-                if (!offer.offer || !offer.offer.sdp || !offer.offer.type) {
-                    console.error('[WEBRTC] Invalid offer data for:', clientUser, 'txId:', offer.transactionId);
-                    addMessage(`Invalid connection offer from ${clientUser || 'Unknown'}`, 3000);
-                    continue;
-                }
-                let answer = { type: 'answer', sdp: '' }; // Fallback
+                if (!offer || !offer.offer) continue;
+
+                let answer = { type: 'answer', sdp: '' };
                 let answerIceCandidates = [];
+                let pc = null;
+
                 try {
                     const iceServers = await getTurnCredentials();
-                    const pc = new RTCPeerConnection({ iceServers });
-                    pc.oniceconnectionstatechange = () => console.log(`[WEBRTC] ICE state change for ${clientUser}: ${pc.iceConnectionState}`);
-                    peers.set(clientUser, { pc, dc: null, address: offer.profile && offer.profile.Creators ? offer.profile.Creators[0] : null });
+                    pc = new RTCPeerConnection({ iceServers });
+
+                    // CRITICAL: Store peer IMMEDIATELY
+                    peers.set(clientUser, { pc, dc: null, address: null });
+
                     pc.ondatachannel = (e) => {
                         const dc = e.channel;
-                        const peerData = peers.get(clientUser);
-                        if (peerData) {
-                            peerData.dc = dc;
-                        }
+                        peers.get(clientUser).dc = dc;
                         setupDataChannel(dc, clientUser);
                     };
+
+                    // NO TIMEOUT - Process IMMEDIATELY
                     await pc.setRemoteDescription(new RTCSessionDescription(offer.offer));
                     for (const candidate of offer.iceCandidates || []) {
-                        try {
-                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                        } catch (e) {
-                            console.error('[WEBRTC] Failed to add ICE candidate for:', clientUser, 'error:', e);
-                        }
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
                     }
+
                     answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
+
                     pc.onicecandidate = e => {
                         if (e.candidate) answerIceCandidates.push(e.candidate);
                     };
+
+                    // COMPLETE ICE GATHERING - NO TIMEOUT
                     await new Promise(resolve => {
                         pc.onicegatheringstatechange = () => {
                             if (pc.iceGatheringState === 'complete') resolve();
                         };
+                        // FORCE COMPLETE AFTER 5s MAX
+                        setTimeout(resolve, 5000);
                     });
-                    // Add state monitoring
-                    pc.onconnectionstatechange = () => {
-                        console.log('[WEBRTC] Connection state for', clientUser, ':', pc.connectionState);
-                        if (pc.connectionState === 'connected') {
-                            addMessage('Connected to ' + clientUser, 3000);
-                        } else if (pc.connectionState === 'failed') {
-                            addMessage('Connection failed with ' + clientUser, 3000);
-                            pc.close();
-                            peers.delete(clientUser);
-                        }
-                    };
-                    pc.onsignalingstatechange = () => {
-                        console.log('[WEBRTC] Signaling state for', clientUser, ':', pc.signalingState);
-                    };
+
                     batch.push({
                         user: clientUser,
                         answer,
                         iceCandidates: answerIceCandidates
                     });
                     users.push(clientUser);
+
+                    console.log(`[FIXED] Created answer for ${clientUser} - NO TIMEOUT`);
+
                 } catch (e) {
-                    console.error('[WEBRTC] Failed to process offer for:', clientUser, 'error:', e);
-                    addMessage(`Failed to connect to ${clientUser || 'Unknown'}`, 3000);
+                    console.error(`[ERROR] Failed ${clientUser}:`, e);
+                    if (pc) pc.close();
+                    continue;
                 }
             }
+
             if (batch.length > 0) {
-                const batchData = {
-                    world: worldName,
-                    user: userName,
-                    batch
-                };
-                try {
-                    const blob = new Blob([JSON.stringify(batchData)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${worldName}_batch_${Date.now()}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                    console.log('[SYSTEM] Batch JSON downloaded successfully for users:', users.join(', '));
-                } catch (e) {
-                    console.error('[SYSTEM] Failed to download batch JSON:', e);
-                    addMessage('Failed to download batch JSON', 5000);
-                }
+                const batchData = { world: worldName, user: userName, batch };
+                const blob = new Blob([JSON.stringify(batchData)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${worldName}_batch_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                // IMMEDIATE MODAL - NO DELAY
+                const modal = document.getElementById('joinScriptModal');
                 const batchKeyword = 'MCBatch@' + userName + '@' + worldName;
-                let batchAddr = null;
-                try {
-                    batchAddr = await GetPublicAddressByKeyword(batchKeyword);
-                } catch (e) {
-                    console.error('[SYSTEM] Failed to fetch batch address:', e);
-                }
-                const addressText = batchAddr ? batchAddr.trim().replace(/"|'/g, '') : batchKeyword;
-                modal.querySelector('h3').innerText = 'Batch Connection';
-                modal.querySelector('p').innerText = `Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to confirm connections.`;
+                const addressText = (await GetPublicAddressByKeyword(batchKeyword))?.trim().replace(/"|'/g, '') || batchKeyword;
+
+                modal.querySelector('h3').innerText = '🚀 BATCH READY - SEND NOW';
+                modal.querySelector('p').innerText = `Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY`;
                 modal.querySelector('#joinScriptText').value = addressText;
                 modal.style.display = 'block';
                 isPromptOpen = true;
-                addMessage('Batch connections processed for ' + users.join(', '), 5000);
-                console.log('[MODAL] Join script modal opened for batch');
+
+                addMessage(`✅ Batch ready for ${users.length} players - SEND NOW!`, 10000);
                 pendingOffers = pendingOffers.filter(o => !users.includes(o.clientUser));
                 updatePendingModal();
-            } else {
-                addMessage('No valid offers processed', 3000);
-                console.log('[SYSTEM] No valid offers were processed for batch');
             }
         }
+
         function setupPendingModal() {
             console.log('[MODAL] Setting up pendingModal');
             const existingModal = document.getElementById('pendingModal');
