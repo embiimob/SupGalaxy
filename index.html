@@ -4778,6 +4778,23 @@ self.onmessage = async function(e) {
             }
         }
 
+        //SUP!? PUBLIC STUN AND TURN SERVERS
+        async function getTurnCredentials() {
+            console.log('[WebRTC] Using static TURN credentials: supgalaxy');
+            return [
+                { urls: 'stun:supturn.com:3478' },
+                {
+                    urls: [
+                        'turn:supturn.com:3478?transport=udp',
+                        'turn:supturn.com:3478?transport=tcp',
+                        'turn:supturn.com:443?transport=tcp'
+                    ],
+                    username: 'supgalaxy',
+                    credential: 'supgalaxy',
+                    credentialType: 'password'
+                }
+            ];
+        }
 
         async function connectToServer(hostUser, offer, iceCandidates) {
             if (peers.size >= MAX_PEERS) {
