@@ -2947,7 +2947,7 @@ self.onmessage = async function(e) {
             if (!chunk.generated) this.generateChunk(chunk);
             return chunk.get(newLx, y, newLz);
         };
-        ChunkManager.prototype.setBlockGlobal = function (wx, wy, wz, bid, doBroadcast = true) {
+        ChunkManager.prototype.setBlockGlobal = function (wx, wy, wz, bid, doBroadcast = true, originSeed = null) {
             if (wy < 0 || wy >= MAX_HEIGHT) return;
             var wrappedWx = modWrap(wx, MAP_SIZE);
             var wrappedWz = modWrap(wz, MAP_SIZE);
@@ -2972,7 +2972,8 @@ self.onmessage = async function(e) {
                     type: 'block_change',
                     wx: wx, wy: wy, wz: wz, bid: bid,
                     prevBid: prev, // Include the previous block ID
-                    username: userName // Let the server know who made the change
+                    username: userName, // Let the server know who made the change
+                    originSeed: originSeed
                 });
 
                 // Both host and client send the change to their peer(s).
@@ -3834,7 +3835,7 @@ self.onmessage = async function(e) {
                 addMessage('Cannot place block in chunk ' + chunkKey + ': owned by another user');
                 return;
             }
-            chunkManager.setBlockGlobal(wx, wy, wz, bid, userName);
+            chunkManager.setBlockGlobal(wx, wy, wz, bid, true, item.originSeed);
 
             // If the block is from another world, record its origin.
             if (item.originSeed && item.originSeed !== worldSeed) {
@@ -5118,7 +5119,13 @@ self.onmessage = async function(e) {
                                     }
                                 }
                             }
-                            chunkManager.setBlockGlobal(data.wx, data.wy, data.wz, data.bid, false);
+                            chunkManager.setBlockGlobal(data.wx, data.wy, data.wz, data.bid, false, data.originSeed);
+
+                            // If the block is from another world, record its origin.
+                            if (data.originSeed && data.originSeed !== worldSeed) {
+                                const coordKey = `${data.wx},${data.wy},${data.wz}`;
+                                foreignBlockOrigins.set(coordKey, data.originSeed);
+                            }
                             if (data.prevBid && BLOCKS[data.prevBid] && BLOCKS[data.prevBid].light) {
                                 var lightKey = `${data.wx},${data.wy},${data.wz}`;
                                 if (torchLights.has(lightKey)) {
