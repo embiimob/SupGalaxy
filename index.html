@@ -2710,7 +2710,7 @@ self.onmessage = async function(e) {
 
         function updateSky(dt) {
             const now = new Date();
-            const hours = now.getHours() + now.getMinutes() / 60;
+            let hours = now.getHours() + now.getMinutes() / 60;
             const timeRatio = hours / 24;
             const timeAngle = timeRatio * Math.PI * 2;
 
@@ -2751,9 +2751,10 @@ self.onmessage = async function(e) {
 
             const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
             const directionalLight = scene.getObjectByProperty('type', 'DirectionalLight');
+            const hemisphereLight = scene.getObjectByProperty('type', 'HemisphereLight');
 
-            const dayAmbient = 0.6;
-            const nightAmbient = 0.02;
+            const dayAmbient = 0.2;
+            const nightAmbient = 0.01;
             const dayDirectional = 0.95;
             const nightDirectional = 0;
 
@@ -2764,6 +2765,11 @@ self.onmessage = async function(e) {
             }
             if (directionalLight) {
                 directionalLight.intensity = nightDirectional + (dayDirectional - nightDirectional) * lightFactor;
+            }
+            if (hemisphereLight) {
+                const dayHemi = 0.6;
+                const nightHemi = 0.02;
+                hemisphereLight.intensity = nightHemi + (dayHemi - nightHemi) * lightFactor;
             }
         }
 
@@ -3210,11 +3216,11 @@ self.onmessage = async function(e) {
             controls.maxDistance = 100;
             controls.enabled = false;
             console.log('[initThree] Controls created');
-            var dir = new THREE.DirectionalLight(0xffffff, 1.5);
+            var dir = new THREE.DirectionalLight(0xffffff, 1.0); // Adjusted intensity
             dir.position.set(100, 200, 100);
             scene.add(dir);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.8);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2)); // Adjusted intensity
+            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.6); // Adjusted intensity
             scene.add(hemisphereLight);
             console.log('[initThree] Lights added');
 
