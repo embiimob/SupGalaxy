@@ -3162,7 +3162,7 @@ self.onmessage = async function(e) {
             }
             processNext.call(this);
         };
-        ChunkManager.prototype.update = function (playerX, playerZ) {
+        ChunkManager.prototype.update = function (playerX, playerZ, playerDirection) {
             var pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
             var pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
             if (pcx !== this.lastPcx || pcz !== this.lastPcz) {
@@ -3175,17 +3175,51 @@ self.onmessage = async function(e) {
                 console.log("Expanding load radius to:", this.currentLoadRadius);
             }
 
-            var needed = new Set();
+            var neededChunks = [];
             for (var dx = -this.currentLoadRadius; dx <= this.currentLoadRadius; dx++) {
                 for (var dz = -this.currentLoadRadius; dz <= this.currentLoadRadius; dz++) {
                     var cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
                     var cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
-                    var ch = this.getChunk(cx, cz);
-                    needed.add(ch.key);
-                    if (!ch.generating && !ch.generated) this.generateChunk(ch);
-                    if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+                    neededChunks.push({ cx: cx, cz: cz, dx: dx, dz: dz });
                 }
             }
+
+            neededChunks.sort((a, b) => {
+                const distASq = a.dx * a.dx + a.dz * a.dz;
+                const distBSq = b.dx * b.dx + b.dz * b.dz;
+
+                let aIsInFront = false;
+                let bIsInFront = false;
+
+                if (playerDirection && playerDirection.lengthSq() > 0) {
+                    const vecA = new THREE.Vector3(a.dx, 0, a.dz);
+                    if (vecA.lengthSq() > 0) {
+                        if (vecA.normalize().dot(playerDirection) > 0.3) {
+                            aIsInFront = true;
+                        }
+                    }
+                    const vecB = new THREE.Vector3(b.dx, 0, b.dz);
+                    if (vecB.lengthSq() > 0) {
+                        if (vecB.normalize().dot(playerDirection) > 0.3) {
+                            bIsInFront = true;
+                        }
+                    }
+                }
+
+                if (aIsInFront && !bIsInFront) return -1;
+                if (!aIsInFront && bIsInFront) return 1;
+
+                return distASq - distBSq;
+            });
+
+            var needed = new Set();
+            for (const chunkInfo of neededChunks) {
+                var ch = this.getChunk(chunkInfo.cx, chunkInfo.cz);
+                needed.add(ch.key);
+                if (!ch.generating && !ch.generated) this.generateChunk(ch);
+                if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+            }
+
             for (var peerUser in userPositions) {
                 if (peerUser !== userName) {
                     var pos = userPositions[peerUser];
@@ -7281,7 +7315,7 @@ self.onmessage = async function(e) {
                     avatarGroup.rotation.y = player.yaw;
                 }
                 updateAvatarAnimation(now, isMoving);
-                chunkManager.update(player.x, player.z);
+                chunkManager.update(player.x, player.z, moveVec);
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
