@@ -2885,6 +2885,16 @@ self.onmessage = async function(e) {
                         if (!id || id === BLOCK_AIR) continue;
                         var wx = modWrap(baseX + x, MAP_SIZE);
                         var wz = modWrap(baseZ + z, MAP_SIZE);
+
+                        if (BLOCKS[id] && BLOCKS[id].light) {
+                            var lightKey = `${wx},${y},${wz}`;
+                            if (!torchLights.has(lightKey)) {
+                                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                                light.position.set(wx + 0.5, y + 0.5, wz + 0.5);
+                                scene.add(light);
+                                torchLights.set(lightKey, light);
+                            }
+                        }
                         var exposed = (
                             this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
                             this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
@@ -3144,6 +3154,29 @@ self.onmessage = async function(e) {
                             meshGroup.remove(ch.mesh);
                             disposeObject(ch.mesh);
                         }
+
+                        // Also remove associated lights
+                        const baseX = ch.cx * CHUNK_SIZE;
+                        const baseZ = ch.cz * CHUNK_SIZE;
+                        for (let x = 0; x < CHUNK_SIZE; x++) {
+                            for (let z = 0; z < CHUNK_SIZE; z++) {
+                                for (let y = 0; y < MAX_HEIGHT; y++) {
+                                    const id = ch.get(x, y, z);
+                                    if (BLOCKS[id] && BLOCKS[id].light) {
+                                        const wx = modWrap(baseX + x, MAP_SIZE);
+                                        const wz = modWrap(baseZ + z, MAP_SIZE);
+                                        const lightKey = `${wx},${y},${wz}`;
+                                        if (torchLights.has(lightKey)) {
+                                            const light = torchLights.get(lightKey);
+                                            scene.remove(light);
+                                            light.dispose();
+                                            torchLights.delete(lightKey);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         this.chunks.delete(ch.key);
                     }
                 }
@@ -6393,7 +6426,7 @@ self.onmessage = async function(e) {
                 isPromptOpen = false;
             };
         }
-        document.addEventListener('DOMContentLoaded', function () {
+                document.addEventListener('DOMContentLoaded', async function () {
             try {
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
