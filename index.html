@@ -375,6 +375,26 @@
             box-shadow: 0 0 8px var(--accent);
         }
 
+        .inv-slot.highlight-craft {
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 12px var(--accent);
+            animation: pulse-craft 1.5s infinite;
+        }
+
+        @keyframes pulse-craft {
+            0% {
+                box-shadow: 0 0 12px var(--accent);
+            }
+
+            50% {
+                box-shadow: 0 0 20px var(--accent);
+            }
+
+            100% {
+                box-shadow: 0 0 12px var(--accent);
+            }
+        }
+
         .inv-count {
             position: absolute;
             bottom: 2px;
@@ -996,8 +1016,8 @@
             { id: 'smooth_stone', out: { id: 106, count: 4 }, requires: { 4: 4 } },
             { id: 'concrete', out: { id: 107, count: 4 }, requires: { 4: 2, 5: 2 } },
             { id: 'polished_wood', out: { id: 108, count: 2 }, requires: { 7: 2 } },
-            { id: 'marble', out: { id: 109, count: 1 }, requires: { 4: 3, 10: 1 } },
-            { id: 'obsidian', out: { id: 110, count: 1 }, requires: { 16: 1, 4: 1 } },
+            { id: 'marble', out: { id: 109, count: 1 }, requires: { 4: 3, 10: 1 }, requiresOffWorld: { 4: 1 } },
+            { id: 'obsidian', out: { id: 110, count: 1 }, requires: { 16: 1, 4: 1 }, requiresOffWorld: { 4: 1 } },
             { id: 'crystal_blue', out: { id: 111, count: 1 }, requires: { 100: 1, 6: 1 } },
             { id: 'crystal_purple', out: { id: 112, count: 1 }, requires: { 100: 1, 11: 1 } },
             { id: 'crystal_green', out: { id: 113, count: 1 }, requires: { 100: 1, 8: 1 } },
@@ -1074,6 +1094,7 @@ var lastWPress = 0;
         var foreignBlockOrigins = new Map();
         var INVENTORY = new Array(36).fill(null);
         var isPromptOpen = false;
+        var craftingState = null; // To manage multi-step crafting
         var userPositions = {};
         var peers = new Map();
         var processedMessages = new Set();
@@ -3430,30 +3451,237 @@ self.onmessage = async function(e) {
             trashIndex = -1;
         });
         function attemptCraft(recipe) {
-            var need = Object.assign({}, recipe.requires);
-            var consumed = [];
-            for (var i = 0; i < INVENTORY.length; i++) {
-                var s = INVENTORY[i];
-                if (!s || s.count === 0) continue;
-                if (need[s.id]) {
-                    var take = Math.min(s.count, need[s.id]);
-                    need[s.id] -= take;
-                    consumed.push({ slot: i, take: take });
-                    if (need[s.id] <= 0) delete need[s.id];
+            // Tally all items, separating native and off-world
+            const availableNative = {};
+            const availableOffWorld = {};
+            const allAvailable = {};
+
+            for (const item of INVENTORY) {
+                if (item) {
+                    allAvailable[item.id] = (allAvailable[item.id] || 0) + item.count;
+                    if (item.originSeed && item.originSeed !== worldSeed) {
+                        availableOffWorld[item.id] = (availableOffWorld[item.id] || 0) + item.count;
+                    } else {
+                        availableNative[item.id] = (availableNative[item.id] || 0) + item.count;
+                    }
                 }
             }
-            if (Object.keys(need).length > 0) {
-                addMessage('Missing materials');
-                return;
+
+            // Check total materials first
+            for (const reqId in recipe.requires) {
+                if ((allAvailable[reqId] || 0) < recipe.requires[reqId]) {
+                    addMessage(`Missing materials for ${BLOCKS[recipe.out.id].name}`);
+                    return;
+                }
             }
-            for (var c of consumed) {
-                INVENTORY[c.slot].count -= c.take;
-                if (INVENTORY[c.slot].count <= 0) INVENTORY[c.slot] = null;
+
+            // Check off-world requirements
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    if ((availableOffWorld[reqId] || 0) < recipe.requiresOffWorld[reqId]) {
+                        addMessage(`Requires off-world ${BLOCKS[reqId].name}`);
+                        return;
+                    }
+                }
             }
-            addToInventory(recipe.out.id, recipe.out.count);
+
+            // If we are here, we have enough materials. Now consume them.
+            let neededToConsume = { ...recipe.requires };
+            let neededOffWorld = { ...recipe.requiresOffWorld };
+            let consumedSeeds = [];
+
+            // Consume off-world items first
+            if (neededOffWorld) {
+                for (let i = 0; i < INVENTORY.length; i++) {
+                    const item = INVENTORY[i];
+                    if (item && neededOffWorld[item.id] > 0 && item.originSeed && item.originSeed !== worldSeed) {
+                        const amountToTake = Math.min(item.count, neededOffWorld[item.id]);
+
+                        for (let j = 0; j < amountToTake; j++) {
+                            consumedSeeds.push(item.originSeed);
+                        }
+
+                        item.count -= amountToTake;
+                        neededOffWorld[item.id] -= amountToTake;
+                        neededToConsume[item.id] -= amountToTake; // Decrement from total needed as well
+
+                        if (item.count === 0) {
+                            INVENTORY[i] = null;
+                        }
+                    }
+                }
+            }
+
+            // Consume remaining items
+            for (let i = 0; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                if (item && neededToConsume[item.id] > 0) {
+                    const amountToTake = Math.min(item.count, neededToConsume[item.id]);
+                    item.count -= amountToTake;
+                    neededToConsume[item.id] -= amountToTake;
+                    if (item.count === 0) {
+                        INVENTORY[i] = null;
+                    }
+                }
+            }
+
+            // Crafting successful. Add the new item.
+            let newOriginSeed = null;
+            if (consumedSeeds.length > 0) {
+                newOriginSeed = consumedSeeds.join('');
+            }
+
+            addToInventory(recipe.out.id, recipe.out.count, newOriginSeed);
             addMessage('Crafted ' + BLOCKS[recipe.out.id].name);
             updateHotbarUI();
+            if (document.getElementById('inventoryModal').style.display === 'block') {
+                updateInventoryUI();
+            }
         }
+        function completeCraft(recipe, selectedIndex) {
+            const neededToConsume = { ...recipe.requires };
+            const consumedSeeds = [];
+
+            const selectedItem = INVENTORY[selectedIndex];
+            if (!selectedItem || !recipe.requiresOffWorld || !recipe.requiresOffWorld[selectedItem.id]) {
+                addMessage("Invalid selection for craft.");
+                craftingState = null;
+                updateInventoryUI();
+                return;
+            }
+
+            // Temporarily reserve the selected item
+            neededToConsume[selectedItem.id]--;
+            consumedSeeds.push(selectedItem.originSeed);
+            const tempInventory = JSON.parse(JSON.stringify(INVENTORY));
+            tempInventory[selectedIndex].count--;
+
+            // Check for and reserve other required off-world items
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    let neededCount = recipe.requiresOffWorld[reqId];
+                    if (parseInt(reqId) === selectedItem.id) {
+                        neededCount--; // Account for the already selected item
+                    }
+                    if (neededCount > 0) {
+                        for (let i = 0; i < tempInventory.length; i++) {
+                            const item = tempInventory[i];
+                            if (item && item.id == reqId && item.originSeed && item.originSeed !== worldSeed && item.count > 0) {
+                                const amountToReserve = Math.min(item.count, neededCount);
+                                for (let j = 0; j < amountToReserve; j++) {
+                                    consumedSeeds.push(item.originSeed);
+                                }
+                                item.count -= amountToReserve;
+                                neededCount -= amountToReserve;
+                                neededToConsume[reqId] -= amountToReserve;
+                                if (neededCount <= 0) break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Tally remaining available materials from the temporary inventory
+            const available = {};
+            for (const item of tempInventory) {
+                if (item && item.count > 0) {
+                    available[item.id] = (available[item.id] || 0) + item.count;
+                }
+            }
+
+            // Check if remaining materials are sufficient
+            for (const reqId in neededToConsume) {
+                if ((available[reqId] || 0) < neededToConsume[reqId]) {
+                    addMessage("Still missing other materials.");
+                    craftingState = null;
+                    updateInventoryUI();
+                    return;
+                }
+            }
+
+            // All checks passed. Now, consume materials from the *actual* inventory.
+            INVENTORY[selectedIndex].count--;
+            if (INVENTORY[selectedIndex].count <= 0) INVENTORY[selectedIndex] = null;
+
+            // This re-uses the same consumption logic, which is fine since we validated it.
+            let finalConsumption = { ...recipe.requires };
+            finalConsumption[selectedItem.id]--;
+
+            let offWorldToConsume = { ...recipe.requiresOffWorld };
+             if (offWorldToConsume[selectedItem.id]) {
+                offWorldToConsume[selectedItem.id]--;
+            }
+
+
+            // Consume other off-world items
+            if (Object.keys(offWorldToConsume).length > 0) {
+                 for (let i = 0; i < INVENTORY.length; i++) {
+                    const item = INVENTORY[i];
+                    if (item && offWorldToConsume[item.id] > 0 && item.originSeed && item.originSeed !== worldSeed) {
+                        const amountToTake = Math.min(item.count, offWorldToConsume[item.id]);
+                        item.count -= amountToTake;
+                        offWorldToConsume[item.id] -= amountToTake;
+                        finalConsumption[item.id] -= amountToTake;
+                        if (item.count === 0) INVENTORY[i] = null;
+                    }
+                }
+            }
+
+            // Consume remaining general items
+            for (let i = 0; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                if (item && finalConsumption[item.id] > 0) {
+                    const amountToTake = Math.min(item.count, finalConsumption[item.id]);
+                    item.count -= amountToTake;
+                    finalConsumption[item.id] -= amountToTake;
+                    if (item.count === 0) INVENTORY[i] = null;
+                }
+            }
+
+            // Add crafted item with combined seeds
+            const newOriginSeed = consumedSeeds.sort().join(''); // Sort for consistency
+            addToInventory(recipe.out.id, recipe.out.count, newOriginSeed);
+            addMessage('Crafted ' + BLOCKS[recipe.out.id].name);
+
+            craftingState = null;
+            toggleInventory();
+            updateHotbarUI();
+        }
+
+        function initiateCraft(recipe) {
+            if (craftingState) {
+                addMessage("Please complete or cancel the current craft.");
+                return;
+            }
+
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    const neededCount = recipe.requiresOffWorld[reqId];
+                    const offWorldItems = INVENTORY
+                        .map((item, index) => ({ item, index }))
+                        .filter(({item}) => item && item.id == reqId && item.originSeed && item.originSeed !== worldSeed);
+
+                    if (offWorldItems.length > neededCount) {
+                        craftingState = {
+                            recipe: recipe,
+                            requiredItemId: parseInt(reqId),
+                        };
+                        addMessage(`Select an off-world ${BLOCKS[reqId].name} to use.`);
+                        document.getElementById('craftModal').style.display = 'none';
+                        if (document.getElementById('inventoryModal').style.display !== 'block') {
+                            toggleInventory();
+                        } else {
+                            updateInventoryUI(); // Just re-render with highlights
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // If no selection is needed, proceed directly
+            attemptCraft(recipe);
+        }
+
         function openCrafting() {
             isPromptOpen = true;
             var m = document.getElementById('craftModal');
@@ -3473,7 +3701,7 @@ self.onmessage = async function(e) {
                 reqs.innerText = 'Requires: ' + Object.entries(r.requires).map(function (kv) { return (BLOCKS[kv[0]].name || kv[0]) + ' x' + kv[1]; }).join(', ');
                 var btn = document.createElement('button');
                 btn.innerText = 'Craft';
-                btn.onclick = function () { attemptCraft(r); };
+                btn.onclick = (function(recipe) { return function() { initiateCraft(recipe); }; })(r);
                 row.appendChild(info);
                 row.appendChild(reqs);
                 row.appendChild(btn);
@@ -3518,13 +3746,20 @@ self.onmessage = async function(e) {
         function toggleInventory() {
             var invModal = document.getElementById('inventoryModal');
             var isVisible = invModal.style.display === 'block';
+
+            if (isVisible && craftingState) {
+                // If closing inventory during a craft, cancel it.
+                craftingState = null;
+                addMessage("Crafting canceled.");
+            }
+
             invModal.style.display = isVisible ? 'none' : 'block';
             isPromptOpen = !isVisible;
 
             if (!isVisible) {
                 updateInventoryUI();
             } else {
-                selectedInventoryIndex = -1; // Clear selection when closing
+                selectedInventoryIndex = -1;
             }
         }
 
@@ -3534,12 +3769,10 @@ self.onmessage = async function(e) {
             grid.innerHTML = '';
             hotbar.innerHTML = '';
 
-            // Main inventory (27 slots)
             for (var i = 9; i < 36; i++) {
                 grid.appendChild(createInventorySlot(i));
             }
 
-            // Hotbar (9 slots)
             for (var i = 0; i < 9; i++) {
                 hotbar.appendChild(createInventorySlot(i));
             }
@@ -3562,29 +3795,38 @@ self.onmessage = async function(e) {
                     countEl.innerText = item.count;
                     slot.appendChild(countEl);
                 }
+
+                if (craftingState && item.id === craftingState.requiredItemId && item.originSeed && item.originSeed !== worldSeed) {
+                    slot.classList.add('highlight-craft');
+                }
             }
 
-            if (index === selectedInventoryIndex) {
+            if (index === selectedInventoryIndex && !craftingState) {
                 slot.classList.add('selected');
             }
 
             slot.addEventListener('click', function() {
                 var clickedIndex = parseInt(this.dataset.index);
 
-                if (selectedInventoryIndex === -1) {
-                    // Nothing selected, so select this slot
-                    selectedInventoryIndex = clickedIndex;
+                if (craftingState) {
+                    const selectedItem = INVENTORY[clickedIndex];
+                    if (selectedItem && selectedItem.id === craftingState.requiredItemId && selectedItem.originSeed && selectedItem.originSeed !== worldSeed) {
+                        completeCraft(craftingState.recipe, clickedIndex);
+                    } else {
+                        addMessage("This item cannot be used for this craft.");
+                    }
                 } else {
-                    // Something is already selected, so swap items
-                    var temp = INVENTORY[selectedInventoryIndex];
-                    INVENTORY[selectedInventoryIndex] = INVENTORY[clickedIndex];
-                    INVENTORY[clickedIndex] = temp;
-
-                    // Reset selection
-                    selectedInventoryIndex = -1;
+                    if (selectedInventoryIndex === -1) {
+                        selectedInventoryIndex = clickedIndex;
+                    } else {
+                        var temp = INVENTORY[selectedInventoryIndex];
+                        INVENTORY[selectedInventoryIndex] = INVENTORY[clickedIndex];
+                        INVENTORY[clickedIndex] = temp;
+                        selectedInventoryIndex = -1;
+                    }
+                    updateInventoryUI();
+                    updateHotbarUI();
                 }
-                updateInventoryUI();
-                updateHotbarUI(); // Also update the main game hotbar
             });
 
             slot.addEventListener('contextmenu', function (e) {
