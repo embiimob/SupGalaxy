@@ -3537,6 +3537,8 @@ self.onmessage = async function(e) {
             if (document.getElementById('inventoryModal').style.display === 'block') {
                 updateInventoryUI();
             }
+            document.getElementById('craftModal').style.display = 'none';
+            isPromptOpen = false;
         }
         function completeCraft(recipe, selectedIndex) {
             const neededToConsume = { ...recipe.requires };
@@ -3644,6 +3646,8 @@ self.onmessage = async function(e) {
             addMessage('Crafted ' + BLOCKS[recipe.out.id].name);
 
             craftingState = null;
+            document.getElementById('craftModal').style.display = 'none';
+            isPromptOpen = false;
             toggleInventory();
             updateHotbarUI();
         }
@@ -3712,7 +3716,11 @@ self.onmessage = async function(e) {
                 reqs.innerText = 'Requires: ' + reqsStrings.join(', ');
                 var btn = document.createElement('button');
                 btn.innerText = 'Craft';
-                btn.onclick = (function(recipe) { return function() { initiateCraft(recipe); }; })(r);
+                btn.onclick = (function(recipe) {
+                    return function() {
+                        initiateCraft(recipe);
+                    };
+                })(r);
                 row.appendChild(info);
                 row.appendChild(reqs);
                 row.appendChild(btn);
