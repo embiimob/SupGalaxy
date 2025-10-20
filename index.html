@@ -953,7 +953,7 @@
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
         var API_CALLS_PER_SECOND = 3;
         var POLL_RADIUS = 2;
-        var LOAD_RADIUS = 8;
+        var LOAD_RADIUS = 16;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'SupGalaxy v0.3.3-beta';
         var POLL_INTERVAL = 30000;
@@ -2944,15 +2944,35 @@ self.onmessage = async function(e) {
             updateTorchRegistry(chunk);
             if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
             var lists = {};
+			var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
             var baseX = chunk.cx * CHUNK_SIZE;
             var baseZ = chunk.cz * CHUNK_SIZE;
+
+            var renderBaseX = baseX;
+            var renderBaseZ = baseZ;
+
+            if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
+                else renderBaseX += MAP_SIZE;
+            }
+            if (Math.abs(chunk.cz - pcz) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cz > pcz) renderBaseZ -= MAP_SIZE;
+                else renderBaseZ += MAP_SIZE;
+            }
+
             for (var x = 0; x < CHUNK_SIZE; x++) {
                 for (var z = 0; z < CHUNK_SIZE; z++) {
                     for (var y = 0; y < MAX_HEIGHT; y++) {
                         var id = chunk.get(x, y, z);
                         if (!id || id === BLOCK_AIR) continue;
+
                         var wx = modWrap(baseX + x, MAP_SIZE);
                         var wz = modWrap(baseZ + z, MAP_SIZE);
+                        var renderX = renderBaseX + x;
+                        var renderZ = renderBaseZ + z;
+
                         var exposed = (
                             this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
                             this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
@@ -2974,7 +2994,7 @@ self.onmessage = async function(e) {
                                 blockId: id
                             };
                         }
-                        lists[materialKey].positions.push({ x: wx, y: y, z: wz });
+                        lists[materialKey].positions.push({ x: renderX, y: y, z: renderZ });
                     }
                 }
             }
