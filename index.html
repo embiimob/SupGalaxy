@@ -1016,8 +1016,8 @@
             { id: 'smooth_stone', out: { id: 106, count: 4 }, requires: { 4: 4 } },
             { id: 'concrete', out: { id: 107, count: 4 }, requires: { 4: 2, 5: 2 } },
             { id: 'polished_wood', out: { id: 108, count: 2 }, requires: { 7: 2 } },
-            { id: 'marble', out: { id: 109, count: 1 }, requires: { 4: 3, 10: 1 }, requiresOffWorld: { 4: 1 } },
-            { id: 'obsidian', out: { id: 110, count: 1 }, requires: { 16: 1, 4: 1 }, requiresOffWorld: { 4: 1 } },
+            { id: 'marble', out: { id: 109, count: 1 }, requires: { 4: 3, 10: 1 } },
+            { id: 'obsidian', out: { id: 110, count: 1 }, requires: { 16: 1, 4: 4 }, requiresOffWorld: { 4: 2 } },
             { id: 'crystal_blue', out: { id: 111, count: 1 }, requires: { 100: 1, 6: 1 } },
             { id: 'crystal_purple', out: { id: 112, count: 1 }, requires: { 100: 1, 11: 1 } },
             { id: 'crystal_green', out: { id: 113, count: 1 }, requires: { 100: 1, 8: 1 } },
@@ -3661,7 +3661,9 @@ self.onmessage = async function(e) {
                         .map((item, index) => ({ item, index }))
                         .filter(({item}) => item && item.id == reqId && item.originSeed && item.originSeed !== worldSeed);
 
-                    if (offWorldItems.length > neededCount) {
+                    const totalOffWorldQuantity = offWorldItems.reduce((sum, { item }) => sum + item.count, 0);
+
+                    if (totalOffWorldQuantity > neededCount) {
                         craftingState = {
                             recipe: recipe,
                             requiredItemId: parseInt(reqId),
@@ -3698,7 +3700,16 @@ self.onmessage = async function(e) {
                 info.innerText = BLOCKS[r.out.id].name + ' x' + r.out.count;
                 var reqs = document.createElement('div');
                 reqs.style.opacity = 0.85;
-                reqs.innerText = 'Requires: ' + Object.entries(r.requires).map(function (kv) { return (BLOCKS[kv[0]].name || kv[0]) + ' x' + kv[1]; }).join(', ');
+
+                var reqsStrings = [];
+                for(const id in r.requires) {
+                    let reqStr = `${BLOCKS[id].name || id} x${r.requires[id]}`;
+                    if(r.requiresOffWorld && r.requiresOffWorld[id]) {
+                        reqStr += ` (${r.requiresOffWorld[id]} must be Off-World)`;
+                    }
+                    reqsStrings.push(reqStr);
+                }
+                reqs.innerText = 'Requires: ' + reqsStrings.join(', ');
                 var btn = document.createElement('button');
                 btn.innerText = 'Craft';
                 btn.onclick = (function(recipe) { return function() { initiateCraft(recipe); }; })(r);
