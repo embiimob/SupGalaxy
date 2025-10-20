@@ -3014,14 +3014,35 @@ self.onmessage = async function(e) {
             if (!parsed) return;
             var chunk = this.chunks.get(normalizedKey);
             if (!chunk) return;
+            var baseX = parsed.cx * CHUNK_SIZE;
+            var baseZ = parsed.cz * CHUNK_SIZE;
 
             for (var d of changes) {
                 if (d.x < 0 || d.x >= CHUNK_SIZE || d.y < 0 || d.y >= MAX_HEIGHT || d.z < 0 || d.z >= CHUNK_SIZE) continue;
 
-                // Accept 0 OR valid BLOCKS entry, default to 4 (Stone)
-                var blockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
+                var wx = baseX + d.x;
+                var wy = d.y;
+                var wz = baseZ + d.z;
+                var lightKey = `${wx},${wy},${wz}`;
 
-                chunk.set(d.x, d.y, d.z, blockId);
+                var prevBlockId = chunk.get(d.x, d.y, d.z);
+                if (BLOCKS[prevBlockId] && BLOCKS[prevBlockId].light) {
+                    if (torchLights.has(lightKey)) {
+                        var light = torchLights.get(lightKey);
+                        scene.remove(light);
+                        light.dispose();
+                        torchLights.delete(lightKey);
+                    }
+                }
+                var newBlockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
+                chunk.set(d.x, d.y, d.z, newBlockId);
+
+                if (BLOCKS[newBlockId] && BLOCKS[newBlockId].light) {
+                    var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                    light.position.set(wx + 0.5, wy + 0.5, wz + 0.5);
+                    scene.add(light);
+                    torchLights.set(lightKey, light);
+                }
             }
             chunk.needsRebuild = true;
             this.buildChunkMesh(chunk);
