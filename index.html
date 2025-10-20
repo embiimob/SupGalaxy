@@ -5260,6 +5260,21 @@ self.onmessage = async function(e) {
                 }));
                 // If this is the host, send the current state of all mobs to the new client
                 if (isHost) {
+                    // Notify all other clients of the new player
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== user && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'new_player', username: user }));
+                        }
+                    }
+                    // Notify the new client of existing players
+                    for (const [peerUser, peerData] of peers.entries()) {
+                         if (peerUser !== user && peerData.dc && peerData.dc.readyState === 'open') {
+                            dc.send(JSON.stringify({ type: 'new_player', username: peerUser }));
+                        }
+                    }
+                    // also notify about host
+                    dc.send(JSON.stringify({ type: 'new_player', username: userName }));
+
                     console.log(`[WEBRTC] Host sending initial mob state to ${user}`);
                     for (const mob of mobs) {
                         dc.send(JSON.stringify({
@@ -5284,17 +5299,29 @@ self.onmessage = async function(e) {
 
                     // Host is the source of truth. It processes inputs and broadcasts state.
                     if (isHost) {
-                        if (data.type !== 'player_move') {
-                            for (const [peerUser, peerData] of peers.entries()) {
-                                if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
-                                    peerData.dc.send(e.data);
-                                }
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(e.data);
                             }
                         }
                     }
 
                     // All peers process the message
                     switch (data.type) {
+                        case 'new_player':
+                            const newPlayerUsername = data.username;
+                            if (newPlayerUsername !== userName && !peers.has(newPlayerUsername)) {
+                                addMessage(`${newPlayerUsername} has joined!`);
+                                if (!playerAvatars.has(newPlayerUsername)) {
+                                    createAndSetupAvatar(newPlayerUsername, false);
+                                }
+                                // Add a placeholder peer entry for player count and state management
+                                if (!peers.has(newPlayerUsername)) {
+                                    peers.set(newPlayerUsername, { pc: null, dc: null, address: null });
+                                }
+                                updateHudButtons();
+                            }
+                            break;
                         case 'state_update':
                             if (!isHost) {
                                 for (const playerData of data.players) {
@@ -5340,7 +5367,6 @@ self.onmessage = async function(e) {
                             break;
 
                         case 'player_move':
-                            if (!isHost) break;
                             if (!playerAvatars.has(sender)) {
                                 createAndSetupAvatar(sender, false, data.yaw);
                             }
