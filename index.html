@@ -1108,7 +1108,7 @@ var lastWPress = 0;
 
         const lightManager = {
             lights: [],
-            poolSize: 32,
+            poolSize: 8,
             init: function() {
                 for (let i = 0; i < this.poolSize; i++) {
                     const light = new THREE.PointLight(0xffaa33, 0, 0); // Initially off
@@ -4138,6 +4138,8 @@ self.onmessage = async function(e) {
                     particles.material.dispose();
                     torchParticles.delete(lightKey);
                 }
+                // Force an immediate light update
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
             }
         }
         function placeBlockAt(wx, wy, wz, bid) {
