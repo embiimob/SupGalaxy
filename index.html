@@ -2957,7 +2957,7 @@ self.onmessage = async function(e) {
                     mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
                 } else {
                     const blockTexture = createBlockTexture(seed, id);
-                    mat = new THREE.MeshLambertMaterial({ map: blockTexture });
+                    mat = new THREE.MeshStandardMaterial({ map: blockTexture });
                 }
                 var mesh = new THREE.Mesh(geom, mat);
                 group.add(mesh);
@@ -3210,10 +3210,12 @@ self.onmessage = async function(e) {
             controls.maxDistance = 100;
             controls.enabled = false;
             console.log('[initThree] Controls created');
-            var dir = new THREE.DirectionalLight(0xffffff, 0.75); // Reduced intensity
+            var dir = new THREE.DirectionalLight(0xffffff, 1.5);
             dir.position.set(100, 200, 100);
             scene.add(dir);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // Reduced intensity
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.8);
+            scene.add(hemisphereLight);
             console.log('[initThree] Lights added');
 
             // Create the procedural ember texture for torches
