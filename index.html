@@ -1089,6 +1089,7 @@ var lastWPress = 0;
         var sun, moon, stars, clouds;
         var emberTexture;
         var textureCache = new Map();
+        var torchRegistry = new Map();
         var torchLights = new Map();
         var torchParticles = new Map();
         var foreignBlockOrigins = new Map();
@@ -1104,6 +1105,39 @@ var lastWPress = 0;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
+
+        const lightManager = {
+            lights: [],
+            poolSize: 8,
+            init: function() {
+                for (let i = 0; i < this.poolSize; i++) {
+                    const light = new THREE.PointLight(0xffaa33, 0, 0); // Initially off
+                    light.castShadow = false;
+                    this.lights.push(light);
+                    scene.add(light);
+                }
+            },
+            update: function(playerPos) {
+                const sortedTorches = Array.from(torchRegistry.values()).sort((a, b) => {
+                    const distA = playerPos.distanceTo(new THREE.Vector3(a.x, a.y, a.z));
+                    const distB = playerPos.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
+                    return distA - distB;
+                });
+
+                for (let i = 0; i < this.poolSize; i++) {
+                    if (i < sortedTorches.length) {
+                        const torchPos = sortedTorches[i];
+                        const light = this.lights[i];
+                        light.position.set(torchPos.x + 0.5, torchPos.y + 0.5, torchPos.z + 0.5);
+                        light.intensity = 0.8;
+                        light.distance = 16;
+                    } else {
+                        // Turn off unused lights
+                        this.lights[i].intensity = 0;
+                    }
+                }
+            }
+        };
 
         // Music Player state
         var musicPlaylist = [];
@@ -2334,6 +2368,33 @@ self.onmessage = async function(e) {
                 console.error('[ChunkManager] Failed to update chunk ownership:', e);
             }
         }
+
+        function updateTorchRegistry(chunk) {
+            const baseX = chunk.cx * CHUNK_SIZE;
+            const baseZ = chunk.cz * CHUNK_SIZE;
+            // Clear existing torches for this chunk
+            torchRegistry.forEach((pos, key) => {
+                if (Math.floor(pos.x / CHUNK_SIZE) === chunk.cx && Math.floor(pos.z / CHUNK_SIZE) === chunk.cz) {
+                    torchRegistry.delete(key);
+                }
+            });
+
+            // Scan for new torches
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    for (let y = 0; y < MAX_HEIGHT; y++) {
+                        const blockId = chunk.get(x, y, z);
+                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                            const wx = baseX + x;
+                            const wz = baseZ + z;
+                            const wy = y;
+                            const lightKey = `${wx},${wy},${wz}`;
+                            torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
+                        }
+                    }
+                }
+            }
+        }
         function applyChunkUpdates(changes, address, timestamp, transactionId) {
             try {
                 for (var delta of changes) {
@@ -2710,7 +2771,7 @@ self.onmessage = async function(e) {
 
         function updateSky(dt) {
             const now = new Date();
-            const hours = now.getHours() + now.getMinutes() / 60;
+            let hours = now.getHours() + now.getMinutes() / 60;
             const timeRatio = hours / 24;
             const timeAngle = timeRatio * Math.PI * 2;
 
@@ -2751,9 +2812,10 @@ self.onmessage = async function(e) {
 
             const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
             const directionalLight = scene.getObjectByProperty('type', 'DirectionalLight');
+            const hemisphereLight = scene.getObjectByProperty('type', 'HemisphereLight');
 
-            const dayAmbient = 0.6;
-            const nightAmbient = 0.02;
+            const dayAmbient = 0.2;
+            const nightAmbient = 0.01;
             const dayDirectional = 0.95;
             const nightDirectional = 0;
 
@@ -2764,6 +2826,11 @@ self.onmessage = async function(e) {
             }
             if (directionalLight) {
                 directionalLight.intensity = nightDirectional + (dayDirectional - nightDirectional) * lightFactor;
+            }
+            if (hemisphereLight) {
+                const dayHemi = 0.6;
+                const nightHemi = 0.02;
+                hemisphereLight.intensity = nightHemi + (dayHemi - nightHemi) * lightFactor;
             }
         }
 
@@ -2874,6 +2941,7 @@ self.onmessage = async function(e) {
             for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 9);
         };
         ChunkManager.prototype.buildChunkMesh = function (chunk) {
+            updateTorchRegistry(chunk);
             if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
             var lists = {};
             var baseX = chunk.cx * CHUNK_SIZE;
@@ -2947,7 +3015,7 @@ self.onmessage = async function(e) {
                     mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
                 } else {
                     const blockTexture = createBlockTexture(seed, id);
-                    mat = new THREE.MeshLambertMaterial({ map: blockTexture });
+                    mat = new THREE.MeshStandardMaterial({ map: blockTexture });
                 }
                 var mesh = new THREE.Mesh(geom, mat);
                 group.add(mesh);
@@ -3017,12 +3085,11 @@ self.onmessage = async function(e) {
 
             for (var d of changes) {
                 if (d.x < 0 || d.x >= CHUNK_SIZE || d.y < 0 || d.y >= MAX_HEIGHT || d.z < 0 || d.z >= CHUNK_SIZE) continue;
-
-                // Accept 0 OR valid BLOCKS entry, default to 4 (Stone)
-                var blockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
-
-                chunk.set(d.x, d.y, d.z, blockId);
+                var newBlockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
+                chunk.set(d.x, d.y, d.z, newBlockId);
             }
+
+            updateTorchRegistry(chunk);
             chunk.needsRebuild = true;
             this.buildChunkMesh(chunk);
         };
@@ -3123,6 +3190,23 @@ self.onmessage = async function(e) {
                             meshGroup.remove(ch.mesh);
                             disposeObject(ch.mesh);
                         }
+
+                        // Clean up torches from the registry when a chunk is unloaded
+                        const baseX = ch.cx * CHUNK_SIZE;
+                        const baseZ = ch.cz * CHUNK_SIZE;
+                        for (let x = 0; x < CHUNK_SIZE; x++) {
+                            for (let z = 0; z < CHUNK_SIZE; z++) {
+                                for (let y = 0; y < MAX_HEIGHT; y++) {
+                                    const id = ch.get(x, y, z);
+                                    if (BLOCKS[id] && BLOCKS[id].light) {
+                                        const wx = modWrap(baseX + x, MAP_SIZE);
+                                        const wz = modWrap(baseZ + z, MAP_SIZE);
+                                        const lightKey = `${wx},${y},${wz}`;
+                                        torchRegistry.delete(lightKey);
+                                    }
+                                }
+                            }
+                        }
                         this.chunks.delete(ch.key);
                     }
                 }
@@ -3156,10 +3240,12 @@ self.onmessage = async function(e) {
             controls.maxDistance = 100;
             controls.enabled = false;
             console.log('[initThree] Controls created');
-            var dir = new THREE.DirectionalLight(0xffffff, 0.75); // Reduced intensity
+            var dir = new THREE.DirectionalLight(0xffffff, 1.0); // Adjusted intensity
             dir.position.set(100, 200, 100);
             scene.add(dir);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // Reduced intensity
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2)); // Adjusted intensity
+            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.6); // Adjusted intensity
+            scene.add(hemisphereLight);
             console.log('[initThree] Lights added');
 
             // Create the procedural ember texture for torches
@@ -3168,6 +3254,7 @@ self.onmessage = async function(e) {
             meshGroup = new THREE.Group();
             scene.add(meshGroup);
             console.log('[initThree] Mesh group created');
+            lightManager.init();
             initSky();
             console.log('[initThree] Sky initialized');
             renderer.domElement.addEventListener('pointerdown', function (e) { onPointerDown(e); });
@@ -4045,12 +4132,7 @@ self.onmessage = async function(e) {
 
             if (BLOCKS[b] && BLOCKS[b].light) {
                 var lightKey = `${wx},${wy},${wz}`;
-                if (torchLights.has(lightKey)) {
-                    var light = torchLights.get(lightKey);
-                    scene.remove(light);
-                    light.dispose();
-                    torchLights.delete(lightKey);
-                }
+                torchRegistry.delete(lightKey);
                 if (torchParticles.has(lightKey)) {
                     var particles = torchParticles.get(lightKey);
                     scene.remove(particles);
@@ -4058,6 +4140,8 @@ self.onmessage = async function(e) {
                     particles.material.dispose();
                     torchParticles.delete(lightKey);
                 }
+                // Force an immediate light update
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
             }
         }
         function placeBlockAt(wx, wy, wz, bid) {
@@ -4115,14 +4199,11 @@ self.onmessage = async function(e) {
             safePlayAudio(soundPlace);
 
             if (BLOCKS[bid] && BLOCKS[bid].light) {
-                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
-                light.position.set(wx, wy + 0.5, wz);
-                scene.add(light);
-                torchLights.set(`${wx},${wy},${wz}`, light);
-
+                const lightKey = `${wx},${wy},${wz}`;
+                torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
                 var particles = createFlameParticles(wx, wy + 0.5, wz);
                 scene.add(particles);
-                torchParticles.set(`${wx},${wy},${wz}`, particles);
+                torchParticles.set(lightKey, particles);
             }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
@@ -6400,7 +6481,7 @@ self.onmessage = async function(e) {
                 isPromptOpen = false;
             };
         }
-        document.addEventListener('DOMContentLoaded', function () {
+                document.addEventListener('DOMContentLoaded', async function () {
             try {
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
@@ -7181,6 +7262,7 @@ self.onmessage = async function(e) {
                 }
                 updateAvatarAnimation(now, isMoving);
                 chunkManager.update(player.x, player.z);
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
 
