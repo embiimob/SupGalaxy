@@ -1089,6 +1089,7 @@ var lastWPress = 0;
         var sun, moon, stars, clouds;
         var emberTexture;
         var textureCache = new Map();
+        var torchRegistry = new Map();
         var torchLights = new Map();
         var torchParticles = new Map();
         var foreignBlockOrigins = new Map();
@@ -1104,6 +1105,39 @@ var lastWPress = 0;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
+
+        const lightManager = {
+            lights: [],
+            poolSize: 32,
+            init: function() {
+                for (let i = 0; i < this.poolSize; i++) {
+                    const light = new THREE.PointLight(0xffaa33, 0, 0); // Initially off
+                    light.castShadow = false;
+                    this.lights.push(light);
+                    scene.add(light);
+                }
+            },
+            update: function(playerPos) {
+                const sortedTorches = Array.from(torchRegistry.values()).sort((a, b) => {
+                    const distA = playerPos.distanceTo(new THREE.Vector3(a.x, a.y, a.z));
+                    const distB = playerPos.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
+                    return distA - distB;
+                });
+
+                for (let i = 0; i < this.poolSize; i++) {
+                    if (i < sortedTorches.length) {
+                        const torchPos = sortedTorches[i];
+                        const light = this.lights[i];
+                        light.position.set(torchPos.x + 0.5, torchPos.y + 0.5, torchPos.z + 0.5);
+                        light.intensity = 0.8;
+                        light.distance = 16;
+                    } else {
+                        // Turn off unused lights
+                        this.lights[i].intensity = 0;
+                    }
+                }
+            }
+        };
 
         // Music Player state
         var musicPlaylist = [];
@@ -2334,6 +2368,33 @@ self.onmessage = async function(e) {
                 console.error('[ChunkManager] Failed to update chunk ownership:', e);
             }
         }
+
+        function updateTorchRegistry(chunk) {
+            const baseX = chunk.cx * CHUNK_SIZE;
+            const baseZ = chunk.cz * CHUNK_SIZE;
+            // Clear existing torches for this chunk
+            torchRegistry.forEach((pos, key) => {
+                if (Math.floor(pos.x / CHUNK_SIZE) === chunk.cx && Math.floor(pos.z / CHUNK_SIZE) === chunk.cz) {
+                    torchRegistry.delete(key);
+                }
+            });
+
+            // Scan for new torches
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    for (let y = 0; y < MAX_HEIGHT; y++) {
+                        const blockId = chunk.get(x, y, z);
+                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                            const wx = baseX + x;
+                            const wz = baseZ + z;
+                            const wy = y;
+                            const lightKey = `${wx},${wy},${wz}`;
+                            torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
+                        }
+                    }
+                }
+            }
+        }
         function applyChunkUpdates(changes, address, timestamp, transactionId) {
             try {
                 for (var delta of changes) {
@@ -2880,6 +2941,7 @@ self.onmessage = async function(e) {
             for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 9);
         };
         ChunkManager.prototype.buildChunkMesh = function (chunk) {
+            updateTorchRegistry(chunk);
             if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
             var lists = {};
             var baseX = chunk.cx * CHUNK_SIZE;
@@ -2891,16 +2953,6 @@ self.onmessage = async function(e) {
                         if (!id || id === BLOCK_AIR) continue;
                         var wx = modWrap(baseX + x, MAP_SIZE);
                         var wz = modWrap(baseZ + z, MAP_SIZE);
-
-                        if (BLOCKS[id] && BLOCKS[id].light) {
-                            var lightKey = `${wx},${y},${wz}`;
-                            if (!torchLights.has(lightKey)) {
-                                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
-                                light.position.set(wx + 0.5, y + 0.5, wz + 0.5);
-                                scene.add(light);
-                                torchLights.set(lightKey, light);
-                            }
-                        }
                         var exposed = (
                             this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
                             this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
@@ -3030,36 +3082,14 @@ self.onmessage = async function(e) {
             if (!parsed) return;
             var chunk = this.chunks.get(normalizedKey);
             if (!chunk) return;
-            var baseX = parsed.cx * CHUNK_SIZE;
-            var baseZ = parsed.cz * CHUNK_SIZE;
 
             for (var d of changes) {
                 if (d.x < 0 || d.x >= CHUNK_SIZE || d.y < 0 || d.y >= MAX_HEIGHT || d.z < 0 || d.z >= CHUNK_SIZE) continue;
-
-                var wx = baseX + d.x;
-                var wy = d.y;
-                var wz = baseZ + d.z;
-                var lightKey = `${wx},${wy},${wz}`;
-
-                var prevBlockId = chunk.get(d.x, d.y, d.z);
-                if (BLOCKS[prevBlockId] && BLOCKS[prevBlockId].light) {
-                    if (torchLights.has(lightKey)) {
-                        var light = torchLights.get(lightKey);
-                        scene.remove(light);
-                        light.dispose();
-                        torchLights.delete(lightKey);
-                    }
-                }
                 var newBlockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
                 chunk.set(d.x, d.y, d.z, newBlockId);
-
-                if (BLOCKS[newBlockId] && BLOCKS[newBlockId].light) {
-                    var light = new THREE.PointLight(0xffaa33, 0.8, 16);
-                    light.position.set(wx + 0.5, wy + 0.5, wz + 0.5);
-                    scene.add(light);
-                    torchLights.set(lightKey, light);
-                }
             }
+
+            updateTorchRegistry(chunk);
             chunk.needsRebuild = true;
             this.buildChunkMesh(chunk);
         };
@@ -3161,7 +3191,7 @@ self.onmessage = async function(e) {
                             disposeObject(ch.mesh);
                         }
 
-                        // Also remove associated lights
+                        // Clean up torches from the registry when a chunk is unloaded
                         const baseX = ch.cx * CHUNK_SIZE;
                         const baseZ = ch.cz * CHUNK_SIZE;
                         for (let x = 0; x < CHUNK_SIZE; x++) {
@@ -3172,17 +3202,11 @@ self.onmessage = async function(e) {
                                         const wx = modWrap(baseX + x, MAP_SIZE);
                                         const wz = modWrap(baseZ + z, MAP_SIZE);
                                         const lightKey = `${wx},${y},${wz}`;
-                                        if (torchLights.has(lightKey)) {
-                                            const light = torchLights.get(lightKey);
-                                            scene.remove(light);
-                                            light.dispose();
-                                            torchLights.delete(lightKey);
-                                        }
+                                        torchRegistry.delete(lightKey);
                                     }
                                 }
                             }
                         }
-
                         this.chunks.delete(ch.key);
                     }
                 }
@@ -3230,6 +3254,7 @@ self.onmessage = async function(e) {
             meshGroup = new THREE.Group();
             scene.add(meshGroup);
             console.log('[initThree] Mesh group created');
+            lightManager.init();
             initSky();
             console.log('[initThree] Sky initialized');
             renderer.domElement.addEventListener('pointerdown', function (e) { onPointerDown(e); });
@@ -4105,12 +4130,7 @@ self.onmessage = async function(e) {
 
             if (BLOCKS[b] && BLOCKS[b].light) {
                 var lightKey = `${wx},${wy},${wz}`;
-                if (torchLights.has(lightKey)) {
-                    var light = torchLights.get(lightKey);
-                    scene.remove(light);
-                    light.dispose();
-                    torchLights.delete(lightKey);
-                }
+                torchRegistry.delete(lightKey);
                 if (torchParticles.has(lightKey)) {
                     var particles = torchParticles.get(lightKey);
                     scene.remove(particles);
@@ -4175,14 +4195,11 @@ self.onmessage = async function(e) {
             safePlayAudio(soundPlace);
 
             if (BLOCKS[bid] && BLOCKS[bid].light) {
-                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
-                light.position.set(wx, wy + 0.5, wz);
-                scene.add(light);
-                torchLights.set(`${wx},${wy},${wz}`, light);
-
+                const lightKey = `${wx},${wy},${wz}`;
+                torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
                 var particles = createFlameParticles(wx, wy + 0.5, wz);
                 scene.add(particles);
-                torchParticles.set(`${wx},${wy},${wz}`, particles);
+                torchParticles.set(lightKey, particles);
             }
         }
         function checkCollisionWithPlayer(wx, wy, wz) {
@@ -7168,6 +7185,7 @@ self.onmessage = async function(e) {
                 }
                 updateAvatarAnimation(now, isMoving);
                 chunkManager.update(player.x, player.z);
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
 
