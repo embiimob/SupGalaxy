@@ -6437,7 +6437,13 @@ self.onmessage = async function(e) {
                     }
 
                     var userWorldKey = userName + '@' + worldName;
-                    var profile = await GetProfileByURN(userName);
+                    var profile;
+                    try {
+                        profile = await GetProfileByURN(userName);
+                    } catch (e) {
+                        console.error("Failed to get profile by URN", e);
+                        profile = null;
+                    }
                     userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
                     if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
                     if (!knownWorlds.has(worldName)) {
@@ -6456,7 +6462,6 @@ self.onmessage = async function(e) {
                     console.log('[LOGIN] Initializing Three.js');
                     initThree();
                     initMusicPlayer();
-                    console.log('[LOGIN] Three.js initialized');
                     INVENTORY[0] = { id: 120, count: 8 };
                     selectedHotIndex = 0; // Auto-select torch
                     selectedBlockId = 120; // Explicitly set selected block
@@ -6464,7 +6469,6 @@ self.onmessage = async function(e) {
                     updateHotbarUI(); // Explicitly update UI and selectedBlockId
                     console.log('[LOGIN] Creating ChunkManager');
                     chunkManager = new ChunkManager(worldSeed);
-                    console.log('[LOGIN] Populating spawn chunks');
                     populateSpawnChunks();
                     console.log('[LOGIN] Calculating spawn point');
                     var spawn = calculateSpawnPoint(userWorldKey);
@@ -6479,7 +6483,6 @@ self.onmessage = async function(e) {
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
                     console.log('[LOGIN] Preloading initial chunks');
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
-                    console.log('[LOGIN] Spawning mobs');
                     const mobRnd = makeSeededRandom(worldSeed + '_mobs');
                     // spawnMobs(12, mobRnd);
                     setupMobile();
@@ -6808,6 +6811,15 @@ self.onmessage = async function(e) {
             mobs.forEach(m => scene.remove(m.mesh));
             mobs = [];
 
+            // Clear old sky elements before re-initializing
+            if (skyProps) {
+                skyProps.suns.forEach(sun => scene.remove(sun.mesh));
+                skyProps.moons.forEach(moon => scene.remove(moon.mesh));
+            }
+            if (stars) scene.remove(stars);
+            if (clouds) scene.remove(clouds);
+
+
             // Re-initialize world
             document.getElementById('worldLabel').textContent = worldName;
             const userWorldKey = userName + '@' + worldName;
@@ -6819,6 +6831,9 @@ self.onmessage = async function(e) {
 
             // Re-create the chunk manager for the new world
             chunkManager = new ChunkManager(worldSeed);
+
+            // Re-initialize the sky with the new world's seed
+            initSky();
 
             // Initial chunk loading
             const spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
