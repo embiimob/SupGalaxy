@@ -3440,6 +3440,7 @@ self.onmessage = async function(e) {
         document.getElementById('trashCancel').addEventListener('click', function () {
             document.getElementById('trashConfirm').style.display = 'none';
             trashIndex = -1;
+            this.blur();
         });
         document.getElementById('trashOk').addEventListener('click', function () {
             if (trashIndex >= 0) {
@@ -3449,6 +3450,7 @@ self.onmessage = async function(e) {
             }
             document.getElementById('trashConfirm').style.display = 'none';
             trashIndex = -1;
+            this.blur();
         });
         function attemptCraft(recipe) {
             // Tally all items, separating native and off-world
@@ -6401,6 +6403,7 @@ self.onmessage = async function(e) {
                     console.warn('[MODAL] pendingModal element not found');
                 }
                 startBtn.addEventListener('click', async function () {
+                    this.blur();
                     console.log('[LOGIN] Start button clicked');
                     isPromptOpen = false;
                     var worldInput = document.getElementById('worldNameInput').value;
@@ -6521,6 +6524,7 @@ self.onmessage = async function(e) {
                     addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
                 });
                 announceLoginBtn.addEventListener('click', async function () {
+                    this.blur();
                     console.log('[LOGIN] Announce Server button clicked');
                     isPromptOpen = true;
                     var worldInput = document.getElementById('worldNameInput').value;
@@ -6548,6 +6552,7 @@ self.onmessage = async function(e) {
                     addMessage('Prepare to announce server after starting', 3000);
                 });
                 newUserJoinScriptBtn.addEventListener('click', async function () {
+                    this.blur();
                     console.log('[LOGIN] Create Join Script button clicked');
                     isPromptOpen = true;
                     var worldInput = document.getElementById('worldNameInput').value;
@@ -6587,16 +6592,31 @@ self.onmessage = async function(e) {
                 });
                 document.getElementById('homeIcon').addEventListener('click', function () {
                     respawnPlayer();
+                    this.blur();
                 });
-                document.getElementById('camToggle').addEventListener('click', toggleCameraMode);
-                document.getElementById('openCraft').addEventListener('click', openCrafting);
+                document.getElementById('camToggle').addEventListener('click', function() {
+                    toggleCameraMode();
+                    this.blur();
+                });
+                document.getElementById('openCraft').addEventListener('click', function() {
+                    openCrafting();
+                    this.blur();
+                });
                 document.getElementById('teleportBtn').addEventListener('click', function () {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
+                    this.blur();
                 });
-                document.getElementById('switchWorldBtn').addEventListener('click', switchWorld);
-                document.getElementById('saveChangesBtn').addEventListener('click', downloadSession);
+                document.getElementById('switchWorldBtn').addEventListener('click', function() {
+                    switchWorld();
+                    this.blur();
+                });
+                document.getElementById('saveChangesBtn').addEventListener('click', function() {
+                    downloadSession();
+                    this.blur();
+                });
                 document.getElementById('joinScriptBtn').addEventListener('click', async function () {
+                    this.blur();
                     isPromptOpen = true;
                     document.getElementById('teleportX').value = '';
                     document.getElementById('teleportY').value = '';
@@ -6611,26 +6631,34 @@ self.onmessage = async function(e) {
                     document.getElementById('joinScriptText').value = joinScript;
                     document.getElementById('joinScriptModal').style.display = 'block';
                 });
-                document.getElementById('usersBtn').addEventListener('click', openUsersModal);
+                document.getElementById('usersBtn').addEventListener('click', function() {
+                    openUsersModal();
+                    this.blur();
+                });
                 document.getElementById('closeCraft').addEventListener('click', function () {
                     isPromptOpen = false;
                     document.getElementById('craftModal').style.display = 'none';
+                    this.blur();
                 });
-        document.getElementById('closeInventory').addEventListener('click', function () {
-            toggleInventory();
-        });
+                document.getElementById('closeInventory').addEventListener('click', function () {
+                    toggleInventory();
+                    this.blur();
+                });
                 document.getElementById('closeJoinScript').addEventListener('click', function () {
                     isPromptOpen = false;
                     isConnecting = false;
                     document.getElementById('joinScriptModal').style.display = 'none';
+                    this.blur();
                 });
                 document.getElementById('closeDownloadModal').addEventListener('click', function () {
                     isPromptOpen = false;
                     document.getElementById('downloadModal').style.display = 'none';
+                    this.blur();
                 });
                 document.getElementById('teleportCancel').addEventListener('click', function () {
                     isPromptOpen = false;
                     document.getElementById('teleportModal').style.display = 'none';
+                    this.blur();
                 });
                 document.getElementById('teleportOk').addEventListener('click', function () {
                     var x = parseFloat(document.getElementById('teleportX').value);
@@ -6643,15 +6671,21 @@ self.onmessage = async function(e) {
                     respawnPlayer(x, y, z);
                     document.getElementById('teleportModal').style.display = 'none';
                     isPromptOpen = false;
+                    this.blur();
                 });
                 document.getElementById('respawnBtn').addEventListener('click', function () {
                     respawnPlayer();
+                    this.blur();
                 });
-                document.getElementById('acceptPending').addEventListener('click', acceptPendingOffers);
+                document.getElementById('acceptPending').addEventListener('click', function() {
+                    acceptPendingOffers();
+                    this.blur();
+                });
                 document.getElementById('closePending').addEventListener('click', function () {
                     document.getElementById('pendingModal').style.display = 'none';
                     pendingOffers = [];
                     updatePendingModal();
+                    this.blur();
                 });
                 async function initWorldsAndUsers() {
                     console.log('[USERS] Initializing worlds and users');
