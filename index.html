@@ -5698,22 +5698,23 @@ self.onmessage = async function(e) {
                             break;
 
                         case 'player_death':
-                            const deadPlayerUsername = data.username;
-                            if (userPositions[deadPlayerUsername]) {
-                        case 'laser_fired':
-                            const origin = new THREE.Vector3(data.origin.x, data.origin.y, data.origin.z);
-                            const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
-                            fireLaser(origin, direction, true);
-                            break;
-                        case 'player_death':
-                            const deadPlayerUsername = data.username;
-                            if (userPositions[deadPlayerUsername]) {
-                                userPositions[deadPlayerUsername].isDying = true;
-                                userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
-                                const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
-                                if (deadPlayerAvatar) deadPlayerAvatar.visible = true;
+                            {
+                                const deadPlayerUsername = data.username;
+                                if (userPositions[deadPlayerUsername]) {
+                                    userPositions[deadPlayerUsername].isDying = true;
+                                    userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
+                                    const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
+                                    if (deadPlayerAvatar) deadPlayerAvatar.visible = true;
+                                }
+                                break;
                             }
-                            break;
+                        case 'laser_fired':
+                            {
+                                const origin = new THREE.Vector3(data.origin.x, data.origin.y, data.origin.z);
+                                const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
+                                fireLaser(origin, direction, true);
+                                break;
+                            }
                     }
                 } catch (err) {
                     console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
