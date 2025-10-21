@@ -5705,6 +5705,9 @@ self.onmessage = async function(e) {
                             const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
                             fireLaser(origin, direction, true);
                             break;
+                        case 'player_death':
+                            const deadPlayerUsername = data.username;
+                            if (userPositions[deadPlayerUsername]) {
                                 userPositions[deadPlayerUsername].isDying = true;
                                 userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
                                 const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
