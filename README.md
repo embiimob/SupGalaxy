@@ -11,9 +11,10 @@ SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seam
 - **Explore & Survive**: Traverse infinite procedural worlds, battle cosmic mobs, gather resources, and manage health/score in a persistent universe.
 - **Build & Craft**: Mine/place blocks, craft stellar materials (crystals, glow bricks, obsidian), and etch creations to the blockchain for eternal persistence.
 - **Decentralized Worlds**: Saves as JSON deltas on IPFS, secured via P2FK on Bitcoin testnet3. Worlds sync globally without central servers.
-- **Player vs. Player (PvP) Combat**: Engage in real-time combat with other players in the same world. Damage and knockback are handled through the decentralized WebRTC connection.
+- **Player vs. Player (PvP) Combat**: Engage in real-time combat with other players in the same world. Laser Blaster, punch Damage and knockback are synchronized through the decentralized WebRTC connection.
 - **Load Session from Minimap**: Easily load a saved game session by dragging and dropping the session's `.json` file directly onto the in-game minimap.
 - **Multiplayer Cosmos**: Connect via WebRTC (TURN server required) for real-time collaboration; positions and builds sync via blockchain polls.
+- **Proximity Audio Streaming**: WebRTC connection enables high quality audio streaming between players who are in the same areaas.
 - **Procedural Suns & Moons**: Each world now features a unique, procedurally generated sky with a variable number of suns and moons. Moon shapes are also randomized, creating asteroid-like celestial bodies for a truly unique cosmic experience.
 - **Infinite Worlds**: Procedural generation for boundless exploration.
 
