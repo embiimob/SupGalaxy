@@ -1108,6 +1108,7 @@ var lastWPress = 0;
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
         var laserBlasts = [];
+        var firstPersonLaserGun;
 
         function fireLaser(origin, direction, isRemote = false) {
             if (!isRemote) {
@@ -3347,6 +3348,17 @@ self.onmessage = async function(e) {
             lightManager.init();
             initSky();
             console.log('[initThree] Sky initialized');
+
+            // Create and attach the first-person laser gun model to the camera
+            const laserGunGeo = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+            const laserGunMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            firstPersonLaserGun = new THREE.Mesh(laserGunGeo, laserGunMat);
+            firstPersonLaserGun.position.set(0.3, -0.3, -0.8); // Position in front of the camera
+            firstPersonLaserGun.rotation.set(0, -0.2, 0);
+            firstPersonLaserGun.visible = false; // Initially hidden
+            camera.add(firstPersonLaserGun);
+            scene.add(camera); // Add camera to the scene so its children are rendered
+
             renderer.domElement.addEventListener('pointerdown', function (e) { onPointerDown(e); });
             renderer.domElement.addEventListener('wheel', function (e) {
                 e.preventDefault();
@@ -3579,6 +3591,16 @@ self.onmessage = async function(e) {
                 s.classList.toggle('active', idx === selectedHotIndex);
             });
             selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
+
+            // Manage laser gun visibility based on selection
+            const laserGunEquipped = selectedBlockId === 121;
+            if (firstPersonLaserGun) {
+                firstPersonLaserGun.visible = laserGunEquipped && cameraMode === 'first';
+            }
+            if (avatarGroup && avatarGroup.laserGunModel) {
+                // The third-person avatar's gun visibility is controlled by this.
+                avatarGroup.laserGunModel.visible = laserGunEquipped;
+            }
         }
         function addToInventory(id, count, originSeed = null) {
             // If the block is native, its originSeed is the current world's seed.
@@ -4050,14 +4072,20 @@ self.onmessage = async function(e) {
         }
 
         function onPointerDown(e) {
-            if (cameraMode !== 'first' || isPromptOpen) return;
+            if (isPromptOpen) return;
             e.preventDefault();
 
             if (selectedBlockId === 121 && e.button === 0) { // Laser Gun
                 const origin = new THREE.Vector3();
-                avatarGroup.laserGunModel.getWorldPosition(origin);
                 const direction = new THREE.Vector3();
                 camera.getWorldDirection(direction);
+
+                if (cameraMode === 'first') {
+                    firstPersonLaserGun.getWorldPosition(origin);
+                } else {
+                    avatarGroup.laserGunModel.getWorldPosition(origin);
+                }
+
                 fireLaser(origin, direction);
                 return;
             }
@@ -4946,6 +4974,7 @@ self.onmessage = async function(e) {
             addMessage('Camera: ' + cameraMode);
             controls.enabled = cameraMode === 'third';
             avatarGroup.visible = cameraMode === 'third';
+            firstPersonLaserGun.visible = cameraMode === 'first';
             if (cameraMode === 'third') {
                 camera.position.set(player.x, player.y + 5, player.z + 10);
                 controls.target.set(player.x, player.y + 0.6, player.z);
@@ -5540,6 +5569,7 @@ self.onmessage = async function(e) {
                                         userState.lastUpdate = performance.now();
                                         userState.lastTimestamp = data.timestamp;
                                         userState.isAttacking = playerData.isAttacking;
+                                        userState.equippedItem = playerData.equippedItem;
                                         if (playerData.attackStartTime && playerData.attackStartTime !== userState.attackStartTime) {
                                             userState.attackStartTime = playerData.attackStartTime;
                                             userState.localAnimStartTime = performance.now();
@@ -5584,6 +5614,7 @@ self.onmessage = async function(e) {
                                 userState.targetYaw = data.yaw;
                                 userState.targetPitch = data.pitch;
                                 userState.isMoving = data.isMoving;
+                                userState.equippedItem = data.equippedItem;
                                 userState.lastUpdate = performance.now();
                                 userState.lastTimestamp = data.timestamp;
                             }
@@ -7459,6 +7490,7 @@ self.onmessage = async function(e) {
                         x: player.x, y: player.y, z: player.z,
                         yaw: player.yaw, pitch: player.pitch,
                         isMoving: isMoving, isAttacking: isAttacking,
+                        equippedItem: selectedBlockId,
                         timestamp: Date.now()
                     };
                     // Client sends its own movement to the host
@@ -7481,7 +7513,8 @@ self.onmessage = async function(e) {
                         x: player.x, y: player.y, z: player.z,
                         yaw: player.yaw, pitch: player.pitch,
                         isMoving: isMoving, isAttacking: isAttacking,
-                        attackStartTime: attackStartTime
+                        attackStartTime: attackStartTime,
+                        equippedItem: selectedBlockId
                     });
                     // Add clients' states
                     for (const [username, positionData] of Object.entries(userPositions)) {
@@ -7495,7 +7528,8 @@ self.onmessage = async function(e) {
                                 x: positionData.targetX, y: positionData.targetY, z: positionData.targetZ,
                                 yaw: positionData.targetYaw, pitch: positionData.targetPitch,
                                 isMoving: positionData.isMoving, isAttacking: positionData.isAttacking,
-                                attackStartTime: positionData.attackStartTime
+                                attackStartTime: positionData.attackStartTime,
+                                equippedItem: positionData.equippedItem
                             });
                         }
                     }
@@ -7605,7 +7639,12 @@ self.onmessage = async function(e) {
                                 userState.isDying = false; // Animation finished, body remains.
                             }
                         } else {
-                             avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                            avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                        }
+
+                        // Update laser gun visibility for remote players
+                        if (avatar.laserGunModel) {
+                            avatar.laserGunModel.visible = userState.equippedItem === 121;
                         }
                     }
                 }
