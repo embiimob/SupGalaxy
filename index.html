@@ -1108,6 +1108,10 @@ var lastWPress = 0;
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
         var projectiles = [];
+        var localAudioStream = null;
+        var userAudioStreams = new Map();
+        const maxAudioDistance = 32;
+        const rolloffFactor = 2;
 
         const lightManager = {
             lights: [],
@@ -5233,6 +5237,24 @@ self.onmessage = async function(e) {
             const iceServers = await getTurnCredentials();
             var pc = new RTCPeerConnection({ iceServers });
             pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${hostUser}: ${pc.iceConnectionState}`);
+
+            if (localAudioStream) {
+                localAudioStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localAudioStream);
+                });
+            }
+
+            pc.ontrack = (event) => {
+                const username = hostUser;
+                if (!userAudioStreams.has(username)) {
+                    const audio = new Audio();
+                    audio.srcObject = event.streams[0];
+                    audio.autoplay = true;
+                    userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                    console.log(`[WebRTC] Received audio stream from ${username}`);
+                }
+            };
+
             var dc = pc.createDataChannel('game');
             setupDataChannel(dc, hostUser);
             try {
@@ -5717,15 +5739,14 @@ self.onmessage = async function(e) {
                 }
             };
 
-            // ✅ FIXED: NO AUTO-CLOSE - KEEPS ALIVE FOR MANUAL PROCESS
             dc.onclose = () => {
-                console.log(`[DC] Closed ${user} - WAITING FOR MANUAL ANSWER`);
-                // DON'T CLEANUP - let manual file drop complete connection
+                console.log(`[WebRTC] Data channel with ${user} closed.`);
+                cleanupPeer(user);
             };
 
             dc.onerror = e => {
-                console.log(`[DC] Error ${user} - KEEPING ALIVE`);
-                // DON'T KILL - manual process will succeed
+                console.error(`[WebRTC] Data channel error with ${user}:`, e);
+                cleanupPeer(user);
             };
         }
 
@@ -5784,6 +5805,22 @@ self.onmessage = async function(e) {
                 try {
                     const iceServers = await getTurnCredentials();
                     pc = new RTCPeerConnection({ iceServers });
+
+                    if (localAudioStream) {
+                        localAudioStream.getTracks().forEach(track => {
+                            pc.addTrack(track, localAudioStream);
+                        });
+                    }
+
+                    pc.ontrack = (event) => {
+                        if (!userAudioStreams.has(clientUser)) {
+                            const audio = new Audio();
+                            audio.srcObject = event.streams[0];
+                            audio.autoplay = true;
+                            userAudioStreams.set(clientUser, { audio: audio, stream: event.streams[0] });
+                            console.log(`[WebRTC] Received audio stream from ${clientUser}`);
+                        }
+                    };
 
                     // CRITICAL: Store peer IMMEDIATELY
                     peers.set(clientUser, { pc, dc: null, address: null });
@@ -6684,6 +6721,7 @@ self.onmessage = async function(e) {
                     document.getElementById('seedLabel').textContent = 'User ' + userName;
                     updateHudButtons();
                     console.log('[LOGIN] Initializing Three.js');
+                    await initAudio();
                     initThree();
                     initMusicPlayer();
                     INVENTORY[0] = { id: 120, count: 8 };
@@ -7040,6 +7078,49 @@ self.onmessage = async function(e) {
             setTimeout(() => {
                 flash.style.background = 'rgba(255, 0, 0, 0)';
             }, 100);
+        }
+
+        function cleanupPeer(username) {
+            const peer = peers.get(username);
+            if (peer) {
+                if (peer.pc) peer.pc.close();
+                peers.delete(username);
+            }
+
+            if (playerAvatars.has(username)) {
+                const avatar = playerAvatars.get(username);
+                scene.remove(avatar);
+                disposeObject(avatar);
+                playerAvatars.delete(username);
+            }
+
+            if (userAudioStreams.has(username)) {
+                const audioStream = userAudioStreams.get(username);
+                audioStream.audio.srcObject = null;
+                audioStream.audio.remove();
+                userAudioStreams.delete(username);
+            }
+
+            delete userPositions[username];
+
+            addMessage(`${username} has disconnected.`);
+            updateHudButtons();
+            console.log(`[WebRTC] Cleaned up peer: ${username}`);
+        }
+
+        async function initAudio() {
+            try {
+                localAudioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                addMessage("Microphone access denied. Proximity chat will be disabled.", 5000);
+            }
         }
 
         function animateAttack() {
@@ -7579,8 +7660,21 @@ self.onmessage = async function(e) {
                                 userState.isDying = false; // Animation finished, body remains.
                             }
                         } else {
-                             avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                            avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
                         }
+                    }
+                }
+
+                for (const [username, audioStream] of userAudioStreams.entries()) {
+                    if (userPositions[username]) {
+                        const userPos = userPositions[username];
+                        const dist = Math.hypot(player.x - userPos.targetX, player.y - userPos.targetY, player.z - userPos.targetZ);
+                        let volume = 0;
+                        if (dist < maxAudioDistance) {
+                            volume = Math.max(0, 1 - (dist / maxAudioDistance));
+                            volume = Math.pow(volume, rolloffFactor);
+                        }
+                        audioStream.audio.volume = volume;
                     }
                 }
 
