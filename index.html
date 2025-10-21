@@ -997,6 +997,7 @@
             118: { name: 'Sandstone', color: '#e3c27d' },
             119: { name: 'Cobblestone', color: '#7d7d7d' },
             120: { name: 'Torch', color: '#ff9900', light: true, transparent: true },
+            121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1028,6 +1029,7 @@
             { id: 'sandstone', out: { id: 118, count: 2 }, requires: { 5: 2 } },
             { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
             { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
+            { id: 'laser_gun', out: { id: 121, count: 1 }, requires: { 111: 1, 11: 1, 106: 1 } },
         ];
         var scene, camera, renderer, controls;
         var meshGroup;
@@ -1105,6 +1107,7 @@ var lastWPress = 0;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
+        var projectiles = [];
 
         const lightManager = {
             lights: [],
@@ -3998,85 +4001,136 @@ self.onmessage = async function(e) {
             return slot;
         }
 
+        function createProjectile(id, user, position, direction) {
+            const projectileSpeed = 10;
+            const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const projectile = new THREE.Mesh(geometry, material);
+
+            // Align projectile with camera direction
+            const quaternion = new THREE.Quaternion();
+            const up = new THREE.Vector3(0, 1, 0);
+            quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
+            projectile.quaternion.copy(quaternion);
+
+            projectile.position.copy(position);
+
+            const light = new THREE.PointLight(0xff0000, 1, 10);
+            light.position.copy(projectile.position);
+            projectile.light = light;
+            scene.add(light);
+
+            projectiles.push({
+                id: id,
+                user: user,
+                mesh: projectile,
+                velocity: direction.multiplyScalar(projectileSpeed),
+                createdAt: Date.now(),
+                light: light,
+            });
+            scene.add(projectile);
+        }
+
         function onPointerDown(e) {
             if (cameraMode !== 'first' || isPromptOpen) return;
             e.preventDefault();
-            raycaster.setFromCamera(pointer, camera);
-            raycaster.far = 5;
-            var mobHits = mobs.map(function (m) { return { mob: m, intersect: raycaster.intersectObject(m.mesh)[0] }; })
-                .filter(function (h) { return h.intersect; })
-                .sort(function (a, b) { return a.intersect.distance - b.intersect.distance; });
-            if (mobHits.length > 0) {
-                var mob = mobHits[0].mob;
-                animateAttack();
-                handleMobHit(mob);
+
+            const selectedItem = INVENTORY[selectedHotIndex];
+            if (selectedItem && selectedItem.id === 121) { // Laser Gun
+                const now = Date.now();
+                if (now - (player.lastFireTime || 0) < 1000) { // 1000ms cooldown
+                    return;
+                }
+                player.lastFireTime = now;
+                const projectileId = `${userName}-${Date.now()}`;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+
+                let position;
+                if (cameraMode === 'third' && avatarGroup && avatarGroup.gun) {
+                    position = new THREE.Vector3();
+                    avatarGroup.gun.getWorldPosition(position);
+                } else {
+                    position = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+                }
+
+                createProjectile(projectileId, userName, position, direction.clone());
+
+                const message = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId,
+                    user: userName,
+                    position: { x: position.x, y: position.y, z: position.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z }
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message);
+                    }
+                }
                 return;
             }
 
-            // Add player hit detection
-            var playerHitAvatars = [];
-            for (const [username, avatar] of playerAvatars.entries()) {
-                if (username !== userName) {
-                    const intersect = raycaster.intersectObject(avatar, true)[0];
-                    if (intersect) {
-                        playerHitAvatars.push({ username, intersect });
-                    }
-                }
+            raycaster.setFromCamera(pointer, camera);
+            raycaster.far = 5;
+
+            // 1. Check for mob hits
+            const mobHits = mobs.map(m => ({ mob: m, intersect: raycaster.intersectObject(m.mesh)[0] }))
+                .filter(h => h.intersect)
+                .sort((a, b) => a.intersect.distance - b.intersect.distance);
+
+            if (mobHits.length > 0) {
+                animateAttack();
+                handleMobHit(mobHits[0].mob);
+                return;
             }
 
-            playerHitAvatars.sort((a, b) => a.intersect.distance - b.intersect.distance);
+            // 2. Check for player hits
+            const playerHitAvatars = Array.from(playerAvatars.entries())
+                .filter(([username]) => username !== userName)
+                .map(([username, avatar]) => ({ username, intersect: raycaster.intersectObject(avatar, true)[0] }))
+                .filter(h => h.intersect)
+                .sort((a, b) => a.intersect.distance - b.intersect.distance);
 
             if (playerHitAvatars.length > 0) {
                 const hitPlayer = playerHitAvatars[0];
-                const message = JSON.stringify({
-                    type: 'player_hit',
-                    target: hitPlayer.username,
-                    username: userName
-                });
+                animateAttack();
+                const message = JSON.stringify({ type: 'player_hit', target: hitPlayer.username, username: userName });
 
                 if (isHost) {
-                    // Host hitting a client, process it directly
                     handlePlayerHit(JSON.parse(message));
                 } else {
-                    // Client hitting another player, send to host for validation
                     const attackMessage = JSON.stringify({ type: 'player_attack', username: userName });
-                    for (const [peerUser, peerData] of peers.entries()) {
+                    for (const [, peerData] of peers.entries()) {
                         if (peerData.dc && peerData.dc.readyState === 'open') {
                             peerData.dc.send(message);
                             peerData.dc.send(attackMessage);
                         }
                     }
-                    // Client gets optimistic feedback
                     safePlayAudio(soundHit);
-                    addMessage('Hit ' + hitPlayer.username + '!', 800);
+                    addMessage(`Hit ${hitPlayer.username}!`, 800);
                 }
-                animateAttack();
-
-                // Apply recoil to the attacker
-                const recoilStrength = 2;
-                const backDir = new THREE.Vector3();
-                camera.getWorldDirection(backDir);
-                player.vx -= backDir.x * recoilStrength;
-                player.vz -= backDir.z * recoilStrength;
-
                 return;
             }
-            var ints = raycaster.intersectObject(meshGroup, true);
+
+            // 3. Check for block interactions
+            const ints = raycaster.intersectObject(meshGroup, true);
             if (ints.length === 0) return;
-            var h = ints[0];
-            var p = h.point;
-            var norm = h.face.normal;
-            var wx = Math.floor(p.x - norm.x * 0.5);
-            var wy = Math.floor(p.y - norm.y * 0.5);
-            var wz = Math.floor(p.z - norm.z * 0.5);
-            if (e.button === 0) {
+
+            const h = ints[0];
+            const p = h.point;
+            const norm = h.face.normal;
+
+            if (e.button === 0) { // Left-click: break block
                 animateAttack();
+                const wx = Math.floor(p.x - norm.x * 0.5);
+                const wy = Math.floor(p.y - norm.y * 0.5);
+                const wz = Math.floor(p.z - norm.z * 0.5);
                 removeBlockAt(wx, wy, wz);
-                safePlayAudio(soundBreak);
-            } else if (e.button === 2) {
-                var placeX = Math.floor(p.x + norm.x * 0.5);
-                var placeY = Math.floor(p.y + norm.y * 0.5);
-                var placeZ = Math.floor(p.z + norm.z * 0.5);
+            } else if (e.button === 2) { // Right-click: place block
+                const placeX = Math.floor(p.x + norm.x * 0.5);
+                const placeY = Math.floor(p.y + norm.y * 0.5);
+                const placeZ = Math.floor(p.z + norm.z * 0.5);
                 placeBlockAt(placeX, placeY, placeZ, selectedBlockId);
             }
         }
@@ -4842,7 +4896,7 @@ self.onmessage = async function(e) {
                     mouseLocked = false;
                 }
                 if (e.key.toLowerCase() === 't') toggleCameraMode();
-                if (e.key.toLowerCase() === 'r') openCrafting();
+                if (e.key.toLowerCase() === 'c') openCrafting();
                 if (e.key.toLowerCase() === 'i') toggleInventory();
                 if (e.key.toLowerCase() === 'p') {
                     isPromptOpen = true;
@@ -5643,6 +5697,18 @@ self.onmessage = async function(e) {
                                 userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
                                 const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
                                 if (deadPlayerAvatar) deadPlayerAvatar.visible = true;
+                            }
+                            break;
+                        case 'health_update':
+                            if (isHost) {
+                                if (userPositions[data.username]) {
+                                    userPositions[data.username].health = data.health;
+                                }
+                            }
+                            break;
+                        case 'laser_fired':
+                            if (data.user !== userName) {
+                                createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z));
                             }
                             break;
                     }
@@ -6621,6 +6687,7 @@ self.onmessage = async function(e) {
                     initThree();
                     initMusicPlayer();
                     INVENTORY[0] = { id: 120, count: 8 };
+            INVENTORY[1] = { id: 121, count: 1 };
                     selectedHotIndex = 0; // Auto-select torch
                     selectedBlockId = 120; // Explicitly set selected block
                     initHotbar();
@@ -7386,7 +7453,8 @@ self.onmessage = async function(e) {
                         x: player.x, y: player.y, z: player.z,
                         yaw: player.yaw, pitch: player.pitch,
                         isMoving: isMoving, isAttacking: isAttacking,
-                        attackStartTime: attackStartTime
+                        attackStartTime: attackStartTime,
+                        health: player.health
                     });
                     // Add clients' states
                     for (const [username, positionData] of Object.entries(userPositions)) {
@@ -7400,7 +7468,8 @@ self.onmessage = async function(e) {
                                 x: positionData.targetX, y: positionData.targetY, z: positionData.targetZ,
                                 yaw: positionData.targetYaw, pitch: positionData.targetPitch,
                                 isMoving: positionData.isMoving, isAttacking: positionData.isAttacking,
-                                attackStartTime: positionData.attackStartTime
+                                attackStartTime: positionData.attackStartTime,
+                                health: positionData.health
                             });
                         }
                     }
@@ -7527,6 +7596,77 @@ self.onmessage = async function(e) {
                     triggerPoll();
                     lastPollPosition.copy(player);
                     hasMovedSubstantially = false;
+                }
+
+                // Update projectiles
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.mesh.position.x += p.velocity.x * dt;
+                    p.mesh.position.y += p.velocity.y * dt;
+                    p.mesh.position.z += p.velocity.z * dt;
+                    p.light.position.copy(p.mesh.position);
+
+                    const wx = Math.floor(p.mesh.position.x);
+                    const wy = Math.floor(p.mesh.position.y);
+                    const wz = Math.floor(p.mesh.position.z);
+
+                    if (isSolid(getBlockAt(wx, wy, wz))) {
+                        removeBlockAt(wx, wy, wz); // Laser breaks blocks
+                        scene.remove(p.mesh);
+                        scene.remove(p.light);
+                        projectiles.splice(i, 1);
+                        continue;
+                    }
+
+                    for (const mob of mobs) {
+                         if (p.mesh.position.distanceTo(mob.pos) < 1) {
+                            if(isHost) mob.hurt(5, p.user);
+                            scene.remove(p.mesh);
+                            scene.remove(p.light);
+                            projectiles.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+                    // Player hit detection
+                    if (p.user !== userName) { // projectile is from another player
+                        const myPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
+                        if (p.mesh.position.distanceTo(myPlayerPos) < 1.5) {
+                            // I've been hit!
+                            const damage = Math.ceil(player.health / 4);
+                            player.health -= damage;
+
+                            // Update UI
+                            document.getElementById('health').innerText = player.health;
+                            updateHealthBar();
+                            addMessage('Hit by ' + p.user + '! HP: ' + player.health, 1000);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+
+                            // report to host
+                            const message = JSON.stringify({ type: 'health_update', username: userName, health: player.health });
+                            for (const [, peerData] of peers.entries()) {
+                                if (peerData.dc && peerData.dc.readyState === 'open') peerData.dc.send(message);
+                            }
+
+                            if (player.health <= 0) {
+                                handlePlayerDeath();
+                            }
+
+                            // remove projectile
+                            scene.remove(p.mesh);
+                            scene.remove(p.light);
+                            projectiles.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+
+                    if (Date.now() - p.createdAt > 5000) { // 5-second lifespan
+                        scene.remove(p.mesh);
+                        scene.remove(p.light);
+                        projectiles.splice(i, 1);
+                    }
                 }
 
                 renderer.render(scene, camera);
