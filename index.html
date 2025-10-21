@@ -2895,7 +2895,6 @@ self.onmessage = async function(e) {
             this.chunks = new Map();
             this.lastPcx = null;
             this.lastPcz = null;
-            this.currentLoadRadius = 2; // Initial small radius
             // meshGroup is already defined and added to scene in initThree(); do not redefine here
             console.log('[ChunkManager] Using existing meshGroup for chunk rendering');
         }
@@ -3169,15 +3168,10 @@ self.onmessage = async function(e) {
                 this.lastPcx = pcx;
                 this.lastPcz = pcz;
             }
-            const distanceToEdge = Math.max(Math.abs(pcx - this.lastPcx), Math.abs(pcz - this.lastPcz));
-            if (distanceToEdge > this.currentLoadRadius - 2 && this.currentLoadRadius < LOAD_RADIUS) {
-                this.currentLoadRadius++;
-                console.log("Expanding load radius to:", this.currentLoadRadius);
-            }
 
             var neededChunks = [];
-            for (var dx = -this.currentLoadRadius; dx <= this.currentLoadRadius; dx++) {
-                for (var dz = -this.currentLoadRadius; dz <= this.currentLoadRadius; dz++) {
+            for (var dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
+                for (var dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
                     var cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
                     var cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
                     neededChunks.push({ cx: cx, cz: cz, dx: dx, dz: dz });
@@ -7267,6 +7261,9 @@ self.onmessage = async function(e) {
                 } else {
                     player.vz = 0; // Stop velocity on collision
                 }
+
+                player.x = modWrap(player.x, MAP_SIZE);
+                player.z = modWrap(player.z, MAP_SIZE);
 
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
