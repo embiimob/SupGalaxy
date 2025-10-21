@@ -953,7 +953,7 @@
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
         var API_CALLS_PER_SECOND = 3;
         var POLL_RADIUS = 2;
-        var LOAD_RADIUS = 8;
+        var LOAD_RADIUS = 16;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'SupGalaxy v0.3.3-beta';
         var POLL_INTERVAL = 30000;
@@ -2895,7 +2895,6 @@ self.onmessage = async function(e) {
             this.chunks = new Map();
             this.lastPcx = null;
             this.lastPcz = null;
-            this.currentLoadRadius = 2; // Initial small radius
             // meshGroup is already defined and added to scene in initThree(); do not redefine here
             console.log('[ChunkManager] Using existing meshGroup for chunk rendering');
         }
@@ -2944,15 +2943,35 @@ self.onmessage = async function(e) {
             updateTorchRegistry(chunk);
             if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
             var lists = {};
+			var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
             var baseX = chunk.cx * CHUNK_SIZE;
             var baseZ = chunk.cz * CHUNK_SIZE;
+
+            var renderBaseX = baseX;
+            var renderBaseZ = baseZ;
+
+            if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
+                else renderBaseX += MAP_SIZE;
+            }
+            if (Math.abs(chunk.cz - pcz) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cz > pcz) renderBaseZ -= MAP_SIZE;
+                else renderBaseZ += MAP_SIZE;
+            }
+
             for (var x = 0; x < CHUNK_SIZE; x++) {
                 for (var z = 0; z < CHUNK_SIZE; z++) {
                     for (var y = 0; y < MAX_HEIGHT; y++) {
                         var id = chunk.get(x, y, z);
                         if (!id || id === BLOCK_AIR) continue;
+
                         var wx = modWrap(baseX + x, MAP_SIZE);
                         var wz = modWrap(baseZ + z, MAP_SIZE);
+                        var renderX = renderBaseX + x;
+                        var renderZ = renderBaseZ + z;
+
                         var exposed = (
                             this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
                             this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
@@ -2974,7 +2993,7 @@ self.onmessage = async function(e) {
                                 blockId: id
                             };
                         }
-                        lists[materialKey].positions.push({ x: wx, y: y, z: wz });
+                        lists[materialKey].positions.push({ x: renderX, y: y, z: renderZ });
                     }
                 }
             }
@@ -3142,30 +3161,59 @@ self.onmessage = async function(e) {
             }
             processNext.call(this);
         };
-        ChunkManager.prototype.update = function (playerX, playerZ) {
+        ChunkManager.prototype.update = function (playerX, playerZ, playerDirection) {
             var pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
             var pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
             if (pcx !== this.lastPcx || pcz !== this.lastPcz) {
                 this.lastPcx = pcx;
                 this.lastPcz = pcz;
             }
-            const distanceToEdge = Math.max(Math.abs(pcx - this.lastPcx), Math.abs(pcz - this.lastPcz));
-            if (distanceToEdge > this.currentLoadRadius - 2 && this.currentLoadRadius < LOAD_RADIUS) {
-                this.currentLoadRadius++;
-                console.log("Expanding load radius to:", this.currentLoadRadius);
-            }
 
-            var needed = new Set();
-            for (var dx = -this.currentLoadRadius; dx <= this.currentLoadRadius; dx++) {
-                for (var dz = -this.currentLoadRadius; dz <= this.currentLoadRadius; dz++) {
+            var neededChunks = [];
+            for (var dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
+                for (var dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
                     var cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
                     var cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
-                    var ch = this.getChunk(cx, cz);
-                    needed.add(ch.key);
-                    if (!ch.generating && !ch.generated) this.generateChunk(ch);
-                    if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+                    neededChunks.push({ cx: cx, cz: cz, dx: dx, dz: dz });
                 }
             }
+
+            neededChunks.sort((a, b) => {
+                const distASq = a.dx * a.dx + a.dz * a.dz;
+                const distBSq = b.dx * b.dx + b.dz * b.dz;
+
+                let aIsInFront = false;
+                let bIsInFront = false;
+
+                if (playerDirection && playerDirection.lengthSq() > 0) {
+                    const vecA = new THREE.Vector3(a.dx, 0, a.dz);
+                    if (vecA.lengthSq() > 0) {
+                        if (vecA.normalize().dot(playerDirection) > 0.3) {
+                            aIsInFront = true;
+                        }
+                    }
+                    const vecB = new THREE.Vector3(b.dx, 0, b.dz);
+                    if (vecB.lengthSq() > 0) {
+                        if (vecB.normalize().dot(playerDirection) > 0.3) {
+                            bIsInFront = true;
+                        }
+                    }
+                }
+
+                if (aIsInFront && !bIsInFront) return -1;
+                if (!aIsInFront && bIsInFront) return 1;
+
+                return distASq - distBSq;
+            });
+
+            var needed = new Set();
+            for (const chunkInfo of neededChunks) {
+                var ch = this.getChunk(chunkInfo.cx, chunkInfo.cz);
+                needed.add(ch.key);
+                if (!ch.generating && !ch.generated) this.generateChunk(ch);
+                if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+            }
+
             for (var peerUser in userPositions) {
                 if (peerUser !== userName) {
                     var pos = userPositions[peerUser];
@@ -3174,7 +3222,7 @@ self.onmessage = async function(e) {
                     this.preloadChunks(peerCx, peerCz, 2);
                 }
             }
-            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 1.5;
+            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 10;
             if (this.chunks.size > maxChunks) {
                 let chunks = Array.from(this.chunks.values());
                 chunks.sort((a, b) => {
@@ -3237,7 +3285,7 @@ self.onmessage = async function(e) {
             controls.enableDamping = true;
             controls.maxPolarAngle = Math.PI / 2;
             controls.minDistance = 2;
-            controls.maxDistance = 100;
+            controls.maxDistance = 400;
             controls.enabled = false;
             console.log('[initThree] Controls created');
             var dir = new THREE.DirectionalLight(0xffffff, 1.0); // Adjusted intensity
@@ -7214,6 +7262,9 @@ self.onmessage = async function(e) {
                     player.vz = 0; // Stop velocity on collision
                 }
 
+                player.x = modWrap(player.x, MAP_SIZE);
+                player.z = modWrap(player.z, MAP_SIZE);
+
                 player.vy -= 16.0 * dt;
                 var dy = player.vy * dt;
                 var newY = player.y + dy;
@@ -7261,7 +7312,7 @@ self.onmessage = async function(e) {
                     avatarGroup.rotation.y = player.yaw;
                 }
                 updateAvatarAnimation(now, isMoving);
-                chunkManager.update(player.x, player.z);
+                chunkManager.update(player.x, player.z, moveVec);
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
                 updateSky(dt);
