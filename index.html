@@ -997,6 +997,7 @@
             118: { name: 'Sandstone', color: '#e3c27d' },
             119: { name: 'Cobblestone', color: '#7d7d7d' },
             120: { name: 'Torch', color: '#ff9900', light: true, transparent: true },
+            121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1028,6 +1029,7 @@
             { id: 'sandstone', out: { id: 118, count: 2 }, requires: { 5: 2 } },
             { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
             { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
+            { id: 'laser_gun', out: { id: 121, count: 1 }, requires: { 111: 1, 11: 1, 106: 1 } },
         ];
         var scene, camera, renderer, controls;
         var meshGroup;
@@ -1105,6 +1107,46 @@ var lastWPress = 0;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
         var offerPollingIntervals = new Map();
+        var laserBlasts = [];
+
+        function fireLaser(origin, direction, isRemote = false) {
+            if (!isRemote) {
+                const message = JSON.stringify({
+                    type: 'laser_fired',
+                    origin: { x: origin.x, y: origin.y, z: origin.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z }
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message);
+                    }
+                }
+            }
+
+            const laserGeo = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
+            const laserMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, emissive: 0xff00ff });
+            const laser = new THREE.Mesh(laserGeo, laserMat);
+
+            laser.position.copy(origin);
+
+            const quat = new THREE.Quaternion();
+            quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+            laser.setRotationFromQuaternion(quat);
+
+            const laserLight = new THREE.PointLight(0xff00ff, 1, 10);
+            laserLight.position.copy(origin);
+
+            const blast = {
+                mesh: laser,
+                light: laserLight,
+                velocity: direction.clone().multiplyScalar(150),
+                createdAt: performance.now()
+            };
+
+            laserBlasts.push(blast);
+            scene.add(laser);
+            scene.add(laserLight);
+        }
 
         const lightManager = {
             lights: [],
@@ -3473,6 +3515,15 @@ self.onmessage = async function(e) {
             mouth.position.set(0, -headSize * 0.2, faceZ);
 
             head.add(leftEye, rightEye, nose, mouth);
+
+            // Laser Gun Model
+            const laserGunGeo = new THREE.BoxGeometry(0.1 * scale, 0.2 * scale, 0.8 * scale);
+            const laserGunMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const laserGunModel = new THREE.Mesh(laserGunGeo, laserGunMat);
+            laserGunModel.position.set(0, -armHeight / 2 + 0.2, 0.2); // Position at the end of the arm
+            rightArm.add(laserGunModel);
+            avatar.laserGunModel = laserGunModel; // Attach for easy access
+
             avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
 
             if (isPlayerOne) {
@@ -4001,6 +4052,16 @@ self.onmessage = async function(e) {
         function onPointerDown(e) {
             if (cameraMode !== 'first' || isPromptOpen) return;
             e.preventDefault();
+
+            if (selectedBlockId === 121 && e.button === 0) { // Laser Gun
+                const origin = new THREE.Vector3();
+                avatarGroup.laserGunModel.getWorldPosition(origin);
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                fireLaser(origin, direction);
+                return;
+            }
+
             raycaster.setFromCamera(pointer, camera);
             raycaster.far = 5;
             var mobHits = mobs.map(function (m) { return { mob: m, intersect: raycaster.intersectObject(m.mesh)[0] }; })
@@ -5639,6 +5700,11 @@ self.onmessage = async function(e) {
                         case 'player_death':
                             const deadPlayerUsername = data.username;
                             if (userPositions[deadPlayerUsername]) {
+                        case 'laser_fired':
+                            const origin = new THREE.Vector3(data.origin.x, data.origin.y, data.origin.z);
+                            const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
+                            fireLaser(origin, direction, true);
+                            break;
                                 userPositions[deadPlayerUsername].isDying = true;
                                 userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
                                 const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
@@ -6621,6 +6687,7 @@ self.onmessage = async function(e) {
                     initThree();
                     initMusicPlayer();
                     INVENTORY[0] = { id: 120, count: 8 };
+                    INVENTORY[1] = { id: 121, count: 1 }; // Laser Gun
                     selectedHotIndex = 0; // Auto-select torch
                     selectedBlockId = 120; // Explicitly set selected block
                     initHotbar();
@@ -7320,6 +7387,30 @@ self.onmessage = async function(e) {
                 // Make skybox elements follow the camera
                 if (stars) stars.position.copy(camera.position);
                 if (clouds) clouds.position.copy(camera.position);
+
+                // Update laser blasts
+                for (let i = laserBlasts.length - 1; i >= 0; i--) {
+                    const blast = laserBlasts[i];
+                    blast.mesh.position.addScaledVector(blast.velocity, dt);
+                    blast.light.position.copy(blast.mesh.position);
+
+                    if (performance.now() - blast.createdAt > 2000) { // 2 second lifespan
+                        scene.remove(blast.mesh);
+                        scene.remove(blast.light);
+                        laserBlasts.splice(i, 1);
+                        continue;
+                    }
+
+                    const blastPos = blast.mesh.position;
+                    const blockId = getBlockAt(blastPos.x, blastPos.y, blastPos.z);
+                    if (isSolid(blockId)) {
+                        removeBlockAt(Math.floor(blastPos.x), Math.floor(blastPos.y), Math.floor(blastPos.z));
+                        scene.remove(blast.mesh);
+                        scene.remove(blast.light);
+                        laserBlasts.splice(i, 1);
+                        continue;
+                    }
+                }
 
                 for (const [key, particleSystem] of torchParticles.entries()) {
                     const positions = particleSystem.geometry.attributes.position.array;
