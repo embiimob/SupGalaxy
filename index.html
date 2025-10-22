@@ -3110,7 +3110,6 @@ self.onmessage = async function(e) {
             if (!CHUNK_DELTAS.has(key)) CHUNK_DELTAS.set(key, []);
             CHUNK_DELTAS.get(key).push({ x: lx, y: wy, z: lz, b: bid });
             chunk.needsRebuild = true;
-            safePlayAudio(soundPlace);
             updateSaveChangesButton();
 
             if (doBroadcast) {
@@ -4531,7 +4530,7 @@ self.onmessage = async function(e) {
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.vx = 0;
             this.vz = 0;
-            this.hp = (this.type === 'bee') ? 10 : 5;
+            this.hp = 10; // Default for bees
             this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
@@ -4579,12 +4578,15 @@ self.onmessage = async function(e) {
                 if (eyeColorRnd < 0.1) { // 10% chance for blue
                     eyeColor = 0x0000ff;
                     this.eyeColor = 'blue';
+                    this.hp = 15;
                 } else if (eyeColorRnd < 0.5) { // 40% chance for green
                     eyeColor = 0x00ff00;
                     this.eyeColor = 'green';
+                    this.hp = 5;
                 } else { // 50% chance for red
                     eyeColor = 0xff0000;
                     this.eyeColor = 'red';
+                    this.hp = 10;
                 }
                 const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
 
@@ -4722,6 +4724,10 @@ self.onmessage = async function(e) {
                     if (this.lingerTime === 0) {
                         this.lingerTime = Date.now(); // Start lingering
                     } else if (Date.now() - this.lingerTime > 2000) { // Linger for 2 seconds
+                        const dist = Math.hypot(player.x - target.x, player.y - target.y, player.z - target.z);
+                        if (dist < maxAudioDistance) {
+                            safePlayAudio(soundBreak);
+                        }
                         chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
                         if (target.id === 123) { // if it was a hive
                             hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
@@ -4797,9 +4803,10 @@ self.onmessage = async function(e) {
                             if (placedHoney) break;
                         }
                     }
-                    if (!placedHoney) {
-                        // If no spot is found after a thorough search, give up and try again later.
-                        // This prevents the bee from getting stuck in this state forever.
+                    if (placedHoney) {
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                    } else {
+                        // If no valid spot was found, don't get stuck, search for another flower.
                         this.aiState = 'SEARCHING_FOR_FLOWER';
                     }
                 }
@@ -4973,11 +4980,18 @@ self.onmessage = async function(e) {
             addMessage('Mob defeated!');
 
             // Award score to the killer
-            const points = (this.eyeColor === 'blue') ? 20 : 10;
+            let points = 10; // Default for green
+            if (this.eyeColor === 'red') {
+                points = 20; // Double points
+            } else if (this.eyeColor === 'blue') {
+                points = 30; // Triple points
+            }
+
             if (killerName === userName) {
                 player.score += points;
                 document.getElementById('score').innerText = player.score;
                 addMessage(`+${points} score`);
+                safePlayAudio(soundHit); // Play a sound for getting points
             } else {
                 const killerPeer = peers.get(killerName);
                 if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
@@ -5974,6 +5988,16 @@ self.onmessage = async function(e) {
                             break;
 
                         case 'block_change':
+                            const dist = Math.hypot(player.x - data.wx, player.y - data.wy, player.z - data.wz);
+                            if (dist < maxAudioDistance) {
+                                // Play sound locally for remote player's actions
+                                if (data.bid !== 0) { // Placing a block
+                                    safePlayAudio(soundPlace);
+                                } else { // Breaking a block
+                                    safePlayAudio(soundBreak);
+                                }
+                            }
+
                             if (isHost) {
                                 console.log(`[WEBRTC] Host relaying block change from ${sender}`);
                                 for (const [peerUser, peerData] of peers.entries()) {
