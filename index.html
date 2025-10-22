@@ -998,6 +998,8 @@
             119: { name: 'Cobblestone', color: '#7d7d7d' },
             120: { name: 'Torch', color: '#ff9900', light: true, transparent: true },
             121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
+            122: { name: 'Honey', color: '#ffb74a' },
+            123: { name: 'Hive', color: '#e3c27d' },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1065,8 +1067,10 @@ var lastWPress = 0;
         var joystick = { up: false, down: false, left: false, right: false };
         var lastFrame = performance.now();
         var mouseLocked = false;
+        var lastMobManagement = 0;
         var deathScreenShown = false;
         var isDying = false;
+        var isNight = false;
         var deathAnimationStart = 0;
         var lastPollPosition = new THREE.Vector3();
         var pauseTimer = 0;
@@ -1110,6 +1114,8 @@ var lastWPress = 0;
         var projectiles = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
+        var hiveLocations = [];
+        var flowerLocations = [];
         const maxAudioDistance = 32;
         const rolloffFactor = 2;
 
@@ -1322,6 +1328,8 @@ const BLOCKS = {
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
         120: { name: 'Torch', color: '#ff9900', light: true },
+        122: { name: 'Honey', color: '#ffb74a' },
+        123: { name: 'Hive', color: '#e3c27d' },
 };
 
 const BIOMES = [
@@ -1408,8 +1416,11 @@ function placeTree(chunkData, lx, cy, lz, rnd) {
         }
 }
 
-function placeFlower(chunkData, lx, cy, lz) {
-        if (cy < MAX_HEIGHT && chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === BLOCK_AIR) chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 12;
+function placeFlower(chunkData, lx, cy, lz, wx, wz) {
+        if (cy < MAX_HEIGHT && chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === BLOCK_AIR) {
+            chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 12;
+            self.postMessage({ type: 'flower_location', location: { x: wx, y: cy, z: wz } });
+        }
 }
 
 function placeCactus(chunkData, lx, cy, lz, rnd) {
@@ -1444,8 +1455,19 @@ function generateChunkData(chunkKey) {
         const cz = parseInt(chunkKey.split(':')[2]);
         const chunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
 
+function placeHive(chunkData, lx, cy, lz, wx, wz) {
+    const hiveHeight = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < hiveHeight; i++) {
+        if (cy + i < MAX_HEIGHT) {
+            chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 123; // Hive block
+        }
+    }
+    self.postMessage({ type: 'hive_location', location: { x: wx, y: cy, z: wz } });
+}
+
         var baseX = cx * CHUNK_SIZE;
         var baseZ = cz * CHUNK_SIZE;
+        const hiveNoise = makeNoise(worldSeed + '_hive');
         for (var lx = 0; lx < CHUNK_SIZE; lx++) {
             for (var lz = 0; lz < CHUNK_SIZE; lz++) {
                 var wx = baseX + lx;
@@ -1474,8 +1496,13 @@ function generateChunkData(chunkKey) {
                     chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
                 }
                 for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
-                if (biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
-                else if (biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz);
+
+                const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
+                if ((biome.key === 'forest' || biome.key === 'plains') && hiveValue > 0.95) { // Hives are rare
+                    placeHive(chunkData, lx, height + 1, lz, wx, wz);
+                }
+                else if (biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
+                else if (biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
                 else if (biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
             }
         }
@@ -2171,6 +2198,10 @@ self.onmessage = async function(e) {
                     chunk.generating = false;
                     chunk.needsRebuild = true;
                 }
+            } else if (data.type === 'hive_location') {
+                hiveLocations.push(data.location);
+            } else if (data.type === 'flower_location') {
+                flowerLocations.push(data.location);
             } else if (data.type === "server_updates") {
                 console.log('[WebRTC] Received server_updates:', data.servers);
                 var newServers = [];
@@ -2784,7 +2815,7 @@ self.onmessage = async function(e) {
 
             const sunAngleForLight = timeAngle + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0);
             const sunY = Math.sin(sunAngleForLight);
-            const isNight = sunY < -0.1;
+            isNight = sunY < -0.1;
 
             skyProps.suns.forEach(sun => {
                 const angle = timeAngle + sun.angleOffset;
@@ -4118,6 +4149,18 @@ self.onmessage = async function(e) {
             }
 
             // 3. Check for block interactions
+            if (e.button === 0 && selectedItem && selectedItem.id === 122) { // Consume Honey
+                player.health = Math.min(999, player.health + 5);
+                updateHealthBar();
+                document.getElementById('health').innerText = player.health;
+                addMessage('Consumed Honey! +5 HP', 1500);
+                INVENTORY[selectedHotIndex].count--;
+                if (INVENTORY[selectedHotIndex].count <= 0) {
+                    INVENTORY[selectedHotIndex] = null;
+                }
+                updateHotbarUI();
+                return;
+            }
             const ints = raycaster.intersectObject(meshGroup, true);
             if (ints.length === 0) return;
 
@@ -4467,30 +4510,75 @@ self.onmessage = async function(e) {
                 }
             }
         }
-        function Mob(x, z, id) {
+        function Mob(x, z, id, type = 'crawley') {
             this.id = id || Date.now();
+            this.type = type;
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.vx = 0;
             this.vz = 0;
-            this.hp = 6;
-            this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color: 0x9bff9b }));
-            this.mesh.position.copy(this.pos);
-            this.originalColor = new THREE.Color(0x9bff9b);
-            scene.add(this.mesh);
-            this.speed = 0.02 + Math.random() * 0.03;
+            this.hp = (this.type === 'bee') ? 3 : 6;
+            this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
+            this.aiState = (this.type === 'bee') ? 'SEARCHING_FOR_FLOWER' : 'IDLE';
+            this.hasPollen = false;
+
+            const aggressionRnd = makeSeededRandom(worldSeed + this.id);
+            if (this.type === 'bee') {
+                const worldBeeAggressionFactor = makeSeededRandom(worldSeed + '_bee_aggro')();
+                this.isAggressive = aggressionRnd() < worldBeeAggressionFactor;
+            } else {
+                const worldAggressionFactor = makeSeededRandom(worldSeed + '_crawley_aggro')();
+                this.isAggressive = aggressionRnd() < worldAggressionFactor;
+            }
+
+            if (this.type === 'bee') {
+                this.mesh = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                const wingMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+
+                const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 1);
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.mesh.add(body);
+
+                const wingGeo = new THREE.BoxGeometry(0.8, 0.1, 0.4);
+                const leftWing = new THREE.Mesh(wingGeo, wingMat);
+                leftWing.position.set(-0.5, 0.2, 0);
+                this.mesh.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeo, wingMat);
+                rightWing.position.set(0.5, 0.2, 0);
+                this.mesh.add(rightWing);
+
+                this.mesh.leftWing = leftWing;
+                this.mesh.rightWing = rightWing;
+
+                this.originalColor = new THREE.Color(0xffff00);
+            } else { // crawley
+                this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color: 0x9bff9b }));
+                this.originalColor = new THREE.Color(0x9bff9b);
+            }
+
+            this.mesh.position.copy(this.pos);
+            scene.add(this.mesh);
         }
         Mob.prototype.update = function (dt) {
+            if (this.type === 'bee') {
+                this.mesh.leftWing.rotation.z = Math.sin(Date.now() * 0.05) * 0.5;
+                this.mesh.rightWing.rotation.z = -Math.sin(Date.now() * 0.05) * 0.5;
+            }
+
             // Only the host runs the mob AI and state changes.
-            if (!isHost) {
+            if (!isHost && peers.size > 0) {
                 // On clients, just update the mesh position smoothly.
                 this.mesh.position.lerp(this.pos, 0.1);
                 // Update flash effect on clients too
                 if (Date.now() < this.flashEnd) {
-                    this.mesh.material.color.set(0xff0000);
+                    if (this.mesh.material) this.mesh.material.color.set(0xff0000);
+                    else this.mesh.children[0].material.color.set(0xff0000);
                 } else {
-                    this.mesh.material.color.copy(this.originalColor);
+                    if (this.mesh.material) this.mesh.material.color.copy(this.originalColor);
+                    else this.mesh.children[0].material.color.copy(this.originalColor);
                 }
                 return;
             }
@@ -4503,74 +4591,170 @@ self.onmessage = async function(e) {
             this.vx *= (1 - 2 * dt);
             this.vz *= (1 - 2 * dt);
 
-
-            this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + Math.sin(Date.now() * 0.003 + this.mesh.id) * 0.4 + 0.5;
-
-            // Find the closest player to target
-            let closestPlayer = null;
-            let minDistance = Infinity;
-
-            // Consider the host player
-            let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
-            if (hostDist < minDistance) {
-                minDistance = hostDist;
-                closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+            if (this.type === 'crawley') {
+                this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + Math.sin(Date.now() * 0.003 + this.mesh.id) * 0.4 + 0.5;
             }
 
-            // Consider all connected peers
-            for (const [username, peerData] of peers.entries()) {
-                if (userPositions[username]) {
-                    const peerPos = userPositions[username];
-                    const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username }; // Assume full health for peers for now
-                    }
-                }
-            }
+            let target = null;
+            let targetDistance = Infinity;
 
-            if (closestPlayer && minDistance < 10) {
-                const dx = closestPlayer.x - this.pos.x;
-                const dz = closestPlayer.z - this.pos.z;
-                const vx = dx / minDistance * this.speed;
-                const vz = dz / minDistance * this.speed;
-                const newX = modWrap(this.pos.x + vx * dt * 60, MAP_SIZE);
-                const newZ = modWrap(this.pos.z + vz * dt * 60, MAP_SIZE);
-
-                if (!checkCollisionWithBlock(newX, this.pos.y, newZ) && !checkCollisionWithPlayer(newX, this.pos.y, newZ)) {
-                    this.pos.x = newX;
-                    this.pos.z = newZ;
-                }
-
-                if (minDistance < 1.2 && Date.now() - this.attackCooldown > 800) {
-                    this.attackCooldown = Date.now();
-                    // Host sends a message to the targeted player to inflict damage
-                    const targetPeer = peers.get(closestPlayer.username);
-                    if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
-                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
-                    } else if (closestPlayer.username === userName) {
-                        // The mob is attacking the host player
-                        if (Date.now() - lastDamageTime > 800) {
-                            player.health = Math.max(0, player.health - 1);
-                            lastDamageTime = Date.now();
-                            document.getElementById('health').innerText = player.health;
-                            updateHealthBar();
-                            addMessage('Hit! HP: ' + player.health, 1000);
-                            if (player.health <= 0) {
-                                handlePlayerDeath();
+            // Crawley AI: Target hives/honey, then players
+            if (this.type === 'crawley') {
+                const scanRadius = 8;
+                for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+                    for (let dz = -scanRadius; dz <= scanRadius; dz++) {
+                        for (let dy = -3; dy <= 3; dy++) {
+                            const bx = Math.floor(this.pos.x + dx);
+                            const by = Math.floor(this.pos.y + dy);
+                            const bz = Math.floor(this.pos.z + dz);
+                            const blockId = getBlockAt(bx, by, bz);
+                            if (blockId === 123 || blockId === 122) { // Hive or Honey
+                                const dist = Math.hypot(bx - this.pos.x, bz - this.pos.z);
+                                if (dist < targetDistance) {
+                                    targetDistance = dist;
+                                    target = { x: bx, y: by, z: bz, id: blockId };
+                                }
                             }
                         }
                     }
                 }
+
+                if (target && targetDistance < 1.5) {
+                    chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
+                    if (target.id === 123) { // if it was a hive
+                        hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
+                    }
+                    target = null;
+                }
+            }
+
+            // Bee AI
+            if (this.type === 'bee') {
+                if (this.aiState === 'SEARCHING_FOR_FLOWER') {
+                    if (flowerLocations.length > 0) {
+                        let closestFlower = null;
+                        let minFlowerDist = Infinity;
+                        for (const flower of flowerLocations) {
+                            const dist = Math.hypot(flower.x - this.pos.x, flower.z - this.pos.z);
+                            if (dist < minFlowerDist) {
+                                minFlowerDist = dist;
+                                closestFlower = flower;
+                            }
+                        }
+                        target = closestFlower;
+                        targetDistance = minFlowerDist;
+                        if (target) this.pos.y += (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y) * 0.1;
+                        if (targetDistance < 1.5) {
+                            this.hasPollen = true;
+                            this.aiState = 'FLYING_TO_HIVE';
+                        }
+                    }
+                } else if (this.aiState === 'FLYING_TO_HIVE') {
+                    if (hiveLocations.length > 0) {
+                        let closestHive = null;
+                        let minHiveDist = Infinity;
+                        for (const hive of hiveLocations) {
+                            const dist = Math.hypot(hive.x - this.pos.x, hive.z - this.pos.z);
+                            if (dist < minHiveDist) {
+                                minHiveDist = dist;
+                                closestHive = hive;
+                            }
+                        }
+                        target = closestHive;
+                        targetDistance = minHiveDist;
+                        if (target) this.pos.y += (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y) * 0.1; // Fly higher
+                        if (targetDistance < 2) {
+                            this.aiState = 'DEPOSITING_HONEY';
+                        }
+                    }
+                } else if (this.aiState === 'DEPOSITING_HONEY') {
+                    // Find an empty spot next to the hive
+                    const hive = hiveLocations.find(h => Math.hypot(h.x - this.pos.x, h.z - this.pos.z) < 3);
+                    if (hive) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dz = -1; dz <= 1; dz++) {
+                                if (dx === 0 && dz === 0) continue;
+                                const bx = hive.x + dx, by = hive.y, bz = hive.z + dz;
+                                if (getBlockAt(bx, by, bz) === 0) {
+                                    chunkManager.setBlockGlobal(bx, by, bz, 122); // Place honey
+                                    this.hasPollen = false;
+                                    this.aiState = 'SEARCHING_FOR_FLOWER';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            // Player targeting if aggressive or no other target
+            if (this.isAggressive || !target) {
+                let closestPlayer = null;
+                let minPlayerDist = Infinity;
+
+                let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+                if (hostDist < minPlayerDist) {
+                    minPlayerDist = hostDist;
+                    closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                }
+
+                for (const [username, peerData] of peers.entries()) {
+                    if (userPositions[username]) {
+                        const peerPos = userPositions[username];
+                        const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
+                        if (dist < minPlayerDist) {
+                            minPlayerDist = dist;
+                            closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username };
+                        }
+                    }
+                }
+                if (closestPlayer && minPlayerDist < 10) {
+                    target = { x: closestPlayer.x, z: closestPlayer.z };
+                    targetDistance = minPlayerDist;
+
+                    if (minPlayerDist < 1.2 && Date.now() - this.attackCooldown > 800) {
+                        this.attackCooldown = Date.now();
+                        const targetPeer = peers.get(closestPlayer.username);
+                        if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                            targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
+                        } else if (closestPlayer.username === userName) {
+                            if (Date.now() - lastDamageTime > 800) {
+                                player.health = Math.max(0, player.health - 1);
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                addMessage('Hit! HP: ' + player.health, 1000);
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (target) {
+                const dx = target.x - this.pos.x;
+                const dz = target.z - this.pos.z;
+                const vx = dx / targetDistance * this.speed;
+                const vz = dz / targetDistance * this.speed;
+                const newX = modWrap(this.pos.x + vx * dt * 60, MAP_SIZE);
+                const newZ = modWrap(this.pos.z + vz * dt * 60, MAP_SIZE);
+                if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
+                    this.pos.x = newX;
+                    this.pos.z = newZ;
+                }
             } else {
-                // Wander aimlessly if no player is near
+                // Wander
                 const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
                 const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
-                if (!checkCollisionWithBlock(newX, this.pos.y, newZ) && !checkCollisionWithPlayer(newX, this.pos.y, newZ)) {
+                if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
                     this.pos.x = newX;
                     this.pos.z = newZ;
                 }
             }
+
 
             this.mesh.position.copy(this.pos);
 
@@ -4581,7 +4765,8 @@ self.onmessage = async function(e) {
                 x: this.pos.x,
                 y: this.pos.y,
                 z: this.pos.z,
-                hp: this.hp
+                hp: this.hp,
+                mobType: this.type
             });
 
             for (const [peerUser, peerData] of peers.entries()) {
@@ -4664,29 +4849,63 @@ self.onmessage = async function(e) {
                 }
             }
         };
-        function spawnMobs(count, rnd) {
-            if (!isHost) return; // Only the host can spawn mobs.
-            if (!rnd) {
-                console.error("No seeded random generator provided for mob spawning.");
-                return;
+        function manageMobs() {
+            if (!isHost && peers.size > 0) return;
+            if (Date.now() - lastMobManagement < 5000) return;
+            lastMobManagement = Date.now();
+
+            const MOB_CAP = 20;
+            const SPAWN_RADIUS = 64;
+            const DESPAWN_RADIUS = 96;
+
+            const allPlayers = [{ x: player.x, y: player.y, z: player.z }];
+            for (const pos of Object.values(userPositions)) {
+                if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
             }
 
-            var loadedChunks = Array.from(chunkManager.chunks.keys());
-            if (loadedChunks.length === 0) return;
-            for (var i = 0; i < count; i++) {
-                var randomChunkKey = loadedChunks[Math.floor(rnd() * loadedChunks.length)];
-                var parsed = parseChunkKey(randomChunkKey);
-                if (!parsed) continue;
-                var cx = parsed.cx;
-                var cz = parsed.cz;
-                var baseX = cx * CHUNK_SIZE;
-                var baseZ = cz * CHUNK_SIZE;
-                var lx = rnd() * CHUNK_SIZE;
-                var lz = rnd() * CHUNK_SIZE;
-                var x = modWrap(baseX + lx, MAP_SIZE);
-                var z = modWrap(baseZ + lz, MAP_SIZE);
-                var m = new Mob(x, z);
-                mobs.push(m);
+            mobs = mobs.filter(mob => {
+                const isNearPlayer = allPlayers.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < DESPAWN_RADIUS);
+                if (!isNearPlayer) {
+                    scene.remove(mob.mesh);
+                    disposeObject(mob.mesh);
+                    const killMessage = JSON.stringify({ type: 'mob_kill', id: mob.id });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(killMessage);
+                        }
+                    }
+                    return false;
+                }
+                return true;
+            });
+
+            if (mobs.length < MOB_CAP) {
+                const mobType = isNight ? 'crawley' : 'bee';
+                const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
+
+                const angle = Math.random() * Math.PI * 2;
+                const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
+                const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
+                const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
+
+                const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
+                mobs.push(newMob);
+
+                const spawnMessage = JSON.stringify({
+                    type: 'mob_spawn',
+                    id: newMob.id,
+                    x: newMob.pos.x,
+                    y: newMob.pos.y,
+                    z: newMob.pos.z,
+                    hp: newMob.hp,
+                    mobType: newMob.type,
+                    isAggressive: newMob.isAggressive
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(spawnMessage);
+                    }
+                }
             }
         }
         function isSolid(id) {
@@ -5056,7 +5275,7 @@ self.onmessage = async function(e) {
             setTimeout(function () { el.remove(); }, ttl || 2000);
         }
         function updateHealthBar() {
-            var pct = Math.max(0, Math.min(1, player.health / 20));
+            var pct = Math.max(0, Math.min(1, player.health / 999));
             document.getElementById('healthBarInner').style.width = (pct * 100) + '%';
         }
         function updateSaveChangesButton() {
@@ -5647,10 +5866,17 @@ self.onmessage = async function(e) {
                             }
                             break;
 
+                        case 'mob_spawn':
+                            if (!mobs.some(m => m.id === data.id)) {
+                                const newMob = new Mob(data.x, data.z, data.id, data.mobType);
+                                newMob.isAggressive = data.isAggressive;
+                                mobs.push(newMob);
+                            }
+                            break;
                         case 'mob_update':
                             let mob = mobs.find(m => m.id === data.id);
                             if (!mob) {
-                                mob = new Mob(data.x, data.z, data.id);
+                                mob = new Mob(data.x, data.z, data.id, data.mobType);
                                 mobs.push(mob);
                             }
                             mob.pos.set(data.x, data.y, data.z);
@@ -7327,6 +7553,7 @@ self.onmessage = async function(e) {
             }
             if (deathScreenShown) {
                 mobs.forEach(function (m) { m.update(dt); });
+                manageMobs();
                 updateSky(dt);
                 updateMinimap();
                 var scoreElement = document.getElementById('score');
