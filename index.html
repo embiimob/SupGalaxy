@@ -3901,36 +3901,6 @@ self.onmessage = async function(e) {
                 list.appendChild(row);
             }
         }
-        function playRangedAudio(audioElement, soundX, soundY, soundZ, isRemote = false) {
-            if (!audioElement) return;
-
-            // If the sound is from a remote player, check if they are in the same chunk.
-            if (isRemote) {
-                const soundChunkX = Math.floor(modWrap(soundX, MAP_SIZE) / CHUNK_SIZE);
-                const soundChunkZ = Math.floor(modWrap(soundZ, MAP_SIZE) / CHUNK_SIZE);
-                const playerChunkX = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
-                const playerChunkZ = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
-
-                if (soundChunkX !== playerChunkX || soundChunkZ !== playerChunkZ) {
-                    return; // Don't play sounds from remote players in different chunks.
-                }
-            }
-
-            // Play the sound for the local player or a nearby remote player.
-            const audio = audioElement.cloneNode();
-            audio.volume = 1.0; // Full volume for simplicity. Could add distance attenuation later.
-
-            var playPromise = audio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(function (e) {
-                    if (!audioErrorLogged) {
-                        addMessage('Audio playback issue detected', 3000);
-                        audioErrorLogged = true;
-                    }
-                });
-            }
-        }
-
         function safePlayAudio(audioElement) {
             if (!audioElement) return;
             var playPromise = audioElement.play();
@@ -4321,7 +4291,7 @@ self.onmessage = async function(e) {
 
             addToInventory(b, 1, originSeed);
             addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b) + (originSeed ? ` from ${originSeed}`: ''));
-            playRangedAudio(soundBreak, wx, wy, wz, false);
+            safePlayAudio(soundBreak);
 
             if (BLOCKS[b] && BLOCKS[b].light) {
                 var lightKey = `${wx},${wy},${wz}`;
@@ -4389,7 +4359,7 @@ self.onmessage = async function(e) {
             item.count -= 1;
             if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
             updateHotbarUI();
-            playRangedAudio(soundPlace, wx, wy, wz, false);
+            safePlayAudio(soundPlace);
 
             if (BLOCKS[bid] && BLOCKS[bid].light) {
                 const lightKey = `${wx},${wy},${wz}`;
@@ -4608,15 +4578,15 @@ self.onmessage = async function(e) {
                 if (eyeColorRnd < 0.1) { // 10% chance for blue
                     eyeColor = 0x0000ff;
                     this.eyeColor = 'blue';
-                    this.hp = 15; // 3 hits
+                    this.hp = 15;
                 } else if (eyeColorRnd < 0.5) { // 40% chance for green
                     eyeColor = 0x00ff00;
                     this.eyeColor = 'green';
-                    this.hp = 5; // 1 hit
+                    this.hp = 5;
                 } else { // 50% chance for red
                     eyeColor = 0xff0000;
                     this.eyeColor = 'red';
-                    this.hp = 10; // 2 hits
+                    this.hp = 10;
                 }
                 const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
 
@@ -4754,6 +4724,10 @@ self.onmessage = async function(e) {
                     if (this.lingerTime === 0) {
                         this.lingerTime = Date.now(); // Start lingering
                     } else if (Date.now() - this.lingerTime > 2000) { // Linger for 2 seconds
+                        const dist = Math.hypot(player.x - target.x, player.y - target.y, player.z - target.z);
+                        if (dist < maxAudioDistance) {
+                            safePlayAudio(soundBreak);
+                        }
                         chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
                         if (target.id === 123) { // if it was a hive
                             hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
@@ -4829,9 +4803,12 @@ self.onmessage = async function(e) {
                             if (placedHoney) break;
                         }
                     }
-                    // Always switch state after attempting to deposit, regardless of success.
-                    // This prevents the bee from getting stuck.
-                    this.aiState = 'SEARCHING_FOR_FLOWER';
+                    if (placedHoney) {
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                    } else {
+                        // If no valid spot was found, don't get stuck, search for another flower.
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                    }
                 }
             }
 
@@ -5003,18 +4980,18 @@ self.onmessage = async function(e) {
             addMessage('Mob defeated!');
 
             // Award score to the killer
-            let points = 10; // Default points
+            let points = 10; // Default for green
             if (this.eyeColor === 'red') {
-                points = 20;
+                points = 20; // Double points
             } else if (this.eyeColor === 'blue') {
-                points = 30;
+                points = 30; // Triple points
             }
 
             if (killerName === userName) {
                 player.score += points;
                 document.getElementById('score').innerText = player.score;
                 addMessage(`+${points} score`);
-                safePlayAudio(soundHit); // Play points sound
+                safePlayAudio(soundHit); // Play a sound for getting points
             } else {
                 const killerPeer = peers.get(killerName);
                 if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
@@ -6011,11 +5988,14 @@ self.onmessage = async function(e) {
                             break;
 
                         case 'block_change':
-                            // Play sound locally for remote player's actions
-                            if (data.bid !== 0) { // Placing a block
-                                playRangedAudio(soundPlace, data.wx, data.wy, data.wz, true);
-                            } else { // Breaking a block
-                                playRangedAudio(soundBreak, data.wx, data.wy, data.wz, true);
+                            const dist = Math.hypot(player.x - data.wx, player.y - data.wy, player.z - data.wz);
+                            if (dist < maxAudioDistance) {
+                                // Play sound locally for remote player's actions
+                                if (data.bid !== 0) { // Placing a block
+                                    safePlayAudio(soundPlace);
+                                } else { // Breaking a block
+                                    safePlayAudio(soundBreak);
+                                }
                             }
 
                             if (isHost) {
