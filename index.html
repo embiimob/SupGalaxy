@@ -3901,29 +3901,33 @@ self.onmessage = async function(e) {
                 list.appendChild(row);
             }
         }
-        function playSpatialAudio(audioElement, soundX, soundY, soundZ) {
+        function playRangedAudio(audioElement, soundX, soundY, soundZ, isRemote = false) {
             if (!audioElement) return;
 
-            const dist = Math.hypot(player.x - soundX, player.y - soundY, player.z - soundZ);
-            const maxDist = 32; // Same as voice chat
+            // If the sound is from a remote player, check if they are in the same chunk.
+            if (isRemote) {
+                const soundChunkX = Math.floor(modWrap(soundX, MAP_SIZE) / CHUNK_SIZE);
+                const soundChunkZ = Math.floor(modWrap(soundZ, MAP_SIZE) / CHUNK_SIZE);
+                const playerChunkX = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+                const playerChunkZ = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
 
-            if (dist < maxDist) {
-                // Clone the audio node to allow for overlapping sounds
-                const audio = audioElement.cloneNode();
-
-                // Volume decreases with distance
-                const volume = Math.max(0, 1 - (dist / maxDist));
-                audio.volume = Math.pow(volume, 2); // Use squared falloff for more natural sound decay
-
-                var playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(function (e) {
-                        if (!audioErrorLogged) {
-                            addMessage('Audio playback issue detected', 3000);
-                            audioErrorLogged = true;
-                        }
-                    });
+                if (soundChunkX !== playerChunkX || soundChunkZ !== playerChunkZ) {
+                    return; // Don't play sounds from remote players in different chunks.
                 }
+            }
+
+            // Play the sound for the local player or a nearby remote player.
+            const audio = audioElement.cloneNode();
+            audio.volume = 1.0; // Full volume for simplicity. Could add distance attenuation later.
+
+            var playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(function (e) {
+                    if (!audioErrorLogged) {
+                        addMessage('Audio playback issue detected', 3000);
+                        audioErrorLogged = true;
+                    }
+                });
             }
         }
 
@@ -4317,7 +4321,7 @@ self.onmessage = async function(e) {
 
             addToInventory(b, 1, originSeed);
             addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b) + (originSeed ? ` from ${originSeed}`: ''));
-            playSpatialAudio(soundBreak, wx, wy, wz);
+            playRangedAudio(soundBreak, wx, wy, wz, false);
 
             if (BLOCKS[b] && BLOCKS[b].light) {
                 var lightKey = `${wx},${wy},${wz}`;
@@ -4385,7 +4389,7 @@ self.onmessage = async function(e) {
             item.count -= 1;
             if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
             updateHotbarUI();
-            playSpatialAudio(soundPlace, wx, wy, wz);
+            playRangedAudio(soundPlace, wx, wy, wz, false);
 
             if (BLOCKS[bid] && BLOCKS[bid].light) {
                 const lightKey = `${wx},${wy},${wz}`;
@@ -4825,11 +4829,9 @@ self.onmessage = async function(e) {
                             if (placedHoney) break;
                         }
                     }
-                    if (!placedHoney) {
-                        this.aiState = 'SEARCHING_FOR_FLOWER';
-                    } else {
-                        return;
-                    }
+                    // Always switch state after attempting to deposit, regardless of success.
+                    // This prevents the bee from getting stuck.
+                    this.aiState = 'SEARCHING_FOR_FLOWER';
                 }
             }
 
@@ -6011,9 +6013,9 @@ self.onmessage = async function(e) {
                         case 'block_change':
                             // Play sound locally for remote player's actions
                             if (data.bid !== 0) { // Placing a block
-                                playSpatialAudio(soundPlace, data.wx, data.wy, data.wz);
+                                playRangedAudio(soundPlace, data.wx, data.wy, data.wz, true);
                             } else { // Breaking a block
-                                playSpatialAudio(soundBreak, data.wx, data.wy, data.wz);
+                                playRangedAudio(soundBreak, data.wx, data.wy, data.wz, true);
                             }
 
                             if (isHost) {
