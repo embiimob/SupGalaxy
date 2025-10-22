@@ -4531,7 +4531,7 @@ self.onmessage = async function(e) {
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.vx = 0;
             this.vz = 0;
-            this.hp = (this.type === 'bee') ? 3 : 6;
+            this.hp = (this.type === 'bee') ? 10 : 5;
             this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
@@ -4540,13 +4540,12 @@ self.onmessage = async function(e) {
             this.lingerTime = 0;
             this.animationTime = Math.random() * Math.PI * 2;
 
-            const aggressionRnd = makeSeededRandom(worldSeed + this.id);
             if (this.type === 'bee') {
                 const worldBeeAggressionFactor = makeSeededRandom(worldSeed + '_bee_aggro')();
-                this.isAggressive = aggressionRnd() < worldBeeAggressionFactor;
-            } else {
-                const worldAggressionFactor = makeSeededRandom(worldSeed + '_crawley_aggro')();
-                this.isAggressive = aggressionRnd() < worldAggressionFactor;
+                this.isAggressive = worldBeeAggressionFactor > 0.5;
+            } else { // crawley
+                const worldCrawleyAggressionFactor = makeSeededRandom(worldSeed + '_crawley_aggro')();
+                this.isAggressive = worldCrawleyAggressionFactor > 0.5;
             }
 
             if (this.type === 'bee') {
@@ -4574,7 +4573,21 @@ self.onmessage = async function(e) {
             } else { // crawley
                 this.mesh = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
-                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+                const eyeColorRnd = makeSeededRandom(worldSeed + '_eye_color_' + this.id)();
+                let eyeColor;
+                if (eyeColorRnd < 0.1) { // 10% chance for blue
+                    eyeColor = 0x0000ff;
+                    this.eyeColor = 'blue';
+                } else if (eyeColorRnd < 0.5) { // 40% chance for green
+                    eyeColor = 0x00ff00;
+                    this.eyeColor = 'green';
+                } else { // 50% chance for red
+                    eyeColor = 0xff0000;
+                    this.eyeColor = 'red';
+                }
+                const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+
 
                 const bodyGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -4652,6 +4665,34 @@ self.onmessage = async function(e) {
             if (this.type === 'crawley') {
                  this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 0.5;
             }
+
+            // --- Torch Avoidance for Crawlers ---
+            let avoidanceVector = new THREE.Vector3(0, 0, 0);
+            let isAvoiding = false;
+            if (this.type === 'crawley') {
+                const AVOID_RADIUS = 8;
+                let closestTorchDist = Infinity;
+
+                for (const torchPos of torchRegistry.values()) {
+                    const dist = this.pos.distanceTo(torchPos);
+                    if (dist < AVOID_RADIUS && dist < closestTorchDist) {
+                        closestTorchDist = dist;
+                        avoidanceVector.subVectors(this.pos, torchPos).normalize();
+                        isAvoiding = true;
+                    }
+                }
+
+                if (isAvoiding) {
+                    const scurrySpeed = this.speed * 2.5; // Scurry effect
+                    this.pos.x += avoidanceVector.x * scurrySpeed * dt * 60;
+                    this.pos.z += avoidanceVector.z * scurrySpeed * dt * 60;
+
+                    this.mesh.position.copy(this.pos);
+                    // Skip other AI when avoiding
+                    return;
+                }
+            }
+
 
             let target = null;
             let targetDistance = Infinity;
@@ -4932,14 +4973,15 @@ self.onmessage = async function(e) {
             addMessage('Mob defeated!');
 
             // Award score to the killer
+            const points = (this.eyeColor === 'blue') ? 20 : 10;
             if (killerName === userName) {
-                player.score += 10;
+                player.score += points;
                 document.getElementById('score').innerText = player.score;
-                addMessage('+10 score');
+                addMessage(`+${points} score`);
             } else {
                 const killerPeer = peers.get(killerName);
                 if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
-                    killerPeer.dc.send(JSON.stringify({ type: 'add_score', amount: 10 }));
+                    killerPeer.dc.send(JSON.stringify({ type: 'add_score', amount: points }));
                 }
             }
 
