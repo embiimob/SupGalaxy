@@ -3917,8 +3917,8 @@ self.onmessage = async function(e) {
         function handleMobHit(mob) {
             // This function is only for the local player's attack action.
             // The server/host will be the one to actually process the damage.
-            if (isHost) {
-                mob.hurt(4, userName); // Host hits a mob, passing their own name as the attacker
+            if (isHost || peers.size === 0) {
+                mob.hurt(4, userName);
             } else {
                 // Client sends hit notification to its peer (the host).
                 for (const [peerUser, peerData] of peers.entries()) {
@@ -4110,14 +4110,29 @@ self.onmessage = async function(e) {
             raycaster.far = 5;
 
             // 1. Check for mob hits
-            const mobHits = mobs.map(m => ({ mob: m, intersect: raycaster.intersectObject(m.mesh)[0] }))
-                .filter(h => h.intersect)
-                .sort((a, b) => a.intersect.distance - b.intersect.distance);
+            const mobMeshes = mobs.map(m => m.mesh).filter(m => m.visible);
+            const mobIntersects = raycaster.intersectObjects(mobMeshes, true);
 
-            if (mobHits.length > 0) {
-                animateAttack();
-                handleMobHit(mobHits[0].mob);
-                return;
+            if (mobIntersects.length > 0) {
+                let hitObject = mobIntersects[0].object;
+                let mobId;
+                // Traverse up the hierarchy to find the parent Group with the mobId
+                while (hitObject) {
+                    if (hitObject.userData.mobId) {
+                        mobId = hitObject.userData.mobId;
+                        break;
+                    }
+                    hitObject = hitObject.parent;
+                }
+
+                if (mobId) {
+                    const hitMob = mobs.find(m => m.id === mobId);
+                    if (hitMob) {
+                        animateAttack();
+                        handleMobHit(hitMob);
+                        return; // Stop further processing
+                    }
+                }
             }
 
             // 2. Check for player hits
@@ -4522,6 +4537,7 @@ self.onmessage = async function(e) {
             this.flashEnd = 0;
             this.aiState = (this.type === 'bee') ? 'SEARCHING_FOR_FLOWER' : 'IDLE';
             this.hasPollen = false;
+            this.animationTime = Math.random() * Math.PI * 2;
 
             const aggressionRnd = makeSeededRandom(worldSeed + this.id);
             if (this.type === 'bee') {
@@ -4578,14 +4594,28 @@ self.onmessage = async function(e) {
                 this.mesh.add(eyeLight);
                 this.mesh.eyeLight = eyeLight;
 
+                this.mesh.legs = [];
+                const legGeo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+                for (let i = 0; i < 6; i++) {
+                    const leg = new THREE.Mesh(legGeo, bodyMat);
+                    const side = (i % 2 === 0) ? 1 : -1;
+                    leg.position.set(side * 0.45, 0, (Math.floor(i / 2) - 1) * 0.3);
+                    this.mesh.add(leg);
+                    this.mesh.legs.push(leg);
+                }
 
                 this.originalColor = new THREE.Color(0x4a4a4a);
             }
 
+            this.mesh.userData.mobId = this.id;
             this.mesh.position.copy(this.pos);
             scene.add(this.mesh);
         }
         Mob.prototype.update = function (dt) {
+            // Ensure mesh is at the correct initial position for clients
+            if (peers.size > 0 && !isHost) {
+                this.mesh.position.copy(this.pos);
+            }
             if (this.type === 'bee') {
                 this.mesh.leftWing.rotation.z = Math.sin(Date.now() * 0.05) * 0.5;
                 this.mesh.rightWing.rotation.z = -Math.sin(Date.now() * 0.05) * 0.5;
@@ -4619,7 +4649,7 @@ self.onmessage = async function(e) {
             this.vz *= (1 - 2 * dt);
 
             if (this.type === 'crawley') {
-                this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + Math.sin(Date.now() * 0.003 + this.mesh.id) * 0.4 + 0.5;
+                 this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 0.5;
             }
 
             let target = null;
@@ -4773,6 +4803,7 @@ self.onmessage = async function(e) {
                 }
             }
 
+            let isMoving = false;
             if (target) {
                 const dx = target.x - this.pos.x;
                 const dz = target.z - this.pos.z;
@@ -4780,17 +4811,41 @@ self.onmessage = async function(e) {
                 const vz = dz / targetDistance * this.speed;
                 const newX = modWrap(this.pos.x + vx * dt * 60, MAP_SIZE);
                 const newZ = modWrap(this.pos.z + vz * dt * 60, MAP_SIZE);
+
+                if (this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1) {
+                        this.pos.y = frontY + 0.5; // Climb up one block
+                    }
+                }
+
                 if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
                     this.pos.x = newX;
                     this.pos.z = newZ;
+                    isMoving = true;
                 }
             } else {
                 // Wander
-                const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
-                const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * 0.002) * dt * 60, MAP_SIZE);
-                if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
+                const wanderSpeed = this.speed * 0.5;
+                const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
+                const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
+                 if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
                     this.pos.x = newX;
                     this.pos.z = newZ;
+                    isMoving = true;
+                }
+            }
+
+            if (this.type === 'crawley' && this.mesh.legs) {
+                if (isMoving) {
+                    this.animationTime += dt * 15; // Animation speed
+                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
+                    this.mesh.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? 1 : -1;
+                        leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
+                    });
+                } else {
+                    this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
                 }
             }
 
@@ -4815,7 +4870,7 @@ self.onmessage = async function(e) {
             }
         };
         Mob.prototype.hurt = function (dmg, attackerName) {
-            if (!isHost) return; // Only host can process damage
+            if (!isHost && peers.size > 0) return; // Only host or single player can process damage
 
             this.hp -= dmg;
             this.flashEnd = Date.now() + 200; // Trigger flash effect
@@ -4893,7 +4948,8 @@ self.onmessage = async function(e) {
             if (Date.now() - lastMobManagement < 5000) return;
             lastMobManagement = Date.now();
 
-            const MOB_CAP = 20;
+            const CRAWLEY_CAP = 20;
+            const BEE_CAP = 10;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -4918,8 +4974,10 @@ self.onmessage = async function(e) {
                 return true;
             });
 
-            if (mobs.length < MOB_CAP) {
-                const mobType = isNight ? 'crawley' : 'bee';
+            const mobType = isNight ? 'crawley' : 'bee';
+            const mobCap = isNight ? CRAWLEY_CAP : BEE_CAP;
+
+            if (mobs.filter(m => m.type === mobType).length < mobCap) {
                 const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
 
                 const angle = Math.random() * Math.PI * 2;
@@ -7011,8 +7069,6 @@ self.onmessage = async function(e) {
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
                     console.log('[LOGIN] Preloading initial chunks');
                     chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
-                    const mobRnd = makeSeededRandom(worldSeed + '_mobs');
-                    // spawnMobs(12, mobRnd);
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
@@ -7723,6 +7779,8 @@ self.onmessage = async function(e) {
                 avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2);
                 if (cameraMode === 'third') {
                     avatarGroup.rotation.y = player.yaw;
+                } else { // first person
+                    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
                 }
                 updateAvatarAnimation(now, isMoving);
                 chunkManager.update(player.x, player.z, moveVec);
@@ -7978,15 +8036,32 @@ self.onmessage = async function(e) {
                         continue;
                     }
 
+                    let hitMob = false;
                     for (const mob of mobs) {
-                         if (p.mesh.position.distanceTo(mob.pos) < 1) {
-                            if(isHost) mob.hurt(5, p.user);
+                        if (p.mesh.position.distanceTo(mob.pos) < 1) {
+                            if (isHost || peers.size === 0) {
+                                mob.hurt(5, p.user);
+                            } else {
+                                // Client sends hit notification to host
+                                for (const [peerUser, peerData] of peers.entries()) {
+                                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                                        peerData.dc.send(JSON.stringify({
+                                            type: 'mob_hit',
+                                            id: mob.id,
+                                            damage: 5,
+                                            username: p.user
+                                        }));
+                                    }
+                                }
+                            }
                             scene.remove(p.mesh);
                             scene.remove(p.light);
                             projectiles.splice(i, 1);
-                            continue;
+                            hitMob = true;
+                            break;
                         }
                     }
+                    if (hitMob) continue;
 
                     // Player hit detection
                     if (p.user !== userName) { // projectile is from another player
