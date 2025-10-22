@@ -1498,7 +1498,7 @@ function placeHive(chunkData, lx, cy, lz, wx, wz) {
                 for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
 
                 const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
-                if ((biome.key === 'forest' || biome.key === 'plains') && hiveValue > 0.95) { // Hives are rare
+                if (biome.key === 'forest' && hiveValue > 0.98) { // Hives are rare and only in forests
                     placeHive(chunkData, lx, height + 1, lz, wx, wz);
                 }
                 else if (biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
@@ -7553,7 +7553,6 @@ self.onmessage = async function(e) {
             }
             if (deathScreenShown) {
                 mobs.forEach(function (m) { m.update(dt); });
-                manageMobs();
                 updateSky(dt);
                 updateMinimap();
                 var scoreElement = document.getElementById('score');
@@ -7690,6 +7689,7 @@ self.onmessage = async function(e) {
                 chunkManager.update(player.x, player.z, moveVec);
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
+                manageMobs();
                 updateSky(dt);
 
                 // Make skybox elements follow the camera
