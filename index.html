@@ -3110,7 +3110,6 @@ self.onmessage = async function(e) {
             if (!CHUNK_DELTAS.has(key)) CHUNK_DELTAS.set(key, []);
             CHUNK_DELTAS.get(key).push({ x: lx, y: wy, z: lz, b: bid });
             chunk.needsRebuild = true;
-            safePlayAudio(soundPlace);
             updateSaveChangesButton();
 
             if (doBroadcast) {
@@ -3902,6 +3901,32 @@ self.onmessage = async function(e) {
                 list.appendChild(row);
             }
         }
+        function playSpatialAudio(audioElement, soundX, soundY, soundZ) {
+            if (!audioElement) return;
+
+            const dist = Math.hypot(player.x - soundX, player.y - soundY, player.z - soundZ);
+            const maxDist = 32; // Same as voice chat
+
+            if (dist < maxDist) {
+                // Clone the audio node to allow for overlapping sounds
+                const audio = audioElement.cloneNode();
+
+                // Volume decreases with distance
+                const volume = Math.max(0, 1 - (dist / maxDist));
+                audio.volume = Math.pow(volume, 2); // Use squared falloff for more natural sound decay
+
+                var playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(function (e) {
+                        if (!audioErrorLogged) {
+                            addMessage('Audio playback issue detected', 3000);
+                            audioErrorLogged = true;
+                        }
+                    });
+                }
+            }
+        }
+
         function safePlayAudio(audioElement) {
             if (!audioElement) return;
             var playPromise = audioElement.play();
@@ -4292,7 +4317,7 @@ self.onmessage = async function(e) {
 
             addToInventory(b, 1, originSeed);
             addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b) + (originSeed ? ` from ${originSeed}`: ''));
-            safePlayAudio(soundBreak);
+            playSpatialAudio(soundBreak, wx, wy, wz);
 
             if (BLOCKS[b] && BLOCKS[b].light) {
                 var lightKey = `${wx},${wy},${wz}`;
@@ -4360,7 +4385,7 @@ self.onmessage = async function(e) {
             item.count -= 1;
             if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
             updateHotbarUI();
-            safePlayAudio(soundPlace);
+            playSpatialAudio(soundPlace, wx, wy, wz);
 
             if (BLOCKS[bid] && BLOCKS[bid].light) {
                 const lightKey = `${wx},${wy},${wz}`;
@@ -4531,7 +4556,7 @@ self.onmessage = async function(e) {
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.vx = 0;
             this.vz = 0;
-            this.hp = (this.type === 'bee') ? 10 : 5;
+            this.hp = 10; // Default for bees
             this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
@@ -4579,12 +4604,15 @@ self.onmessage = async function(e) {
                 if (eyeColorRnd < 0.1) { // 10% chance for blue
                     eyeColor = 0x0000ff;
                     this.eyeColor = 'blue';
+                    this.hp = 15; // 3 hits
                 } else if (eyeColorRnd < 0.5) { // 40% chance for green
                     eyeColor = 0x00ff00;
                     this.eyeColor = 'green';
+                    this.hp = 5; // 1 hit
                 } else { // 50% chance for red
                     eyeColor = 0xff0000;
                     this.eyeColor = 'red';
+                    this.hp = 10; // 2 hits
                 }
                 const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
 
@@ -4798,9 +4826,9 @@ self.onmessage = async function(e) {
                         }
                     }
                     if (!placedHoney) {
-                        // If no spot is found after a thorough search, give up and try again later.
-                        // This prevents the bee from getting stuck in this state forever.
                         this.aiState = 'SEARCHING_FOR_FLOWER';
+                    } else {
+                        return;
                     }
                 }
             }
@@ -4973,11 +5001,18 @@ self.onmessage = async function(e) {
             addMessage('Mob defeated!');
 
             // Award score to the killer
-            const points = (this.eyeColor === 'blue') ? 20 : 10;
+            let points = 10; // Default points
+            if (this.eyeColor === 'red') {
+                points = 20;
+            } else if (this.eyeColor === 'blue') {
+                points = 30;
+            }
+
             if (killerName === userName) {
                 player.score += points;
                 document.getElementById('score').innerText = player.score;
                 addMessage(`+${points} score`);
+                safePlayAudio(soundHit); // Play points sound
             } else {
                 const killerPeer = peers.get(killerName);
                 if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
@@ -5974,6 +6009,13 @@ self.onmessage = async function(e) {
                             break;
 
                         case 'block_change':
+                            // Play sound locally for remote player's actions
+                            if (data.bid !== 0) { // Placing a block
+                                playSpatialAudio(soundPlace, data.wx, data.wy, data.wz);
+                            } else { // Breaking a block
+                                playSpatialAudio(soundBreak, data.wx, data.wy, data.wz);
+                            }
+
                             if (isHost) {
                                 console.log(`[WEBRTC] Host relaying block change from ${sender}`);
                                 for (const [peerUser, peerData] of peers.entries()) {
