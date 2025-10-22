@@ -4555,8 +4555,31 @@ self.onmessage = async function(e) {
 
                 this.originalColor = new THREE.Color(0xffff00);
             } else { // crawley
-                this.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshLambertMaterial({ color: 0x9bff9b }));
-                this.originalColor = new THREE.Color(0x9bff9b);
+                this.mesh = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+                const bodyGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.mesh.add(body);
+
+                const eyeGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
+
+                const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+                leftEye.position.set(-0.25, 0.2, -0.45);
+                this.mesh.add(leftEye);
+
+                const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+                rightEye.position.set(0.25, 0.2, -0.45);
+                this.mesh.add(rightEye);
+
+                const eyeLight = new THREE.PointLight(0xff0000, 1, 5);
+                eyeLight.position.set(0, 0.2, -0.5);
+                this.mesh.add(eyeLight);
+                this.mesh.eyeLight = eyeLight;
+
+
+                this.originalColor = new THREE.Color(0x4a4a4a);
             }
 
             this.mesh.position.copy(this.pos);
@@ -4566,6 +4589,10 @@ self.onmessage = async function(e) {
             if (this.type === 'bee') {
                 this.mesh.leftWing.rotation.z = Math.sin(Date.now() * 0.05) * 0.5;
                 this.mesh.rightWing.rotation.z = -Math.sin(Date.now() * 0.05) * 0.5;
+            }
+
+            if (this.type === 'crawley' && this.mesh.eyeLight) {
+                this.mesh.eyeLight.visible = isNight;
             }
 
             // Only the host runs the mob AI and state changes.
@@ -4668,21 +4695,33 @@ self.onmessage = async function(e) {
                         }
                     }
                 } else if (this.aiState === 'DEPOSITING_HONEY') {
-                    // Find an empty spot next to the hive
                     const hive = hiveLocations.find(h => Math.hypot(h.x - this.pos.x, h.z - this.pos.z) < 3);
+                    let placedHoney = false;
                     if (hive) {
-                        for (let dx = -1; dx <= 1; dx++) {
-                            for (let dz = -1; dz <= 1; dz++) {
-                                if (dx === 0 && dz === 0) continue;
-                                const bx = hive.x + dx, by = hive.y, bz = hive.z + dz;
-                                if (getBlockAt(bx, by, bz) === 0) {
-                                    chunkManager.setBlockGlobal(bx, by, bz, 122); // Place honey
-                                    this.hasPollen = false;
-                                    this.aiState = 'SEARCHING_FOR_FLOWER';
-                                    break;
+                        // Search a 3x3x3 area around the hive for a valid spot
+                        for (let dy = 0; dy < 3; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                for (let dz = -1; dz <= 1; dz++) {
+                                    if (dx === 0 && dy === 0 && dz === 0) continue; // Don't place inside hive
+                                    const bx = hive.x + dx, by = hive.y + dy, bz = hive.z + dz;
+                                    // Honey must be placed in an empty space on top of a solid block
+                                    if (getBlockAt(bx, by, bz) === 0 && isSolid(getBlockAt(bx, by - 1, bz))) {
+                                        chunkManager.setBlockGlobal(bx, by, bz, 122); // Place honey
+                                        this.hasPollen = false;
+                                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                                        placedHoney = true;
+                                        break;
+                                    }
                                 }
+                                if (placedHoney) break;
                             }
+                            if (placedHoney) break;
                         }
+                    }
+                    if (!placedHoney) {
+                        // If no spot is found after a thorough search, give up and try again later.
+                        // This prevents the bee from getting stuck in this state forever.
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
                     }
                 }
             }
