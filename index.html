@@ -4537,6 +4537,7 @@ self.onmessage = async function(e) {
             this.flashEnd = 0;
             this.aiState = (this.type === 'bee') ? 'SEARCHING_FOR_FLOWER' : 'IDLE';
             this.hasPollen = false;
+            this.lingerTime = 0;
             this.animationTime = Math.random() * Math.PI * 2;
 
             const aggressionRnd = makeSeededRandom(worldSeed + this.id);
@@ -4677,11 +4678,18 @@ self.onmessage = async function(e) {
                 }
 
                 if (target && targetDistance < 1.5) {
-                    chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
-                    if (target.id === 123) { // if it was a hive
-                        hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
+                    if (this.lingerTime === 0) {
+                        this.lingerTime = Date.now(); // Start lingering
+                    } else if (Date.now() - this.lingerTime > 2000) { // Linger for 2 seconds
+                        chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
+                        if (target.id === 123) { // if it was a hive
+                            hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
+                        }
+                        target = null;
+                        this.lingerTime = 0; // Reset linger time
                     }
-                    target = null;
+                } else {
+                    this.lingerTime = 0; // Reset if not near a target
                 }
             }
 
@@ -4913,7 +4921,7 @@ self.onmessage = async function(e) {
             }
         };
         Mob.prototype.die = function (killerName) {
-            if (!isHost) return; // Only host can process death
+            if (!isHost && peers.size > 0) return; // Only host or single player can process death
 
             try {
                 scene.remove(this.mesh);
@@ -4960,7 +4968,9 @@ self.onmessage = async function(e) {
 
             mobs = mobs.filter(mob => {
                 const isNearPlayer = allPlayers.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < DESPAWN_RADIUS);
-                if (!isNearPlayer) {
+                const shouldDespawnTime = (isNight && mob.type === 'bee') || (!isNight && mob.type === 'crawley');
+
+                if (!isNearPlayer || shouldDespawnTime) {
                     scene.remove(mob.mesh);
                     disposeObject(mob.mesh);
                     const killMessage = JSON.stringify({ type: 'mob_kill', id: mob.id });
@@ -4971,6 +4981,7 @@ self.onmessage = async function(e) {
                     }
                     return false;
                 }
+
                 return true;
             });
 
