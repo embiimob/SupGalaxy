@@ -1110,6 +1110,8 @@ var lastWPress = 0;
         var isConnecting = false;
         var playerAvatars = new Map();
         var answerPollingIntervals = new Map();
+        var worldArchetype = null;
+        var gravity = 16.0;
         var offerPollingIntervals = new Map();
         var projectiles = [];
         var localAudioStream = null;
@@ -1307,6 +1309,77 @@ const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
 
+const ARCHETYPES = {
+    'Earth': {
+        name: 'Earth',
+        gravity: 16.0,
+        skyType: 'earth',
+        mobSpawnRules: { day: ['bee'], night: ['crawley'] },
+        terrainGenerator: 'generateStandardTerrain',
+        biomeModifications: {},
+        flora: ['trees', 'flowers', 'hives']
+    },
+    'Moon': {
+        name: 'Moon',
+        gravity: 8.0,
+        skyType: 'moon',
+        mobSpawnRules: { day: ['crawley'], night: [] },
+        terrainGenerator: 'generateMoonTerrain',
+        biomeModifications: { noWater: true },
+        flora: []
+    },
+    'Vulcan': {
+        name: 'Vulcan',
+        gravity: 16.0,
+        skyType: 'vulcan',
+        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
+        terrainGenerator: 'generateVulcanTerrain',
+        biomeModifications: { moreLava: true },
+        flora: []
+    },
+    'Desert': {
+        name: 'Desert',
+        gravity: 16.0,
+        skyType: 'desert',
+        mobSpawnRules: { day: [], night: ['crawley'] },
+        terrainGenerator: 'generateDesertTerrain',
+        biomeModifications: { onlyDesert: true },
+        flora: ['cactus']
+    },
+    'Water': {
+        name: 'Water World',
+        gravity: 16.0,
+        skyType: 'earth',
+        mobSpawnRules: { day: ['bee'], night: [] },
+        terrainGenerator: 'generateWaterWorldTerrain',
+        biomeModifications: { deepWater: true },
+        flora: ['trees', 'flowers', 'hives']
+    },
+    'Massive': {
+        name: 'Massive',
+        gravity: 32.0,
+        skyType: 'earth',
+        mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
+        terrainGenerator: 'generateStandardTerrain',
+        biomeModifications: { largeBiomes: true },
+        flora: ['trees', 'flowers', 'hives']
+    }
+};
+
+function selectArchetype(seed) {
+    if (worldArchetypes.has(seed)) {
+        return worldArchetypes.get(seed);
+    }
+    const rnd = makeSeededRandom(seed + '_archetype_selector');
+    const types = Object.keys(ARCHETYPES);
+    const selectedKey = types[Math.floor(rnd() * types.length)];
+    const archetype = ARCHETYPES[selectedKey];
+    worldArchetypes.set(seed, archetype);
+    return archetype;
+}
+
+var sentArchetypes = new Set();
+var worldArchetypes = new Map();
 const BLOCKS = {
         1: { name: 'Bedrock', color: '#0b0b0b' }, 2: { name: 'Grass', color: '#3fb34f' },
         3: { name: 'Dirt', color: '#7a4f29' }, 4: { name: 'Stone', color: '#9aa0a6' },
@@ -1428,33 +1501,6 @@ function placeCactus(chunkData, lx, cy, lz, rnd) {
         for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 9;
 }
 
-function pickBiome(n, biomes) {
-        if (n > 0.68) return biomes.find(b => b.key === 'snow') || biomes[0];
-        if (n < 0.25) return biomes.find(b => b.key === 'desert') || biomes[1];
-        if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
-        if (n > 0.60) return biomes.find(b => b.key === 'mountain') || biomes[4];
-        if (n < 0.35) return biomes.find(b => b.key === 'swamp') || biomes[5];
-        return biomes.find(b => b.key === 'plains') || biomes[0];
-}
-
-function generateChunkData(chunkKey) {
-        const worldSeed = chunkKey.split(':')[0];
-        const biomeRnd = makeSeededRandom(worldSeed + '_biomes');
-
-        const modifiedBiomes = BIOMES.map(biome => ({
-            ...biome,
-            heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
-            roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
-            featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5)
-        }));
-
-        const noise = makeNoise(worldSeed);
-        const blockNoise = makeNoise(worldSeed + '_block');
-        const chunkRnd = makeSeededRandom(chunkKey);
-        const cx = parseInt(chunkKey.split(':')[1]);
-        const cz = parseInt(chunkKey.split(':')[2]);
-        const chunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
-
 function placeHive(chunkData, lx, cy, lz, wx, wz) {
     const hiveHeight = 2 + Math.floor(Math.random() * 2);
     for (let i = 0; i < hiveHeight; i++) {
@@ -1465,46 +1511,227 @@ function placeHive(chunkData, lx, cy, lz, wx, wz) {
     self.postMessage({ type: 'hive_location', location: { x: wx, y: cy, z: wz } });
 }
 
-        var baseX = cx * CHUNK_SIZE;
-        var baseZ = cz * CHUNK_SIZE;
-        const hiveNoise = makeNoise(worldSeed + '_hive');
-        for (var lx = 0; lx < CHUNK_SIZE; lx++) {
-            for (var lz = 0; lz < CHUNK_SIZE; lz++) {
-                var wx = baseX + lx;
-                var wz = baseZ + lz;
-                var nx = (wx % MAP_SIZE) / MAP_SIZE * 10000;
-                var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
-                var n = fbm(noise, nx * 0.005, nz * 0.005, 5, 0.6);
-                var biome = pickBiome(n, modifiedBiomes);
-                var heightScale = biome.heightScale;
-                var roughness = biome.roughness;
-                var height = Math.floor(n * 40 * heightScale + 8);
-                if (n > 0.7) height += Math.floor((n - 0.7) * 60 * heightScale);
-                var localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5);
-                height += Math.floor(localN * 15 * roughness);
-                height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
-                for (var y = 0; y <= height; y++) {
-                    var id = BLOCK_AIR;
-                    if (y === 0) id = 1;
-                    else if (y < height - 3) id = 4;
-                    else if (y < height) id = 3;
-                    else {
-                        var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
-                        var paletteIndex = Math.floor(blockN * biome.palette.length);
-                        id = biome.palette[paletteIndex % biome.palette.length];
+function pickBiome(n, biomes, archetype) {
+        if (archetype.biomeModifications.onlyDesert) {
+            return biomes.find(b => b.key === 'desert') || biomes[1];
+        }
+        if (n > 0.68) return biomes.find(b => b.key === 'snow') || biomes[0];
+        if (n < 0.25) return biomes.find(b => b.key === 'desert') || biomes[1];
+        if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
+        if (n > 0.60) return biomes.find(b => b.key === 'mountain') || biomes[4];
+        if (n < 0.35) return biomes.find(b => b.key === 'swamp') || biomes[5];
+        return biomes.find(b => b.key === 'plains') || biomes[0];
+}
+
+function generateStandardTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const biomeRnd = makeSeededRandom(worldSeed + '_biomes');
+    const modifiedBiomes = BIOMES.map(biome => ({
+        ...biome,
+        heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
+        roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
+        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5)
+    }));
+    const noise = makeNoise(worldSeed);
+    const blockNoise = makeNoise(worldSeed + '_block');
+    const chunkRnd = makeSeededRandom(chunkKey);
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    var baseX = cx * CHUNK_SIZE;
+    var baseZ = cz * CHUNK_SIZE;
+    const hiveNoise = makeNoise(worldSeed + '_hive');
+    for (var lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (var lz = 0; lz < CHUNK_SIZE; lz++) {
+            var wx = baseX + lx;
+            var wz = baseZ + lz;
+            var nx = (wx % MAP_SIZE) / MAP_SIZE * 10000;
+            var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
+            const biomeNoiseScale = archetype.biomeModifications.largeBiomes ? 0.002 : 0.005;
+            var n = fbm(noise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
+            var biome = pickBiome(n, modifiedBiomes, archetype);
+            var heightScale = biome.heightScale;
+            var roughness = biome.roughness;
+            var height = Math.floor(n * 40 * heightScale + 8);
+            if (n > 0.7) height += Math.floor((n - 0.7) * 60 * heightScale);
+            var localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5);
+            height += Math.floor(localN * 15 * roughness);
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+            for (var y = 0; y <= height; y++) {
+                var id = BLOCK_AIR;
+                if (y === 0) id = 1;
+                else if (y < height - 3) id = 4;
+                else if (y < height) id = 3;
+                else {
+                    var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
+                    var paletteIndex = Math.floor(blockN * biome.palette.length);
+                    id = biome.palette[paletteIndex % biome.palette.length];
+                }
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+            if (!archetype.biomeModifications.noWater) {
+                for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
+            }
+            const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
+            if (archetype.flora.includes('hives') && biome.key === 'forest' && hiveValue > 0.98) {
+                placeHive(chunkData, lx, height + 1, lz, wx, wz);
+            }
+            else if (archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
+            else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+        }
+    }
+}
+
+function generateMoonTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const noise = makeNoise(worldSeed);
+    const craterNoise = makeNoise(worldSeed + '_craters');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 100;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 100;
+
+            let height = 30 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
+
+            // Add craters
+            const craterValue = fbm(craterNoise, nx * 0.5, nz * 0.5, 3, 0.5);
+            if (craterValue > 0.7) {
+                const craterDepth = (craterValue - 0.7) * 30;
+                height -= craterDepth;
+            }
+
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+
+            for (let y = 0; y <= height; y++) {
+                const id = (y === 0) ? 1 : 4; // Bedrock and Stone
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+        }
+    }
+}
+
+function generateVulcanTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const noise = makeNoise(worldSeed);
+    const mountainNoise = makeNoise(worldSeed + '_mountains');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
+
+            let mountainHeight = fbm(mountainNoise, nx * 0.2, nz * 0.2, 8, 0.6) * 150;
+            let groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 10;
+            let height = Math.max(mountainHeight, groundHeight);
+
+            // Volcanoes
+            if (mountainHeight > 80) {
+                const peak = 80 + (mountainHeight - 80);
+                if (height > peak - 5) {
+                    height = peak - (height - (peak - 5));
+                     if (height < peak - 10) {
+                        for(let y = height; y < peak - 10; y++) {
+                            chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; //Lava
+                        }
                     }
+                }
+            }
+
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+
+            for (let y = 0; y <= height; y++) {
+                let id = 4; // Stone
+                if (y < height - 5) id = 110; // Obsidian
+                if (y === 0) id = 1; // Bedrock
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+        }
+    }
+}
+
+function generateDesertTerrain(chunkData, chunkKey, archetype) {
+    generateStandardTerrain(chunkData, chunkKey, archetype);
+}
+
+function generateWaterWorldTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const islandNoise = makeNoise(worldSeed + '_islands');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+             const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 50;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 50;
+             let islandValue = fbm(islandNoise, nx, nz, 5, 0.5);
+             if (islandValue > 0.55) {
+                const elevation = (islandValue - 0.55) * 100;
+                let height = SEA_LEVEL + elevation;
+                height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+                 for (let y = 0; y <= height; y++) {
+                    let id = 3; // Dirt
+                    if (y < height - 3) id = 4; // Stone
+                    if (y === height) id = 2; // Grass
+                    if (y === 0) id = 1; // Bedrock
                     chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
                 }
-                for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
-
-                const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
-                if (biome.key === 'forest' && hiveValue > 0.98) { // Hives are rare and only in forests
-                    placeHive(chunkData, lx, height + 1, lz, wx, wz);
+            } else {
+                for (let y = 0; y <= SEA_LEVEL; y++) {
+                     let id = 6; // Water
+                    if (y < SEA_LEVEL - 20) id = 15; // Gravel
+                    if (y < SEA_LEVEL - 23) id = 4; // Stone
+                    if (y === 0) id = 1; // Bedrock
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
                 }
-                else if (biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
-                else if (biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
-                else if (biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
             }
+        }
+    }
+}
+
+function generateChunkData(chunkKey) {
+        const worldSeed = chunkKey.split(':')[0];
+        const archetype = selectArchetype(worldSeed);
+        if (!sentArchetypes.has(worldSeed)) {
+            self.postMessage({ type: 'world_archetype', archetype: archetype });
+            sentArchetypes.add(worldSeed);
+        }
+
+        const chunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
+
+        switch (archetype.terrainGenerator) {
+            case 'generateStandardTerrain':
+                generateStandardTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateMoonTerrain':
+                generateMoonTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateVulcanTerrain':
+                generateVulcanTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateDesertTerrain':
+                generateDesertTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateWaterWorldTerrain':
+                generateWaterWorldTerrain(chunkData, chunkKey, archetype);
+                break;
+            default:
+                generateStandardTerrain(chunkData, chunkKey, archetype);
         }
         return chunkData;
 }
@@ -2202,6 +2429,10 @@ self.onmessage = async function(e) {
                 hiveLocations.push(data.location);
             } else if (data.type === 'flower_location') {
                 flowerLocations.push(data.location);
+            } else if (data.type === 'world_archetype') {
+                worldArchetype = data.archetype;
+                gravity = data.archetype.gravity;
+                document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
             } else if (data.type === "server_updates") {
                 console.log('[WebRTC] Received server_updates:', data.servers);
                 var newServers = [];
@@ -5118,6 +5349,7 @@ self.onmessage = async function(e) {
             }
         };
         function manageMobs() {
+            if (!worldArchetype) return;
             if (!isHost && peers.size > 0) return;
             if (Date.now() - lastMobManagement < 5000) return;
             lastMobManagement = Date.now();
@@ -5132,11 +5364,13 @@ self.onmessage = async function(e) {
                 if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
             }
 
+            const allowedMobsToday = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+
             mobs = mobs.filter(mob => {
                 const isNearPlayer = allPlayers.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < DESPAWN_RADIUS);
-                const shouldDespawnTime = (isNight && mob.type === 'bee') || (!isNight && mob.type === 'crawley');
+                const isAllowedNow = allowedMobsToday.includes(mob.type);
 
-                if (!isNearPlayer || shouldDespawnTime) {
+                if (!isNearPlayer || !isAllowedNow) {
                     scene.remove(mob.mesh);
                     disposeObject(mob.mesh);
                     const killMessage = JSON.stringify({ type: 'mob_kill', id: mob.id });
@@ -5151,33 +5385,35 @@ self.onmessage = async function(e) {
                 return true;
             });
 
-            const mobType = isNight ? 'crawley' : 'bee';
-            const mobCap = isNight ? CRAWLEY_CAP : BEE_CAP;
+            for (const mobType of allowedMobsToday) {
+                const mobCap = (mobType === 'crawley') ? CRAWLEY_CAP : BEE_CAP;
+                const currentCount = mobs.filter(m => m.type === mobType).length;
 
-            if (mobs.filter(m => m.type === mobType).length < mobCap) {
-                const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
+                if (currentCount < mobCap) {
+                    const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
 
-                const angle = Math.random() * Math.PI * 2;
-                const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
-                const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
-                const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
+                    const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
+                    const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
 
-                const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
-                mobs.push(newMob);
+                    const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
+                    mobs.push(newMob);
 
-                const spawnMessage = JSON.stringify({
-                    type: 'mob_spawn',
-                    id: newMob.id,
-                    x: newMob.pos.x,
-                    y: newMob.pos.y,
-                    z: newMob.pos.z,
-                    hp: newMob.hp,
-                    mobType: newMob.type,
-                    isAggressive: newMob.isAggressive
-                });
-                for (const [peerUser, peerData] of peers.entries()) {
-                    if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
-                        peerData.dc.send(spawnMessage);
+                    const spawnMessage = JSON.stringify({
+                        type: 'mob_spawn',
+                        id: newMob.id,
+                        x: newMob.pos.x,
+                        y: newMob.pos.y,
+                        z: newMob.pos.z,
+                        hp: newMob.hp,
+                        mobType: newMob.type,
+                        isAggressive: newMob.isAggressive
+                    });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(spawnMessage);
+                        }
                     }
                 }
             }
@@ -7921,7 +8157,7 @@ self.onmessage = async function(e) {
                 player.x = modWrap(player.x, MAP_SIZE);
                 player.z = modWrap(player.z, MAP_SIZE);
 
-                player.vy -= 16.0 * dt;
+                player.vy -= gravity * dt;
                 var dy = player.vy * dt;
                 var newY = player.y + dy;
                 if (!checkCollision(player.x, newY, player.z)) {
