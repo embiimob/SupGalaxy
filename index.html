@@ -4266,6 +4266,48 @@ self.onmessage = async function(e) {
             }
             return false;
         }
+        function checkAndDeactivateHive(brokenX, brokenY, brokenZ) {
+            const HIVE_ID = 123;
+            let associatedHive = null;
+            let minDistance = Infinity;
+
+            // 1. Find the closest hive in hiveLocations that this broken block might belong to.
+            for (const hive of hiveLocations) {
+                const dist = Math.hypot(brokenX - hive.x, brokenY - hive.y, brokenZ - hive.z);
+                // A hive is a small vertical structure, so check within a reasonable radius.
+                if (dist < 10 && dist < minDistance) {
+                    minDistance = dist;
+                    associatedHive = hive;
+                }
+            }
+
+            if (!associatedHive) {
+                // This broken block was likely not part of a tracked hive.
+                return;
+            }
+
+            // 2. Scan the area around the associated hive's base to check for any remaining hive blocks.
+            let remainingHiveBlocks = 0;
+            const scanRadius = 3; // Check a 7x7 horizontal area
+            const scanHeight = 8; // Check 8 blocks up from the base
+            for (let y = associatedHive.y; y < associatedHive.y + scanHeight; y++) {
+                for (let x = associatedHive.x - scanRadius; x <= associatedHive.x + scanRadius; x++) {
+                    for (let z = associatedHive.z - scanRadius; z <= associatedHive.z + scanRadius; z++) {
+                        if (getBlockAt(x, y, z) === HIVE_ID) {
+                            remainingHiveBlocks++;
+                        }
+                    }
+                }
+            }
+
+            // 3. If no hive blocks remain, deactivate the hive by removing it from tracking.
+            if (remainingHiveBlocks === 0) {
+                console.log(`[HIVE] All blocks for hive at ${associatedHive.x},${associatedHive.y},${associatedHive.z} are gone. Deactivating.`);
+                hiveLocations = hiveLocations.filter(h => h.x !== associatedHive.x || h.y !== associatedHive.y || h.z !== associatedHive.z);
+                addMessage('A bee hive has been destroyed!', 3000);
+            }
+        }
+
         function removeBlockAt(wx, wy, wz) {
             var b = getBlockAt(wx, wy, wz);
             if (!b || b === BLOCK_AIR || b === 1 || b === 6) {
@@ -4305,6 +4347,11 @@ self.onmessage = async function(e) {
                 }
                 // Force an immediate light update
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+            }
+
+            if (b === 123 || b === 122) { // Hive or Honey
+                // Use a timeout to allow the block removal to fully process before checking.
+                setTimeout(() => checkAndDeactivateHive(wx, wy, wz), 100);
             }
         }
         function placeBlockAt(wx, wy, wz, bid) {
@@ -4665,8 +4712,49 @@ self.onmessage = async function(e) {
             this.vz *= (1 - 2 * dt);
 
             if (this.type === 'crawley') {
-                 this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 0.5;
+                // --- Stacking & Collision Physics for Crawlers ---
+                // 1. Horizontal separation from other crawlers to prevent blending.
+                for (const other of mobs) {
+                    if (other.id !== this.id && other.type === 'crawley') {
+                        const dx = this.pos.x - other.pos.x;
+                        const dz = this.pos.z - other.pos.z;
+                        const dist = Math.hypot(dx, dz);
+                        const min_dist = 0.9; // Crawler width
+
+                        if (dist < min_dist) {
+                            const overlap = (min_dist - dist) / dist;
+                            // Push this mob away from the other. This is a soft push to reduce jitter.
+                            this.pos.x += dx * overlap * 0.2;
+                            this.pos.z += dz * overlap * 0.2;
+                        }
+                    }
+                }
+
+                // 2. Vertical stacking logic.
+                // Find the highest support surface beneath the crawler (either ground or another crawler).
+                let groundY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 0.5;
+                let supportY = groundY;
+                for (const other of mobs) {
+                    if (other.id !== this.id && other.type === 'crawley') {
+                        const dist = Math.hypot(this.pos.x - other.pos.x, this.pos.z - other.pos.z);
+                        // If horizontally overlapping and the other mob is below us...
+                        if (dist < 0.9 && other.pos.y < this.pos.y) {
+                            // ...it can act as a support. Find the highest possible support.
+                            supportY = Math.max(supportY, other.pos.y + 0.9);
+                        }
+                    }
+                }
+
+                // 3. Apply gravity or rest on support.
+                if (this.pos.y > supportY) {
+                    // If airborne, fall down.
+                    this.pos.y = Math.max(supportY, this.pos.y - 16.0 * dt);
+                } else {
+                    // Otherwise, ensure we are resting on the highest support.
+                    this.pos.y = supportY;
+                }
             }
+
 
             // --- Torch Avoidance for Crawlers ---
             let avoidanceVector = new THREE.Vector3(0, 0, 0);
@@ -4701,24 +4789,47 @@ self.onmessage = async function(e) {
 
             // Crawley AI: Target hives/honey, then players
             if (this.type === 'crawley') {
-                const scanRadius = 8;
+                const scanRadius = 16; // Increased scan radius for more aggressive hive seeking
+                let hiveTarget = null;
+                let honeyTarget = null;
+                let minHiveDist = Infinity;
+                let minHoneyDist = Infinity;
+
+                // Scan for Hives and Honey separately to prioritize Hives.
                 for (let dx = -scanRadius; dx <= scanRadius; dx++) {
                     for (let dz = -scanRadius; dz <= scanRadius; dz++) {
-                        for (let dy = -3; dy <= 3; dy++) {
+                        for (let dy = -4; dy <= 4; dy++) { // Increased vertical scan
                             const bx = Math.floor(this.pos.x + dx);
                             const by = Math.floor(this.pos.y + dy);
                             const bz = Math.floor(this.pos.z + dz);
                             const blockId = getBlockAt(bx, by, bz);
-                            if (blockId === 123 || blockId === 122) { // Hive or Honey
-                                const dist = Math.hypot(bx - this.pos.x, bz - this.pos.z);
-                                if (dist < targetDistance) {
-                                    targetDistance = dist;
-                                    target = { x: bx, y: by, z: bz, id: blockId };
+
+                            if (blockId === 123) { // Hive Block
+                                const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                if (dist < minHiveDist) {
+                                    minHiveDist = dist;
+                                    hiveTarget = { x: bx, y: by, z: bz, id: blockId };
+                                }
+                            } else if (blockId === 122) { // Honey Block
+                                const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                if (dist < minHoneyDist) {
+                                    minHoneyDist = dist;
+                                    honeyTarget = { x: bx, y: by, z: bz, id: blockId };
                                 }
                             }
                         }
                     }
                 }
+
+                // Prioritize the Hive itself over Honey.
+                if (hiveTarget) {
+                    target = hiveTarget;
+                    targetDistance = minHiveDist;
+                } else if (honeyTarget) {
+                    target = honeyTarget;
+                    targetDistance = minHoneyDist;
+                }
+
 
                 if (target && targetDistance < 1.5) {
                     if (this.lingerTime === 0) {
@@ -4729,9 +4840,8 @@ self.onmessage = async function(e) {
                             safePlayAudio(soundBreak);
                         }
                         chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
-                        if (target.id === 123) { // if it was a hive
-                            hiveLocations = hiveLocations.filter(h => h.x !== target.x || h.y !== target.y || h.z !== target.z);
-                        }
+                        // Use a timeout to allow the block removal to fully process before checking.
+                        setTimeout(() => checkAndDeactivateHive(target.x, target.y, target.z), 100);
                         target = null;
                         this.lingerTime = 0; // Reset linger time
                     }
