@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -1332,7 +1333,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley', 'rockgolem'], night: ['crawley', 'rockgolem'] },
+        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
@@ -1341,7 +1342,7 @@ const ARCHETYPES = {
         name: 'Desert',
         gravity: 16.0,
         skyType: 'desert',
-        mobSpawnRules: { day: [], night: ['crawley', 'sandworm'] },
+        mobSpawnRules: { day: [], night: ['crawley'] },
         terrainGenerator: 'generateDesertTerrain',
         biomeModifications: { onlyDesert: true },
         flora: ['cactus']
@@ -1380,20 +1381,6 @@ function selectArchetype(seed) {
 
 var sentArchetypes = new Set();
 var worldArchetypes = new Map();
-
-const MOON_BASE_STRUCTURES = {
-    'corridor': [
-        [[107, 107, 107], [100, 100, 100], [107, 107, 107]],
-        [[107, 0, 107], [100, 0, 100], [107, 0, 107]],
-        [[107, 107, 107], [100, 100, 100], [107, 107, 107]],
-    ],
-    'room': [
-        [[107, 107, 107, 107, 107], [107, 100, 100, 100, 107], [107, 100, 100, 100, 107], [107, 100, 100, 100, 107], [107, 107, 107, 107, 107]],
-        [[107, 0, 0, 0, 107], [107, 0, 0, 0, 107], [107, 0, 0, 0, 107], [107, 0, 0, 0, 107], [107, 0, 0, 0, 107]],
-        [[107, 107, 107, 107, 107], [107, 107, 107, 107, 107], [107, 107, 107, 107, 107], [107, 107, 107, 107, 107], [107, 107, 107, 107, 107]],
-    ]
-};
-
 const BLOCKS = {
         1: { name: 'Bedrock', color: '#0b0b0b' }, 2: { name: 'Grass', color: '#3fb34f' },
         3: { name: 'Dirt', color: '#7a4f29' }, 4: { name: 'Stone', color: '#9aa0a6' },
@@ -1600,7 +1587,6 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
     const worldSeed = chunkKey.split(':')[0];
     const noise = makeNoise(worldSeed);
     const craterNoise = makeNoise(worldSeed + '_craters');
-    const baseNoise = makeNoise(worldSeed + '_moon_base');
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
     const baseX = cx * CHUNK_SIZE;
@@ -1627,23 +1613,6 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
             for (let y = 0; y <= height; y++) {
                 const id = (y === 0) ? 1 : 4; // Bedrock and Stone
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
-            }
-
-            // Moon bases
-            const baseValue = fbm(baseNoise, nx * 0.2, nz * 0.2, 2, 0.5);
-            if (baseValue > 0.8) {
-                const structureType = (fbm(baseNoise, nx * 2, nz * 2, 2, 0.5) > 0.5) ? 'room' : 'corridor';
-                const structure = MOON_BASE_STRUCTURES[structureType];
-                const structureHeight = height + 1;
-                for (let y = 0; y < structure.length; y++) {
-                    for (let z = 0; z < structure[y].length; z++) {
-                        for (let x = 0; x < structure[y][z].length; x++) {
-                            if (lx + x < CHUNK_SIZE && lz + z < CHUNK_SIZE && structureHeight + y < MAX_HEIGHT) {
-                                chunkData[(structureHeight + y) * CHUNK_SIZE * CHUNK_SIZE + (lz + z) * CHUNK_SIZE + (lx + x)] = structure[y][z][x];
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -1695,43 +1664,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
 }
 
 function generateDesertTerrain(chunkData, chunkKey, archetype) {
-    const worldSeed = chunkKey.split(':')[0];
-    const oasisNoise = makeNoise(worldSeed + '_oases');
-    const cx = parseInt(chunkKey.split(':')[1]);
-    const cz = parseInt(chunkKey.split(':')[2]);
-    const baseX = cx * CHUNK_SIZE;
-    const baseZ = cz * CHUNK_SIZE;
-
-    // First, generate the base terrain for the whole chunk as if it were a standard world.
-    const tempChunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
-    generateStandardTerrain(tempChunkData, chunkKey, archetype);
-
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            const wx = baseX + lx;
-            const wz = baseZ + lz;
-            const nx = (wx % MAP_SIZE) / MAP_SIZE * 20;
-            const nz = (wz % MAP_SIZE) / MAP_SIZE * 20;
-            let oasisValue = fbm(oasisNoise, nx, nz, 4, 0.6);
-
-            if (oasisValue > 0.7) {
-                // This is an oasis, so we copy the pre-generated standard terrain.
-                for (let y = 0; y < MAX_HEIGHT; y++) {
-                    const index = y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx;
-                    chunkData[index] = tempChunkData[index];
-                }
-            } else {
-                // This is desert, so we generate the sandy terrain.
-                const height = 40 + fbm(makeNoise(worldSeed), nx * 2, nz * 2, 5, 0.5) * 10;
-                for (let y = 0; y <= height; y++) {
-                    let id = 5; // Sand
-                    if (y < height - 5) id = 118; // Sandstone
-                    if (y === 0) id = 1; // Bedrock
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
-                }
-            }
-        }
-    }
+    generateStandardTerrain(chunkData, chunkKey, archetype);
 }
 
 function generateWaterWorldTerrain(chunkData, chunkKey, archetype) {
@@ -1741,29 +1674,27 @@ function generateWaterWorldTerrain(chunkData, chunkKey, archetype) {
     const cz = parseInt(chunkKey.split(':')[2]);
     const baseX = cx * CHUNK_SIZE;
     const baseZ = cz * CHUNK_SIZE;
-
-    // First, generate the base terrain for the whole chunk as if it were a standard world.
-    const tempChunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
-    generateStandardTerrain(tempChunkData, chunkKey, archetype);
-
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            const wx = baseX + lx;
+             const wx = baseX + lx;
             const wz = baseZ + lz;
             const nx = (wx % MAP_SIZE) / MAP_SIZE * 50;
             const nz = (wz % MAP_SIZE) / MAP_SIZE * 50;
-            let islandValue = fbm(islandNoise, nx, nz, 5, 0.5);
-
-            if (islandValue > 0.55) {
-                // This is land, so we copy the pre-generated standard terrain.
-                for (let y = 0; y < MAX_HEIGHT; y++) {
-                    const index = y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx;
-                    chunkData[index] = tempChunkData[index];
+             let islandValue = fbm(islandNoise, nx, nz, 5, 0.5);
+             if (islandValue > 0.55) {
+                const elevation = (islandValue - 0.55) * 100;
+                let height = SEA_LEVEL + elevation;
+                height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+                 for (let y = 0; y <= height; y++) {
+                    let id = 3; // Dirt
+                    if (y < height - 3) id = 4; // Stone
+                    if (y === height) id = 2; // Grass
+                    if (y === 0) id = 1; // Bedrock
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
                 }
             } else {
-                // This is water, so we generate the deep ocean floor.
                 for (let y = 0; y <= SEA_LEVEL; y++) {
-                    let id = 6; // Water
+                     let id = 6; // Water
                     if (y < SEA_LEVEL - 20) id = 15; // Gravel
                     if (y < SEA_LEVEL - 23) id = 4; // Stone
                     if (y === 0) id = 1; // Bedrock
@@ -4878,69 +4809,86 @@ self.onmessage = async function(e) {
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.vx = 0;
             this.vz = 0;
-            this.hp = 10;
-            this.speed = 0.02 + Math.random() * 0.03;
+            this.hp = 10; // Default for bees
+            this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
             this.attackCooldown = 0;
             this.flashEnd = 0;
-            this.aiState = 'IDLE';
+            this.aiState = (this.type === 'bee') ? 'SEARCHING_FOR_FLOWER' : 'IDLE';
             this.hasPollen = false;
             this.lingerTime = 0;
             this.animationTime = Math.random() * Math.PI * 2;
-            this.isAggressive = makeSeededRandom(worldSeed + '_' + type + '_aggro')() > 0.5;
 
             if (this.type === 'bee') {
-                this.hp = 10;
-                this.speed = 0.04 + Math.random() * 0.02;
-                this.aiState = 'SEARCHING_FOR_FLOWER';
+                const worldBeeAggressionFactor = makeSeededRandom(worldSeed + '_bee_aggro')();
+                this.isAggressive = worldBeeAggressionFactor > 0.5;
+            } else { // crawley
+                const worldCrawleyAggressionFactor = makeSeededRandom(worldSeed + '_crawley_aggro')();
+                this.isAggressive = worldCrawleyAggressionFactor > 0.5;
+            }
+
+            if (this.type === 'bee') {
                 this.mesh = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
                 const wingMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+
                 const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 1);
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
                 this.mesh.add(body);
+
                 const wingGeo = new THREE.BoxGeometry(0.8, 0.1, 0.4);
                 const leftWing = new THREE.Mesh(wingGeo, wingMat);
                 leftWing.position.set(-0.5, 0.2, 0);
                 this.mesh.add(leftWing);
+
                 const rightWing = new THREE.Mesh(wingGeo, wingMat);
                 rightWing.position.set(0.5, 0.2, 0);
                 this.mesh.add(rightWing);
+
                 this.mesh.leftWing = leftWing;
                 this.mesh.rightWing = rightWing;
+
                 this.originalColor = new THREE.Color(0xffff00);
-            } else if (this.type === 'crawley') {
+            } else { // crawley
                 this.mesh = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+
                 const eyeColorRnd = makeSeededRandom(worldSeed + '_eye_color_' + this.id)();
                 let eyeColor;
-                if (eyeColorRnd < 0.1) {
+                if (eyeColorRnd < 0.1) { // 10% chance for blue
                     eyeColor = 0x0000ff;
                     this.eyeColor = 'blue';
                     this.hp = 15;
-                } else if (eyeColorRnd < 0.5) {
+                } else if (eyeColorRnd < 0.5) { // 40% chance for green
                     eyeColor = 0x00ff00;
                     this.eyeColor = 'green';
                     this.hp = 5;
-                } else {
+                } else { // 50% chance for red
                     eyeColor = 0xff0000;
                     this.eyeColor = 'red';
                     this.hp = 10;
                 }
                 const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+
+
                 const bodyGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
                 const body = new THREE.Mesh(bodyGeo, bodyMat);
                 this.mesh.add(body);
+
                 const eyeGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
+
                 const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
                 leftEye.position.set(-0.25, 0.2, -0.45);
                 this.mesh.add(leftEye);
+
                 const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
                 rightEye.position.set(0.25, 0.2, -0.45);
                 this.mesh.add(rightEye);
+
                 const eyeLight = new THREE.PointLight(0xff0000, 1, 5);
                 eyeLight.position.set(0, 0.2, -0.5);
                 this.mesh.add(eyeLight);
                 this.mesh.eyeLight = eyeLight;
+
                 this.mesh.legs = [];
                 const legGeo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
                 for (let i = 0; i < 6; i++) {
@@ -4950,36 +4898,8 @@ self.onmessage = async function(e) {
                     this.mesh.add(leg);
                     this.mesh.legs.push(leg);
                 }
+
                 this.originalColor = new THREE.Color(0x4a4a4a);
-            } else if (this.type === 'sandworm') {
-                this.hp = 30;
-                this.speed = 0.01 + Math.random() * 0.01;
-                this.aiState = 'BURROWED';
-                this.mesh = new THREE.Group();
-                const segmentMat = new THREE.MeshLambertMaterial({ color: 0xc2b280 });
-                for (let i = 0; i < 5; i++) {
-                    const segmentGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-                    const segment = new THREE.Mesh(segmentGeo, segmentMat);
-                    segment.position.y = -1.5 * i;
-                    this.mesh.add(segment);
-                }
-                this.originalColor = new THREE.Color(0xc2b280);
-            } else if (this.type === 'rockgolem') {
-                this.hp = 40;
-                this.speed = 0.01 + Math.random() * 0.005;
-                this.mesh = new THREE.Group();
-                const rockMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-                const bodyGeo = new THREE.BoxGeometry(2, 3, 1);
-                const body = new THREE.Mesh(bodyGeo, rockMat);
-                this.mesh.add(body);
-                const armGeo = new THREE.BoxGeometry(1, 2.5, 1);
-                const leftArm = new THREE.Mesh(armGeo, rockMat);
-                leftArm.position.set(-1.5, 0, 0);
-                this.mesh.add(leftArm);
-                const rightArm = new THREE.Mesh(armGeo, rockMat);
-                rightArm.position.set(1.5, 0, 0);
-                this.mesh.add(rightArm);
-                this.originalColor = new THREE.Color(0x888888);
             }
 
             this.mesh.userData.mobId = this.id;
@@ -5316,34 +5236,14 @@ self.onmessage = async function(e) {
 
             if (this.type === 'crawley' && this.mesh.legs) {
                 if (isMoving) {
-                    this.animationTime += dt * 15;
-                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05;
+                    this.animationTime += dt * 15; // Animation speed
+                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
                     this.mesh.legs.forEach((leg, i) => {
                         const side = (i % 2 === 0) ? 1 : -1;
                         leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
                     });
                 } else {
                     this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
-                }
-            } else if (this.type === 'sandworm') {
-                if (this.aiState === 'BURROWED') {
-                    this.mesh.visible = false;
-                    if (target && targetDistance < 5) {
-                        this.aiState = 'EMERGING';
-                        this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) - 3;
-                        this.mesh.visible = true;
-                    }
-                } else if (this.aiState === 'EMERGING') {
-                    this.pos.y += 4 * dt;
-                    if (this.pos.y >= chunkManager.getSurfaceY(this.pos.x, this.pos.z)) {
-                        this.aiState = 'ATTACKING';
-                    }
-                }
-            } else if (this.type === 'rockgolem') {
-                if (isMoving) {
-                    this.animationTime += dt * 5;
-                    this.mesh.children[1].rotation.x = Math.sin(this.animationTime) * 0.5;
-                    this.mesh.children[2].rotation.x = -Math.sin(this.animationTime) * 0.5;
                 }
             }
 
@@ -5421,21 +5321,19 @@ self.onmessage = async function(e) {
             mobs = mobs.filter(m => m.id !== this.id);
             addMessage('Mob defeated!');
 
-            let points = 10;
-            if (this.type === 'crawley') {
-                if (this.eyeColor === 'red') points = 20;
-                else if (this.eyeColor === 'blue') points = 30;
-            } else if (this.type === 'sandworm') {
-                points = 50;
-            } else if (this.type === 'rockgolem') {
-                points = 40;
+            // Award score to the killer
+            let points = 10; // Default for green
+            if (this.eyeColor === 'red') {
+                points = 20; // Double points
+            } else if (this.eyeColor === 'blue') {
+                points = 30; // Triple points
             }
 
             if (killerName === userName) {
                 player.score += points;
                 document.getElementById('score').innerText = player.score;
                 addMessage(`+${points} score`);
-                safePlayAudio(soundHit);
+                safePlayAudio(soundHit); // Play a sound for getting points
             } else {
                 const killerPeer = peers.get(killerName);
                 if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
@@ -5443,6 +5341,7 @@ self.onmessage = async function(e) {
                 }
             }
 
+            // Broadcast the kill to all clients
             const killMessage = JSON.stringify({ type: 'mob_kill', id: this.id });
             for (const [peerUser, peerData] of peers.entries()) {
                 if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
@@ -5458,8 +5357,6 @@ self.onmessage = async function(e) {
 
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
-            const SANDWORM_CAP = 5;
-            const ROCKGOLEM_CAP = 10;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -5490,14 +5387,7 @@ self.onmessage = async function(e) {
             });
 
             for (const mobType of allowedMobsToday) {
-                let mobCap;
-                switch (mobType) {
-                    case 'crawley': mobCap = CRAWLEY_CAP; break;
-                    case 'bee': mobCap = BEE_CAP; break;
-                    case 'sandworm': mobCap = SANDWORM_CAP; break;
-                    case 'rockgolem': mobCap = ROCKGOLEM_CAP; break;
-                    default: mobCap = 0;
-                }
+                const mobCap = (mobType === 'crawley') ? CRAWLEY_CAP : BEE_CAP;
                 const currentCount = mobs.filter(m => m.type === mobType).length;
 
                 if (currentCount < mobCap) {
@@ -8781,5 +8671,6 @@ self.onmessage = async function(e) {
         }
         console.log('[SYSTEM] Script loaded');
     </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"f66a24b9c76746a1948052a4bac31597","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
