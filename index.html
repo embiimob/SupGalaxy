@@ -1068,6 +1068,7 @@ var lastWPress = 0;
         var joystick = { up: false, down: false, left: false, right: false };
         var lastFrame = performance.now();
         var mouseLocked = false;
+        var lastMobBatchTime = 0;
         var lastMobManagement = 0;
         var deathScreenShown = false;
         var isDying = false;
@@ -4807,6 +4808,8 @@ self.onmessage = async function(e) {
             this.id = id || Date.now();
             this.type = type;
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
+            this.targetPos = new THREE.Vector3().copy(this.pos);
+            this.lastUpdateTime = 0;
             this.vx = 0;
             this.vz = 0;
             this.hp = 10; // Default for bees
@@ -4922,9 +4925,19 @@ self.onmessage = async function(e) {
 
             // Only the host runs the mob AI and state changes.
             if (!isHost && peers.size > 0) {
-                // On clients, just update the mesh position smoothly.
-                this.mesh.position.lerp(this.pos, 0.1);
-                // Update flash effect on clients too
+                // Interpolate position for smooth movement on clients
+                if (this.lastUpdateTime > 0) {
+                    const now = performance.now();
+                    const timeSinceUpdate = now - this.lastUpdateTime;
+                    const interpolationFactor = Math.min(1, timeSinceUpdate / 100); // 100ms interval
+                    this.pos.lerp(this.targetPos, interpolationFactor);
+                    this.mesh.position.copy(this.pos);
+                } else {
+                    // Snap to position if no updates have been received yet
+                    this.pos.copy(this.targetPos);
+                    this.mesh.position.copy(this.pos);
+                }
+
                 if (Date.now() < this.flashEnd) {
                     if (this.mesh.material) this.mesh.material.color.set(0xff0000);
                     else this.mesh.children[0].material.color.set(0xff0000);
@@ -5250,22 +5263,6 @@ self.onmessage = async function(e) {
 
             this.mesh.position.copy(this.pos);
 
-            // Host broadcasts the mob's state to all clients.
-            const updateMessage = JSON.stringify({
-                type: 'mob_update',
-                id: this.id,
-                x: this.pos.x,
-                y: this.pos.y,
-                z: this.pos.z,
-                hp: this.hp,
-                mobType: this.type
-            });
-
-            for (const [peerUser, peerData] of peers.entries()) {
-                if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
-                    peerData.dc.send(updateMessage);
-                }
-            }
         };
         Mob.prototype.hurt = function (dmg, attackerName) {
             if (!isHost && peers.size > 0) return; // Only host or single player can process damage
@@ -6394,6 +6391,32 @@ self.onmessage = async function(e) {
                                 mobs.push(newMob);
                             }
                             break;
+                        case 'mob_state_batch':
+                            if (!isHost) {
+                                const receivedMobIds = new Set();
+                                for (const mobState of data.mobs) {
+                                    receivedMobIds.add(mobState.id);
+                                    let mob = mobs.find(m => m.id === mobState.id);
+                                    if (!mob) {
+                                        mob = new Mob(mobState.x, mobState.z, mobState.id, mobState.type);
+                                        mobs.push(mob);
+                                    }
+                                    mob.targetPos.set(mobState.x, mobState.y, mobState.z);
+                                    mob.hp = mobState.hp;
+                                    mob.isAggressive = mobState.isAggressive;
+                                    mob.lastUpdateTime = performance.now();
+                                }
+                                mobs = mobs.filter(mob => {
+                                    if (!receivedMobIds.has(mob.id)) {
+                                        scene.remove(mob.mesh);
+                                        disposeObject(mob.mesh);
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                            }
+                            break;
+
                         case 'mob_update':
                             let mob = mobs.find(m => m.id === data.id);
                             if (!mob) {
@@ -8316,6 +8339,31 @@ self.onmessage = async function(e) {
                         }
                     }
                 }
+
+                if (isHost && now - lastMobBatchTime > 100) {
+                    lastMobBatchTime = now;
+                    const mobStates = mobs.map(mob => ({
+                        id: mob.id,
+                        x: mob.pos.x,
+                        y: mob.pos.y,
+                        z: mob.pos.z,
+                        hp: mob.hp,
+                        type: mob.type,
+                        isAggressive: mob.isAggressive
+                    }));
+
+                    const batchMessage = JSON.stringify({
+                        type: 'mob_state_batch',
+                        mobs: mobStates
+                    });
+
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(batchMessage);
+                        }
+                    }
+                }
+
                 for (var entry of playerAvatars) {
                     var username = entry[0];
                     var avatar = entry[1];
