@@ -3211,6 +3211,34 @@ self.onmessage = async function(e) {
             for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 9);
         };
         ChunkManager.prototype.buildChunkMesh = function (chunk) {
+            const faceData = [
+                { // right
+                    dir: [1, 0, 0],
+                    corners: [[1, 1, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1]],
+                },
+                { // left
+                    dir: [-1, 0, 0],
+                    corners: [[0, 1, 1], [0, 0, 1], [0, 0, 0], [0, 1, 0]],
+                },
+                { // top
+                    dir: [0, 1, 0],
+                    corners: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
+                },
+                { // bottom
+                    dir: [0, -1, 0],
+                    corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
+                },
+                { // front
+                    dir: [0, 0, 1],
+                    corners: [[1, 1, 1], [1, 0, 1], [0, 0, 1], [0, 1, 1]],
+                },
+                { // back
+                    dir: [0, 0, -1],
+                    corners: [[0, 1, 0], [0, 0, 0], [1, 0, 0], [1, 1, 0]],
+                },
+            ];
+            const uvs = [[1, 1], [1, 0], [0, 0], [0, 1]];
+
             updateTorchRegistry(chunk);
             if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
             var lists = {};
@@ -3243,59 +3271,53 @@ self.onmessage = async function(e) {
                         var renderX = renderBaseX + x;
                         var renderZ = renderBaseZ + z;
 
-                        var exposed = (
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y + 1, z) === BLOCK_AIR ||
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y - 1, z) === BLOCK_AIR ||
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z + 1) === BLOCK_AIR ||
-                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z - 1) === BLOCK_AIR
-                        );
-                        if (!exposed) continue;
-
                         const coordKey = `${wx},${y},${wz}`;
                         const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
                         const materialKey = `${id}-${blockOriginSeed}`;
 
                         if (!lists[materialKey]) {
                             lists[materialKey] = {
-                                positions: [],
-                                seed: blockOriginSeed,
-                                blockId: id
+                                positions: [], normals: [], uvs: [], indices: [],
+                                seed: blockOriginSeed, blockId: id, vertOffset: 0
                             };
                         }
-                        lists[materialKey].positions.push({ x: renderX, y: y, z: renderZ });
+                        const list = lists[materialKey];
+
+                        for (const { dir, corners } of faceData) {
+                            const neighborId = this.getBlockGlobal(chunk.cx, chunk.cz, x + dir[0], y + dir[1], z + dir[2]);
+                            const neighborInfo = BLOCKS[neighborId] || {};
+
+                            if (neighborId === BLOCK_AIR || neighborInfo.transparent) {
+                                for (let i = 0; i < 4; i++) {
+                                    const corner = corners[i];
+                                    list.positions.push(renderX + corner[0], y + corner[1], renderZ + corner[2]);
+                                    list.normals.push(...dir);
+                                    list.uvs.push(...uvs[i]);
+                                }
+                                list.indices.push(
+                                    list.vertOffset, list.vertOffset + 1, list.vertOffset + 2,
+                                    list.vertOffset + 2, list.vertOffset + 3, list.vertOffset
+                                );
+                                list.vertOffset += 4;
+                            }
+                        }
                     }
                 }
             }
             var group = new THREE.Group();
             for (var matKey in lists) {
                 const list = lists[matKey];
-                if (!list.positions || list.positions.length === 0) continue;
+                if (list.positions.length === 0) continue;
 
                 var id = list.blockId;
                 var seed = list.seed;
-                var box = new THREE.BoxGeometry(1, 1, 1);
-                var positions = []; var normals = []; var uvs = []; var indices = []; var vertOffset = 0;
-                for (var p of list.positions) {
-                    var posAttr = box.attributes.position.array;
-                    var normAttr = box.attributes.normal.array;
-                    var uvAttr = box.attributes.uv.array;
-                    var idxAttr = box.index.array;
-                    for (var vi = 0; vi < box.attributes.position.count; vi++) {
-                        positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
-                        normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
-                        uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
-                    }
-                    for (var ii = 0; ii < idxAttr.length; ii++) indices.push(idxAttr[ii] + vertOffset);
-                    vertOffset += box.attributes.position.count;
-                }
                 var geom = new THREE.BufferGeometry();
-                geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-                geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-                geom.setIndex(indices);
+                geom.setAttribute('position', new THREE.Float32BufferAttribute(list.positions, 3));
+                geom.setAttribute('normal', new THREE.Float32BufferAttribute(list.normals, 3));
+                geom.setAttribute('uv', new THREE.Float32BufferAttribute(list.uvs, 2));
+                geom.setIndex(list.indices);
                 geom.computeBoundingSphere();
+
                 var info = BLOCKS[id] || { color: '#ff00ff' };
                 var mat;
 
