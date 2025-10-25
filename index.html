@@ -780,6 +780,7 @@
 <body>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r134/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r134/examples/js/utils/BufferGeometryUtils.js"></script>
     <div id="loginOverlay">
         <div id="loginCard">
             <label>World name</label>
@@ -1050,6 +1051,7 @@
         };
         var isAttacking = false;
         var attackStartTime = 0;
+        var useGreedyMesher = false; // <<< FEATURE FLAG
 var isSprinting = false;
 var lastWPress = 0;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
@@ -3210,319 +3212,43 @@ self.onmessage = async function(e) {
             var h = 1 + Math.floor(rnd() * 3);
             for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 9);
         };
-        function mergeGeometries(geometries) {
-            if (geometries.length === 0) return new THREE.BufferGeometry();
-            if (geometries.length === 1) return geometries[0];
-
-            const merged = new THREE.BufferGeometry();
-            const positions = [];
-            const normals = [];
-            const uvs = [];
-            const indices = [];
-
-            let indexOffset = 0;
-
-            for (const geometry of geometries) {
-                const positionAttr = geometry.attributes.position;
-                const normalAttr = geometry.attributes.normal;
-                const uvAttr = geometry.attributes.uv;
-                const indexAttr = geometry.index;
-
-                for (let i = 0; i < positionAttr.count; i++) {
-                    positions.push(
-                        positionAttr.getX(i),
-                        positionAttr.getY(i),
-                        positionAttr.getZ(i)
-                    );
-                }
-
-                for (let i = 0; i < normalAttr.count; i++) {
-                    normals.push(
-                        normalAttr.getX(i),
-                        normalAttr.getY(i),
-                        normalAttr.getZ(i)
-                    );
-                }
-
-                if (uvAttr) {
-                    for (let i = 0; i < uvAttr.count; i++) {
-                        uvs.push(
-                            uvAttr.getX(i),
-                            uvAttr.getY(i)
-                        );
-                    }
-                }
-
-                for (let i = 0; i < indexAttr.count; i++) {
-                    indices.push(indexAttr.getX(i) + indexOffset);
-                }
-
-                indexOffset += positionAttr.count;
-    }
-
-            merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-            if (uvs.length > 0) {
-                merged.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-            }
-            merged.setIndex(indices);
-
-            return merged;
-        }
-
-        function buildGreedyMesh(chunk, chunkManager, foreignBlockOrigins, worldSeed) {
-            const geos = {};
-
-            const getMaterialKey = (x, y, z) => {
-                const blockId = chunk.get(x, y, z);
-                if (blockId === BLOCK_AIR) return null;
-
-                const wx = chunk.cx * CHUNK_SIZE + x;
-                const wz = chunk.cz * CHUNK_SIZE + z;
-                const coordKey = `${wx},${y},${wz}`;
-                const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
-                return `${blockId}-${blockOriginSeed}`;
-            };
-
-            for (let d = 0; d < 3; d++) {
-                const u = (d + 1) % 3;
-                const v = (d + 2) % 3;
-                const dims = [CHUNK_SIZE, MAX_HEIGHT, CHUNK_SIZE];
-                const x = [0, 0, 0];
-                const q = [0, 0, 0];
-                q[d] = 1;
-
-                const mask = new Array(dims[u] * dims[v]).fill(null);
-
-                for (x[d] = -1; x[d] < dims[d];) {
-                    let n = 0;
-                    for (x[v] = 0; x[v] < dims[v]; x[v]++) {
-                        for (x[u] = 0; x[u] < dims[u]; x[u]++) {
-                            const a = (x[d] >= 0) ? getMaterialKey(x[0], x[1], x[2]) : null;
-                            const b = (x[d] < dims[d] - 1) ? getMaterialKey(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : null;
-
-                            const blockAInfo = a ? BLOCKS[parseInt(a.split('-')[0])] : null;
-                            const blockBInfo = b ? BLOCKS[parseInt(b.split('-')[0])] : null;
-
-                            const aIsSolid = blockAInfo && !blockAInfo.transparent;
-                            const bIsSolid = blockBInfo && !blockBInfo.transparent;
-
-                            if (a === b) { // Same material key, no face
-                                mask[n++] = null;
-                            } else if (aIsSolid && (!b || !bIsSolid)) { // A is solid, B is not
-                                mask[n++] = a;
-                            } else if (bIsSolid && (!a || !aIsSolid)) { // B is solid, A is not
-                                mask[n++] = `-${b}`; // Use string prefix for back face
-                            } else { // Both transparent or both air
-                                mask[n++] = null;
-                            }
-                        }
-                    }
-
-                    x[d]++;
-
-                    n = 0;
-                    for (let j = 0; j < dims[v]; j++) {
-                        for (let i = 0; i < dims[u];) {
-                            if (mask[n]) {
-                                const current = mask[n];
-                                let w = 1;
-                                while (i + w < dims[u] && mask[n + w] === current) {
-                                    w++;
-                                }
-
-                                let h = 1;
-                                let done = false;
-                                for (let k = j + 1; k < dims[v]; k++) {
-                                    for (let l = 0; l < w; l++) {
-                                        if (mask[n + l + k * dims[u]] !== current) {
-                                            done = true;
-                                            break;
-                                        }
-                                    }
-                                    if (done) break;
-                                    h++;
-                                }
-
-                                x[u] = i;
-                                x[v] = j;
-
-                                const du = [0, 0, 0];
-                                const dv = [0, 0, 0];
-                                du[u] = w;
-                                dv[v] = h;
-
-                                const isBackFace = current.startsWith('-');
-                                const normal = [0, 0, 0];
-                                normal[d] = isBackFace ? -1 : 1;
-
-                                const materialKey = isBackFace ? current.substring(1) : current;
-                                if (!geos[materialKey]) geos[materialKey] = { positions: [], normals: [], uvs: [], indices: [], vertOffset: 0 };
-
-                                const geo = geos[materialKey];
-                                const pos = [x[0], x[1], x[2]];
-                                pos[d] += 1; // Offset the quad to the block boundary
-
-                                const p1 = [pos[0], pos[1], pos[2]];
-                                const p2 = [pos[0] + du[0], pos[1] + du[1], pos[2] + du[2]];
-                                const p3 = [pos[0] + dv[0], pos[1] + dv[1], pos[2] + dv[2]];
-                                const p4 = [pos[0] + du[0] + dv[0], pos[1] + du[1] + dv[1], pos[2] + du[2] + dv[2]];
-
-                                geo.positions.push(p1[0], p1[1], p1[2]);
-                                geo.positions.push(p3[0], p3[1], p3[2]);
-                                geo.positions.push(p4[0], p4[1], p4[2]);
-                                geo.positions.push(p2[0], p2[1], p2[2]);
-
-                                for(let k=0; k<4; k++) geo.normals.push(normal[0], normal[1], normal[2]);
-                                geo.uvs.push(0, 0, 0, h, w, h, w, 0);
-
-                                const off = geo.vertOffset;
-                                if (isBackFace) {
-                                    geo.indices.push(off, off + 1, off + 2, off, off + 2, off + 3);
-                                } else {
-                                    geo.indices.push(off + 2, off + 1, off, off + 3, off + 2, off);
-                                }
-                                geo.vertOffset += 4;
-
-                                for (let l = 0; l < h; l++) {
-                                    for (let m = 0; m < w; m++) {
-                                        mask[n + m + l * dims[u]] = null;
-                                    }
-                                }
-                                i += w;
-                                n += w;
-                            } else {
-                                i++;
-                                n++;
-                            }
-                        }
-                    }
-                }
-            }
-
-            const group = new THREE.Group();
-            for (const matKey in geos) {
-                const geoData = geos[matKey];
-                if (geoData.positions.length === 0) continue;
-
-                const geom = new THREE.BufferGeometry();
-                geom.setAttribute('position', new THREE.Float32BufferAttribute(geoData.positions, 3));
-                geom.setAttribute('normal', new THREE.Float32BufferAttribute(geoData.normals, 3));
-                geom.setAttribute('uv', new THREE.Float32BufferAttribute(geoData.uvs, 2));
-                geom.setIndex(geoData.indices);
-
-                const [id, seed] = matKey.split('-');
-                const info = BLOCKS[id] || { color: '#ff00ff' };
-                let mat;
-
-                if (info.light) {
-                    mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
-                } else if (info.transparent) {
-                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
-                } else {
-                    const blockTexture = createBlockTexture(seed, id);
-                    mat = new THREE.MeshStandardMaterial({ map: blockTexture });
-                }
-
-                const mesh = new THREE.Mesh(geom, mat);
-                group.add(mesh);
-            }
-            return group;
-        }
         ChunkManager.prototype.buildChunkMesh = function (chunk) {
-            const useGreedyMesher = true; // FEATURE FLAG
-
             updateTorchRegistry(chunk);
-            if (chunk.mesh) {
-                meshGroup.remove(chunk.mesh);
-                disposeObject(chunk.mesh);
-                chunk.mesh = null;
-            }
+            if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
 
-            let group;
             if (useGreedyMesher) {
-                group = buildGreedyMesh(chunk, this, foreignBlockOrigins, worldSeed);
-            } else {
-                // ... Original meshing logic ...
-                var lists = {};
-                for (var x = 0; x < CHUNK_SIZE; x++) {
-                    for (var z = 0; z < CHUNK_SIZE; z++) {
-                        for (var y = 0; y < MAX_HEIGHT; y++) {
-                            var id = chunk.get(x, y, z);
-                            if (!id || id === BLOCK_AIR) continue;
+                const group = buildGreedyMesh(chunk, foreignBlockOrigins, worldSeed);
+                const pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+                const pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+                const baseX = chunk.cx * CHUNK_SIZE;
+                const baseZ = chunk.cz * CHUNK_SIZE;
+                let renderBaseX = baseX;
+                let renderBaseZ = baseZ;
 
-                            var wx = modWrap(chunk.cx * CHUNK_SIZE + x, MAP_SIZE);
-                            var wz = modWrap(chunk.cz * CHUNK_SIZE + z, MAP_SIZE);
-
-                            var exposed = (
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x, y + 1, z) === BLOCK_AIR ||
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x, y - 1, z) === BLOCK_AIR ||
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z + 1) === BLOCK_AIR ||
-                                this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z - 1) === BLOCK_AIR
-                            );
-                            if (!exposed) continue;
-
-                            const coordKey = `${wx},${y},${wz}`;
-                            const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
-                            const materialKey = `${id}-${blockOriginSeed}`;
-
-                            if (!lists[materialKey]) {
-                                lists[materialKey] = { positions: [], seed: blockOriginSeed, blockId: id };
-                            }
-                            lists[materialKey].positions.push({ x: x, y: y, z: z });
-                        }
-                    }
+                if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
+                    if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
+                    else renderBaseX += MAP_SIZE;
                 }
-                group = new THREE.Group();
-                for (var matKey in lists) {
-                    const list = lists[matKey];
-                    if (!list.positions || list.positions.length === 0) continue;
-                    var id = list.blockId;
-                    var seed = list.seed;
-                    // ... geometry generation for each material key ...
-                    var box = new THREE.BoxGeometry(1, 1, 1);
-                    var positions = []; var normals = []; var uvs = []; var indices = []; var vertOffset = 0;
-                    for (var p of list.positions) {
-                        var posAttr = box.attributes.position.array;
-                        var normAttr = box.attributes.normal.array;
-                        var uvAttr = box.attributes.uv.array;
-                        var idxAttr = box.index.array;
-                        for (var vi = 0; vi < box.attributes.position.count; vi++) {
-                            positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
-                            normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
-                            uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
-                        }
-                        for (var ii = 0; ii < idxAttr.length; ii++) indices.push(idxAttr[ii] + vertOffset);
-                        vertOffset += box.attributes.position.count;
-                    }
-                    var geom = new THREE.BufferGeometry();
-                    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                    geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-                    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-                    geom.setIndex(indices);
-
-                    var info = BLOCKS[id] || { color: '#ff00ff' };
-                    var mat;
-                    if (info.light) {
-                        mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
-                    } else if (info.transparent) {
-                        mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
-                    } else {
-                        const blockTexture = createBlockTexture(seed, id);
-                        mat = new THREE.MeshStandardMaterial({ map: blockTexture });
-                    }
-                    var mesh = new THREE.Mesh(geom, mat);
-                    group.add(mesh);
+                if (Math.abs(chunk.cz - pcz) > CHUNKS_PER_SIDE / 2) {
+                    if (chunk.cz > pcz) renderBaseZ -= MAP_SIZE;
+                    else renderBaseZ += MAP_SIZE;
                 }
+                group.position.set(renderBaseX, 0, renderBaseZ);
+                chunk.mesh = group;
+                meshGroup.add(chunk.mesh);
+                chunk.needsRebuild = false;
+                return;
             }
 
-            // This part is common for both meshing strategies
-            var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var lists = {};
+			var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
             var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
-            var renderBaseX = chunk.cx * CHUNK_SIZE;
-            var renderBaseZ = chunk.cz * CHUNK_SIZE;
+
+            var baseX = chunk.cx * CHUNK_SIZE;
+            var baseZ = chunk.cz * CHUNK_SIZE;
+
+            var renderBaseX = baseX;
+            var renderBaseZ = baseZ;
 
             if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
                 if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
@@ -3533,7 +3259,84 @@ self.onmessage = async function(e) {
                 else renderBaseZ += MAP_SIZE;
             }
 
-            group.position.set(renderBaseX, 0, renderBaseZ);
+            for (var x = 0; x < CHUNK_SIZE; x++) {
+                for (var z = 0; z < CHUNK_SIZE; z++) {
+                    for (var y = 0; y < MAX_HEIGHT; y++) {
+                        var id = chunk.get(x, y, z);
+                        if (!id || id === BLOCK_AIR) continue;
+
+                        var wx = modWrap(baseX + x, MAP_SIZE);
+                        var wz = modWrap(baseZ + z, MAP_SIZE);
+                        var renderX = renderBaseX + x;
+                        var renderZ = renderBaseZ + z;
+
+                        var exposed = (
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x + 1, y, z) === BLOCK_AIR ||
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x - 1, y, z) === BLOCK_AIR ||
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y + 1, z) === BLOCK_AIR ||
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y - 1, z) === BLOCK_AIR ||
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z + 1) === BLOCK_AIR ||
+                            this.getBlockGlobal(chunk.cx, chunk.cz, x, y, z - 1) === BLOCK_AIR
+                        );
+                        if (!exposed) continue;
+
+                        const coordKey = `${wx},${y},${wz}`;
+                        const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                        const materialKey = `${id}-${blockOriginSeed}`;
+
+                        if (!lists[materialKey]) {
+                            lists[materialKey] = {
+                                positions: [],
+                                seed: blockOriginSeed,
+                                blockId: id
+                            };
+                        }
+                        lists[materialKey].positions.push({ x: renderX, y: y, z: renderZ });
+                    }
+                }
+            }
+            var group = new THREE.Group();
+            for (var matKey in lists) {
+                const list = lists[matKey];
+                if (!list.positions || list.positions.length === 0) continue;
+
+                var id = list.blockId;
+                var seed = list.seed;
+                var box = new THREE.BoxGeometry(1, 1, 1);
+                var positions = []; var normals = []; var uvs = []; var indices = []; var vertOffset = 0;
+                for (var p of list.positions) {
+                    var posAttr = box.attributes.position.array;
+                    var normAttr = box.attributes.normal.array;
+                    var uvAttr = box.attributes.uv.array;
+                    var idxAttr = box.index.array;
+                    for (var vi = 0; vi < box.attributes.position.count; vi++) {
+                        positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
+                        normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
+                        uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
+                    }
+                    for (var ii = 0; ii < idxAttr.length; ii++) indices.push(idxAttr[ii] + vertOffset);
+                    vertOffset += box.attributes.position.count;
+                }
+                var geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+                geom.setIndex(indices);
+                geom.computeBoundingSphere();
+                var info = BLOCKS[id] || { color: '#ff00ff' };
+                var mat;
+
+                if (info.light) {
+                    mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
+                } else if (info.transparent) {
+                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                } else {
+                    const blockTexture = createBlockTexture(seed, id);
+                    mat = new THREE.MeshStandardMaterial({ map: blockTexture });
+                }
+                var mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
+            }
             chunk.mesh = group;
             meshGroup.add(chunk.mesh);
             chunk.needsRebuild = false;
@@ -3762,6 +3565,182 @@ self.onmessage = async function(e) {
                 }
             }
         };
+        function buildGreedyMesh(chunk, foreignBlockOrigins, worldSeed) {
+            const geos = {};
+            const chunkData = chunk.data;
+
+            const get = (x, y, z) => {
+                if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= MAX_HEIGHT || z < 0 || z >= CHUNK_SIZE) return 0;
+                return chunkData[y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x];
+            };
+
+            // d: dimension of sweep (0=X, 1=Y, 2=Z)
+            for (let d = 0; d < 3; d++) {
+                const u = (d + 1) % 3; // a-axis of slice plane
+                const v = (d + 2) % 3; // b-axis of slice plane
+
+                const x = [0, 0, 0]; // current voxel coordinates
+                const q = [0, 0, 0]; // sweep direction
+                q[d] = 1;
+
+                const dims = [CHUNK_SIZE, MAX_HEIGHT, CHUNK_SIZE];
+                const u_dim = dims[u];
+                const v_dim = dims[v];
+
+                const mask = new Array(u_dim * v_dim);
+
+                // Slice the chunk along the d-axis
+                for (x[d] = -1; x[d] < dims[d];) {
+                    let n = 0;
+                    // Create a 2D mask for this slice
+                    for (x[v] = 0; x[v] < v_dim; x[v]++) {
+                        for (x[u] = 0; x[u] < u_dim; x[u]++) {
+                            const blockId1 = (x[d] >= 0) ? get(x[0], x[1], x[2]) : 0;
+                            const blockId2 = (x[d] < dims[d] - 1) ? get(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : 0;
+
+                            const block1 = BLOCKS[blockId1] || {};
+                            const block2 = BLOCKS[blockId2] || {};
+
+                            const transparent1 = !blockId1 || block1.transparent;
+                            const transparent2 = !blockId2 || block2.transparent;
+
+                            let materialKey = null;
+                            if (transparent1 !== transparent2) {
+                                if (transparent1) {
+                                    // Face is on block2, pointing towards negative d
+                                    const wx = chunk.cx * CHUNK_SIZE + x[0] + q[0];
+                                    const wy = x[1] + q[1];
+                                    const wz = chunk.cz * CHUNK_SIZE + x[2] + q[2];
+                                    const coordKey = `${wx},${wy},${wz}`;
+                                    const originSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                                    materialKey = `${blockId2}-${originSeed}|-`;
+                                } else {
+                                    // Face is on block1, pointing towards positive d
+                                    const wx = chunk.cx * CHUNK_SIZE + x[0];
+                                    const wy = x[1];
+                                    const wz = chunk.cz * CHUNK_SIZE + x[2];
+                                    const coordKey = `${wx},${wy},${wz}`;
+                                    const originSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                                    materialKey = `${blockId1}-${originSeed}|+`;
+                                }
+                            }
+                            mask[n++] = materialKey;
+                        }
+                    }
+
+                    x[d]++; // Advance to the next slice
+
+                    // Generate quads from the mask
+                    n = 0;
+                    for (let j = 0; j < v_dim; j++) {
+                        for (let i = 0; i < u_dim;) {
+                            const materialKey = mask[n];
+                            if (materialKey) {
+                                let w; // width of quad
+                                for (w = 1; i + w < u_dim && mask[n + w] === materialKey; w++);
+
+                                let h; // height of quad
+                                let done = false;
+                                for (h = 1; j + h < v_dim; h++) {
+                                    for (let k = 0; k < w; k++) {
+                                        if (mask[n + k + h * u_dim] !== materialKey) {
+                                            done = true;
+                                            break;
+                                        }
+                                    }
+                                    if (done) break;
+                                }
+
+                                // Add quad
+                                x[u] = i;
+                                x[v] = j;
+
+                                const du = [0, 0, 0]; du[u] = w;
+                                const dv = [0, 0, 0]; dv[v] = h;
+
+                                const [mat, direction] = materialKey.split('|');
+                                const isPositiveFace = direction === '+';
+
+                                const normal = [0, 0, 0];
+                                normal[d] = isPositiveFace ? 1 : -1;
+
+                                const v1 = [x[0], x[1], x[2]];
+                                const v2 = [x[0] + du[0], x[1] + du[1], x[2] + du[2]];
+                                const v3 = [x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]];
+                                const v4 = [x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]];
+
+                                if (isPositiveFace) {
+                                    v1[d] += 1; v2[d] += 1; v3[d] += 1; v4[d] += 1;
+                                }
+
+                                const quadGeo = new THREE.BufferGeometry();
+                                const positions = new Float32Array([
+                                    v1[0], v1[1], v1[2],
+                                    v3[0], v3[1], v3[2],
+                                    v2[0], v2[1], v2[2],
+                                    v4[0], v4[1], v4[2],
+                                ]);
+                                const normals = new Float32Array([...normal, ...normal, ...normal, ...normal]);
+                                const uvs = new Float32Array([0, 0, 0, h, w, 0, w, h]);
+
+                                const indices = isPositiveFace ? [0, 1, 2, 2, 1, 3] : [0, 2, 1, 2, 3, 1];
+
+                                quadGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                                quadGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                                quadGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                                quadGeo.setIndex(indices);
+
+                                if (!geos[mat]) {
+                                    const [blockId, ...seedParts] = mat.split('-');
+                                    geos[mat] = {
+                                        geometries: [],
+                                        blockId: parseInt(blockId),
+                                        seed: seedParts.join('-')
+                                    };
+                                }
+                                geos[mat].geometries.push(quadGeo);
+
+                                // Clear mask
+                                for (let l = 0; l < h; l++) {
+                                    for (let k = 0; k < w; k++) {
+                                        mask[n + k + l * u_dim] = null;
+                                    }
+                                }
+
+                                i += w;
+                                n += w;
+                            } else {
+                                i++;
+                                n++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const group = new THREE.Group();
+            for (const matKey in geos) {
+                const data = geos[matKey];
+                if (data.geometries.length > 0) {
+                    const merged = THREE.BufferGeometryUtils.mergeBufferGeometries(data.geometries);
+                    if (!merged) continue;
+                    const info = BLOCKS[data.blockId];
+                    if (!info) continue;
+                    let material;
+                    if (info.light) {
+                        material = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
+                    } else if (info.transparent) {
+                        material = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                    } else {
+                        const blockTexture = createBlockTexture(data.seed, data.blockId);
+                        material = new THREE.MeshStandardMaterial({ map: blockTexture });
+                    }
+                    const mesh = new THREE.Mesh(merged, material);
+                    group.add(mesh);
+                }
+            }
+            return group;
+        }
         function initThree() {
             console.log('[initThree] Starting');
             scene = new THREE.Scene();
