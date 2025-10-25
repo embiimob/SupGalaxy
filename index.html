@@ -1654,10 +1654,9 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
                 const peak = mountainHeight;
                 const craterRadius = 20 + fbm(noise, nx, nz, 2, 0.5) * 15;
                 const craterDepth = 15 + fbm(noise, nz, nx, 2, 0.5) * 10;
-                const distFromPeakCenter = Math.hypot(
-                    fbm(noise, nx * 0.5, nz * 0.5, 3, 0.5) * 5,
-                    fbm(noise, nz * 0.5, nx * 0.5, 3, 0.5) * 5
-                );
+                const craterShapeX = fbm(noise, nx * 0.5, nz * 0.5, 3, 0.5) - 0.5;
+                const craterShapeZ = fbm(noise, nz * 0.5, nx * 0.5, 3, 0.5) - 0.5;
+                const distFromPeakCenter = Math.hypot(craterShapeX * craterRadius * 2, craterShapeZ * craterRadius * 2);
 
                 if (distFromPeakCenter < craterRadius) {
                     const t = distFromPeakCenter / craterRadius;
@@ -2486,7 +2485,10 @@ self.onmessage = async function(e) {
             } else if (data.type === 'flower_location') {
                 flowerLocations.push(data.location);
             } else if (data.type === 'volcano_peak') {
-                volcanoLocations.push(data.location);
+                const loc = data.location;
+                if (!volcanoLocations.some(v => v.x === loc.x && v.y === loc.y && v.z === loc.z)) {
+                    volcanoLocations.push({ ...loc, nextEruptionTime: 0 });
+                }
             } else if (data.type === 'world_archetype') {
                 worldArchetype = data.archetype;
                 gravity = data.archetype.gravity;
@@ -3726,7 +3728,7 @@ self.onmessage = async function(e) {
         }
 
         function LavaMob(x, y, z) {
-            this.id = 'lava_' + Date.now();
+            this.id = 'lava_' + Date.now() + Math.random();
             this.type = 'lava';
             this.pos = new THREE.Vector3(x, y, z);
             this.startTime = Date.now();
@@ -3736,8 +3738,8 @@ self.onmessage = async function(e) {
             this.boulders = [];
         }
 
-        function Boulder(startX, startY, startZ, targetX, targetZ) {
-            this.id = 'boulder_' + Date.now();
+        function Boulder(startX, startY, startZ, targetX, targetZ, id) {
+            this.id = id || 'boulder_' + Date.now() + Math.random();
             this.pos = new THREE.Vector3(startX, startY, startZ);
             this.velocity = new THREE.Vector3(targetX - startX, 30, targetZ - startZ).normalize().multiplyScalar(20);
             this.size = 1 + Math.random() * 3;
@@ -3745,6 +3747,7 @@ self.onmessage = async function(e) {
             const material = new THREE.MeshStandardMaterial({ color: 0x5a5a5a });
             this.mesh = new THREE.Mesh(geometry, material);
             this.mesh.position.copy(this.pos);
+            this.mesh.userData.boulderId = this.id;
             scene.add(this.mesh);
         }
 
@@ -6586,12 +6589,18 @@ self.onmessage = async function(e) {
                             }
                             break;
                         case 'lava_mob_spawn':
-                            const lavaMob = new LavaMob(data.x, data.y, data.z);
-                            mobs.push(lavaMob);
+                            if (!mobs.some(m => m.id === data.id)) {
+                                const lavaMob = new LavaMob(data.x, data.y, data.z);
+                                lavaMob.id = data.id;
+                                mobs.push(lavaMob);
+                            }
                             break;
                         case 'boulder_spawn':
-                            const boulder = new Boulder(data.startX, data.startY, data.startZ, data.targetX, data.targetZ);
-                            mobs.find(m => m.type === 'lava').boulders.push(boulder);
+                            const lavaMobForBoulder = mobs.find(m => m.id === data.lavaMobId);
+                            if (lavaMobForBoulder && !lavaMobForBoulder.boulders.some(b => b.id === data.id)) {
+                                const boulder = new Boulder(data.startX, data.startY, data.startZ, data.targetX, data.targetZ, data.id);
+                                lavaMobForBoulder.boulders.push(boulder);
+                            }
                             break;
                         case 'lava_flow':
                             chunkManager.setBlockGlobal(data.x, data.y, data.z, 16, false);
@@ -8042,73 +8051,136 @@ self.onmessage = async function(e) {
         }
 
         function createSmokeParticle(x, y, z) {
-            const smokeGeo = new THREE.SphereGeometry(2 + Math.random() * 3, 8, 8);
-            const smokeMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.3 });
+            const size = 3 + Math.random() * 4;
+            const smokeGeo = new THREE.SphereGeometry(size, 8, 8);
+            const grayValue = Math.random() * 0.3 + 0.1; // Darker smoke
+            const smokeMat = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(grayValue, grayValue, grayValue),
+                transparent: true,
+                opacity: 0.4 + Math.random() * 0.2
+            });
             const particle = new THREE.Mesh(smokeGeo, smokeMat);
             particle.position.set(x, y, z);
-            particle.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 1.5, (Math.random() - 0.5) * 0.5);
+            particle.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.8, Math.random() * 2.5 + 1.0, (Math.random() - 0.5) * 0.8);
+            particle.lifespan = 1.0 + Math.random() * 1.0; // Lifespan in seconds
             smokeParticles.add(particle);
         }
 
         function manageLavaMobs(dt) {
             if (!isHost && peers.size > 0) return;
 
-            if (volcanoLocations.length > 0 && mobs.filter(m => m.type === 'lava').length < 3 && Math.random() < 0.001) {
-                const volcano = volcanoLocations[Math.floor(Math.random() * volcanoLocations.length)];
-                const lavaMob = new LavaMob(volcano.x, volcano.y, volcano.z);
-                mobs.push(lavaMob);
-                for (const [peerUser, peerData] of peers.entries()) {
-                    if (peerData.dc && peerData.dc.readyState === 'open') {
-                        peerData.dc.send(JSON.stringify({ type: 'lava_mob_spawn', x: volcano.x, y: volcano.y, z: volcano.z }));
+            const PROXIMITY_RADIUS = 128;
+            const allPlayers = [{ x: player.x, y: player.y, z: player.z, username: userName }];
+            for (const username in userPositions) {
+                allPlayers.push({ ...userPositions[username], username });
+            }
+
+            const now = Date.now();
+
+            // Spawning logic based on proximity and cooldown
+            volcanoLocations.forEach(volcano => {
+                const isPlayerNear = allPlayers.some(p => Math.hypot(p.x - volcano.x, p.z - volcano.z) < PROXIMITY_RADIUS);
+                const activeMobAtVolcano = mobs.some(m => m.type === 'lava' && m.pos.distanceTo(new THREE.Vector3(volcano.x, volcano.y, volcano.z)) < 10);
+
+                if (isPlayerNear && !activeMobAtVolcano && now > volcano.nextEruptionTime && mobs.filter(m => m.type === 'lava').length < 3) {
+                    const lavaMob = new LavaMob(volcano.x, volcano.y, volcano.z);
+                    mobs.push(lavaMob);
+                    volcano.nextEruptionTime = now + (5 + Math.random() * 5) * 60 * 1000; // Next eruption in 5-10 minutes
+
+                    // Network broadcast
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'lava_mob_spawn', id: lavaMob.id, x: volcano.x, y: volcano.y, z: volcano.z }));
+                        }
                     }
+                }
+            });
+
+            // Update and despawn logic for existing lava mobs
+            const lavaMobs = mobs.filter(m => m.type === 'lava');
+            for (let i = lavaMobs.length - 1; i >= 0; i--) {
+                const mob = lavaMobs[i];
+                const isPlayerNear = allPlayers.some(p => Math.hypot(p.x - mob.pos.x, p.z - mob.pos.z) < PROXIMITY_RADIUS * 1.5);
+
+                if (now - mob.startTime > mob.duration || !isPlayerNear) {
+                    mob.active = false;
+                    mob.lavaBlocks.forEach(block => {
+                        chunkManager.setBlockGlobal(block.x, block.y, block.z, 0, true);
+                    });
+                    mobs = mobs.filter(m => m.id !== mob.id);
+                    // Also clean up any boulders associated with this mob
+                    mob.boulders.forEach(boulder => {
+                        scene.remove(boulder.mesh);
+                        boulder.mesh.geometry.dispose();
+                        boulder.mesh.material.dispose();
+                    });
+                    continue;
+                }
+
+                // Smoke
+                if (Math.random() < 0.1) {
+                    createSmokeParticle(mob.pos.x, mob.pos.y, mob.pos.z);
+                }
+
+                // Boulders
+                if (Math.random() < 0.05) {
+                    const targetX = mob.pos.x + (Math.random() - 0.5) * 128;
+                    const targetZ = mob.pos.z + (Math.random() - 0.5) * 128;
+                    const boulder = new Boulder(mob.pos.x, mob.pos.y, mob.pos.z, targetX, targetZ);
+                    mob.boulders.push(boulder);
+
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({
+                                type: 'boulder_spawn',
+                                id: boulder.id,
+                                lavaMobId: mob.id,
+                                startX: mob.pos.x, startY: mob.pos.y, startZ: mob.pos.z,
+                                targetX: targetX, targetZ: targetZ
+                            }));
+                        }
+                    }
+                }
+
+                // Lava Flow and Cooling
+                if (Math.random() < 0.3) { // Increased chance of flow
+                    const spread = 20;
+                    const lavaX = mob.pos.x + (Math.random() - 0.5) * spread;
+                    const lavaZ = mob.pos.z + (Math.random() - 0.5) * spread;
+                    const lavaY = chunkManager.getSurfaceY(lavaX, lavaZ);
+                    if (getBlockAt(lavaX, lavaY, lavaZ) !== 6) { // Don't flow into water
+                        chunkManager.setBlockGlobal(lavaX, lavaY, lavaZ, 16, true); // 16 is Lava
+                        const coolTime = Date.now() + (15 + Math.random() * 15) * 1000; // Cools in 15-30 seconds
+                        mob.lavaBlocks.set(`${lavaX},${lavaY},${lavaZ}`, { x: lavaX, y: lavaY, z: lavaZ, coolTime });
+                    }
+                }
+
+                // Check for cooling lava
+                mob.lavaBlocks.forEach((block, key) => {
+                    if (now > block.coolTime) {
+                        chunkManager.setBlockGlobal(block.x, block.y, block.z, 110, true); // 110 is Obsidian
+                        mob.lavaBlocks.delete(key);
+                    }
+                });
+            }
+
+
+            // Update smoke particles globally
+            for (let i = smokeParticles.children.length - 1; i >= 0; i--) {
+                const p = smokeParticles.children[i];
+                p.position.add(p.velocity.clone().multiplyScalar(dt));
+                p.lifespan -= dt;
+                p.material.opacity = Math.max(0, p.material.opacity - (dt / p.lifespan) * 0.5);
+
+                if (p.lifespan <= 0) {
+                    smokeParticles.remove(p);
+                    p.geometry.dispose();
+                    p.material.dispose();
                 }
             }
 
-            mobs.filter(m => m.type === 'lava').forEach(mob => {
-                if (Date.now() - mob.startTime > mob.duration) {
-                    mob.active = false;
-                    mob.lavaBlocks.forEach(block => {
-                        chunkManager.setBlockGlobal(block.x, block.y, block.z, 0);
-                    });
-                    mobs = mobs.filter(m => m.id !== mob.id);
-                } else {
-                    if (Math.random() < 0.1) {
-                        createSmokeParticle(mob.pos.x, mob.pos.y, mob.pos.z);
-                    }
-                    if (Math.random() < 0.05) {
-                        const targetX = mob.pos.x + (Math.random() - 0.5) * 128;
-                        const targetZ = mob.pos.z + (Math.random() - 0.5) * 128;
-                        const boulder = new Boulder(mob.pos.x, mob.pos.y, mob.pos.z, targetX, targetZ);
-                        mob.boulders.push(boulder);
-                        for (const [peerUser, peerData] of peers.entries()) {
-                            if (peerData.dc && peerData.dc.readyState === 'open') {
-                                peerData.dc.send(JSON.stringify({ type: 'boulder_spawn', startX: mob.pos.x, startY: mob.pos.y, startZ: mob.pos.z, targetX: targetX, targetZ: targetZ }));
-                            }
-                        }
-                    }
-                    if (Math.random() < 0.2) {
-                        const lavaX = mob.pos.x + (Math.random() - 0.5) * 10;
-                        const lavaZ = mob.pos.z + (Math.random() - 0.5) * 10;
-                        const lavaY = chunkManager.getSurfaceY(lavaX, lavaZ);
-                        chunkManager.setBlockGlobal(lavaX, lavaY, lavaZ, 16);
-                        mob.lavaBlocks.set(`${lavaX},${lavaY},${lavaZ}`, { x: lavaX, y: lavaY, z: lavaZ });
-                        for (const [peerUser, peerData] of peers.entries()) {
-                            if (peerData.dc && peerData.dc.readyState === 'open') {
-                                peerData.dc.send(JSON.stringify({ type: 'lava_flow', x: lavaX, y: lavaY, z: lavaZ }));
-                            }
-                        }
-                    }
-                }
-            });
 
-            smokeParticles.children.forEach(p => {
-                p.position.add(p.velocity.clone().multiplyScalar(dt));
-                p.material.opacity -= 0.1 * dt;
-                if (p.material.opacity <= 0) {
-                    smokeParticles.remove(p);
-                }
-            });
-
+            // Persistent smoke on all volcanoes
             volcanoLocations.forEach(volcano => {
                 if (Math.random() < 0.2) {
                     createSmokeParticle(volcano.x, volcano.y, volcano.z);
@@ -8117,22 +8189,45 @@ self.onmessage = async function(e) {
         }
 
         function manageBoulders(dt) {
+            const allPlayers = [{ x: player.x, y: player.y, z: player.z, username: userName, healthProxy: player }];
+            for (const username in userPositions) {
+                allPlayers.push({ ...userPositions[username], username, healthProxy: { health: 20 } }); // Placeholder
+            }
+
             mobs.filter(m => m.type === 'lava').forEach(mob => {
-                mob.boulders.forEach((boulder, index) => {
+                for (let i = mob.boulders.length - 1; i >= 0; i--) {
+                    const boulder = mob.boulders[i];
                     boulder.velocity.y -= gravity * dt;
                     boulder.pos.add(boulder.velocity.clone().multiplyScalar(dt));
                     boulder.mesh.position.copy(boulder.pos);
 
                     if (boulder.pos.y < chunkManager.getSurfaceY(boulder.pos.x, boulder.pos.z)) {
-                        const damage = boulder.size > 2 ? 2 : 1;
-                        if (player.pos.distanceTo(boulder.pos) < boulder.size) {
-                            player.health -= damage;
-                            addMessage('Hit by a boulder!', 1000);
+                        if(isHost || peers.size === 0) {
+                            const damage = boulder.size > 2 ? 2 : 1;
+                            allPlayers.forEach(p => {
+                                const playerPos = new THREE.Vector3(p.x, p.y, p.z);
+                                if (playerPos.distanceTo(boulder.pos) < boulder.size + 1) {
+                                     if(p.username === userName) {
+                                         player.health -= damage;
+                                         addMessage('Hit by a boulder!', 1000);
+                                         updateHealthBar();
+                                         if (player.health <= 0) handlePlayerDeath();
+                                     } else {
+                                         const targetPeer = peers.get(p.username);
+                                         if(targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                                             targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: damage, attacker: 'boulder' }));
+                                         }
+                                     }
+                                }
+                            });
                         }
+
                         scene.remove(boulder.mesh);
-                        mob.boulders.splice(index, 1);
+                        boulder.mesh.geometry.dispose();
+                        boulder.mesh.material.dispose();
+                        mob.boulders.splice(i, 1);
                     }
-                });
+                }
             });
         }
 
@@ -8242,7 +8337,18 @@ self.onmessage = async function(e) {
             });
             console.log('[MINIMAP] Events attached: double-click and drag-and-drop enabled');
         }
+        var lastLogTime = 0;
         function gameLoop(now) {
+            if (now - (lastLogTime || 0) > 5000) {
+                console.log(`[DEBUG] volcanoLocations count: ${volcanoLocations.length}`);
+                if(volcanoLocations.length > 0) {
+                    console.log(`[DEBUG] First volcano: `, volcanoLocations[0]);
+                    const isPlayerNear = Math.hypot(player.x - volcanoLocations[0].x, player.z - volcanoLocations[0].z) < 128;
+                    console.log(`[DEBUG] Player near first volcano: ${isPlayerNear}`);
+                    console.log(`[DEBUG] Mobs array size: ${mobs.length}`);
+                }
+                lastLogTime = now;
+            }
             if (isDying) {
                 const fallDuration = 1500; // 1.5 seconds for a more dramatic fall
                 const sinkDuration = 1000; // 1 second to sink
