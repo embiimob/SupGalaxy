@@ -1372,7 +1372,6 @@ function selectArchetype(seed) {
     return archetype;
 }
 
-var sentArchetypes = new Set();
 var worldArchetypes = new Map();
 const BLOCKS = {
         1: { name: 'Bedrock', color: '#0b0b0b' }, 2: { name: 'Grass', color: '#3fb34f' },
@@ -1708,10 +1707,7 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
 function generateChunkData(chunkKey) {
         const worldSeed = chunkKey.split(':')[0];
         const archetype = selectArchetype(worldSeed);
-        if (!sentArchetypes.has(worldSeed)) {
-            self.postMessage({ type: 'world_archetype', archetype: archetype });
-            sentArchetypes.add(worldSeed);
-        }
+        self.postMessage({ type: 'world_archetype', archetype: archetype, seed: worldSeed });
 
         const chunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
 
@@ -2428,9 +2424,11 @@ self.onmessage = async function(e) {
             } else if (data.type === 'flower_location') {
                 flowerLocations.push(data.location);
             } else if (data.type === 'world_archetype') {
-                worldArchetype = data.archetype;
-                gravity = data.archetype.gravity;
-                document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
+                if (data.seed === worldSeed) {
+                    worldArchetype = data.archetype;
+                    gravity = data.archetype.gravity;
+                    document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
+                }
             } else if (data.type === "server_updates") {
                 console.log('[WebRTC] Received server_updates:', data.servers);
                 var newServers = [];
@@ -7895,6 +7893,7 @@ self.onmessage = async function(e) {
         }
 
         function switchWorld() {
+            worldArchetype = null;
             const newWorldName = prompt("Enter the name of the world to switch to:");
             if (!newWorldName || newWorldName.trim() === "") {
                 addMessage("World name cannot be empty.", 3000);
