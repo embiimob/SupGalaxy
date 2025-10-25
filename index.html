@@ -954,7 +954,8 @@
         var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
         var API_CALLS_PER_SECOND = 3;
         var POLL_RADIUS = 2;
-        var LOAD_RADIUS = 5;
+        var INITIAL_LOAD_RADIUS = 9;
+        var LOAD_RADIUS = 3;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'SupGalaxy v0.4.20-beta';
         var POLL_INTERVAL = 30000;
@@ -7509,7 +7510,7 @@ self.onmessage = async function(e) {
                     var spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
                     var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
                     console.log('[LOGIN] Preloading initial chunks');
-                    chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
+                    chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
                     setupMobile();
                     initMinimap();
                     updateHotbarUI();
