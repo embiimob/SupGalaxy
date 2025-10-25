@@ -1335,7 +1335,7 @@ const ARCHETYPES = {
         gravity: 16.0,
         skyType: 'vulcan',
         mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
-        terrainGenerator: 'generateVulcanTerrain',
+        terrainGenerator: 'generate',
         biomeModifications: { moreLava: true },
         flora: []
     },
@@ -1635,30 +1635,58 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
             const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
 
+            // Base terrain and mountain height
             let mountainHeight = fbm(mountainNoise, nx * 0.2, nz * 0.2, 8, 0.6) * 150;
             let groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 10;
-            let height = Math.max(mountainHeight, groundHeight);
+            let baseHeight = Math.max(mountainHeight, groundHeight);
 
-            // Volcanoes
-            if (mountainHeight > 80) {
-                const peak = 80 + (mountainHeight - 80);
-                if (height > peak - 5) {
-                    height = peak - (height - (peak - 5));
-                     if (height < peak - 10) {
-                        for(let y = height; y < peak - 10; y++) {
-                            chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; //Lava
-                        }
+            let height = baseHeight;
+            let isVolcano = mountainHeight > 80;
+            let placeLava = false;
+            let lavaLevel = 0;
+
+            // === VOLCANO CALDERA LOGIC ===
+            if (isVolcano) {
+                const peak = mountainHeight;
+
+                // Find distance from the true peak (center of volcano)
+                // Use a radial falloff to create a crater around the peak
+                const distFromPeak = Math.abs(height - peak);
+                const craterRadius = 15; // How wide the caldera is (in height units)
+                const craterDepth = 12;  // How deep below peak the lava sits
+
+                if (distFromPeak < craterRadius) {
+                    // Carve out a parabolic crater
+                    const t = distFromPeak / craterRadius;
+                    const craterFloor = peak - craterDepth * (1 - t * t); // Parabolic shape
+                    height = Math.min(height, Math.floor(craterFloor));
+
+                    // Lava fills from bottom of crater up to a level
+                    lavaLevel = Math.floor(peak - craterDepth + 3); // Lava 3 blocks below rim
+                    if (height < lavaLevel) {
+                        placeLava = true;
                     }
                 }
             }
 
-            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+            // Clamp height
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
 
+            // === PLACE SOLID TERRAIN ===
             for (let y = 0; y <= height; y++) {
                 let id = 4; // Stone
-                if (y < height - 5) id = 110; // Obsidian
+                if (y < height - 5) id = 110; // Deep stone → Obsidian
                 if (y === 0) id = 1; // Bedrock
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+
+            // === PLACE LAVA IN CALDERA ===
+            if (placeLava && lavaLevel > height) {
+                const lavaStartY = height + 1;
+                const lavaEndY = Math.min(lavaLevel, MAX_HEIGHT - 1);
+                for (let y = lavaStartY; y <= lavaEndY; y++) {
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; // Lava
+                }
             }
         }
     }
