@@ -3360,10 +3360,13 @@ self.onmessage = async function(e) {
                                 if (!geos[materialKey]) geos[materialKey] = { positions: [], normals: [], uvs: [], indices: [], vertOffset: 0 };
 
                                 const geo = geos[materialKey];
-                                const p1 = [x[0], x[1], x[2]];
-                                const p2 = [x[0] + du[0], x[1] + du[1], x[2] + du[2]];
-                                const p3 = [x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]];
-                                const p4 = [x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]];
+                                const pos = [x[0], x[1], x[2]];
+                                pos[d] += 1; // Offset the quad to the block boundary
+
+                                const p1 = [pos[0], pos[1], pos[2]];
+                                const p2 = [pos[0] + du[0], pos[1] + du[1], pos[2] + du[2]];
+                                const p3 = [pos[0] + dv[0], pos[1] + dv[1], pos[2] + dv[2]];
+                                const p4 = [pos[0] + du[0] + dv[0], pos[1] + du[1] + dv[1], pos[2] + du[2] + dv[2]];
 
                                 geo.positions.push(p1[0], p1[1], p1[2]);
                                 geo.positions.push(p3[0], p3[1], p3[2]);
@@ -3374,10 +3377,10 @@ self.onmessage = async function(e) {
                                 geo.uvs.push(0, 0, 0, h, w, h, w, 0);
 
                                 const off = geo.vertOffset;
-                                if (!isBackFace) {
+                                if (isBackFace) {
                                     geo.indices.push(off, off + 1, off + 2, off, off + 2, off + 3);
                                 } else {
-                                    geo.indices.push(off, off + 2, off + 1, off, off + 3, off + 2);
+                                    geo.indices.push(off + 2, off + 1, off, off + 3, off + 2, off);
                                 }
                                 geo.vertOffset += 4;
 
