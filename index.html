@@ -1349,15 +1349,6 @@ const ARCHETYPES = {
         biomeModifications: { onlyDesert: true },
         flora: ['cactus']
     },
-    'Water': {
-        name: 'Water World',
-        gravity: 16.0,
-        skyType: 'earth',
-        mobSpawnRules: { day: ['bee'], night: [] },
-        terrainGenerator: 'generateWaterWorldTerrain',
-        biomeModifications: { deepWater: true },
-        flora: ['trees', 'flowers', 'hives']
-    },
     'Massive': {
         name: 'Massive',
         gravity: 32.0,
@@ -1714,44 +1705,6 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
     generateStandardTerrain(chunkData, chunkKey, archetype);
 }
 
-function generateWaterWorldTerrain(chunkData, chunkKey, archetype) {
-    const worldSeed = chunkKey.split(':')[0];
-    const islandNoise = makeNoise(worldSeed + '_islands');
-    const cx = parseInt(chunkKey.split(':')[1]);
-    const cz = parseInt(chunkKey.split(':')[2]);
-    const baseX = cx * CHUNK_SIZE;
-    const baseZ = cz * CHUNK_SIZE;
-     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-             const wx = baseX + lx;
-            const wz = baseZ + lz;
-            const nx = (wx % MAP_SIZE) / MAP_SIZE * 50;
-            const nz = (wz % MAP_SIZE) / MAP_SIZE * 50;
-             let islandValue = fbm(islandNoise, nx, nz, 5, 0.5);
-             if (islandValue > 0.55) {
-                const elevation = (islandValue - 0.55) * 100;
-                let height = SEA_LEVEL + elevation;
-                height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
-                 for (let y = 0; y <= height; y++) {
-                    let id = 3; // Dirt
-                    if (y < height - 3) id = 4; // Stone
-                    if (y === height) id = 2; // Grass
-                    if (y === 0) id = 1; // Bedrock
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
-                }
-            } else {
-                for (let y = 0; y <= SEA_LEVEL; y++) {
-                     let id = 6; // Water
-                    if (y < SEA_LEVEL - 20) id = 15; // Gravel
-                    if (y < SEA_LEVEL - 23) id = 4; // Stone
-                    if (y === 0) id = 1; // Bedrock
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
-                }
-            }
-        }
-    }
-}
-
 function generateChunkData(chunkKey) {
         const worldSeed = chunkKey.split(':')[0];
         const archetype = selectArchetype(worldSeed);
@@ -1774,9 +1727,6 @@ function generateChunkData(chunkKey) {
                 break;
             case 'generateDesertTerrain':
                 generateDesertTerrain(chunkData, chunkKey, archetype);
-                break;
-            case 'generateWaterWorldTerrain':
-                generateWaterWorldTerrain(chunkData, chunkKey, archetype);
                 break;
             default:
                 generateStandardTerrain(chunkData, chunkKey, archetype);
