@@ -3487,7 +3487,7 @@ self.onmessage = async function(e) {
                     this.preloadChunks(peerCx, peerCz, 2);
                 }
             }
-            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 10;
+            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 10 * 3;
             if (this.chunks.size > maxChunks) {
                 let chunks = Array.from(this.chunks.values());
                 chunks.sort((a, b) => {
