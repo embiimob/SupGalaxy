@@ -1001,6 +1001,7 @@
             121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
             122: { name: 'Honey', color: '#ffb74a' },
             123: { name: 'Hive', color: '#e3c27d' },
+        124: { name: 'Iron', color: '#c0c0c0' }
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1076,6 +1077,7 @@ var lastWPress = 0;
         var deathAnimationStart = 0;
         var lastPollPosition = new THREE.Vector3();
         var pauseTimer = 0;
+        var smokeParticles;
         var lastMoveTime = 0;
         var hasMovedSubstantially = false;
         var soundBreak = document.getElementById('soundBreak');
@@ -1120,6 +1122,7 @@ var lastWPress = 0;
         var userAudioStreams = new Map();
         var hiveLocations = [];
         var flowerLocations = [];
+        var volcanoLocations = [];
         const maxAudioDistance = 32;
         const rolloffFactor = 2;
 
@@ -1405,6 +1408,7 @@ const BLOCKS = {
         120: { name: 'Torch', color: '#ff9900', light: true },
         122: { name: 'Honey', color: '#ffb74a' },
         123: { name: 'Hive', color: '#e3c27d' },
+        124: { name: 'Iron', color: '#c0c0c0' }
 };
 
 const BIOMES = [
@@ -1623,6 +1627,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
     const worldSeed = chunkKey.split(':')[0];
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
+    const resourceNoise = makeNoise(worldSeed + '_resources');
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
     const baseX = cx * CHUNK_SIZE;
@@ -1635,57 +1640,78 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
             const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
 
-            // Base terrain and mountain height
-            let mountainHeight = fbm(mountainNoise, nx * 0.2, nz * 0.2, 8, 0.6) * 150;
-            let groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 10;
+            // Sharper peaks and deeper valleys
+            let mountainHeight = fbm(mountainNoise, nx * 0.3, nz * 0.3, 8, 0.55);
+            mountainHeight = Math.pow(mountainHeight, 2.5) * 220;
+
+            let groundHeight = 10 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
             let baseHeight = Math.max(mountainHeight, groundHeight);
 
             let height = baseHeight;
-            let isVolcano = mountainHeight > 80;
-            let placeLava = false;
-            let lavaLevel = 0;
+            const isVolcano = mountainHeight > 100 && fbm(noise, nx * 0.8, nz * 0.8, 4, 0.6) > 0.6;
 
-            // === VOLCANO CALDERA LOGIC ===
             if (isVolcano) {
                 const peak = mountainHeight;
+                const craterRadius = 20 + fbm(noise, nx, nz, 2, 0.5) * 15;
+                const craterDepth = 15 + fbm(noise, nz, nx, 2, 0.5) * 10;
+                const distFromPeakCenter = Math.hypot(
+                    fbm(noise, nx * 0.5, nz * 0.5, 3, 0.5) * 5,
+                    fbm(noise, nz * 0.5, nx * 0.5, 3, 0.5) * 5
+                );
 
-                // Find distance from the true peak (center of volcano)
-                // Use a radial falloff to create a crater around the peak
-                const distFromPeak = Math.abs(height - peak);
-                const craterRadius = 15; // How wide the caldera is (in height units)
-                const craterDepth = 12;  // How deep below peak the lava sits
+                if (distFromPeakCenter < craterRadius) {
+                    const t = distFromPeakCenter / craterRadius;
+                    const craterFloor = peak - craterDepth * (1 - t * t * t);
+                    height = Math.min(height, craterFloor);
 
-                if (distFromPeak < craterRadius) {
-                    // Carve out a parabolic crater
-                    const t = distFromPeak / craterRadius;
-                    const craterFloor = peak - craterDepth * (1 - t * t); // Parabolic shape
-                    height = Math.min(height, Math.floor(craterFloor));
-
-                    // Lava fills from bottom of crater up to a level
-                    lavaLevel = Math.floor(peak - craterDepth + 3); // Lava 3 blocks below rim
+                    const lavaLevel = peak - craterDepth + 5;
                     if (height < lavaLevel) {
-                        placeLava = true;
+                        for (let y = Math.floor(height) + 1; y <= Math.floor(lavaLevel); y++) {
+                            if (y < MAX_HEIGHT) {
+                                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; // Lava
+                            }
+                        }
+                    }
+
+                    if (Math.abs(height - peak) < 5) {
+                        self.postMessage({ type: 'volcano_peak', location: { x: wx, y: peak, z: wz } });
                     }
                 }
             }
 
-            // Clamp height
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
 
-            // === PLACE SOLID TERRAIN ===
             for (let y = 0; y <= height; y++) {
-                let id = 4; // Stone
-                if (y < height - 5) id = 110; // Deep stone → Obsidian
+                let id;
+                if (y < height - 10) {
+                    id = 110; // Obsidian
+                } else {
+                    id = 4; // Stone
+                }
                 if (y === 0) id = 1; // Bedrock
+
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+
+                // Add coal and iron ore
+                if (id === 4) { // Only replace stone
+                    const r = resourceNoise(nx * 2, y * 0.1, nz * 2);
+                    if (r > 0.95) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 124; // Iron Ore
+                    } else if (r > 0.92) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 11; // Coal
+                    }
+                }
             }
 
-            // === PLACE LAVA IN CALDERA ===
-            if (placeLava && lavaLevel > height) {
-                const lavaStartY = height + 1;
-                const lavaEndY = Math.min(lavaLevel, MAX_HEIGHT - 1);
-                for (let y = lavaStartY; y <= lavaEndY; y++) {
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; // Lava
+            // Ocean and beaches
+            const VULCAN_SEA_LEVEL = 32;
+            if (height < VULCAN_SEA_LEVEL) {
+                for (let y = height + 1; y <= VULCAN_SEA_LEVEL; y++) {
+                    if (y === height + 1 && y <= VULCAN_SEA_LEVEL + 2) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
+                    } else {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+                    }
                 }
             }
         }
@@ -2459,6 +2485,8 @@ self.onmessage = async function(e) {
                 hiveLocations.push(data.location);
             } else if (data.type === 'flower_location') {
                 flowerLocations.push(data.location);
+            } else if (data.type === 'volcano_peak') {
+                volcanoLocations.push(data.location);
             } else if (data.type === 'world_archetype') {
                 worldArchetype = data.archetype;
                 gravity = data.archetype.gravity;
@@ -3602,6 +3630,8 @@ self.onmessage = async function(e) {
             console.log('[initThree] Mesh group created');
             lightManager.init();
             initSky();
+            smokeParticles = new THREE.Group();
+            scene.add(smokeParticles);
             console.log('[initThree] Sky initialized');
             renderer.domElement.addEventListener('pointerdown', function (e) { onPointerDown(e); });
             renderer.domElement.addEventListener('wheel', function (e) {
@@ -3694,6 +3724,30 @@ self.onmessage = async function(e) {
             });
             createAndSetupAvatar(userName, true);
         }
+
+        function LavaMob(x, y, z) {
+            this.id = 'lava_' + Date.now();
+            this.type = 'lava';
+            this.pos = new THREE.Vector3(x, y, z);
+            this.startTime = Date.now();
+            this.duration = 3 * 60 * 1000; // 3 minutes
+            this.active = true;
+            this.lavaBlocks = new Map();
+            this.boulders = [];
+        }
+
+        function Boulder(startX, startY, startZ, targetX, targetZ) {
+            this.id = 'boulder_' + Date.now();
+            this.pos = new THREE.Vector3(startX, startY, startZ);
+            this.velocity = new THREE.Vector3(targetX - startX, 30, targetZ - startZ).normalize().multiplyScalar(20);
+            this.size = 1 + Math.random() * 3;
+            const geometry = new THREE.BoxGeometry(this.size, this.size, this.size);
+            const material = new THREE.MeshStandardMaterial({ color: 0x5a5a5a });
+            this.mesh = new THREE.Mesh(geometry, material);
+            this.mesh.position.copy(this.pos);
+            scene.add(this.mesh);
+        }
+
         var avatarGroup;
         function createAndSetupAvatar(username, isPlayerOne, initialYaw = 0) {
             // Clean up existing avatar if it exists
@@ -6531,6 +6585,17 @@ self.onmessage = async function(e) {
                                 createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z));
                             }
                             break;
+                        case 'lava_mob_spawn':
+                            const lavaMob = new LavaMob(data.x, data.y, data.z);
+                            mobs.push(lavaMob);
+                            break;
+                        case 'boulder_spawn':
+                            const boulder = new Boulder(data.startX, data.startY, data.startZ, data.targetX, data.targetZ);
+                            mobs.find(m => m.type === 'lava').boulders.push(boulder);
+                            break;
+                        case 'lava_flow':
+                            chunkManager.setBlockGlobal(data.x, data.y, data.z, 16, false);
+                            break;
                     }
                 } catch (err) {
                     console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
@@ -7976,6 +8041,101 @@ self.onmessage = async function(e) {
             addMessage(`Switched to world: ${worldName}`, 4000);
         }
 
+        function createSmokeParticle(x, y, z) {
+            const smokeGeo = new THREE.SphereGeometry(2 + Math.random() * 3, 8, 8);
+            const smokeMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.3 });
+            const particle = new THREE.Mesh(smokeGeo, smokeMat);
+            particle.position.set(x, y, z);
+            particle.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 1.5, (Math.random() - 0.5) * 0.5);
+            smokeParticles.add(particle);
+        }
+
+        function manageLavaMobs(dt) {
+            if (!isHost && peers.size > 0) return;
+
+            if (volcanoLocations.length > 0 && mobs.filter(m => m.type === 'lava').length < 3 && Math.random() < 0.001) {
+                const volcano = volcanoLocations[Math.floor(Math.random() * volcanoLocations.length)];
+                const lavaMob = new LavaMob(volcano.x, volcano.y, volcano.z);
+                mobs.push(lavaMob);
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(JSON.stringify({ type: 'lava_mob_spawn', x: volcano.x, y: volcano.y, z: volcano.z }));
+                    }
+                }
+            }
+
+            mobs.filter(m => m.type === 'lava').forEach(mob => {
+                if (Date.now() - mob.startTime > mob.duration) {
+                    mob.active = false;
+                    mob.lavaBlocks.forEach(block => {
+                        chunkManager.setBlockGlobal(block.x, block.y, block.z, 0);
+                    });
+                    mobs = mobs.filter(m => m.id !== mob.id);
+                } else {
+                    if (Math.random() < 0.1) {
+                        createSmokeParticle(mob.pos.x, mob.pos.y, mob.pos.z);
+                    }
+                    if (Math.random() < 0.05) {
+                        const targetX = mob.pos.x + (Math.random() - 0.5) * 128;
+                        const targetZ = mob.pos.z + (Math.random() - 0.5) * 128;
+                        const boulder = new Boulder(mob.pos.x, mob.pos.y, mob.pos.z, targetX, targetZ);
+                        mob.boulders.push(boulder);
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify({ type: 'boulder_spawn', startX: mob.pos.x, startY: mob.pos.y, startZ: mob.pos.z, targetX: targetX, targetZ: targetZ }));
+                            }
+                        }
+                    }
+                    if (Math.random() < 0.2) {
+                        const lavaX = mob.pos.x + (Math.random() - 0.5) * 10;
+                        const lavaZ = mob.pos.z + (Math.random() - 0.5) * 10;
+                        const lavaY = chunkManager.getSurfaceY(lavaX, lavaZ);
+                        chunkManager.setBlockGlobal(lavaX, lavaY, lavaZ, 16);
+                        mob.lavaBlocks.set(`${lavaX},${lavaY},${lavaZ}`, { x: lavaX, y: lavaY, z: lavaZ });
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify({ type: 'lava_flow', x: lavaX, y: lavaY, z: lavaZ }));
+                            }
+                        }
+                    }
+                }
+            });
+
+            smokeParticles.children.forEach(p => {
+                p.position.add(p.velocity.clone().multiplyScalar(dt));
+                p.material.opacity -= 0.1 * dt;
+                if (p.material.opacity <= 0) {
+                    smokeParticles.remove(p);
+                }
+            });
+
+            volcanoLocations.forEach(volcano => {
+                if (Math.random() < 0.2) {
+                    createSmokeParticle(volcano.x, volcano.y, volcano.z);
+                }
+            });
+        }
+
+        function manageBoulders(dt) {
+            mobs.filter(m => m.type === 'lava').forEach(mob => {
+                mob.boulders.forEach((boulder, index) => {
+                    boulder.velocity.y -= gravity * dt;
+                    boulder.pos.add(boulder.velocity.clone().multiplyScalar(dt));
+                    boulder.mesh.position.copy(boulder.pos);
+
+                    if (boulder.pos.y < chunkManager.getSurfaceY(boulder.pos.x, boulder.pos.z)) {
+                        const damage = boulder.size > 2 ? 2 : 1;
+                        if (player.pos.distanceTo(boulder.pos) < boulder.size) {
+                            player.health -= damage;
+                            addMessage('Hit by a boulder!', 1000);
+                        }
+                        scene.remove(boulder.mesh);
+                        mob.boulders.splice(index, 1);
+                    }
+                });
+            });
+        }
+
         function animateRemoteFall(avatar) {
             const fallDuration = 1000; // 1 second
             const startRotation = avatar.rotation.clone();
@@ -8129,6 +8289,8 @@ self.onmessage = async function(e) {
                 if (scoreElement) scoreElement.innerText = player.score;
                 renderer.render(scene, camera);
             } else {
+                manageLavaMobs(dt);
+                manageBoulders(dt);
                 var speed = isSprinting ? 4.3 * 3 : 4.3;
                 var mvx = 0, mvz = 0;
                 if (isMobile()) {
