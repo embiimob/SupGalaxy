@@ -923,6 +923,25 @@
             <button id="closePending">Close</button>
         </div>
     </div>
+    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.8;">📺</div>
+    <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
+        <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay loop muted playsinline></video>
+        <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
+        <div id="videoControls" style="display: flex; justify-content: space-around; align-items: center;">
+            <button id="videoPlayPauseBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
+            <button id="videoSkipBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
+            <button id="videoMuteBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔊</button>
+        </div>
+        <div id="videoModeToggle" style="margin-top: 10px; text-align: center; font-size: 12px;">
+            <label>
+                <input type="radio" name="videoMode" value="tv" checked> TV
+            </label>
+            <label style="margin-left: 10px;">
+                <input type="radio" name="videoMode" value="conference"> Conference
+            </label>
+        </div>
+    </div>
+
     <audio id="soundBreak" preload="auto">
         <source src="sounds/break.ogg" type="audio/ogg">
     </audio>
@@ -1169,6 +1188,15 @@ var previousIsSprinting = false;
         var musicAudioElement = new Audio();
         var isMusicPlaying = false;
         var isMuted = false;
+
+        // Video Player state
+        var videoPlaylist = [];
+        var currentVideoIndex = 0;
+        var videoElement = document.getElementById('videoElement');
+        var isVideoPlaying = false;
+        var isVideoMuted = true;
+        var localVideoStream = null;
+
 
         function simpleHash(str) {
             let hash = 0;
@@ -7727,6 +7755,7 @@ self.onmessage = async function(e) {
                     await initAudio();
                     initThree();
                     initMusicPlayer();
+                    initVideoPlayer();
                     INVENTORY[0] = { id: 120, count: 8 };
             INVENTORY[1] = { id: 121, count: 1 };
                     selectedHotIndex = 0; // Auto-select torch
@@ -7999,6 +8028,20 @@ self.onmessage = async function(e) {
                 initWorldsAndUsers();
                 updateLoginUI();
                 setupEmojiPicker();
+
+                // Video Player event listeners
+                document.getElementById('tvIcon').addEventListener('click', () => {
+                    const videoPlayer = document.getElementById('videoPlayer');
+                    if (videoPlayer.style.display === 'none') {
+                        videoPlayer.style.display = 'block';
+                        if (!localVideoStream) {
+                            initLocalVideo();
+                        }
+                    } else {
+                        videoPlayer.style.display = 'none';
+                    }
+                });
+
                 console.log('[SYSTEM] DOMContentLoaded completed, all listeners attached');
             } catch (error) {
                 console.error('[SYSTEM] Error in DOMContentLoaded:', error);
@@ -8960,6 +9003,164 @@ self.onmessage = async function(e) {
             musicAudioElement.muted = isMuted;
             if (muteBtn) muteBtn.innerText = isMuted ? '🔊' : '🔇';
         }
+
+        // Video Player Logic
+        function initVideoPlayer() {
+            const playPauseBtn = document.getElementById('videoPlayPauseBtn');
+            const skipBtn = document.getElementById('videoSkipBtn');
+            const muteBtn = document.getElementById('videoMuteBtn');
+
+            if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseVideo);
+            if (skipBtn) skipBtn.addEventListener('click', skipVideo);
+            if (muteBtn) muteBtn.addEventListener('click', muteVideo);
+
+            videoElement.addEventListener('ended', () => {
+                skipVideo();
+            });
+
+            fetchAndPlayVideos();
+        }
+
+        async function fetchAndPlayVideos() {
+            const videoStatus = document.getElementById('videoInfo');
+            if (!videoStatus) return;
+            videoStatus.innerText = 'Finding videos...';
+
+            try {
+                const gameAddress = await GetPublicAddressByKeyword('game');
+                if (!gameAddress) {
+                    videoStatus.innerText = 'Video channel not found';
+                    return;
+                }
+
+                const messages = await GetPublicMessagesByAddress(gameAddress, 0, 100);
+                if (!messages || messages.length === 0) {
+                    videoStatus.innerText = 'No videos found';
+                    return;
+                }
+
+                const videoRegex = /(\b[a-zA-Z0-9\-_]+\.(mp4|webm|ogg|mov|avi))\b/i;
+                const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+
+                for (const msg of messages) {
+                    if (videoPlaylist.length >= 10) break;
+
+                    const messageText = msg.Message || '';
+                    const videoMatch = messageText.match(videoRegex);
+                    const ipfsMatch = messageText.match(ipfsRegex);
+
+                    if (videoMatch && ipfsMatch) {
+                        const filename = videoMatch[0];
+                        const hash = ipfsMatch[1];
+                        if (!videoPlaylist.some(track => track.url.includes(hash))) {
+                            videoPlaylist.push({
+                                name: filename,
+                                url: `https://ipfs.io/ipfs/${hash}`
+                            });
+                        }
+                    }
+                }
+
+                if (videoPlaylist.length === 0) {
+                    videoStatus.innerText = 'No valid videos found';
+                } else {
+                    playVideo(currentVideoIndex);
+                }
+            } catch (error) {
+                console.error("Failed to fetch videos:", error);
+                videoStatus.innerText = 'Error loading videos';
+            }
+        }
+
+        function playVideo(index) {
+            const videoStatus = document.getElementById('videoInfo');
+            const playPauseBtn = document.getElementById('videoPlayPauseBtn');
+            if (!videoStatus || !playPauseBtn) return;
+
+            if (videoPlaylist.length === 0 || index < 0 || index >= videoPlaylist.length) {
+                videoStatus.innerText = 'Playlist finished';
+                isVideoPlaying = false;
+                playPauseBtn.innerText = '▶';
+                return;
+            }
+
+            currentVideoIndex = index;
+            const track = videoPlaylist[currentVideoIndex];
+            videoStatus.innerText = track.name;
+            videoElement.src = track.url;
+            videoElement.load();
+
+            const playPromise = videoElement.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isVideoPlaying = true;
+                    playPauseBtn.innerText = '⏸';
+                }).catch(error => {
+                    console.error(`Video playback for ${track.name} failed:`, error);
+                    isVideoPlaying = false;
+                    playPauseBtn.innerText = '▶';
+                    setTimeout(skipVideo, 2000);
+                });
+            }
+        }
+
+        function playPauseVideo() {
+            if (videoPlaylist.length === 0) return;
+            const playPauseBtn = document.getElementById('videoPlayPauseBtn');
+            if (isVideoPlaying) {
+                videoElement.pause();
+                isVideoPlaying = false;
+                if (playPauseBtn) playPauseBtn.innerText = '▶';
+            } else {
+                if (videoElement.src) {
+                    const playPromise = videoElement.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            isVideoPlaying = true;
+                            if (playPauseBtn) playPauseBtn.innerText = '⏸';
+                        }).catch(error => {
+                            console.error("Video playback failed on resume:", error);
+                        });
+                    }
+                } else {
+                    playVideo(currentVideoIndex);
+                }
+            }
+        }
+
+        function skipVideo() {
+            if (videoPlaylist.length > 0) {
+                const nextIndex = (currentVideoIndex + 1) % videoPlaylist.length;
+                playVideo(nextIndex);
+            }
+        }
+
+        function muteVideo() {
+            const muteBtn = document.getElementById('videoMuteBtn');
+            isVideoMuted = !isVideoMuted;
+            videoElement.muted = isVideoMuted;
+            if (muteBtn) muteBtn.innerText = isVideoMuted ? '🔊' : '🔇';
+        }
+
+        async function initLocalVideo() {
+            try {
+                localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const localVideoElement = document.createElement('video');
+                localVideoElement.srcObject = localVideoStream;
+                localVideoElement.autoplay = true;
+                localVideoElement.muted = true;
+                localVideoElement.style.width = '100px';
+                localVideoElement.style.borderRadius = '8px';
+                localVideoElement.style.position = 'absolute';
+                localVideoElement.style.top = '10px';
+                localVideoElement.style.left = '10px';
+                document.getElementById('videoPlayer').appendChild(localVideoElement);
+            } catch (error) {
+                console.error("Error accessing camera and microphone:", error);
+                addMessage("Camera and microphone access denied. Video conferencing will be disabled.", 5000);
+            }
+        }
+
         console.log('[SYSTEM] Script loaded');
     </script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"f66a24b9c76746a1948052a4bac31597","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
