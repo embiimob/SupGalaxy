@@ -3478,9 +3478,8 @@ self.onmessage = async function(e) {
                 var wrappedCz = modWrap(dcz, chunksPerSide);
                 var chunk = this.getChunk(wrappedCx, wrappedCz);
                 if (!chunk.generated) this.generateChunk(chunk);
-                if (chunk.needsRebuild || !chunk.mesh) this.buildChunkMesh(chunk);
                 index++;
-                setTimeout(processNext.bind(this), 333);
+                setTimeout(processNext.bind(this), 33);
             }
             processNext.call(this);
         };
@@ -3530,11 +3529,15 @@ self.onmessage = async function(e) {
             });
 
             var needed = new Set();
+            var built = 0;
             for (const chunkInfo of neededChunks) {
                 var ch = this.getChunk(chunkInfo.cx, chunkInfo.cz);
                 needed.add(ch.key);
                 if (!ch.generating && !ch.generated) this.generateChunk(ch);
-                if (ch.generated && (ch.needsRebuild || !ch.mesh)) this.buildChunkMesh(ch);
+                if (ch.generated && (ch.needsRebuild || !ch.mesh) && built < 2) {
+                    this.buildChunkMesh(ch);
+                    built++;
+                }
             }
 
             for (var peerUser in userPositions) {
@@ -7775,7 +7778,7 @@ self.onmessage = async function(e) {
                     if (healthElement) healthElement.innerText = player.health;
                     var scoreElement = document.getElementById('score');
                     if (scoreElement) scoreElement.innerText = player.score;
-                    await initServers();
+                    initServers(); // Do not await, let it run in the background
                     worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
                     startWorker();
                     setInterval(pollServers, POLL_INTERVAL);
