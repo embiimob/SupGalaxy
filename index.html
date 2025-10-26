@@ -957,6 +957,7 @@
         var POLL_RADIUS = 2;
         var INITIAL_LOAD_RADIUS = 9;
         var LOAD_RADIUS = 3;
+        var currentLoadRadius = INITIAL_LOAD_RADIUS;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
         var VERSION = 'SupGalaxy v0.4.20-beta';
         var POLL_INTERVAL = 30000;
@@ -1056,6 +1057,8 @@
         var useGreedyMesher = false; // <<< FEATURE FLAG
 var isSprinting = false;
 var lastWPress = 0;
+var sprintStartPosition = new THREE.Vector3();
+var previousIsSprinting = false;
         var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
         var lastUpdateTime = 0;
         var lastStateUpdateTime = 0;
@@ -3490,8 +3493,8 @@ self.onmessage = async function(e) {
             }
 
             var neededChunks = [];
-            for (var dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-                for (var dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+            for (var dx = -currentLoadRadius; dx <= currentLoadRadius; dx++) {
+                for (var dz = -currentLoadRadius; dz <= currentLoadRadius; dz++) {
                     var cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
                     var cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
                     neededChunks.push({ cx: cx, cz: cz, dx: dx, dz: dz });
@@ -3542,7 +3545,7 @@ self.onmessage = async function(e) {
                     this.preloadChunks(peerCx, peerCz, 2);
                 }
             }
-            const maxChunks = (LOAD_RADIUS * 2 + 1) * (LOAD_RADIUS * 2 + 1) * 10 * 3;
+            const maxChunks = (currentLoadRadius * 2 + 1) * (currentLoadRadius * 2 + 1) * 10 * 3;
             if (this.chunks.size > maxChunks) {
                 let chunks = Array.from(this.chunks.values());
                 chunks.sort((a, b) => {
@@ -4979,9 +4982,10 @@ self.onmessage = async function(e) {
             document.getElementById('health').innerText = player.health;
             var newCx = Math.floor(targetX / CHUNK_SIZE);
             var newCz = Math.floor(targetZ / CHUNK_SIZE);
-            chunkManager.preloadChunks(newCx, newCz, LOAD_RADIUS);
-            for (var dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-                for (var dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+            currentLoadRadius = INITIAL_LOAD_RADIUS;
+            chunkManager.preloadChunks(newCx, newCz, currentLoadRadius);
+            for (var dx = -currentLoadRadius; dx <= currentLoadRadius; dx++) {
+                for (var dz = -currentLoadRadius; dz <= currentLoadRadius; dz++) {
                     var cx = modWrap(newCx + dx, CHUNKS_PER_SIDE);
                     var cz = modWrap(newCz + dz, CHUNKS_PER_SIDE);
                     var chunk = chunkManager.getChunk(cx, cz);
@@ -8501,6 +8505,15 @@ self.onmessage = async function(e) {
                 const rotationChanged = Math.abs(player.yaw - lastSentPosition.yaw) > 0.01 || Math.abs(player.pitch - lastSentPosition.pitch) > 0.01;
 
                 if (now - lastUpdateTime > 50 && (positionChanged || rotationChanged)) {
+                    if (isSprinting && !previousIsSprinting) {
+                        sprintStartPosition.set(player.x, player.y, player.z);
+                        currentLoadRadius = LOAD_RADIUS;
+                    } else if (!isSprinting && previousIsSprinting) {
+                        if (new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100) {
+                            currentLoadRadius = INITIAL_LOAD_RADIUS;
+                        }
+                    }
+                    previousIsSprinting = isSprinting;
                     lastUpdateTime = now;
                     lastMoveTime = now;
                     lastSentPosition = { x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch };
