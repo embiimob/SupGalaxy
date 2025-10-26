@@ -1688,12 +1688,22 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
 
             // Ocean and beaches
             const VULCAN_SEA_LEVEL = 32;
-            if (height < VULCAN_SEA_LEVEL) {
-                for (let y = height + 1; y <= VULCAN_SEA_LEVEL; y++) {
-                    if (y === height + 1 && y <= VULCAN_SEA_LEVEL + 2) {
+            if (height < VULCAN_SEA_LEVEL + 4) { // Process chunks near the sea level
+                if (height < VULCAN_SEA_LEVEL) {
+                    // This part is for land below sea level.
+                    // First, create the underwater sand slope.
+                    for (let y = height; y > height - 4 && y > 0; y--) {
                         chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
-                    } else {
+                    }
+                    // Then, fill with water.
+                    for (let y = height + 1; y <= VULCAN_SEA_LEVEL; y++) {
                         chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+                    }
+                } else {
+                    // This part is for land at or just above sea level.
+                    // Convert the top layers to sand to create the beach.
+                     for (let y = height; y > height - 4 && y > 0; y--) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
                     }
                 }
             }
