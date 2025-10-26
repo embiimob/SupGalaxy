@@ -923,7 +923,7 @@
             <button id="closePending">Close</button>
         </div>
     </div>
-    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.8;">📺</div>
+    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
         <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay loop muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
@@ -934,10 +934,13 @@
         </div>
         <div id="videoModeToggle" style="margin-top: 10px; text-align: center; font-size: 12px;">
             <label>
-                <input type="radio" name="videoMode" value="tv" checked> TV
+                <input type="radio" name="videoMode" value="ipfs_local" checked> TV + Cam
             </label>
             <label style="margin-left: 10px;">
-                <input type="radio" name="videoMode" value="conference"> Conference
+                <input type="radio" name="videoMode" value="local_only"> Cam Only
+            </label>
+            <label style="margin-left: 10px;">
+                <input type="radio" name="videoMode" value="ipfs_only"> TV Only
             </label>
         </div>
     </div>
@@ -8039,7 +8042,34 @@ self.onmessage = async function(e) {
                         }
                     } else {
                         videoPlayer.style.display = 'none';
+                        if (localVideoStream) {
+                            localVideoStream.getTracks().forEach(track => track.stop());
+                            localVideoStream = null;
+                            const localVideoElement = document.getElementById('localVideoElement');
+                            if (localVideoElement) {
+                                localVideoElement.remove();
+                            }
+                        }
                     }
+                });
+
+                document.querySelectorAll('input[name="videoMode"]').forEach(radio => {
+                    radio.addEventListener('change', (event) => {
+                        const mode = event.target.value;
+                        const ipfsVideo = document.getElementById('videoElement');
+                        const localVideo = document.getElementById('localVideoElement');
+
+                        if (mode === 'ipfs_local') {
+                            if (ipfsVideo) ipfsVideo.style.display = 'block';
+                            if (localVideo) localVideo.style.display = 'block';
+                        } else if (mode === 'local_only') {
+                            if (ipfsVideo) ipfsVideo.style.display = 'none';
+                            if (localVideo) localVideo.style.display = 'block';
+                        } else if (mode === 'ipfs_only') {
+                            if (ipfsVideo) ipfsVideo.style.display = 'block';
+                            if (localVideo) localVideo.style.display = 'none';
+                        }
+                    });
                 });
 
                 console.log('[SYSTEM] DOMContentLoaded completed, all listeners attached');
@@ -9146,6 +9176,7 @@ self.onmessage = async function(e) {
             try {
                 localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 const localVideoElement = document.createElement('video');
+                localVideoElement.id = 'localVideoElement';
                 localVideoElement.srcObject = localVideoStream;
                 localVideoElement.autoplay = true;
                 localVideoElement.muted = true;
