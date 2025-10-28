@@ -804,6 +804,9 @@
                     <img src="https://brand.github.com/_next/static/media/logo-04.9a1517f0.png" alt="GitHub" style="height: 32px; filter: invert(1);">
                 </a>
             </div>
+            <div id="dropZone" style="border: 2px dashed rgb(204, 204, 204); padding: 20px; text-align: center; margin-top: 20px; color: white;">
+                Drag & Drop Session File
+            </div>
         </div>
     </div>
     <div id="emojiModal">
@@ -1332,6 +1335,131 @@ var previousIsSprinting = false;
             }
         }
         async function applySaveFile(data, fromAddress, blockDate) {
+            // New session file loading logic
+            if (data.playerData && data.hash) {
+                const playerData = data.playerData;
+                const expectedHash = data.hash;
+                const actualHash = simpleHash(JSON.stringify(playerData));
+
+                if (actualHash !== expectedHash) {
+                    addMessage('Sorry, file malformed and does not login.', 3000);
+                    return;
+                }
+
+                addMessage('Session file verified. Loading player...', 2000);
+
+                // Start game with loaded data
+                worldName = playerData.world;
+                userName = playerData.user;
+                worldSeed = playerData.seed;
+
+                document.getElementById('worldNameInput').value = worldName;
+                document.getElementById('userInput').value = userName;
+
+
+                // Most of this is copied from startBtn click handler
+                var userWorldKey = userName + '@' + worldName;
+                var profile;
+                try {
+                    profile = await GetProfileByURN(userName);
+                } catch (e) {
+                    console.error("Failed to get profile by URN", e);
+                    profile = null;
+                }
+                userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
+                if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+                if (!knownWorlds.has(worldName)) {
+                    knownWorlds.set(worldName, { discoverer: userName, users: new Set([userName]), toAddress: userAddress });
+                } else {
+                    knownWorlds.get(worldName).users.add(userName);
+                }
+                keywordCache.set(userAddress, userWorldKey);
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('hud').style.display = 'block';
+                document.getElementById('hotbar').style.display = 'flex';
+                document.getElementById('rightPanel').style.display = 'flex';
+                document.getElementById('worldLabel').textContent = worldName;
+                document.getElementById('seedLabel').textContent = 'User ' + userName;
+                updateHudButtons();
+                console.log('[LOGIN] Initializing Three.js from session');
+                await initAudio();
+                initThree();
+                initMusicPlayer();
+                initVideoPlayer();
+
+                // Load player data
+                player.x = playerData.profile.x;
+                player.y = playerData.profile.y;
+                player.z = playerData.profile.z;
+                player.health = playerData.profile.health;
+                player.score = playerData.profile.score;
+                INVENTORY = playerData.profile.inventory;
+                musicPlaylist = playerData.musicPlaylist || [];
+
+                selectedHotIndex = 0;
+                selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
+                initHotbar();
+                updateHotbarUI();
+
+                console.log('[LOGIN] Creating ChunkManager from session');
+                chunkManager = new ChunkManager(worldSeed);
+
+                if (playerData.deltas) {
+                    for (var delta of playerData.deltas) {
+                        var chunkKey = delta.chunk.replace(/^#/, '');
+                        var changes = delta.changes;
+                        chunkManager.applyDeltasToChunk(chunkKey, changes);
+                    }
+                }
+
+                populateSpawnChunks();
+
+                spawnPoint = { x: player.x, y: player.y, z: player.z };
+                player.vy = 0;
+                player.onGround = true;
+
+                var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+                var spawnCx = Math.floor(player.x / CHUNK_SIZE);
+                var spawnCz = Math.floor(player.z / CHUNK_SIZE);
+
+                console.log('[LOGIN] Preloading initial chunks from session');
+                chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
+
+                setupMobile();
+                initMinimap();
+                updateHotbarUI();
+                cameraMode = 'first';
+                controls.enabled = false;
+                avatarGroup.visible = false;
+                camera.position.set(player.x, player.y + 1.62, player.z);
+                camera.rotation.set(0, 0, 0, 'YXZ');
+                if (!isMobile()) {
+                    try {
+                        renderer.domElement.requestPointerLock();
+                        mouseLocked = true;
+                        document.getElementById('crosshair').style.display = 'block';
+                    } catch (e) {
+                        addMessage('Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.', 3000);
+                    }
+                }
+                player.yaw = 0;
+                player.pitch = 0;
+                lastFrame = performance.now();
+                lastRegenTime = lastFrame;
+                var unregisterKeyEvents = registerKeyEvents();
+                console.log('[LOGIN] Starting game loop from session');
+                requestAnimationFrame(gameLoop);
+                addMessage('Loaded session for ' + userName + ' in ' + worldName, 3000);
+                updateHud();
+
+                initServers();
+                worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
+                startWorker();
+                setInterval(pollServers, POLL_INTERVAL);
+
+                return;
+            }
+
             if (!data) return;
 
             if (data.foreignBlockOrigins) {
@@ -5941,7 +6069,7 @@ self.onmessage = async function(e) {
             }
         }
         async function downloadSession() {
-            var out = {
+            var playerData = {
                 world: worldName,
                 seed: worldSeed,
                 user: userName,
@@ -5952,17 +6080,25 @@ self.onmessage = async function(e) {
                     x: player.x,
                     y: player.y,
                     z: player.z,
+                    health: player.health,
+                    score: player.score,
                     inventory: INVENTORY
-                }
+                },
+                musicPlaylist: musicPlaylist
             };
             for (var entry of CHUNK_DELTAS) {
                 var k = entry[0];
                 var arr = entry[1];
                 var parsed = parseChunkKey(k);
                 if (parsed) {
-                    out.deltas.push({ chunk: k, changes: arr });
+                    playerData.deltas.push({ chunk: k, changes: arr });
                 }
             }
+            var hash = simpleHash(JSON.stringify(playerData));
+            var out = {
+                playerData: playerData,
+                hash: hash
+            };
             var blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
@@ -8018,6 +8154,37 @@ self.onmessage = async function(e) {
                             if (localVideo) localVideo.style.display = 'none';
                         }
                     });
+                });
+
+                var dropZone = document.getElementById('dropZone');
+
+                dropZone.addEventListener('dragover', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                });
+
+                dropZone.addEventListener('dragleave', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = '';
+                });
+
+                dropZone.addEventListener('drop', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = '';
+                    var file = event.dataTransfer.files[0];
+                    if (file) {
+                        var reader = new FileReader();
+                        reader.onload = function(e) {
+                            try {
+                                var sessionData = JSON.parse(e.target.result);
+                                applySaveFile(sessionData, 'local', new Date().toISOString());
+                            } catch (error) {
+                                console.error('Error parsing session file:', error);
+                                addMessage('Sorry, file malformed.', 3000);
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
                 });
 
                 console.log('[SYSTEM] DOMContentLoaded completed, all listeners attached');
