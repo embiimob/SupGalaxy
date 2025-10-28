@@ -950,7 +950,7 @@
     </div>
     <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
-        <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay loop muted playsinline></video>
+        <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
         <div id="videoControls" style="display: flex; justify-content: space-around; align-items: center;">
             <button id="videoPlayPauseBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
@@ -1412,6 +1412,7 @@ var previousIsSprinting = false;
                 player.score = playerData.profile.score;
                 INVENTORY = playerData.profile.inventory;
                 musicPlaylist = playerData.musicPlaylist || [];
+                videoPlaylist = playerData.videoPlaylist || [];
 
                 selectedHotIndex = 0;
                 selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
@@ -6101,7 +6102,8 @@ self.onmessage = async function(e) {
                     score: player.score,
                     inventory: INVENTORY
                 },
-                musicPlaylist: musicPlaylist
+                musicPlaylist: musicPlaylist,
+                videoPlaylist: videoPlaylist
             };
             for (var entry of CHUNK_DELTAS) {
                 var k = entry[0];
