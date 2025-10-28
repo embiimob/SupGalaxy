@@ -860,10 +860,15 @@
     <div id="hotbar" style="display:none;"></div>
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
+        <div id="proximityVideo" style="display: none; margin-top: 8px;">
+            <video id="proximityVideoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
+            <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
+        </div>
         <div id="versionLabel">SupGalaxy v0.4.20-beta</div>
         <div id="musicPlayer" style="margin-top: 18px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
             <div style="display: flex; justify-content: space-around; margin-top: 4px;">
+                <button id="cameraBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">📷</button>
                 <button id="playPauseBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
                 <button id="skipBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
                 <button id="muteBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔇</button>
@@ -1184,6 +1189,11 @@ var previousIsSprinting = false;
         var projectiles = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
+        var localVideoStream = null;
+        var userVideoStreams = new Map();
+        let proximityVideoUsers = [];
+        let currentProximityVideoIndex = 0;
+        let lastProximityVideoChangeTime = 0;
         var hiveLocations = [];
         var flowerLocations = [];
         const maxAudioDistance = 32;
@@ -6339,13 +6349,26 @@ self.onmessage = async function(e) {
             }
 
             pc.ontrack = (event) => {
-                const username = hostUser;
-                if (!userAudioStreams.has(username)) {
-                    const audio = new Audio();
-                    audio.srcObject = event.streams[0];
-                    audio.autoplay = true;
-                    userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
-                    console.log(`[WebRTC] Received audio stream from ${username}`);
+                const username = hostUser; // In a client-server model, the track is from the hostUser.
+                if (event.track.kind === 'audio') {
+                    if (!userAudioStreams.has(username)) {
+                        const audio = new Audio();
+                        audio.srcObject = event.streams[0];
+                        audio.autoplay = true;
+                        userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received audio stream from ${username}`);
+                    }
+                } else if (event.track.kind === 'video') {
+                    if (!userVideoStreams.has(username)) {
+                        const video = document.createElement('video');
+                        video.srcObject = event.streams[0];
+                        video.autoplay = true;
+                        video.playsInline = true;
+                        video.style.display = 'none'; // Initially hidden
+                        document.body.appendChild(video);
+                        userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received video stream from ${username}`);
+                    }
                 }
             };
 
@@ -6972,12 +6995,26 @@ self.onmessage = async function(e) {
                     }
 
                     pc.ontrack = (event) => {
-                        if (!userAudioStreams.has(clientUser)) {
-                            const audio = new Audio();
-                            audio.srcObject = event.streams[0];
-                            audio.autoplay = true;
-                            userAudioStreams.set(clientUser, { audio: audio, stream: event.streams[0] });
-                            console.log(`[WebRTC] Received audio stream from ${clientUser}`);
+                        const username = clientUser; // The track is from the connecting client.
+                        if (event.track.kind === 'audio') {
+                            if (!userAudioStreams.has(username)) {
+                                const audio = new Audio();
+                                audio.srcObject = event.streams[0];
+                                audio.autoplay = true;
+                                userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received audio stream from ${username}`);
+                            }
+                        } else if (event.track.kind === 'video') {
+                            if (!userVideoStreams.has(username)) {
+                                const video = document.createElement('video');
+                                video.srcObject = event.streams[0];
+                                video.autoplay = true;
+                                video.playsInline = true;
+                                video.style.display = 'none'; // Initially hidden
+                                document.body.appendChild(video);
+                                userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received video stream from ${username}`);
+                            }
                         }
                     };
 
@@ -7880,7 +7917,13 @@ self.onmessage = async function(e) {
                     document.getElementById('seedLabel').textContent = 'User ' + userName;
                     updateHudButtons();
                     console.log('[LOGIN] Initializing Three.js');
-                    await initAudio();
+                    try {
+                        await initAudio();
+                    } catch (e) {
+                        console.error("Failed to initialize audio:", e);
+                        addMessage("Could not initialize audio, continuing without it.", 3000);
+                    }
+                    console.log('[LOGIN] Initializing Three.js after audio');
                     initThree();
                     initMusicPlayer();
                     initVideoPlayer();
@@ -8307,11 +8350,51 @@ self.onmessage = async function(e) {
                 userAudioStreams.delete(username);
             }
 
+            if (userVideoStreams.has(username)) {
+                userVideoStreams.delete(username);
+            }
+
             delete userPositions[username];
 
             addMessage(`${username} has disconnected.`);
             updateHudButtons();
             console.log(`[WebRTC] Cleaned up peer: ${username}`);
+        }
+
+        async function toggleCamera() {
+            const cameraBtn = document.getElementById('cameraBtn');
+            if (localVideoStream) {
+                localVideoStream.getTracks().forEach(track => track.stop());
+                localVideoStream = null;
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.pc) {
+                        const senders = peerData.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+                        senders.forEach(sender => peerData.pc.removeTrack(sender));
+                    }
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(JSON.stringify({ type: 'video_stopped', username: userName }));
+                    }
+                }
+                cameraBtn.style.boxShadow = '';
+                addMessage('Camera disabled', 2000);
+            } else {
+                try {
+                    localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.pc) {
+                            localVideoStream.getTracks().forEach(track => peerData.pc.addTrack(track, localVideoStream));
+                        }
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'video_started', username: userName }));
+                        }
+                    }
+                    cameraBtn.style.boxShadow = '0 0 10px 3px rgba(102, 209, 255, 0.7)';
+                    addMessage('Camera enabled', 2000);
+                } catch (err) {
+                    addMessage('Could not access camera', 3000);
+                    console.error('Error accessing camera:', err);
+                }
+            }
         }
 
         async function initAudio() {
@@ -8333,6 +8416,76 @@ self.onmessage = async function(e) {
             if (!isAttacking) {
                 isAttacking = true;
                 attackStartTime = performance.now();
+            }
+        }
+
+        function updateProximityVideo() {
+            const now = Date.now();
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
+            proximityVideoUsers = [];
+            const localPlayerPos = new THREE.Vector3(player.x, player.y, player.z);
+
+            // Add host if they have video and are in proximity
+            if (isHost && localVideoStream) {
+                 if (userPositions[userName]) {
+                    const hostPos = new THREE.Vector3(userPositions[userName].targetX, userPositions[userName].targetY, userPositions[userName].targetZ);
+                    if (localPlayerPos.distanceTo(hostPos) <= 32) {
+                        proximityVideoUsers.push(userName);
+                    }
+                }
+            }
+
+
+            for (const [username, videoStream] of userVideoStreams.entries()) {
+                if (userPositions[username]) {
+                    const userPos = userPositions[username];
+                    const remotePlayerPos = new THREE.Vector3(userPos.targetX, userPos.targetY, userPos.targetZ);
+                    if (localPlayerPos.distanceTo(remotePlayerPos) <= 32) {
+                        proximityVideoUsers.push(username);
+                    }
+                }
+            }
+
+            if (localVideoStream) {
+                const localPlayerInProximityWithVideoUsers = proximityVideoUsers.length > 0;
+                if (localPlayerInProximityWithVideoUsers && !proximityVideoUsers.includes(userName)) {
+                    proximityVideoUsers.push(userName);
+                }
+            }
+
+
+            if (proximityVideoUsers.length === 0) {
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                currentProximityVideoIndex = 0;
+                lastProximityVideoChangeTime = 0;
+                return;
+            }
+
+            if (now - lastProximityVideoChangeTime > 30000 || proximityVideoUsers.length > 0 && proximityVideoContainer.style.display === 'none') {
+                lastProximityVideoChangeTime = now;
+                currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length;
+
+                const currentUser = proximityVideoUsers[currentProximityVideoIndex];
+                proximityVideoLabel.innerText = currentUser;
+
+                if (currentUser === userName && localVideoStream) {
+                     proximityVideoElement.srcObject = localVideoStream;
+                } else if (userVideoStreams.has(currentUser)) {
+                    proximityVideoElement.srcObject = userVideoStreams.get(currentUser).stream;
+                }
+                proximityVideoContainer.style.display = 'block';
+            }
+             if (proximityVideoContainer.style.display === 'block') {
+                const currentUser = proximityVideoUsers[currentProximityVideoIndex];
+                if (!proximityVideoUsers.includes(currentUser)) {
+                    lastProximityVideoChangeTime = 0;
+                }
             }
         }
 
@@ -8922,6 +9075,8 @@ self.onmessage = async function(e) {
                     }
                 }
 
+                updateProximityVideo();
+
                 if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
                     hasMovedSubstantially = true;
                 }
@@ -9044,6 +9199,7 @@ self.onmessage = async function(e) {
             if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
             if (skipBtn) skipBtn.addEventListener('click', skipMusic);
             if (muteBtn) muteBtn.addEventListener('click', muteMusic);
+        document.getElementById('cameraBtn').addEventListener('click', toggleCamera);
             if (musicMenuBtn) musicMenuBtn.addEventListener('click', () => {
                 musicMenuModal.style.display = 'flex';
                 isPromptOpen = true;
