@@ -9113,7 +9113,7 @@ self.onmessage = async function(e) {
                     return;
                 }
 
-                const audioRegex = /(\b[a-zA-Z0-9\-_]+\.(mp3|wav))\b/i;
+                const audioRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp3|wav))\b/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 for (const msg of messages) {
@@ -9269,7 +9269,7 @@ self.onmessage = async function(e) {
                 }
 
                 musicList.innerHTML = '';
-                const audioRegex = /(\b[a-zA-Z0-9\-_]+\.(mp3|wav))\b/i;
+                const audioRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp3|wav))\b/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 const filteredMessages = messages.filter(msg => {
