@@ -844,6 +844,7 @@
                 <button id="skipBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
                 <button id="muteBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔇</button>
             </div>
+            <button id="musicMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Music Menu</button>
         </div>
     </div>
     <div id="craftModal">
@@ -942,6 +943,23 @@
             <label style="margin-left: 10px;">
                 <input type="radio" name="videoMode" value="ipfs_only"> TV Only
             </label>
+        </div>
+    </div>
+
+    <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
+        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
+            <h3>Music Menu</h3>
+            <div id="musicList" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
+            <div id="musicPlaylistView" style="display: none; max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
+            <div id="musicPagination" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <button id="musicPrevBtn">Previous</button>
+                <span id="musicPageNum">Page 1</span>
+                <button id="musicNextBtn">Next</button>
+            </div>
+            <div style="text-align:right;">
+                <button id="showPlaylistBtn" style="float: left;">Show Playlist</button>
+                <button id="closeMusicMenu">Close</button>
+            </div>
         </div>
     </div>
 
@@ -1191,6 +1209,10 @@ var previousIsSprinting = false;
         var musicAudioElement = new Audio();
         var isMusicPlaying = false;
         var isMuted = false;
+        var musicCurrentPage = 1;
+        var previewAudio = new Audio();
+        var currentPreviewUrl = null;
+        var showingPlaylist = false;
 
         // Video Player state
         var videoPlaylist = [];
@@ -5749,76 +5771,6 @@ self.onmessage = async function(e) {
         var minimapCtx;
 
 
-           async function handleMinimapFile(file) {
-            try {
-                const text = await file.text();
-                const data = JSON.parse(text);
-
-                if (data.deltas && data.profile) {
-                    await applySaveFile(data, userAddress, new Date().toISOString());
-                    addMessage('✅ Session loaded!', 3000);
-                    return;
-                }
-
-                if (!data.world || data.world !== worldName) {
-                    addMessage('❌ Wrong world', 3000);
-                    return;
-                }
-
-                if (data.offer && isHost) {
-                    // HOST MODE: Add to pending - NO POLLING
-                    const clientUser = data.user || 'anonymous';
-                    if (clientUser === userName) return;
-
-                    pendingOffers.push({
-                        clientUser, offer: data.offer, iceCandidates: data.iceCandidates || [],
-                        transactionId: 'manual_' + Date.now(), timestamp: Date.now(),
-                        profile: await GetProfileByURN(clientUser) || { URN: clientUser }
-                    });
-
-                    addMessage(`📥 Request from ${clientUser} - READY TO ACCEPT`, 5000);
-                    setupPendingModal();
-                    document.getElementById('pendingModal').style.display = 'block';
-                    isPromptOpen = true;
-
-                } else if ((data.answer || data.batch) && !isHost) {
-                    // CLIENT MODE: Process answer - NO POLLING
-                    const hostUser = data.user || 'anonymous';
-                    const peer = peers.get(hostUser);
-                    if (!peer?.pc) {
-                        addMessage(`❌ No connection for ${hostUser}`, 3000);
-                        return;
-                    }
-
-                    try {
-                        if (data.answer) {
-                            await peer.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                        } else if (data.batch) {
-                            const myAnswer = data.batch.find(entry => entry.user === userName);
-                            if (myAnswer) {
-                                await peer.pc.setRemoteDescription(new RTCSessionDescription(myAnswer.answer));
-                            }
-                        }
-
-                        for (const candidate of (data.iceCandidates || data.batch?.find(e => e.user === userName)?.iceCandidates || [])) {
-                            await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
-                        }
-
-                        // ✅ SUCCESS - NO POLLING NEEDED
-                        addMessage(`✅ Connected to ${hostUser}!`, 5000);
-                        updateHudButtons();
-
-                    } catch (e) {
-                        console.error(`❌ Answer failed ${hostUser}:`, e);
-                        addMessage(`❌ Failed: ${hostUser}`, 3000);
-                    }
-                }
-            } catch (e) {
-                console.error('[FILE] Error:', e);
-                addMessage('❌ Invalid file', 3000);
-            }
-        }
-
         function updateMinimap() {
             if (!minimapCtx) return;
             var canvas = minimapCtx.canvas;
@@ -6112,23 +6064,19 @@ self.onmessage = async function(e) {
                 }
                 function updateWorldSuggestions() {
                     var value = worldInput.value.toLowerCase();
-                    var suggestions = Array.from(knownWorlds.entries())
-                        .filter(function (w) { return w[0].toLowerCase().startsWith(value); })
+                    var suggestions = Array.from(knownWorlds.keys())
+                        .filter(w => w.toLowerCase().startsWith(value))
                         .slice(0, 10);
-                    worldSuggestions.innerHTML = suggestions.map(function (w) {
-                        var server = knownServers.find(function (s) { return s.hostUser === w[1].discoverer; });
-                        var isOld = server ? (Date.now() - server.timestamp > 86400000) : true;
-                        return '<div data-value="' + w[0] + '" class="' + (isOld ? 'greyed' : '') + '">' + w[0] + ' (' + (w[1].discoverer || 'unknown') + ')</div>';
-                    }).join('');
+                    worldSuggestions.innerHTML = suggestions.map(w => `<div data-value="${w}">${w}</div>`).join('');
                     worldSuggestions.style.display = suggestions.length > 0 && value ? 'block' : 'none';
-                    console.log('[LoginUI] World suggestions updated:', suggestions.length);
                 }
+
                 function updateUserSuggestions() {
                     var value = userInput.value.toLowerCase();
                     var suggestions = Array.from(knownUsers.keys())
-                        .filter(function (u) { return u.toLowerCase().startsWith(value); })
+                        .filter(u => u.toLowerCase().startsWith(value))
                         .slice(0, 10);
-                    userSuggestions.innerHTML = suggestions.map(function (u) { return '<div data-value="' + u + '">' + u + '</div>'; }).join('');
+                    userSuggestions.innerHTML = suggestions.map(u => `<div data-value="${u}">${u}</div>`).join('');
                     userSuggestions.style.display = suggestions.length > 0 && value ? 'block' : 'none';
                     console.log('[LoginUI] User suggestions updated:', suggestions.length);
                 }
@@ -8901,13 +8849,58 @@ self.onmessage = async function(e) {
             const playPauseBtn = document.getElementById('playPauseBtn');
             const skipBtn = document.getElementById('skipBtn');
             const muteBtn = document.getElementById('muteBtn');
+            const musicMenuBtn = document.getElementById('musicMenuBtn');
+            const musicMenuModal = document.getElementById('musicMenuModal');
+            const closeMusicMenuBtn = document.getElementById('closeMusicMenu');
+            const showPlaylistBtn = document.getElementById('showPlaylistBtn');
+            const musicList = document.getElementById('musicList');
 
             if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
             if (skipBtn) skipBtn.addEventListener('click', skipMusic);
             if (muteBtn) muteBtn.addEventListener('click', muteMusic);
+            if (musicMenuBtn) musicMenuBtn.addEventListener('click', () => {
+                musicMenuModal.style.display = 'flex';
+                isPromptOpen = true;
+                fetchSongsForMenu(musicCurrentPage);
+            });
+            if (closeMusicMenuBtn) closeMusicMenuBtn.addEventListener('click', () => {
+                musicMenuModal.style.display = 'none';
+                isPromptOpen = false;
+            });
+
+            const prevBtn = document.getElementById('musicPrevBtn');
+            const nextBtn = document.getElementById('musicNextBtn');
+
+            if (prevBtn) prevBtn.addEventListener('click', () => {
+                if (musicCurrentPage > 1) {
+                    musicCurrentPage--;
+                    fetchSongsForMenu(musicCurrentPage);
+                }
+            });
+
+            if (nextBtn) nextBtn.addEventListener('click', () => {
+                musicCurrentPage++;
+                fetchSongsForMenu(musicCurrentPage);
+            });
+
+            if (showPlaylistBtn) showPlaylistBtn.addEventListener('click', () => {
+                showingPlaylist = !showingPlaylist;
+                document.getElementById('musicList').style.display = showingPlaylist ? 'none' : 'block';
+                document.getElementById('musicPagination').style.display = showingPlaylist ? 'none' : 'block';
+                document.getElementById('musicPlaylistView').style.display = showingPlaylist ? 'block' : 'none';
+                showPlaylistBtn.innerText = showingPlaylist ? 'Show Search' : 'Show Playlist';
+                if (showingPlaylist) {
+                    renderPlaylist();
+                }
+            });
 
             musicAudioElement.addEventListener('ended', () => {
                 skipMusic();
+            });
+
+            previewAudio.addEventListener('ended', () => {
+                document.querySelectorAll('.preview-play-btn').forEach(btn => btn.innerText = '▶');
+                currentPreviewUrl = null;
             });
 
             fetchAndPlayMusic();
@@ -8943,10 +8936,11 @@ self.onmessage = async function(e) {
 
                     if (audioMatch && ipfsMatch) {
                         const filename = audioMatch[0];
+                        const sanitizedFilename = filename.replace(/>|</g, '');
                         const hash = ipfsMatch[1];
                         if (!musicPlaylist.some(track => track.url.includes(hash))) {
                             musicPlaylist.push({
-                                name: filename,
+                                name: sanitizedFilename,
                                 url: `https://ipfs.io/ipfs/${hash}`
                             });
                         }
@@ -9032,6 +9026,151 @@ self.onmessage = async function(e) {
             isMuted = !isMuted;
             musicAudioElement.muted = isMuted;
             if (muteBtn) muteBtn.innerText = isMuted ? '🔊' : '🔇';
+        }
+
+        function togglePreview(button, songUrl) {
+            const isCurrentlyPlaying = !previewAudio.paused && currentPreviewUrl === songUrl;
+
+            // Stop any playing audio from the main player
+            if (isMusicPlaying) {
+                playPauseMusic();
+            }
+
+            // Stop any currently playing preview
+            if (!previewAudio.paused) {
+                previewAudio.pause();
+                const playingButton = document.querySelector('.preview-play-btn[data-playing="true"]');
+                if(playingButton) {
+                    playingButton.innerText = '▶';
+                    playingButton.removeAttribute('data-playing');
+                }
+            }
+
+            if (isCurrentlyPlaying) {
+                currentPreviewUrl = null;
+            } else {
+                previewAudio.src = songUrl;
+                previewAudio.play();
+                currentPreviewUrl = songUrl;
+                button.innerText = '⏹';
+                button.setAttribute('data-playing', 'true');
+            }
+        }
+
+        async function fetchSongsForMenu(page = 1) {
+            const musicList = document.getElementById('musicList');
+            const pageNum = document.getElementById('musicPageNum');
+            const prevBtn = document.getElementById('musicPrevBtn');
+            musicList.innerHTML = '<li>Loading...</li>';
+            pageNum.innerText = `Page ${page}`;
+            prevBtn.disabled = page === 1;
+
+            try {
+                const gameAddress = await GetPublicAddressByKeyword('game');
+                if (!gameAddress) {
+                    musicList.innerHTML = '<li>Music channel not found</li>';
+                    return;
+                }
+
+                const messages = await GetPublicMessagesByAddress(gameAddress, (page - 1) * 50, 50);
+                if (!messages || messages.length === 0) {
+                    musicList.innerHTML = '<li>No more songs</li>';
+                    document.getElementById('musicNextBtn').disabled = true;
+                    return;
+                }
+
+                musicList.innerHTML = '';
+                const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+
+                messages.forEach(async msg => {
+                    const messageText = msg.Message || '';
+                    const ipfsMatch = messageText.match(ipfsRegex);
+
+                    if (ipfsMatch) {
+                        const hash = ipfsMatch[1];
+                        const filename = messageText.substring(messageText.indexOf(hash) + hash.length + 1).trim();
+                        const sanitizedFilename = filename.replace(/>|</g, '');
+                        const listItem = document.createElement('div');
+                        listItem.style.display = 'flex';
+                        listItem.style.justifyContent = 'space-between';
+                        listItem.style.padding = '5px';
+                        listItem.style.borderBottom = '1px solid #333';
+
+                        const songName = document.createElement('span');
+                        const profile = await GetProfileByAddress(msg.FromAddress);
+                        const creator = profile ? profile.URN : 'anonymous';
+                        songName.innerText = `${sanitizedFilename} by ${creator}`;
+                        listItem.appendChild(songName);
+
+                        const buttonContainer = document.createElement('div');
+
+                        const playButton = document.createElement('button');
+                        playButton.innerText = '▶';
+                        playButton.className = 'preview-play-btn';
+                        playButton.style.fontSize = '10px';
+                        const songUrl = `https://ipfs.io/ipfs/${hash}`;
+                        playButton.onclick = () => togglePreview(playButton, songUrl);
+                        buttonContainer.appendChild(playButton);
+
+                        const addButton = document.createElement('button');
+                        addButton.innerText = 'Add';
+                        addButton.style.fontSize = '10px';
+                        addButton.style.marginLeft = '5px';
+                        addButton.onclick = () => {
+                            const track = {
+                                name: sanitizedFilename,
+                                url: `https://ipfs.io/ipfs/${hash}`
+                            };
+                            if (!musicPlaylist.some(t => t.url === track.url)) {
+                                if (musicPlaylist.length >= 10) {
+                                    musicPlaylist.shift(); // Remove the oldest song
+                                }
+                                musicPlaylist.push(track);
+                                addMessage(`${sanitizedFilename} added to playlist`);
+                            } else {
+                                addMessage(`${sanitizedFilename} is already in the playlist`);
+                            }
+                        };
+                        buttonContainer.appendChild(addButton);
+                        listItem.appendChild(buttonContainer);
+                        musicList.appendChild(listItem);
+                    }
+                });
+                document.getElementById('musicNextBtn').disabled = messages.length < 50;
+            } catch (error) {
+                console.error("Failed to fetch songs for menu:", error);
+                musicList.innerHTML = '<li>Error loading songs</li>';
+            }
+        }
+
+        function renderPlaylist() {
+            const playlistView = document.getElementById('musicPlaylistView');
+            playlistView.innerHTML = '';
+            if (musicPlaylist.length === 0) {
+                playlistView.innerHTML = '<div>Playlist is empty</div>';
+                return;
+            }
+            musicPlaylist.forEach((track, index) => {
+                const listItem = document.createElement('div');
+                listItem.style.display = 'flex';
+                listItem.style.justifyContent = 'space-between';
+                listItem.style.padding = '5px';
+                listItem.style.borderBottom = '1px solid #333';
+
+                const songName = document.createElement('span');
+                songName.innerText = track.name;
+                listItem.appendChild(songName);
+
+                const removeButton = document.createElement('button');
+                removeButton.innerText = 'Remove';
+                removeButton.style.fontSize = '10px';
+                removeButton.onclick = () => {
+                    musicPlaylist.splice(index, 1);
+                    renderPlaylist();
+                };
+                listItem.appendChild(removeButton);
+                playlistView.appendChild(listItem);
+            });
         }
 
         // Video Player Logic
