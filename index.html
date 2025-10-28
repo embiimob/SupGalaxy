@@ -809,6 +809,27 @@
             </div>
         </div>
     </div>
+
+    <div id="videoMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
+        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
+            <h3>Video Menu</h3>
+            <div style="display: flex; margin-bottom: 10px;">
+                <input type="text" id="videoSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                <button id="videoSearchBtn" style="margin-left: 5px; padding: 6px 10px; border-radius: 4px; background: var(--accent); color: #111; border: 0; cursor: pointer;">Search</button>
+            </div>
+            <div id="videoList" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
+            <div id="videoPlaylistView" style="display: none; max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
+            <div id="videoPagination" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <button id="videoPrevBtn">Previous</button>
+                <span id="videoPageNum">Page 1</span>
+                <button id="videoNextBtn">Next</button>
+            </div>
+            <div style="text-align:right;">
+                <button id="showVideoPlaylistBtn" style="float: left;">Show Playlist</button>
+                <button id="closeVideoMenu">Close</button>
+            </div>
+        </div>
+    </div>
     <div id="emojiModal">
         <div id="emojiGrid"></div>
     </div>
@@ -929,24 +950,15 @@
     </div>
     <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
-        <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay loop muted playsinline></video>
+        <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
         <div id="videoControls" style="display: flex; justify-content: space-around; align-items: center;">
             <button id="videoPlayPauseBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
             <button id="videoSkipBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
             <button id="videoMuteBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔊</button>
+            <button id="videoFullscreenBtn" style="padding: 4px 8px; font-size: 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">📺</button>
         </div>
-        <div id="videoModeToggle" style="margin-top: 10px; text-align: center; font-size: 12px;">
-            <label>
-                <input type="radio" name="videoMode" value="ipfs_local" checked> TV + Cam
-            </label>
-            <label style="margin-left: 10px;">
-                <input type="radio" name="videoMode" value="local_only"> Cam Only
-            </label>
-            <label style="margin-left: 10px;">
-                <input type="radio" name="videoMode" value="ipfs_only"> TV Only
-            </label>
-        </div>
+        <button id="videoMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Video Menu</button>
     </div>
 
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
@@ -1227,7 +1239,8 @@ var previousIsSprinting = false;
         var videoElement = document.getElementById('videoElement');
         var isVideoPlaying = false;
         var isVideoMuted = true;
-        var localVideoStream = null;
+        var videoCurrentPage = 1;
+        var showingVideoPlaylist = false;
 
 
         function simpleHash(str) {
@@ -1399,6 +1412,7 @@ var previousIsSprinting = false;
                 player.score = playerData.profile.score;
                 INVENTORY = playerData.profile.inventory;
                 musicPlaylist = playerData.musicPlaylist || [];
+                videoPlaylist = playerData.videoPlaylist || [];
 
                 selectedHotIndex = 0;
                 selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
@@ -6088,7 +6102,8 @@ self.onmessage = async function(e) {
                     score: player.score,
                     inventory: INVENTORY
                 },
-                musicPlaylist: musicPlaylist
+                musicPlaylist: musicPlaylist,
+                videoPlaylist: videoPlaylist
             };
             for (var entry of CHUNK_DELTAS) {
                 var k = entry[0];
@@ -8147,39 +8162,15 @@ self.onmessage = async function(e) {
                     const videoPlayer = document.getElementById('videoPlayer');
                     if (videoPlayer.style.display === 'none') {
                         videoPlayer.style.display = 'block';
-                        if (!localVideoStream) {
-                            initLocalVideo();
-                        }
+                        fetchAndPlayVideos('game');
                     } else {
                         videoPlayer.style.display = 'none';
-                        if (localVideoStream) {
-                            localVideoStream.getTracks().forEach(track => track.stop());
-                            localVideoStream = null;
-                            const localVideoElement = document.getElementById('localVideoElement');
-                            if (localVideoElement) {
-                                localVideoElement.remove();
-                            }
+                        if (isVideoPlaying) {
+                            videoElement.pause();
+                            isVideoPlaying = false;
+                            document.getElementById('videoPlayPauseBtn').innerText = '▶';
                         }
                     }
-                });
-
-                document.querySelectorAll('input[name="videoMode"]').forEach(radio => {
-                    radio.addEventListener('change', (event) => {
-                        const mode = event.target.value;
-                        const ipfsVideo = document.getElementById('videoElement');
-                        const localVideo = document.getElementById('localVideoElement');
-
-                        if (mode === 'ipfs_local') {
-                            if (ipfsVideo) ipfsVideo.style.display = 'block';
-                            if (localVideo) localVideo.style.display = 'block';
-                        } else if (mode === 'local_only') {
-                            if (ipfsVideo) ipfsVideo.style.display = 'none';
-                            if (localVideo) localVideo.style.display = 'block';
-                        } else if (mode === 'ipfs_only') {
-                            if (ipfsVideo) ipfsVideo.style.display = 'block';
-                            if (localVideo) localVideo.style.display = 'none';
-                        }
-                    });
                 });
 
                 var dropZone = document.getElementById('dropZone');
@@ -9401,25 +9392,86 @@ self.onmessage = async function(e) {
             const playPauseBtn = document.getElementById('videoPlayPauseBtn');
             const skipBtn = document.getElementById('videoSkipBtn');
             const muteBtn = document.getElementById('videoMuteBtn');
+            const fullscreenBtn = document.getElementById('videoFullscreenBtn');
+            const videoMenuBtn = document.getElementById('videoMenuBtn');
+            const videoMenuModal = document.getElementById('videoMenuModal');
+            const closeVideoMenuBtn = document.getElementById('closeVideoMenu');
+            const showPlaylistBtn = document.getElementById('showVideoPlaylistBtn');
+            const videoSearchInput = document.getElementById('videoSearchInput');
+            const videoSearchBtn = document.getElementById('videoSearchBtn');
 
             if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseVideo);
             if (skipBtn) skipBtn.addEventListener('click', skipVideo);
             if (muteBtn) muteBtn.addEventListener('click', muteVideo);
+            if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+            if (videoMenuBtn) videoMenuBtn.addEventListener('click', () => {
+                videoMenuModal.style.display = 'flex';
+                isPromptOpen = true;
+                videoSearchInput.value = 'game'; // Default search term
+                fetchVideosForMenu('game', 1);
+            });
+
+            if (closeVideoMenuBtn) closeVideoMenuBtn.addEventListener('click', () => {
+                videoMenuModal.style.display = 'none';
+                isPromptOpen = false;
+            });
+
+            function performVideoSearch() {
+                const searchTerm = videoSearchInput.value.trim();
+                if (searchTerm) {
+                    videoCurrentPage = 1;
+                    fetchVideosForMenu(searchTerm, videoCurrentPage);
+                }
+            }
+
+            if (videoSearchBtn) videoSearchBtn.addEventListener('click', performVideoSearch);
+            if (videoSearchInput) videoSearchInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    performVideoSearch();
+                }
+            });
+
+            const prevBtn = document.getElementById('videoPrevBtn');
+            const nextBtn = document.getElementById('videoNextBtn');
+
+            if (prevBtn) prevBtn.addEventListener('click', () => {
+                if (videoCurrentPage > 1) {
+                    videoCurrentPage--;
+                    const searchTerm = videoSearchInput.value.trim() || 'game';
+                    fetchVideosForMenu(searchTerm, videoCurrentPage);
+                }
+            });
+
+            if (nextBtn) nextBtn.addEventListener('click', () => {
+                videoCurrentPage++;
+                const searchTerm = videoSearchInput.value.trim() || 'game';
+                fetchVideosForMenu(searchTerm, videoCurrentPage);
+            });
+
+            if (showPlaylistBtn) showPlaylistBtn.addEventListener('click', () => {
+                showingVideoPlaylist = !showingVideoPlaylist;
+                document.getElementById('videoList').style.display = showingVideoPlaylist ? 'none' : 'block';
+                document.getElementById('videoPagination').style.display = showingVideoPlaylist ? 'none' : 'block';
+                document.getElementById('videoPlaylistView').style.display = showingVideoPlaylist ? 'block' : 'none';
+                showPlaylistBtn.innerText = showingVideoPlaylist ? 'Show Search' : 'Show Playlist';
+                if (showingVideoPlaylist) {
+                    renderVideoPlaylist();
+                }
+            });
 
             videoElement.addEventListener('ended', () => {
                 skipVideo();
             });
-
-            fetchAndPlayVideos();
         }
 
-        async function fetchAndPlayVideos() {
+        async function fetchAndPlayVideos(searchTerm = 'game') {
             const videoStatus = document.getElementById('videoInfo');
             if (!videoStatus) return;
             videoStatus.innerText = 'Finding videos...';
 
             try {
-                const gameAddress = await GetPublicAddressByKeyword('game');
+                const gameAddress = await GetPublicAddressByKeyword(searchTerm);
                 if (!gameAddress) {
                     videoStatus.innerText = 'Video channel not found';
                     return;
@@ -9534,25 +9586,139 @@ self.onmessage = async function(e) {
             if (muteBtn) muteBtn.innerText = isVideoMuted ? '🔊' : '🔇';
         }
 
-        async function initLocalVideo() {
-            try {
-                localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                const localVideoElement = document.createElement('video');
-                localVideoElement.id = 'localVideoElement';
-                localVideoElement.srcObject = localVideoStream;
-                localVideoElement.autoplay = true;
-                localVideoElement.muted = true;
-                localVideoElement.style.width = '100px';
-                localVideoElement.style.borderRadius = '8px';
-                localVideoElement.style.position = 'absolute';
-                localVideoElement.style.top = '10px';
-                localVideoElement.style.left = '10px';
-                document.getElementById('videoPlayer').appendChild(localVideoElement);
-            } catch (error) {
-                console.error("Error accessing camera and microphone:", error);
-                addMessage("Camera and microphone access denied. Video conferencing will be disabled.", 5000);
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                videoElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
             }
         }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                // Any cleanup when exiting fullscreen can be done here
+            }
+        });
+
+        function renderVideoPlaylist() {
+            const playlistView = document.getElementById('videoPlaylistView');
+            playlistView.innerHTML = '';
+            if (videoPlaylist.length === 0) {
+                playlistView.innerHTML = '<div>Playlist is empty</div>';
+                return;
+            }
+            videoPlaylist.forEach((track, index) => {
+                const listItem = document.createElement('div');
+                listItem.style.display = 'flex';
+                listItem.style.justifyContent = 'space-between';
+                listItem.style.padding = '5px';
+                listItem.style.borderBottom = '1px solid #333';
+
+                const videoName = document.createElement('span');
+                videoName.innerText = track.name;
+                listItem.appendChild(videoName);
+
+                const removeButton = document.createElement('button');
+                removeButton.innerText = 'Remove';
+                removeButton.style.fontSize = '10px';
+                removeButton.onclick = () => {
+                    videoPlaylist.splice(index, 1);
+                    renderVideoPlaylist();
+                };
+                listItem.appendChild(removeButton);
+                playlistView.appendChild(listItem);
+            });
+        }
+
+        async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
+            const videoList = document.getElementById('videoList');
+            const pageNum = document.getElementById('videoPageNum');
+            const prevBtn = document.getElementById('videoPrevBtn');
+            videoList.innerHTML = '<li>Loading...</li>';
+            pageNum.innerText = `Page ${page}`;
+            prevBtn.disabled = page === 1;
+
+            try {
+                const gameAddress = await GetPublicAddressByKeyword(searchTerm);
+                if (!gameAddress) {
+                    videoList.innerHTML = `<li>No results found for "${searchTerm}"</li>`;
+                    return;
+                }
+
+                const messages = await GetPublicMessagesByAddress(gameAddress, (page - 1) * 50, 50);
+                if (!messages || messages.length === 0) {
+                    videoList.innerHTML = '<li>No more videos</li>';
+                    document.getElementById('videoNextBtn').disabled = true;
+                    return;
+                }
+
+                videoList.innerHTML = '';
+                const videoRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp4|webm|ogg|mov|avi))\b/i;
+                const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+
+                const filteredMessages = messages.filter(msg => {
+                    const messageText = msg.Message || '';
+                    return videoRegex.test(messageText) && ipfsRegex.test(messageText);
+                });
+
+                filteredMessages.sort((a, b) => new Date(b.BlockDate) - new Date(a.BlockDate));
+
+                filteredMessages.forEach(async msg => {
+                    const messageText = msg.Message || '';
+                    const ipfsMatch = messageText.match(ipfsRegex);
+
+                    if (ipfsMatch) {
+                        const hash = ipfsMatch[1];
+                        const videoMatch = messageText.match(videoRegex);
+                        const filename = videoMatch ? videoMatch[0] : 'Unnamed Video';
+                        const sanitizedFilename = filename.replace(/>|</g, '');
+                        const listItem = document.createElement('div');
+                        listItem.style.display = 'flex';
+                        listItem.style.justifyContent = 'space-between';
+                        listItem.style.padding = '5px';
+                        listItem.style.borderBottom = '1px solid #333';
+
+                        const videoName = document.createElement('span');
+                        const profile = await GetProfileByAddress(msg.FromAddress);
+                        const creator = profile ? profile.URN : 'anonymous';
+                        videoName.innerText = `${sanitizedFilename} by ${creator}`;
+                        listItem.appendChild(videoName);
+
+                        const buttonContainer = document.createElement('div');
+
+                        const addButton = document.createElement('button');
+                        addButton.innerText = 'Add';
+                        addButton.style.fontSize = '10px';
+                        addButton.style.marginLeft = '5px';
+                        addButton.onclick = () => {
+                            const track = {
+                                name: sanitizedFilename,
+                                url: `https://ipfs.io/ipfs/${hash}`
+                            };
+                            if (!videoPlaylist.some(t => t.url === track.url)) {
+                                if (videoPlaylist.length >= 10) {
+                                    videoPlaylist.shift(); // Remove the oldest video
+                                }
+                                videoPlaylist.push(track);
+                                addMessage(`${sanitizedFilename} added to playlist`);
+                            } else {
+                                addMessage(`${sanitizedFilename} is already in the playlist`);
+                            }
+                        };
+                        buttonContainer.appendChild(addButton);
+                        listItem.appendChild(buttonContainer);
+                        videoList.appendChild(listItem);
+                    }
+                });
+                document.getElementById('videoNextBtn').disabled = messages.length < 50;
+            } catch (error) {
+                console.error("Failed to fetch videos for menu:", error);
+                videoList.innerHTML = '<li>Error loading videos</li>';
+            }
+        }
+
 
         console.log('[SYSTEM] Script loaded');
     </script>
