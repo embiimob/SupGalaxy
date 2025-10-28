@@ -860,10 +860,6 @@
     <div id="hotbar" style="display:none;"></div>
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
-        <div id="proximityVideo" style="display: none; margin-top: 8px;">
-            <video id="proximityVideoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
-            <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
-        </div>
         <div id="versionLabel">SupGalaxy v0.4.20-beta</div>
         <div id="musicPlayer" style="margin-top: 18px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
@@ -965,7 +961,10 @@
         </div>
         <button id="videoMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Video Menu</button>
     </div>
-
+    <div id="proximityVideo" style="display: none; position: fixed; right: 12px; top: 210px; width: 160px; z-index: 180;">
+        <video id="proximityVideoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
+        <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
+    </div>
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
         <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
             <h3>Music Menu</h3>
@@ -6920,8 +6919,33 @@ self.onmessage = async function(e) {
                             break;
                         case 'video_stopped':
                             if (userVideoStreams.has(data.username)) {
+                                const videoData = userVideoStreams.get(data.username);
+                                if (videoData.video) {
+                                    videoData.video.srcObject = null;
+                                    videoData.video.remove();
+                                }
                                 userVideoStreams.delete(data.username);
                                 addMessage(`${data.username} stopped their video.`, 2000);
+                            }
+                            break;
+                        case 'renegotiation_offer':
+                            if (peers.has(user)) {
+                                const peer = peers.get(user);
+                                peer.pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+                                    .then(() => peer.pc.createAnswer())
+                                    .then(answer => peer.pc.setLocalDescription(answer))
+                                    .then(() => {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(JSON.stringify({ type: 'renegotiation_answer', answer: peer.pc.localDescription }));
+                                        }
+                                    })
+                                    .catch(e => console.error("Renegotiation error (offer):", e));
+                            }
+                            break;
+                        case 'renegotiation_answer':
+                            if (peers.has(user)) {
+                                peers.get(user).pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+                                    .catch(e => console.error("Renegotiation error (answer):", e));
                             }
                             break;
                     }
@@ -8385,6 +8409,13 @@ self.onmessage = async function(e) {
                     if (peerData.pc) {
                         const senders = peerData.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
                         senders.forEach(sender => peerData.pc.removeTrack(sender));
+
+                        // Renegotiate
+                        const offer = await peerData.pc.createOffer();
+                        await peerData.pc.setLocalDescription(offer);
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                        }
                     }
                     if (peerData.dc && peerData.dc.readyState === 'open') {
                         peerData.dc.send(JSON.stringify({ type: 'video_stopped', username: userName }));
@@ -8405,6 +8436,13 @@ self.onmessage = async function(e) {
                     for (const [peerUser, peerData] of peers.entries()) {
                         if (peerData.pc) {
                             localVideoStream.getTracks().forEach(track => peerData.pc.addTrack(track, localVideoStream));
+
+                            // Renegotiate
+                            const offer = await peerData.pc.createOffer();
+                            await peerData.pc.setLocalDescription(offer);
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                            }
                         }
                         if (peerData.dc && peerData.dc.readyState === 'open') {
                             peerData.dc.send(JSON.stringify({ type: 'video_started', username: userName }));
@@ -8453,6 +8491,7 @@ self.onmessage = async function(e) {
 
         function updateProximityVideo() {
             const now = Date.now();
+            const proximityVideoContainer = document.getElementById('proximityVideo');
             const proximityVideoElement = document.getElementById('proximityVideoElement');
             const proximityVideoLabel = document.getElementById('proximityVideoLabel');
 
@@ -8470,26 +8509,40 @@ self.onmessage = async function(e) {
                 }
             }
 
-            proximityVideoUsers = [userName, ...remoteUsersInProximity];
+            let usersToShow = [...remoteUsersInProximity];
+            if (localVideoStream) {
+                usersToShow.unshift(userName);
+            }
+
+            proximityVideoUsers = usersToShow;
+
+            if (proximityVideoUsers.length === 0) {
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                currentProximityVideoIndex = 0;
+                return;
+            }
+
+            proximityVideoContainer.style.display = 'block';
 
             if (currentProximityVideoIndex >= proximityVideoUsers.length) {
                 currentProximityVideoIndex = 0;
-                lastProximityVideoChangeTime = now;
             }
 
-            if (now - lastProximityVideoChangeTime > 30000) {
+            const thirtySeconds = 30 * 1000;
+            if (now - lastProximityVideoChangeTime > thirtySeconds) {
                 lastProximityVideoChangeTime = now;
                 currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length;
             }
 
             const currentUser = proximityVideoUsers[currentProximityVideoIndex];
-            if (proximityVideoLabel.innerText !== currentUser) {
+            const currentStream = (currentUser === userName) ? localVideoStream : userVideoStreams.get(currentUser)?.stream;
+
+            if (proximityVideoElement.srcObject !== currentStream) {
                 proximityVideoLabel.innerText = currentUser;
-                if (currentUser === userName) {
-                     proximityVideoElement.srcObject = localVideoStream;
-                } else {
-                    proximityVideoElement.srcObject = userVideoStreams.get(currentUser).stream;
-                }
+                proximityVideoElement.srcObject = currentStream;
             }
         }
 
