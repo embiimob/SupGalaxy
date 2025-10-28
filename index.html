@@ -868,7 +868,6 @@
         <div id="musicPlayer" style="margin-top: 18px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
             <div style="display: flex; justify-content: space-around; margin-top: 4px;">
-                <button id="cameraBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">📷</button>
                 <button id="playPauseBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
                 <button id="skipBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
                 <button id="muteBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔇</button>
@@ -953,7 +952,8 @@
             <button id="closePending">Close</button>
         </div>
     </div>
-    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
+    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 48px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
+    <div id="cameraBtn" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📷</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
         <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
@@ -6915,6 +6915,15 @@ self.onmessage = async function(e) {
                                 createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z));
                             }
                             break;
+                        case 'video_started':
+                            addMessage(`${data.username} started their video.`, 2000);
+                            break;
+                        case 'video_stopped':
+                            if (userVideoStreams.has(data.username)) {
+                                userVideoStreams.delete(data.username);
+                                addMessage(`${data.username} stopped their video.`, 2000);
+                            }
+                            break;
                     }
                 } catch (err) {
                     console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
@@ -8363,9 +8372,15 @@ self.onmessage = async function(e) {
 
         async function toggleCamera() {
             const cameraBtn = document.getElementById('cameraBtn');
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
             if (localVideoStream) {
+                // Turn off camera and hide video feed
                 localVideoStream.getTracks().forEach(track => track.stop());
                 localVideoStream = null;
+
                 for (const [peerUser, peerData] of peers.entries()) {
                     if (peerData.pc) {
                         const senders = peerData.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
@@ -8375,11 +8390,18 @@ self.onmessage = async function(e) {
                         peerData.dc.send(JSON.stringify({ type: 'video_stopped', username: userName }));
                     }
                 }
-                cameraBtn.style.boxShadow = '';
+
+                cameraBtn.style.opacity = '0.5';
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
                 addMessage('Camera disabled', 2000);
             } else {
+                // Turn on camera and show local video feed
                 try {
                     localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
                     for (const [peerUser, peerData] of peers.entries()) {
                         if (peerData.pc) {
                             localVideoStream.getTracks().forEach(track => peerData.pc.addTrack(track, localVideoStream));
@@ -8388,8 +8410,18 @@ self.onmessage = async function(e) {
                             peerData.dc.send(JSON.stringify({ type: 'video_started', username: userName }));
                         }
                     }
-                    cameraBtn.style.boxShadow = '0 0 10px 3px rgba(102, 209, 255, 0.7)';
+
+                    cameraBtn.style.opacity = '1';
+                    proximityVideoElement.srcObject = localVideoStream;
+                    proximityVideoLabel.innerText = userName;
+                    proximityVideoContainer.style.display = 'block';
                     addMessage('Camera enabled', 2000);
+
+                    // Reset proximity video display to show local user first
+                    lastProximityVideoChangeTime = Date.now();
+                    proximityVideoUsers = [userName, ...proximityVideoUsers.filter(u => u !== userName)];
+                    currentProximityVideoIndex = 0;
+
                 } catch (err) {
                     addMessage('Could not access camera', 3000);
                     console.error('Error accessing camera:', err);
@@ -8421,70 +8453,42 @@ self.onmessage = async function(e) {
 
         function updateProximityVideo() {
             const now = Date.now();
-            const proximityVideoContainer = document.getElementById('proximityVideo');
             const proximityVideoElement = document.getElementById('proximityVideoElement');
             const proximityVideoLabel = document.getElementById('proximityVideoLabel');
 
-            proximityVideoUsers = [];
             const localPlayerPos = new THREE.Vector3(player.x, player.y, player.z);
 
-            // Add host if they have video and are in proximity
-            if (isHost && localVideoStream) {
-                 if (userPositions[userName]) {
-                    const hostPos = new THREE.Vector3(userPositions[userName].targetX, userPositions[userName].targetY, userPositions[userName].targetZ);
-                    if (localPlayerPos.distanceTo(hostPos) <= 32) {
-                        proximityVideoUsers.push(userName);
-                    }
-                }
-            }
-
-
+            const remoteUsersInProximity = [];
             for (const [username, videoStream] of userVideoStreams.entries()) {
+                if (username === userName) continue;
                 if (userPositions[username]) {
                     const userPos = userPositions[username];
                     const remotePlayerPos = new THREE.Vector3(userPos.targetX, userPos.targetY, userPos.targetZ);
                     if (localPlayerPos.distanceTo(remotePlayerPos) <= 32) {
-                        proximityVideoUsers.push(username);
+                        remoteUsersInProximity.push(username);
                     }
                 }
             }
 
-            if (localVideoStream) {
-                const localPlayerInProximityWithVideoUsers = proximityVideoUsers.length > 0;
-                if (localPlayerInProximityWithVideoUsers && !proximityVideoUsers.includes(userName)) {
-                    proximityVideoUsers.push(userName);
-                }
-            }
+            proximityVideoUsers = [userName, ...remoteUsersInProximity];
 
-
-            if (proximityVideoUsers.length === 0) {
-                proximityVideoContainer.style.display = 'none';
-                if (proximityVideoElement.srcObject) {
-                    proximityVideoElement.srcObject = null;
-                }
+            if (currentProximityVideoIndex >= proximityVideoUsers.length) {
                 currentProximityVideoIndex = 0;
-                lastProximityVideoChangeTime = 0;
-                return;
+                lastProximityVideoChangeTime = now;
             }
 
-            if (now - lastProximityVideoChangeTime > 30000 || proximityVideoUsers.length > 0 && proximityVideoContainer.style.display === 'none') {
+            if (now - lastProximityVideoChangeTime > 30000) {
                 lastProximityVideoChangeTime = now;
                 currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length;
-
-                const currentUser = proximityVideoUsers[currentProximityVideoIndex];
-                proximityVideoLabel.innerText = currentUser;
-
-                if (currentUser === userName && localVideoStream) {
-                     proximityVideoElement.srcObject = localVideoStream;
-                } else if (userVideoStreams.has(currentUser)) {
-                    proximityVideoElement.srcObject = userVideoStreams.get(currentUser).stream;
-                }
-                proximityVideoContainer.style.display = 'block';
             }
-             if (proximityVideoContainer.style.display === 'block') {
-                const currentUser = proximityVideoUsers[currentProximityVideoIndex];
-                if (!proximityVideoUsers.includes(currentUser)) {
-                    lastProximityVideoChangeTime = 0;
+
+            const currentUser = proximityVideoUsers[currentProximityVideoIndex];
+            if (proximityVideoLabel.innerText !== currentUser) {
+                proximityVideoLabel.innerText = currentUser;
+                if (currentUser === userName) {
+                     proximityVideoElement.srcObject = localVideoStream;
+                } else {
+                    proximityVideoElement.srcObject = userVideoStreams.get(currentUser).stream;
                 }
             }
         }
