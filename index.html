@@ -288,8 +288,8 @@
             background: rgba(6,8,12,0.55);
             padding: 10px;
             border-radius: 8px;
-            width: 160px;
-            height: 190px;
+            width: 180px;
+            height: 240px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -297,7 +297,7 @@
 
         #minimap {
             width: 100%;
-            height: 120px;
+            height: 150px;
             border: 1px solid rgba(255,255,255,0.1);
         }
 
@@ -307,6 +307,17 @@
             opacity: 0.78;
             margin-top: 4px;
             text-align: center;
+        }
+
+        #musicPlayer button {
+            margin-top: 4px;
+            padding: 2px 6px;
+            font-size: 10px;
+            background: #0f2a3a;
+            border: 1px solid rgba(255,255,255,0.04);
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
         }
 
         #craftModal {
@@ -861,14 +872,14 @@
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
         <div id="versionLabel">SupGalaxy v0.4.20-beta</div>
-        <div id="musicPlayer" style="margin-top: 18px; width: 100%;">
+        <div id="musicPlayer" style="margin-top: 8px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
             <div style="display: flex; justify-content: space-around; margin-top: 4px;">
-                <button id="playPauseBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">▶</button>
-                <button id="skipBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">⏭</button>
-                <button id="muteBtn" style="padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">🔇</button>
+                <button id="playPauseBtn">▶</button>
+                <button id="skipBtn">⏭</button>
+                <button id="muteBtn">🔇</button>
             </div>
-            <button id="musicMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Music Menu</button>
+            <button id="musicMenuBtn" style="width: 100%;">Music Menu</button>
         </div>
     </div>
     <div id="craftModal">
@@ -961,7 +972,7 @@
         </div>
         <button id="videoMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Video Menu</button>
     </div>
-    <div id="proximityVideo" style="display: none; position: fixed; right: 12px; top: 210px; width: 160px; z-index: 180;">
+    <div id="proximityVideo" style="display: none; position: fixed; right: 12px; top: 290px; width: 160px; z-index: 180;">
         <video id="proximityVideoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
     </div>
