@@ -6414,7 +6414,29 @@ self.onmessage = async function(e) {
                 const text = await file.text();
                 const data = JSON.parse(text);
 
-                // Check if it's a save session file
+                // Handle new session file format
+                if (data.playerData && data.hash) {
+                    if (data.playerData.world !== worldName) {
+                        addMessage('Invalid file: wrong world', 3000);
+                        console.log('[MINIMAP] Invalid file: world mismatch, expected:', worldName, 'got:', data.playerData.world);
+                        return;
+                    }
+
+                    const playerData = data.playerData;
+                    if (playerData.deltas) {
+                        for (const delta of playerData.deltas) {
+                            const chunkKey = delta.chunk.replace(/^#/, '');
+                            chunkManager.applyDeltasToChunk(chunkKey, delta.changes);
+                        }
+                    }
+                    if (playerData.foreignBlockOrigins) {
+                        foreignBlockOrigins = new Map(playerData.foreignBlockOrigins);
+                    }
+                    addMessage('Loaded chunk data from session file.', 3000);
+                    return;
+                }
+
+                // Check if it's a save session file (old format)
                 if (data.deltas && data.profile) {
                     console.log('[MINIMAP] Save session file detected, applying...');
                     await applySaveFile(data, userAddress, new Date().toISOString());
