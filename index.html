@@ -948,7 +948,8 @@
             <button id="closePending">Close</button>
         </div>
     </div>
-    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
+    <div id="tvIcon" style="position: fixed; bottom: 12px; right: 48px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
+    <div id="cameraBtn" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📷</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
         <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>
@@ -960,7 +961,10 @@
         </div>
         <button id="videoMenuBtn" style="width: 100%; margin-top: 4px; padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer;">Video Menu</button>
     </div>
-
+    <div id="proximityVideo" style="display: none; position: fixed; right: 12px; top: 210px; width: 160px; z-index: 180;">
+        <video id="proximityVideoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
+        <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
+    </div>
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
         <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
             <h3>Music Menu</h3>
@@ -1184,6 +1188,11 @@ var previousIsSprinting = false;
         var projectiles = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
+        var localVideoStream = null;
+        var userVideoStreams = new Map();
+        let proximityVideoUsers = [];
+        let currentProximityVideoIndex = 0;
+        let lastProximityVideoChangeTime = 0;
         var hiveLocations = [];
         var flowerLocations = [];
         const maxAudioDistance = 32;
@@ -6339,13 +6348,26 @@ self.onmessage = async function(e) {
             }
 
             pc.ontrack = (event) => {
-                const username = hostUser;
-                if (!userAudioStreams.has(username)) {
-                    const audio = new Audio();
-                    audio.srcObject = event.streams[0];
-                    audio.autoplay = true;
-                    userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
-                    console.log(`[WebRTC] Received audio stream from ${username}`);
+                const username = hostUser; // In a client-server model, the track is from the hostUser.
+                if (event.track.kind === 'audio') {
+                    if (!userAudioStreams.has(username)) {
+                        const audio = new Audio();
+                        audio.srcObject = event.streams[0];
+                        audio.autoplay = true;
+                        userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received audio stream from ${username}`);
+                    }
+                } else if (event.track.kind === 'video') {
+                    if (!userVideoStreams.has(username)) {
+                        const video = document.createElement('video');
+                        video.srcObject = event.streams[0];
+                        video.autoplay = true;
+                        video.playsInline = true;
+                        video.style.display = 'none'; // Initially hidden
+                        document.body.appendChild(video);
+                        userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received video stream from ${username}`);
+                    }
                 }
             };
 
@@ -6892,6 +6914,40 @@ self.onmessage = async function(e) {
                                 createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z));
                             }
                             break;
+                        case 'video_started':
+                            addMessage(`${data.username} started their video.`, 2000);
+                            break;
+                        case 'video_stopped':
+                            if (userVideoStreams.has(data.username)) {
+                                const videoData = userVideoStreams.get(data.username);
+                                if (videoData.video) {
+                                    videoData.video.srcObject = null;
+                                    videoData.video.remove();
+                                }
+                                userVideoStreams.delete(data.username);
+                                addMessage(`${data.username} stopped their video.`, 2000);
+                            }
+                            break;
+                        case 'renegotiation_offer':
+                            if (peers.has(user)) {
+                                const peer = peers.get(user);
+                                peer.pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+                                    .then(() => peer.pc.createAnswer())
+                                    .then(answer => peer.pc.setLocalDescription(answer))
+                                    .then(() => {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(JSON.stringify({ type: 'renegotiation_answer', answer: peer.pc.localDescription }));
+                                        }
+                                    })
+                                    .catch(e => console.error("Renegotiation error (offer):", e));
+                            }
+                            break;
+                        case 'renegotiation_answer':
+                            if (peers.has(user)) {
+                                peers.get(user).pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+                                    .catch(e => console.error("Renegotiation error (answer):", e));
+                            }
+                            break;
                     }
                 } catch (err) {
                     console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
@@ -6972,12 +7028,26 @@ self.onmessage = async function(e) {
                     }
 
                     pc.ontrack = (event) => {
-                        if (!userAudioStreams.has(clientUser)) {
-                            const audio = new Audio();
-                            audio.srcObject = event.streams[0];
-                            audio.autoplay = true;
-                            userAudioStreams.set(clientUser, { audio: audio, stream: event.streams[0] });
-                            console.log(`[WebRTC] Received audio stream from ${clientUser}`);
+                        const username = clientUser; // The track is from the connecting client.
+                        if (event.track.kind === 'audio') {
+                            if (!userAudioStreams.has(username)) {
+                                const audio = new Audio();
+                                audio.srcObject = event.streams[0];
+                                audio.autoplay = true;
+                                userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received audio stream from ${username}`);
+                            }
+                        } else if (event.track.kind === 'video') {
+                            if (!userVideoStreams.has(username)) {
+                                const video = document.createElement('video');
+                                video.srcObject = event.streams[0];
+                                video.autoplay = true;
+                                video.playsInline = true;
+                                video.style.display = 'none'; // Initially hidden
+                                document.body.appendChild(video);
+                                userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received video stream from ${username}`);
+                            }
                         }
                     };
 
@@ -7880,7 +7950,13 @@ self.onmessage = async function(e) {
                     document.getElementById('seedLabel').textContent = 'User ' + userName;
                     updateHudButtons();
                     console.log('[LOGIN] Initializing Three.js');
-                    await initAudio();
+                    try {
+                        await initAudio();
+                    } catch (e) {
+                        console.error("Failed to initialize audio:", e);
+                        addMessage("Could not initialize audio, continuing without it.", 3000);
+                    }
+                    console.log('[LOGIN] Initializing Three.js after audio');
                     initThree();
                     initMusicPlayer();
                     initVideoPlayer();
@@ -8307,11 +8383,88 @@ self.onmessage = async function(e) {
                 userAudioStreams.delete(username);
             }
 
+            if (userVideoStreams.has(username)) {
+                userVideoStreams.delete(username);
+            }
+
             delete userPositions[username];
 
             addMessage(`${username} has disconnected.`);
             updateHudButtons();
             console.log(`[WebRTC] Cleaned up peer: ${username}`);
+        }
+
+        async function toggleCamera() {
+            const cameraBtn = document.getElementById('cameraBtn');
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
+            if (localVideoStream) {
+                // Turn off camera and hide video feed
+                localVideoStream.getTracks().forEach(track => track.stop());
+                localVideoStream = null;
+
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.pc) {
+                        const senders = peerData.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+                        senders.forEach(sender => peerData.pc.removeTrack(sender));
+
+                        // Renegotiate
+                        const offer = await peerData.pc.createOffer();
+                        await peerData.pc.setLocalDescription(offer);
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                        }
+                    }
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(JSON.stringify({ type: 'video_stopped', username: userName }));
+                    }
+                }
+
+                cameraBtn.style.opacity = '0.5';
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                addMessage('Camera disabled', 2000);
+            } else {
+                // Turn on camera and show local video feed
+                try {
+                    localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.pc) {
+                            localVideoStream.getTracks().forEach(track => peerData.pc.addTrack(track, localVideoStream));
+
+                            // Renegotiate
+                            const offer = await peerData.pc.createOffer();
+                            await peerData.pc.setLocalDescription(offer);
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                            }
+                        }
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'video_started', username: userName }));
+                        }
+                    }
+
+                    cameraBtn.style.opacity = '1';
+                    proximityVideoElement.srcObject = localVideoStream;
+                    proximityVideoLabel.innerText = userName;
+                    proximityVideoContainer.style.display = 'block';
+                    addMessage('Camera enabled', 2000);
+
+                    // Reset proximity video display to show local user first
+                    lastProximityVideoChangeTime = Date.now();
+                    proximityVideoUsers = [userName, ...proximityVideoUsers.filter(u => u !== userName)];
+                    currentProximityVideoIndex = 0;
+
+                } catch (err) {
+                    addMessage('Could not access camera', 3000);
+                    console.error('Error accessing camera:', err);
+                }
+            }
         }
 
         async function initAudio() {
@@ -8333,6 +8486,63 @@ self.onmessage = async function(e) {
             if (!isAttacking) {
                 isAttacking = true;
                 attackStartTime = performance.now();
+            }
+        }
+
+        function updateProximityVideo() {
+            const now = Date.now();
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
+            const localPlayerPos = new THREE.Vector3(player.x, player.y, player.z);
+
+            const remoteUsersInProximity = [];
+            for (const [username, videoStream] of userVideoStreams.entries()) {
+                if (username === userName) continue;
+                if (userPositions[username]) {
+                    const userPos = userPositions[username];
+                    const remotePlayerPos = new THREE.Vector3(userPos.targetX, userPos.targetY, userPos.targetZ);
+                    if (localPlayerPos.distanceTo(remotePlayerPos) <= 32) {
+                        remoteUsersInProximity.push(username);
+                    }
+                }
+            }
+
+            let usersToShow = [...remoteUsersInProximity];
+            if (localVideoStream) {
+                usersToShow.unshift(userName);
+            }
+
+            proximityVideoUsers = usersToShow;
+
+            if (proximityVideoUsers.length === 0) {
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                currentProximityVideoIndex = 0;
+                return;
+            }
+
+            proximityVideoContainer.style.display = 'block';
+
+            if (currentProximityVideoIndex >= proximityVideoUsers.length) {
+                currentProximityVideoIndex = 0;
+            }
+
+            const thirtySeconds = 30 * 1000;
+            if (now - lastProximityVideoChangeTime > thirtySeconds) {
+                lastProximityVideoChangeTime = now;
+                currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length;
+            }
+
+            const currentUser = proximityVideoUsers[currentProximityVideoIndex];
+            const currentStream = (currentUser === userName) ? localVideoStream : userVideoStreams.get(currentUser)?.stream;
+
+            if (proximityVideoElement.srcObject !== currentStream) {
+                proximityVideoLabel.innerText = currentUser;
+                proximityVideoElement.srcObject = currentStream;
             }
         }
 
@@ -8922,6 +9132,8 @@ self.onmessage = async function(e) {
                     }
                 }
 
+                updateProximityVideo();
+
                 if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
                     hasMovedSubstantially = true;
                 }
@@ -9044,6 +9256,7 @@ self.onmessage = async function(e) {
             if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
             if (skipBtn) skipBtn.addEventListener('click', skipMusic);
             if (muteBtn) muteBtn.addEventListener('click', muteMusic);
+        document.getElementById('cameraBtn').addEventListener('click', toggleCamera);
             if (musicMenuBtn) musicMenuBtn.addEventListener('click', () => {
                 musicMenuModal.style.display = 'flex';
                 isPromptOpen = true;
