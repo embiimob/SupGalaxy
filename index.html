@@ -952,6 +952,10 @@
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
         <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
             <h3>Music Menu</h3>
+                <div style="display: flex; margin-bottom: 10px;">
+                    <input type="text" id="musicSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    <button id="musicSearchBtn" style="margin-left: 5px; padding: 6px 10px; border-radius: 4px; background: var(--accent); color: #111; border: 0; cursor: pointer;">Search</button>
+                </div>
             <div id="musicList" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
             <div id="musicPlaylistView" style="display: none; max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
             <div id="musicPagination" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -9043,6 +9047,8 @@ self.onmessage = async function(e) {
             const closeMusicMenuBtn = document.getElementById('closeMusicMenu');
             const showPlaylistBtn = document.getElementById('showPlaylistBtn');
             const musicList = document.getElementById('musicList');
+            const musicSearchInput = document.getElementById('musicSearchInput');
+            const musicSearchBtn = document.getElementById('musicSearchBtn');
 
             if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
             if (skipBtn) skipBtn.addEventListener('click', skipMusic);
@@ -9050,12 +9056,29 @@ self.onmessage = async function(e) {
             if (musicMenuBtn) musicMenuBtn.addEventListener('click', () => {
                 musicMenuModal.style.display = 'flex';
                 isPromptOpen = true;
-                fetchSongsForMenu(musicCurrentPage);
+                musicSearchInput.value = 'game';
+                fetchSongsForMenu('game', 1);
             });
             if (closeMusicMenuBtn) closeMusicMenuBtn.addEventListener('click', () => {
                 musicMenuModal.style.display = 'none';
                 isPromptOpen = false;
             });
+
+            function performMusicSearch() {
+                const searchTerm = musicSearchInput.value.trim();
+                if (searchTerm) {
+                    musicCurrentPage = 1;
+                    fetchSongsForMenu(searchTerm, musicCurrentPage);
+                }
+            }
+
+            if (musicSearchBtn) musicSearchBtn.addEventListener('click', performMusicSearch);
+            if (musicSearchInput) musicSearchInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    performMusicSearch();
+                }
+            });
+
 
             const prevBtn = document.getElementById('musicPrevBtn');
             const nextBtn = document.getElementById('musicNextBtn');
@@ -9063,13 +9086,15 @@ self.onmessage = async function(e) {
             if (prevBtn) prevBtn.addEventListener('click', () => {
                 if (musicCurrentPage > 1) {
                     musicCurrentPage--;
-                    fetchSongsForMenu(musicCurrentPage);
+                    const searchTerm = musicSearchInput.value.trim() || 'game';
+                    fetchSongsForMenu(searchTerm, musicCurrentPage);
                 }
             });
 
             if (nextBtn) nextBtn.addEventListener('click', () => {
                 musicCurrentPage++;
-                fetchSongsForMenu(musicCurrentPage);
+                const searchTerm = musicSearchInput.value.trim() || 'game';
+                fetchSongsForMenu(searchTerm, musicCurrentPage);
             });
 
             if (showPlaylistBtn) showPlaylistBtn.addEventListener('click', () => {
@@ -9246,7 +9271,7 @@ self.onmessage = async function(e) {
             }
         }
 
-        async function fetchSongsForMenu(page = 1) {
+        async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
             const musicList = document.getElementById('musicList');
             const pageNum = document.getElementById('musicPageNum');
             const prevBtn = document.getElementById('musicPrevBtn');
@@ -9255,9 +9280,9 @@ self.onmessage = async function(e) {
             prevBtn.disabled = page === 1;
 
             try {
-                const gameAddress = await GetPublicAddressByKeyword('game');
+                const gameAddress = await GetPublicAddressByKeyword(searchTerm);
                 if (!gameAddress) {
-                    musicList.innerHTML = '<li>Music channel not found</li>';
+                    musicList.innerHTML = `<li>No results found for "${searchTerm}"</li>`;
                     return;
                 }
 
