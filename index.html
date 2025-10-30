@@ -1079,6 +1079,7 @@
             122: { name: 'Honey', color: '#ffb74a' },
             123: { name: 'Hive', color: '#e3c27d' },
             124: { name: 'Iron Ore', color: '#a8a8a8' },
+            125: { name: 'Emerald', color: '#00ff7b' },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1569,7 +1570,7 @@ const ARCHETYPES = {
         name: 'Desert',
         gravity: 16.0,
         skyType: 'desert',
-        mobSpawnRules: { day: [], night: ['crawley'] },
+            mobSpawnRules: { day: ['grub'], night: ['crawley', 'grub'] },
         terrainGenerator: 'generateDesertTerrain',
         biomeModifications: { onlyDesert: true },
         flora: ['cactus']
@@ -5355,6 +5356,45 @@ self.onmessage = async function(e) {
                 }
 
                 this.originalColor = new THREE.Color(0x4a4a4a);
+            } else if (this.type === 'grub') {
+                this.hp = 20;
+                this.speed = 0.015 + Math.random() * 0.01;
+                this.aiState = 'IDLE';
+                this.animationTime = Math.random() * Math.PI * 2;
+
+                const grubRnd = makeSeededRandom(worldSeed + '_grub_color_' + this.id);
+                const baseColor = new THREE.Color().setHSL(grubRnd(), 0.4 + grubRnd() * 0.2, 0.3 + grubRnd() * 0.2);
+                this.originalColor = baseColor;
+
+                const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
+                this.mesh = new THREE.Group();
+                this.segments = [];
+
+                const numSegments = 6;
+                for (let i = 0; i < numSegments; i++) {
+                    const segmentSize = 1.0 - Math.pow(i / numSegments, 2) * 0.5;
+                    const segmentGeo = new THREE.SphereGeometry(segmentSize * 0.6, 16, 12);
+                    const segment = new THREE.Mesh(segmentGeo, bodyMat);
+                    segment.position.z = -i * 0.8;
+                    this.mesh.add(segment);
+                    this.segments.push(segment);
+                }
+
+                const head = this.segments[0];
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
+                const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+                leftEye.position.set(-0.25, 0.25, 0.5);
+                head.add(leftEye);
+                const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+                rightEye.position.set(0.25, 0.25, 0.5);
+                head.add(rightEye);
+
+                this.glowMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0 });
+                const glowGeo = new THREE.SphereGeometry(1, 16, 12);
+                this.glowMesh = new THREE.Mesh(glowGeo, this.glowMaterial);
+                this.glowMesh.visible = false;
+                this.mesh.add(this.glowMesh);
             }
 
             this.mesh.userData.mobId = this.id;
@@ -5373,6 +5413,15 @@ self.onmessage = async function(e) {
 
             if (this.type === 'crawley' && this.mesh.eyeLight) {
                 this.mesh.eyeLight.visible = isNight;
+            }
+
+            if (this.type === 'grub') {
+                this.glowMesh.visible = isNight;
+                if (isNight) {
+                    this.glowMaterial.opacity = (Math.sin(Date.now() * 0.002) + 1) / 2 * 0.5 + 0.2;
+                } else {
+                    this.glowMaterial.opacity = 0;
+                }
             }
 
             // Only the host runs the mob AI and state changes.
@@ -5483,6 +5532,65 @@ self.onmessage = async function(e) {
 
             let target = null;
             let targetDistance = Infinity;
+
+            if (this.type === 'grub') {
+                if (this.aiState === 'IDLE' || this.aiState === 'SEARCHING_FOR_CACTUS') {
+                    const scanRadius = 12;
+                    let closestCactus = null;
+                    let minCactusDist = Infinity;
+
+                    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+                        for (let dz = -scanRadius; dz <= scanRadius; dz++) {
+                            for (let dy = -4; dy <= 4; dy++) {
+                                const bx = Math.floor(this.pos.x + dx);
+                                const by = Math.floor(this.pos.y + dy);
+                                const bz = Math.floor(this.pos.z + dz);
+                                const blockId = getBlockAt(bx, by, bz);
+
+                                if (blockId === 9) { // Cactus
+                                    const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                    if (dist < minCactusDist) {
+                                        minCactusDist = dist;
+                                        closestCactus = { x: bx, y: by, z: bz };
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (closestCactus) {
+                        this.aiState = 'MOVING_TO_CACTUS';
+                        this.targetBlock = closestCactus;
+                    } else {
+                        this.aiState = 'IDLE';
+                    }
+                }
+
+                if (this.aiState === 'MOVING_TO_CACTUS' && this.targetBlock) {
+                    target = { x: this.targetBlock.x + 0.5, y: this.targetBlock.y + 0.5, z: this.targetBlock.z + 0.5 };
+                    targetDistance = this.pos.distanceTo(target);
+
+                    if (targetDistance < 1.5) {
+                        this.aiState = 'EATING_CACTUS';
+                        this.lingerTime = Date.now();
+                    }
+                } else if (this.aiState === 'EATING_CACTUS') {
+                    if (Date.now() - this.lingerTime > 1500) { // 1.5 seconds to "eat"
+                        chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0);
+
+                        // Find a spot behind the grub to place the emerald
+                        const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+                        const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2));
+                        const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
+
+                        chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed);
+
+                        this.aiState = 'IDLE';
+                        this.targetBlock = null;
+                    }
+                }
+            }
+
 
             // Crawley AI: Target hives/honey, then players
             if (this.type === 'crawley') {
@@ -5709,6 +5817,26 @@ self.onmessage = async function(e) {
                     });
                 } else {
                     this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
+                }
+            }
+
+            if (this.type === 'grub') {
+                if (isMoving || this.aiState === 'EATING_CACTUS') {
+                    this.animationTime += dt * 8;
+                    this.segments.forEach((segment, i) => {
+                        segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15;
+                        if(this.aiState === 'EATING_CACTUS') {
+                             segment.position.x = Math.sin(this.animationTime * 2 - i) * 0.1;
+                        } else {
+                             segment.position.x = 0;
+                        }
+                    });
+                }
+
+                if (target) {
+                    const targetDirection = new THREE.Vector3().subVectors(target, this.pos).normalize();
+                    const angle = Math.atan2(targetDirection.x, targetDirection.z);
+                    this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.1);
                 }
             }
 
@@ -8865,6 +8993,28 @@ self.onmessage = async function(e) {
                         addMessage('Stuck in block, respawned');
                     }
                 }
+
+                    // Grub contact damage
+                    for (const mob of mobs) {
+                        if (mob.type === 'grub' && Date.now() - lastDamageTime > 1000) {
+                            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
+                                new THREE.Vector3(player.width, player.height, player.depth)
+                            );
+                            const grubBox = new THREE.Box3().setFromObject(mob.mesh);
+                            if (playerBox.intersectsBox(grubBox)) {
+                                player.health = Math.max(0, player.health - 2);
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                addMessage('Hit by a Grub! HP: ' + player.health, 1000);
+                                flashDamageEffect();
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                            }
+                        }
+                    }
                 if (player.y < -10) {
                     player.x = modWrap(player.x, MAP_SIZE);
                     player.z = modWrap(player.z, MAP_SIZE);
