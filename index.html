@@ -3111,7 +3111,13 @@ self.onmessage = async function(e) {
 
             const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
             const baseColor = new THREE.Color(BLOCKS[blockId].color);
-            const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+            let secondaryColor;
+
+            if (blockId === 125) { // Emerald
+                secondaryColor = baseColor.clone().multiplyScalar(0.6); // Darker green for emerald pattern
+            } else {
+                secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+            }
 
             // Base fill
             context.fillStyle = baseColor.getStyle();
@@ -5423,7 +5429,7 @@ self.onmessage = async function(e) {
                 const stripedMat = new THREE.MeshStandardMaterial({ map: stripedTexture });
 
                 const bodyMaterials = [
-                    bodyMat, bodyMat, bodyMat, bodyMat, stripedMat, stripedMat
+                    stripedMat, stripedMat, stripedMat, stripedMat, stripedMat, stripedMat
                 ];
                 this.originalColor = null;
 
@@ -6123,6 +6129,7 @@ self.onmessage = async function(e) {
 
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
+            const GRUB_CAP = 7;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -6153,7 +6160,12 @@ self.onmessage = async function(e) {
             });
 
             for (const mobType of allowedMobsToday) {
-                const mobCap = (mobType === 'crawley') ? CRAWLEY_CAP : BEE_CAP;
+                let mobCap;
+                if (mobType === 'crawley') mobCap = CRAWLEY_CAP;
+                else if (mobType === 'bee') mobCap = BEE_CAP;
+                else if (mobType === 'grub') mobCap = GRUB_CAP;
+                else continue;
+
                 const currentCount = mobs.filter(m => m.type === mobType).length;
 
                 if (currentCount < mobCap) {
