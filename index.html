@@ -5304,7 +5304,7 @@ self.onmessage = async function(e) {
                 this.mesh.rightWing = rightWing;
 
                 this.originalColor = new THREE.Color(0xffff00);
-            } else { // crawley
+            } else if (this.type === 'crawley') {
                 this.mesh = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
 
