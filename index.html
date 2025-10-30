@@ -3102,8 +3102,13 @@ self.onmessage = async function(e) {
             const context = canvas.getContext('2d');
 
             const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
-            const baseColor = new THREE.Color(BLOCKS[blockId].color);
-            const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+            let baseColor = new THREE.Color(BLOCKS[blockId].color);
+            let secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+
+            if (blockId === 125) { // Special texture for Emerald
+                baseColor = new THREE.Color(0x00ff7b);
+                secondaryColor = new THREE.Color(0x00aa55);
+            }
 
             // Base fill
             context.fillStyle = baseColor.getStyle();
@@ -5400,9 +5405,10 @@ self.onmessage = async function(e) {
                 this.originalColor = new THREE.Color(0x4a4a4a);
             } else if (this.type === 'grub') {
                 this.hp = 20;
-                this.speed = 0.015 + Math.random() * 0.01;
+                this.speed = 0.01 + Math.random() * 0.005; // Slower movement
                 this.aiState = 'IDLE';
                 this.animationTime = Math.random() * Math.PI * 2;
+                this.cactusEaten = 0;
 
                 const bodyTexture = createMobTexture(worldSeed, 'grub_body');
                 const mouthTexture = createMobTexture(worldSeed, 'grub_mouth');
@@ -5416,15 +5422,18 @@ self.onmessage = async function(e) {
 
                 const numSegments = 6;
                 for (let i = 0; i < numSegments; i++) {
-                    const segmentSize = 1.0 - Math.pow(i / numSegments, 2) * 0.5;
+                    let segmentSize = 1.0 - Math.pow(i / numSegments, 2) * 0.5;
+                    if (i >= 4) { // Make tail smaller
+                        segmentSize *= 0.8;
+                    }
                     const segmentGeo = new THREE.BoxGeometry(segmentSize * 1.2, segmentSize * 0.8, segmentSize * 0.8);
                     const segment = new THREE.Mesh(segmentGeo, bodyMat);
-                    segment.position.z = -i * 0.8;
+                    segment.position.z = -i * 0.75; // Reduced spacing
                     this.mesh.add(segment);
                     this.segments.push(segment);
 
-                    // Add legs to alternating segments (but not the head)
-                    if (i > 0 && i % 2 !== 0) {
+                    // Add legs to alternating segments (but not the head or tail)
+                    if (i > 0 && i % 2 !== 0 && i < 5) {
                         const legGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
                         const leftLeg = new THREE.Mesh(legGeo, bodyMat);
                         leftLeg.position.set(-segmentSize * 0.6, -0.3, segment.position.z);
@@ -5455,19 +5464,19 @@ self.onmessage = async function(e) {
                 const mouthGeo = new THREE.BoxGeometry(0.4, 0.1, 0.1);
                 const mouthMat = new THREE.MeshStandardMaterial({ map: mouthTexture });
                 const mouth = new THREE.Mesh(mouthGeo, mouthMat);
-                mouth.position.set(0, -0.2, 0.4);
+                mouth.position.set(0, -0.2, 0.45);
                 head.add(mouth);
 
                 const pincherGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
                 const leftPincher = new THREE.Mesh(pincherGeo, mouthMat);
-                leftPincher.position.set(-0.25, -0.2, 0.4);
-                leftPincher.rotation.z = Math.PI / 8;
+                leftPincher.position.set(-0.25, -0.2, 0.5);
+                leftPincher.rotation.z = Math.PI / 6;
                 head.add(leftPincher);
                 this.pinchers.push(leftPincher);
 
                 const rightPincher = new THREE.Mesh(pincherGeo, mouthMat);
-                rightPincher.position.set(0.25, -0.2, 0.4);
-                rightPincher.rotation.z = -Math.PI / 8;
+                rightPincher.position.set(0.25, -0.2, 0.5);
+                rightPincher.rotation.z = -Math.PI / 6;
                 head.add(rightPincher);
                 this.pinchers.push(rightPincher);
 
@@ -5656,18 +5665,65 @@ self.onmessage = async function(e) {
                         this.lingerTime = Date.now();
                     }
                 } else if (this.aiState === 'EATING_CACTUS') {
-                    if (Date.now() - this.lingerTime > 1500) { // 1.5 seconds to "eat"
+                    if (Date.now() - this.lingerTime > 2500) { // Slower eating
                         chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0);
+                        this.cactusEaten++;
 
-                        // Find a spot behind the grub to place the emerald
-                        const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-                        const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2));
-                        const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
-
-                        chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed);
+                        if (this.cactusEaten >= 5) {
+                            this.cactusEaten = 0;
+                            const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+                            const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2));
+                            const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
+                            chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed);
+                        }
 
                         this.aiState = 'IDLE';
                         this.targetBlock = null;
+                    }
+                }
+            } else { // All other mobs can target players
+                if (this.isAggressive || !target) {
+                    let closestPlayer = null;
+                    let minPlayerDist = Infinity;
+
+                    let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+                    if (hostDist < minPlayerDist) {
+                        minPlayerDist = hostDist;
+                        closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                    }
+
+                    for (const [username, peerData] of peers.entries()) {
+                        if (userPositions[username]) {
+                            const peerPos = userPositions[username];
+                            const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
+                            if (dist < minPlayerDist) {
+                                minPlayerDist = dist;
+                                closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username };
+                            }
+                        }
+                    }
+                    if (closestPlayer && minPlayerDist < 10) {
+                        target = { x: closestPlayer.x, z: closestPlayer.z };
+                        targetDistance = minPlayerDist;
+
+                        if (minPlayerDist < 1.2 && Date.now() - this.attackCooldown > 800) {
+                            this.attackCooldown = Date.now();
+                            const targetPeer = peers.get(closestPlayer.username);
+                            if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                                targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
+                            } else if (closestPlayer.username === userName) {
+                                if (Date.now() - lastDamageTime > 800) {
+                                    player.health = Math.max(0, player.health - 1);
+                                    lastDamageTime = Date.now();
+                                    document.getElementById('health').innerText = player.health;
+                                    updateHealthBar();
+                                    addMessage('Hit! HP: ' + player.health, 1000);
+                                    if (player.health <= 0) {
+                                        handlePlayerDeath();
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -5904,15 +5960,20 @@ self.onmessage = async function(e) {
             if (this.type === 'grub') {
                 const isEating = this.aiState === 'EATING_CACTUS';
                 if (isMoving || isEating) {
-                    this.animationTime += dt * (isMoving ? 12 : 6); // Faster walk, slower eat animation
+                    this.animationTime += dt * (isMoving ? 8 : 4); // Slower animation
 
                     // Body undulation
                     this.segments.forEach((segment, i) => {
                         segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15;
                         if (isEating) {
-                            segment.position.x = Math.sin(this.animationTime * 2 - i) * 0.05; // Subtle side-to-side wiggle
+                            segment.position.x = Math.sin(this.animationTime * 2 - i) * 0.05;
+                            // Angle front segments up
+                            if (i < 2) {
+                                segment.rotation.x = -Math.abs(Math.sin(this.animationTime)) * 0.5;
+                            }
                         } else {
                             segment.position.x = 0;
+                            segment.rotation.x = 0; // Reset rotation
                         }
                     });
 
