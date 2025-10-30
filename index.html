@@ -3084,8 +3084,10 @@ self.onmessage = async function(e) {
 
             if (striped) {
                 context.fillStyle = 'rgba(0,0,0,0.8)';
-                context.fillRect(0, 0, size, 1);
-                context.fillRect(0, size - 1, size, 1);
+                context.fillRect(0, 0, size, 1); // Top
+                context.fillRect(0, size - 1, size, 1); // Bottom
+                context.fillRect(0, 0, 1, size); // Left
+                context.fillRect(size - 1, 0, 1, size); // Right
             }
 
             const texture = new THREE.CanvasTexture(canvas);
@@ -5406,10 +5408,13 @@ self.onmessage = async function(e) {
                 this.originalColor = new THREE.Color(0x4a4a4a);
             } else if (this.type === 'grub') {
                 this.hp = 20;
-                this.speed = 0.01 + Math.random() * 0.005; // Slower movement
+                this.speed = (0.01 + Math.random() * 0.005) / 2; // Slower movement, halved
                 this.aiState = 'IDLE';
                 this.animationTime = Math.random() * Math.PI * 2;
                 this.cactusEaten = 0;
+                this.isAggressive = false; // Grubs are not aggressive
+
+                const scale = 3; // Scale factor for the grub size
 
                 const bodyTexture = createMobTexture(worldSeed, 'grub_body');
                 const stripedTexture = createMobTexture(worldSeed, 'grub_body', true);
@@ -5418,14 +5423,9 @@ self.onmessage = async function(e) {
                 const stripedMat = new THREE.MeshStandardMaterial({ map: stripedTexture });
 
                 const bodyMaterials = [
-                    bodyMat, // right
-                    bodyMat, // left
-                    bodyMat, // top
-                    bodyMat, // bottom
-                    stripedMat, // front
-                    stripedMat  // back
+                    bodyMat, bodyMat, bodyMat, bodyMat, stripedMat, stripedMat
                 ];
-                this.originalColor = null; // No longer needed with textures
+                this.originalColor = null;
 
                 this.mesh = new THREE.Group();
                 this.segments = [];
@@ -5435,17 +5435,14 @@ self.onmessage = async function(e) {
 
                 const numSegments = 6;
                 for (let i = 0; i < numSegments; i++) {
-                    let segmentSize = 1.0 - Math.pow(i / numSegments, 2) * 0.5;
-                    if (i === 4) {
-                        segmentSize *= 0.8;
-                    }
-                    if (i === 5) { // Make last tail piece half the size
-                        segmentSize *= 0.4;
-                    }
+                    let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                    if (i === 4) segmentSize *= 0.8;
+                    if (i === 5) segmentSize *= 0.4;
+
                     const segmentGeo = new THREE.BoxGeometry(segmentSize * 1.2, segmentSize * 0.8, segmentSize * 0.8);
                     const segment = new THREE.Mesh(segmentGeo, bodyMaterials);
 
-                    this.segments.push(segment); // Store all segments for undulation
+                    this.segments.push(segment);
 
                     if (i < 2) {
                         this.headPivot.add(segment);
@@ -5454,30 +5451,30 @@ self.onmessage = async function(e) {
                     }
                 }
 
-                // Position segments relative to their parents for correct pivoting
-                this.segments[0].position.z = 1.05;
-                this.segments[1].position.z = 0.35;
+                this.segments[0].position.z = 1.05 * scale;
+                this.segments[1].position.z = 0.35 * scale;
 
-                for (let i = 2; i < numSegments; i++) {
-                    this.segments[i].position.z = -i * 0.7;
-                }
+                // Adjusted positioning for tail segments
+                this.segments[2].position.z = -2 * 0.7 * scale;
+                this.segments[3].position.z = -3 * 0.7 * scale;
+                this.segments[4].position.z = (-4 * 0.7 + 0.2) * scale;
+                this.segments[5].position.z = (-5 * 0.7 + 0.5) * scale;
 
-                this.headPivot.position.z = -1.05;
+                this.headPivot.position.z = -1.05 * scale;
                 this.mesh.add(this.headPivot);
 
-                // Add legs directly to the segments
                 for (let i = 1; i < 5; i++) {
                     if (i % 2 !== 0) {
-                        let segmentSize = 1.0 - Math.pow(i / numSegments, 2) * 0.5;
-                        const legGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+                        let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                        const legGeo = new THREE.BoxGeometry(0.1 * scale, 0.5 * scale, 0.1 * scale);
 
                         const leftLeg = new THREE.Mesh(legGeo, bodyMat);
-                        leftLeg.position.set(-segmentSize * 0.6, -0.3, 0);
+                        leftLeg.position.set(-segmentSize * 0.6, -0.3 * scale, 0);
                         this.segments[i].add(leftLeg);
                         this.legs.push(leftLeg);
 
                         const rightLeg = new THREE.Mesh(legGeo, bodyMat);
-                        rightLeg.position.set(segmentSize * 0.6, -0.3, 0);
+                        rightLeg.position.set(segmentSize * 0.6, -0.3 * scale, 0);
                         this.segments[i].add(rightLeg);
                         this.legs.push(rightLeg);
                     }
@@ -5485,42 +5482,37 @@ self.onmessage = async function(e) {
 
                 const head = this.segments[0];
                 const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-                const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                const eyeGeo = new THREE.BoxGeometry(0.1 * scale, 0.1 * scale, 0.1 * scale);
 
-                // Eyes on the side of the head
                 const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-                leftEye.position.set(-0.6, 0.2, 0); // Position on the side
+                leftEye.position.set(-0.6 * scale, 0.2 * scale, 0);
                 head.add(leftEye);
 
                 const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-                rightEye.position.set(0.6, 0.2, 0); // Position on the side
+                rightEye.position.set(0.6 * scale, 0.2 * scale, 0);
                 head.add(rightEye);
 
-                // Mouth and Pinchers
-                const mouthGeo = new THREE.BoxGeometry(0.4, 0.1, 0.1);
+                const mouthGeo = new THREE.BoxGeometry(0.4 * scale, 0.1 * scale, 0.1 * scale);
                 const mouthMat = new THREE.MeshStandardMaterial({ map: mouthTexture });
                 const mouth = new THREE.Mesh(mouthGeo, mouthMat);
-                mouth.position.set(0, -0.2, 0.45);
+                mouth.position.set(0, -0.2 * scale, 0.45 * scale);
                 head.add(mouth);
 
-                const pincherGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
+                const pincherGeo = new THREE.BoxGeometry(0.1 * scale, 0.3 * scale, 0.1 * scale);
                 const leftPincher = new THREE.Mesh(pincherGeo, mouthMat);
-                leftPincher.position.set(-0.25, -0.2, 0.5);
+                leftPincher.position.set(-0.4 * scale, -0.2 * scale, 0.5 * scale);
                 leftPincher.rotation.z = Math.PI / 6;
                 head.add(leftPincher);
                 this.pinchers.push(leftPincher);
 
                 const rightPincher = new THREE.Mesh(pincherGeo, mouthMat);
-                rightPincher.position.set(0.25, -0.2, 0.5);
+                rightPincher.position.set(0.4 * scale, -0.2 * scale, 0.5 * scale);
                 rightPincher.rotation.z = -Math.PI / 6;
                 head.add(rightPincher);
                 this.pinchers.push(rightPincher);
 
-                this.glowMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0 });
-                const glowGeo = new THREE.SphereGeometry(1, 16, 12);
-                this.glowMesh = new THREE.Mesh(glowGeo, this.glowMaterial);
-                this.glowMesh.visible = false;
-                this.mesh.add(this.glowMesh);
+                this.glowLight = new THREE.PointLight(0x00ff00, 0, 10 * scale);
+                this.mesh.add(this.glowLight);
             }
 
             this.mesh.userData.mobId = this.id;
@@ -5541,12 +5533,11 @@ self.onmessage = async function(e) {
                 this.mesh.eyeLight.visible = isNight;
             }
 
-            if (this.type === 'grub') {
-                this.glowMesh.visible = isNight;
+            if (this.type === 'grub' && this.glowLight) {
                 if (isNight) {
-                    this.glowMaterial.opacity = (Math.sin(Date.now() * 0.002) + 1) / 2 * 0.5 + 0.2;
+                    this.glowLight.intensity = (Math.sin(Date.now() * 0.002) + 1) / 2 * 0.8 + 0.4;
                 } else {
-                    this.glowMaterial.opacity = 0;
+                    this.glowLight.intensity = 0;
                 }
             }
 
@@ -5995,28 +5986,33 @@ self.onmessage = async function(e) {
 
             if (this.type === 'grub') {
                 const isEating = this.aiState === 'EATING_CACTUS';
-                if (isMoving || isEating) {
-                    this.animationTime += dt * (isMoving ? 8 : 4); // Slower animation
+                const animationSpeed = (isMoving ? 8 : 4) / 2; // Halved animation speed
+                this.animationTime += dt * animationSpeed;
 
-                    this.segments.forEach((segment, i) => {
-                        if (i >= 2) { // Only undulate the main body
-                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15;
+                this.segments.forEach((segment, i) => {
+                    if (i > 0) {
+                        // The second segment (i=1) should only undulate when not eating
+                        if (i === 1 && isEating) {
+                            segment.position.y = 0;
+                        } else {
+                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
                         }
-                    });
-
-                    if (isEating) {
-                        // "L" shape animation for eating
-                        this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
-                        const pincherAngle = Math.abs(Math.sin(this.animationTime * 2)) * (Math.PI / 6); // More dramatic
-                        this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
-                        this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
-                    } else {
-                        this.headPivot.rotation.x = 0; // Reset head pivot
-                        this.pinchers[0].rotation.z = Math.PI / 6;
-                        this.pinchers[1].rotation.z = -Math.PI / 6;
                     }
+                });
 
-                    // Leg movement
+                if (isEating) {
+                    this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
+                    const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
+                    this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
+                    this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
+                } else {
+                    this.headPivot.rotation.x = 0;
+                    this.pinchers[0].rotation.z = Math.PI / 6;
+                    this.pinchers[1].rotation.z = -Math.PI / 6;
+                }
+
+                // Leg movement
+                if (isMoving || isEating) {
                     this.legs.forEach((leg, i) => {
                         const side = (i % 2 === 0) ? -1 : 1;
                         const legGroup = Math.floor(i / 2);
@@ -6027,9 +6023,9 @@ self.onmessage = async function(e) {
                 }
 
                 if (target) {
-                    const targetDirection = new THREE.Vector3().subVectors(target, this.pos).normalize();
+                    const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(target.x, this.pos.y, target.z), this.pos).normalize();
                     const angle = Math.atan2(targetDirection.x, targetDirection.z);
-                    this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.1);
+                    this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
                 }
             }
 
