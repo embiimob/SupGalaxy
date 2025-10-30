@@ -3062,7 +3062,7 @@ self.onmessage = async function(e) {
 
             let baseColor, secondaryColor;
             if (partName.includes('body')) {
-                baseColor = new THREE.Color().setHSL(rnd() * 0.1 + 0.1, 0.3 + rnd() * 0.3, 0.4 + rnd() * 0.2); // Sandy/Earthy
+                baseColor = new THREE.Color().setHSL(rnd(), 0.2 + rnd() * 0.8, 0.2 + rnd() * 0.6);
                 secondaryColor = baseColor.clone().multiplyScalar(0.7 + rnd() * 0.2);
             } else { // Mouth/Pinchers
                 baseColor = new THREE.Color().setHSL(rnd() * 0.1 + 0.05, 0.2 + rnd() * 0.2, 0.2 + rnd() * 0.1); // Darker
@@ -6129,7 +6129,7 @@ self.onmessage = async function(e) {
 
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
-            const GRUB_CAP = 7;
+            const GRUB_CAP = 2;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
