@@ -3083,7 +3083,8 @@ self.onmessage = async function(e) {
             }
 
             if (striped) {
-                context.fillStyle = 'rgba(0,0,0,0.8)';
+                const borderColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.2);
+                context.fillStyle = borderColor.getStyle();
                 context.fillRect(0, 0, size, 1); // Top
                 context.fillRect(0, size - 1, size, 1); // Bottom
                 context.fillRect(0, 0, 1, size); // Left
@@ -3111,13 +3112,7 @@ self.onmessage = async function(e) {
 
             const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
             const baseColor = new THREE.Color(BLOCKS[blockId].color);
-            let secondaryColor;
-
-            if (blockId === 125) { // Emerald
-                secondaryColor = baseColor.clone().multiplyScalar(0.6); // Darker green for emerald pattern
-            } else {
-                secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
-            }
+            let secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
 
             // Base fill
             context.fillStyle = baseColor.getStyle();
@@ -5517,7 +5512,9 @@ self.onmessage = async function(e) {
                 head.add(rightPincher);
                 this.pinchers.push(rightPincher);
 
-                this.glowLight = new THREE.PointLight(0x00ff00, 0, 10 * scale);
+                const glowRnd = makeSeededRandom(worldSeed + '_grub_glow_' + this.id);
+                const glowColor = new THREE.Color().setHSL(glowRnd(), 0.7 + glowRnd() * 0.3, 0.5 + glowRnd() * 0.2);
+                this.glowLight = new THREE.PointLight(glowColor, 0, 10 * scale);
                 this.mesh.add(this.glowLight);
             }
 
