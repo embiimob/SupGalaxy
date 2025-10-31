@@ -1079,6 +1079,7 @@
             122: { name: 'Honey', color: '#ffb74a' },
             123: { name: 'Hive', color: '#e3c27d' },
             124: { name: 'Iron Ore', color: '#a8a8a8' },
+            125: { name: 'Emerald', color: '#00ff7b' },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -1569,7 +1570,7 @@ const ARCHETYPES = {
         name: 'Desert',
         gravity: 16.0,
         skyType: 'desert',
-        mobSpawnRules: { day: [], night: ['crawley'] },
+            mobSpawnRules: { day: ['grub'], night: ['crawley', 'grub'] },
         terrainGenerator: 'generateDesertTerrain',
         biomeModifications: { onlyDesert: true },
         flora: ['cactus']
@@ -3046,6 +3047,56 @@ self.onmessage = async function(e) {
             return new THREE.CanvasTexture(canvas);
         }
 
+        function createMobTexture(seed, partName, striped = false) {
+            const cacheKey = `${seed}:${partName}:${striped}`;
+            if (textureCache.has(cacheKey)) {
+                return textureCache.get(cacheKey);
+            }
+
+            const size = 16;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const rnd = makeSeededRandom(seed + '_mob_texture_' + partName);
+
+            let baseColor, secondaryColor;
+            if (partName.includes('body')) {
+                baseColor = new THREE.Color().setHSL(rnd(), 0.2 + rnd() * 0.8, 0.2 + rnd() * 0.6);
+                secondaryColor = baseColor.clone().multiplyScalar(0.7 + rnd() * 0.2);
+            } else { // Mouth/Pinchers
+                baseColor = new THREE.Color().setHSL(rnd() * 0.1 + 0.05, 0.2 + rnd() * 0.2, 0.2 + rnd() * 0.1); // Darker
+                secondaryColor = baseColor.clone().multiplyScalar(1.2 + rnd() * 0.2);
+            }
+
+            context.fillStyle = baseColor.getStyle();
+            context.fillRect(0, 0, size, size);
+
+            const patternNoise = makeNoise(seed + '_mob_pattern_' + partName);
+            for (let i = 0; i < 50; i++) {
+                const x = Math.floor(rnd() * size);
+                const y = Math.floor(rnd() * size);
+                const noiseVal = patternNoise(x / size, y / size);
+                const color = (noiseVal > 0.5) ? secondaryColor : baseColor.clone().lerp(secondaryColor, 0.5);
+                context.fillStyle = color.getStyle();
+                context.fillRect(x, y, 1, 1);
+            }
+
+            if (striped) {
+                context.fillStyle = 'rgba(0,0,0,0.8)';
+                context.fillRect(0, 0, size, 1); // Top
+                context.fillRect(0, size - 1, size, 1); // Bottom
+                context.fillRect(0, 0, 1, size); // Left
+                context.fillRect(size - 1, 0, 1, size); // Right
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            textureCache.set(cacheKey, texture);
+            return texture;
+        }
+
         function createBlockTexture(seed, blockId) {
             const cacheKey = `${seed}:${blockId}`;
             if (textureCache.has(cacheKey)) {
@@ -3060,7 +3111,13 @@ self.onmessage = async function(e) {
 
             const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
             const baseColor = new THREE.Color(BLOCKS[blockId].color);
-            const secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+            let secondaryColor;
+
+            if (blockId === 125) { // Emerald
+                secondaryColor = baseColor.clone().multiplyScalar(0.6); // Darker green for emerald pattern
+            } else {
+                secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+            }
 
             // Base fill
             context.fillStyle = baseColor.getStyle();
@@ -5303,7 +5360,7 @@ self.onmessage = async function(e) {
                 this.mesh.rightWing = rightWing;
 
                 this.originalColor = new THREE.Color(0xffff00);
-            } else { // crawley
+            } else if (this.type === 'crawley') {
                 this.mesh = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
 
@@ -5355,6 +5412,113 @@ self.onmessage = async function(e) {
                 }
 
                 this.originalColor = new THREE.Color(0x4a4a4a);
+            } else if (this.type === 'grub') {
+                this.hp = 20;
+                this.speed = (0.01 + Math.random() * 0.005) / 2; // Slower movement, halved
+                this.aiState = 'IDLE';
+                this.animationTime = Math.random() * Math.PI * 2;
+                this.cactusEaten = 0;
+                this.isAggressive = false; // Grubs are not aggressive
+
+                const scale = 3; // Scale factor for the grub size
+
+                const bodyTexture = createMobTexture(worldSeed, 'grub_body');
+                const stripedTexture = createMobTexture(worldSeed, 'grub_body', true);
+                const mouthTexture = createMobTexture(worldSeed, 'grub_mouth');
+                const bodyMat = new THREE.MeshStandardMaterial({ map: bodyTexture });
+                const stripedMat = new THREE.MeshStandardMaterial({ map: stripedTexture });
+
+                const bodyMaterials = [
+                    stripedMat, stripedMat, stripedMat, stripedMat, stripedMat, stripedMat
+                ];
+                this.originalColor = null;
+
+                this.mesh = new THREE.Group();
+                this.segments = [];
+                this.legs = [];
+                this.pinchers = [];
+                this.headPivot = new THREE.Object3D();
+
+                const numSegments = 6;
+                for (let i = 0; i < numSegments; i++) {
+                    let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                    if (i === 4) segmentSize *= 0.8;
+                    if (i === 5) segmentSize *= 0.4;
+
+                    const segmentGeo = new THREE.BoxGeometry(segmentSize * 1.2, segmentSize * 0.8, segmentSize * 0.8);
+                    const segment = new THREE.Mesh(segmentGeo, bodyMaterials);
+
+                    this.segments.push(segment);
+
+                    if (i < 2) {
+                        this.headPivot.add(segment);
+                    } else {
+                        this.mesh.add(segment);
+                    }
+                }
+
+                this.segments[0].position.z = 1.05 * scale;
+                this.segments[1].position.z = 0.35 * scale;
+
+                // Adjusted positioning for tail segments
+                this.segments[2].position.z = -2 * 0.7 * scale;
+                this.segments[3].position.z = -3 * 0.7 * scale;
+                this.segments[4].position.z = (-4 * 0.7 + 0.2) * scale;
+                this.segments[5].position.z = (-5 * 0.7 + 0.5) * scale;
+
+                this.headPivot.position.z = -1.05 * scale;
+                this.mesh.add(this.headPivot);
+
+                for (let i = 1; i < 5; i++) {
+                    if (i % 2 !== 0) {
+                        let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                        const legGeo = new THREE.BoxGeometry(0.1 * scale, 0.5 * scale, 0.1 * scale);
+
+                        const leftLeg = new THREE.Mesh(legGeo, bodyMat);
+                        leftLeg.position.set(-segmentSize * 0.6, -0.3 * scale, 0);
+                        this.segments[i].add(leftLeg);
+                        this.legs.push(leftLeg);
+
+                        const rightLeg = new THREE.Mesh(legGeo, bodyMat);
+                        rightLeg.position.set(segmentSize * 0.6, -0.3 * scale, 0);
+                        this.segments[i].add(rightLeg);
+                        this.legs.push(rightLeg);
+                    }
+                }
+
+                const head = this.segments[0];
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const eyeGeo = new THREE.BoxGeometry(0.1 * scale, 0.1 * scale, 0.1 * scale);
+
+                const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+                leftEye.position.set(-0.6 * scale, 0.2 * scale, 0);
+                head.add(leftEye);
+
+                const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+                rightEye.position.set(0.6 * scale, 0.2 * scale, 0);
+                head.add(rightEye);
+
+                const mouthGeo = new THREE.BoxGeometry(0.4 * scale, 0.1 * scale, 0.1 * scale);
+                const mouthMat = new THREE.MeshStandardMaterial({ map: mouthTexture });
+                const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+                mouth.position.set(0, -0.2 * scale, 0.45 * scale);
+                head.add(mouth);
+
+                const pincherGeo = new THREE.BoxGeometry(0.1 * scale, 0.3 * scale, 0.1 * scale);
+                const leftPincher = new THREE.Mesh(pincherGeo, mouthMat);
+                leftPincher.position.set(-0.4 * scale, -0.2 * scale, 0.5 * scale);
+                leftPincher.rotation.z = Math.PI / 6;
+                head.add(leftPincher);
+                this.pinchers.push(leftPincher);
+
+                const rightPincher = new THREE.Mesh(pincherGeo, mouthMat);
+                rightPincher.position.set(0.4 * scale, -0.2 * scale, 0.5 * scale);
+                rightPincher.rotation.z = -Math.PI / 6;
+                head.add(rightPincher);
+                this.pinchers.push(rightPincher);
+
+                this.glowLight = new THREE.PointLight(0x00ff00, 0, 10 * scale);
+                this.mesh.add(this.glowLight);
             }
 
             this.mesh.userData.mobId = this.id;
@@ -5375,6 +5539,14 @@ self.onmessage = async function(e) {
                 this.mesh.eyeLight.visible = isNight;
             }
 
+            if (this.type === 'grub' && this.glowLight) {
+                if (isNight) {
+                    this.glowLight.intensity = (Math.sin(Date.now() * 0.002) + 1) / 2 * 0.8 + 0.4;
+                } else {
+                    this.glowLight.intensity = 0;
+                }
+            }
+
             // Only the host runs the mob AI and state changes.
             if (!isHost && peers.size > 0) {
                 // Interpolate position for smooth movement on clients
@@ -5393,7 +5565,7 @@ self.onmessage = async function(e) {
                 if (Date.now() < this.flashEnd) {
                     if (this.mesh.material) this.mesh.material.color.set(0xff0000);
                     else this.mesh.children[0].material.color.set(0xff0000);
-                } else {
+                } else if (this.originalColor) { // Check if originalColor is not null
                     if (this.mesh.material) this.mesh.material.color.copy(this.originalColor);
                     else this.mesh.children[0].material.color.copy(this.originalColor);
                 }
@@ -5483,6 +5655,112 @@ self.onmessage = async function(e) {
 
             let target = null;
             let targetDistance = Infinity;
+
+            if (this.type === 'grub') {
+                if (this.aiState === 'IDLE' || this.aiState === 'SEARCHING_FOR_CACTUS') {
+                    const scanRadius = 12;
+                    let closestCactus = null;
+                    let minCactusDist = Infinity;
+
+                    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+                        for (let dz = -scanRadius; dz <= scanRadius; dz++) {
+                            for (let dy = -4; dy <= 4; dy++) {
+                                const bx = Math.floor(this.pos.x + dx);
+                                const by = Math.floor(this.pos.y + dy);
+                                const bz = Math.floor(this.pos.z + dz);
+                                const blockId = getBlockAt(bx, by, bz);
+
+                                if (blockId === 9) { // Cactus
+                                    const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                    if (dist < minCactusDist) {
+                                        minCactusDist = dist;
+                                        closestCactus = { x: bx, y: by, z: bz };
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (closestCactus) {
+                        this.aiState = 'MOVING_TO_CACTUS';
+                        this.targetBlock = closestCactus;
+                    } else {
+                        this.aiState = 'IDLE';
+                    }
+                }
+
+                if (this.aiState === 'MOVING_TO_CACTUS' && this.targetBlock) {
+                    target = { x: this.targetBlock.x + 0.5, y: this.targetBlock.y + 0.5, z: this.targetBlock.z + 0.5 };
+                    targetDistance = this.pos.distanceTo(target);
+
+                    if (targetDistance < 1.5) {
+                        this.aiState = 'EATING_CACTUS';
+                        this.lingerTime = Date.now();
+                    }
+                } else if (this.aiState === 'EATING_CACTUS') {
+                    if (Date.now() - this.lingerTime > 2500) { // Slower eating
+                        chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0);
+                        this.cactusEaten++;
+
+                        if (this.cactusEaten >= 5) {
+                            this.cactusEaten = 0;
+                            const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+                            const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2));
+                            const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
+                            chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed);
+                        }
+
+                        this.aiState = 'IDLE';
+                        this.targetBlock = null;
+                    }
+                }
+            } else { // All other mobs can target players
+                if (this.isAggressive || !target) {
+                    let closestPlayer = null;
+                    let minPlayerDist = Infinity;
+
+                    let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+                    if (hostDist < minPlayerDist) {
+                        minPlayerDist = hostDist;
+                        closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                    }
+
+                    for (const [username, peerData] of peers.entries()) {
+                        if (userPositions[username]) {
+                            const peerPos = userPositions[username];
+                            const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
+                            if (dist < minPlayerDist) {
+                                minPlayerDist = dist;
+                                closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username };
+                            }
+                        }
+                    }
+                    if (closestPlayer && minPlayerDist < 10) {
+                        target = { x: closestPlayer.x, z: closestPlayer.z };
+                        targetDistance = minPlayerDist;
+
+                        if (minPlayerDist < 1.2 && Date.now() - this.attackCooldown > 800) {
+                            this.attackCooldown = Date.now();
+                            const targetPeer = peers.get(closestPlayer.username);
+                            if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                                targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
+                            } else if (closestPlayer.username === userName) {
+                                if (Date.now() - lastDamageTime > 800) {
+                                    player.health = Math.max(0, player.health - 1);
+                                    lastDamageTime = Date.now();
+                                    document.getElementById('health').innerText = player.health;
+                                    updateHealthBar();
+                                    addMessage('Hit! HP: ' + player.health, 1000);
+                                    if (player.health <= 0) {
+                                        handlePlayerDeath();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
 
             // Crawley AI: Target hives/honey, then players
             if (this.type === 'crawley') {
@@ -5712,6 +5990,51 @@ self.onmessage = async function(e) {
                 }
             }
 
+            if (this.type === 'grub') {
+                const isEating = this.aiState === 'EATING_CACTUS';
+                const animationSpeed = (isMoving ? 8 : 4) / 2; // Halved animation speed
+                this.animationTime += dt * animationSpeed;
+
+                this.segments.forEach((segment, i) => {
+                    if (i > 0) {
+                        // The second segment (i=1) should only undulate when not eating
+                        if (i === 1 && isEating) {
+                            segment.position.y = 0;
+                        } else {
+                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
+                        }
+                    }
+                });
+
+                if (isEating) {
+                    this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
+                    const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
+                    this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
+                    this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
+                } else {
+                    this.headPivot.rotation.x = 0;
+                    this.pinchers[0].rotation.z = Math.PI / 6;
+                    this.pinchers[1].rotation.z = -Math.PI / 6;
+                }
+
+                // Leg movement
+                if (isMoving || isEating) {
+                    this.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? -1 : 1;
+                        const legGroup = Math.floor(i / 2);
+                        leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
+                    });
+                } else {
+                    this.legs.forEach(leg => leg.rotation.x = 0);
+                }
+
+                if (target) {
+                    const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(target.x, this.pos.y, target.z), this.pos).normalize();
+                    const angle = Math.atan2(targetDirection.x, targetDirection.z);
+                    this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
+                }
+            }
+
 
             this.mesh.position.copy(this.pos);
 
@@ -5806,6 +6129,7 @@ self.onmessage = async function(e) {
 
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
+            const GRUB_CAP = 2;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -5836,7 +6160,12 @@ self.onmessage = async function(e) {
             });
 
             for (const mobType of allowedMobsToday) {
-                const mobCap = (mobType === 'crawley') ? CRAWLEY_CAP : BEE_CAP;
+                let mobCap;
+                if (mobType === 'crawley') mobCap = CRAWLEY_CAP;
+                else if (mobType === 'bee') mobCap = BEE_CAP;
+                else if (mobType === 'grub') mobCap = GRUB_CAP;
+                else continue;
+
                 const currentCount = mobs.filter(m => m.type === mobType).length;
 
                 if (currentCount < mobCap) {
@@ -8865,6 +9194,28 @@ self.onmessage = async function(e) {
                         addMessage('Stuck in block, respawned');
                     }
                 }
+
+                    // Grub contact damage
+                    for (const mob of mobs) {
+                        if (mob.type === 'grub' && Date.now() - lastDamageTime > 1000) {
+                            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
+                                new THREE.Vector3(player.width, player.height, player.depth)
+                            );
+                            const grubBox = new THREE.Box3().setFromObject(mob.mesh);
+                            if (playerBox.intersectsBox(grubBox)) {
+                                player.health = Math.max(0, player.health - 2);
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                addMessage('Hit by a Grub! HP: ' + player.health, 1000);
+                                flashDamageEffect();
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                            }
+                        }
+                    }
                 if (player.y < -10) {
                     player.x = modWrap(player.x, MAP_SIZE);
                     player.z = modWrap(player.z, MAP_SIZE);
