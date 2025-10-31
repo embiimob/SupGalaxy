@@ -5313,6 +5313,8 @@ self.onmessage = async function(e) {
             this.type = type;
             this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
             this.targetPos = new THREE.Vector3().copy(this.pos);
+            this.targetQuaternion = new THREE.Quaternion();
+            this.lastQuaternionUpdate = 0;
             this.lastUpdateTime = 0;
             this.vx = 0;
             this.vz = 0;
@@ -5518,6 +5520,10 @@ self.onmessage = async function(e) {
                 const glowColor = new THREE.Color().setHSL(glowRnd(), 0.7 + glowRnd() * 0.3, 0.5 + glowRnd() * 0.2);
                 this.glowLight = new THREE.PointLight(glowColor, 0, 10 * scale);
                 this.mesh.add(this.glowLight);
+
+                // Pre-create red materials for damage flash
+                const redMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                this.redMaterials = Array(bodyMaterials.length).fill(redMaterial);
             }
 
             this.mesh.userData.mobId = this.id;
@@ -5555,6 +5561,12 @@ self.onmessage = async function(e) {
                     const interpolationFactor = Math.min(1, timeSinceUpdate / 100); // 100ms interval
                     this.pos.lerp(this.targetPos, interpolationFactor);
                     this.mesh.position.copy(this.pos);
+
+                    if (this.lastQuaternionUpdate > 0) {
+                        const timeSinceUpdate = now - this.lastQuaternionUpdate;
+                        const interpolationFactor = Math.min(1, timeSinceUpdate / 100);
+                        this.mesh.quaternion.slerp(this.targetQuaternion, interpolationFactor);
+                    }
                 } else {
                     // Snap to position if no updates have been received yet
                     this.pos.copy(this.targetPos);
@@ -5563,10 +5575,9 @@ self.onmessage = async function(e) {
 
                 if (Date.now() < this.flashEnd) {
                     if (this.type === 'grub') {
-                        // Special handling for multi-part grub model
+                        // Use pre-created red materials for damage flash
                         this.segments.forEach(segment => {
-                            const redMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-                            segment.material = Array(segment.material.length).fill(redMaterial);
+                            segment.material = this.redMaterials;
                         });
                     } else if (this.mesh.material) {
                         this.mesh.material.color.set(0xff0000);
@@ -5593,58 +5604,8 @@ self.onmessage = async function(e) {
                     }
                 }
 
-                if (this.type === 'crawley' && this.mesh.legs) {
-                    if (this.isMoving) {
-                        this.animationTime += dt * 15; // Animation speed
-                        this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
-                        this.mesh.legs.forEach((leg, i) => {
-                            const side = (i % 2 === 0) ? 1 : -1;
-                            leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
-                        });
-                    } else {
-                        this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
-                    }
                 }
-
-                if (this.type === 'grub') {
-                    const isEating = this.aiState === 'EATING_CACTUS';
-                    const animationSpeed = (this.isMoving ? 8 : 4) / 2; // Halved animation speed
-                    this.animationTime += dt * animationSpeed;
-
-                    this.segments.forEach((segment, i) => {
-                        if (i > 0) {
-                            if (i === 1 && isEating) {
-                                segment.position.y = 0;
-                            } else {
-                                segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
-                            }
-                        }
-                    });
-
-                    if (isEating) {
-                        this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
-                        const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
-                        this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
-                        this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
-                    } else {
-                        this.headPivot.rotation.x = 0;
-                        this.pinchers[0].rotation.z = Math.PI / 6;
-                        this.pinchers[1].rotation.z = -Math.PI / 6;
-                    }
-
-                    if (this.isMoving || isEating) {
-                        this.legs.forEach((leg, i) => {
-                            const side = (i % 2 === 0) ? -1 : 1;
-                            const legGroup = Math.floor(i / 2);
-                            leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
-                        });
-                    } else {
-                        this.legs.forEach(leg => leg.rotation.x = 0);
-                    }
-                }
-                return;
-            }
-
+            } else {
             // Apply velocity from knockback
             this.pos.x += this.vx * dt;
             this.pos.z += this.vz * dt;
@@ -6092,9 +6053,56 @@ self.onmessage = async function(e) {
                 this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
             }
 
-
             this.mesh.position.copy(this.pos);
 
+            // Grub and Crawley animations are now client-side, driven by host state.
+            if (this.type === 'grub') {
+                const isEating = this.aiState === 'EATING_CACTUS';
+                const animationSpeed = (this.isMoving ? 8 : 4) / 2;
+                this.animationTime += dt * animationSpeed;
+
+                this.segments.forEach((segment, i) => {
+                    if (i > 0) {
+                        if (i === 1 && isEating) {
+                            segment.position.y = 0;
+                        } else {
+                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
+                        }
+                    }
+                });
+
+                if (isEating) {
+                    this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
+                    const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
+                    this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
+                    this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
+                } else {
+                    this.headPivot.rotation.x = 0;
+                    this.pinchers[0].rotation.z = Math.PI / 6;
+                    this.pinchers[1].rotation.z = -Math.PI / 6;
+                }
+
+                if (this.isMoving || isEating) {
+                    this.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? -1 : 1;
+                        const legGroup = Math.floor(i / 2);
+                        leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
+                    });
+                } else {
+                    this.legs.forEach(leg => leg.rotation.x = 0);
+                }
+            } else if (this.type === 'crawley' && this.mesh.legs) {
+                if (this.isMoving) {
+                    this.animationTime += dt * 15; // Animation speed
+                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
+                    this.mesh.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? 1 : -1;
+                        leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
+                    });
+                } else {
+                    this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
+                }
+            }
         };
         Mob.prototype.hurt = function (dmg, attackerName) {
             if (!isHost && peers.size > 0) return; // Only host or single player can process damage
@@ -7241,6 +7249,10 @@ self.onmessage = async function(e) {
                                     mob.isAggressive = mobState.isAggressive;
                                      mob.isMoving = mobState.isMoving; // <<< Update isMoving
                                      mob.aiState = mobState.aiState; // <<< Update aiState
+                                     if (mobState.quaternion) {
+                                         mob.targetQuaternion.fromArray(mobState.quaternion);
+                                         mob.lastQuaternionUpdate = performance.now();
+                                     }
                                     mob.lastUpdateTime = performance.now();
                                 }
                                 mobs = mobs.filter(mob => {
@@ -9462,8 +9474,9 @@ self.onmessage = async function(e) {
                         hp: mob.hp,
                         type: mob.type,
                         isAggressive: mob.isAggressive,
-                        isMoving: mob.isMoving, // <<< Add isMoving state
-                        aiState: mob.aiState,     // <<< Add aiState
+                        isMoving: mob.isMoving,
+                        aiState: mob.aiState,
+                        quaternion: mob.mesh.quaternion.toArray(),
                     }));
 
                     const batchMessage = JSON.stringify({
