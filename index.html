@@ -6993,6 +6993,17 @@ self.onmessage = async function(e) {
                     // also notify about host
                     dc.send(JSON.stringify({ type: 'new_player', username: userName }));
 
+                    //compile and send all chunk deltas to the new player
+                    const chunkDeltasArray = Array.from(CHUNK_DELTAS.entries());
+                    const foreignBlockOriginsArray = Array.from(foreignBlockOrigins.entries());
+                    const worldSyncMessage = {
+                        type: 'world_sync',
+                        chunkDeltas: chunkDeltasArray,
+                        foreignBlockOrigins: foreignBlockOriginsArray
+                    };
+                    dc.send(JSON.stringify(worldSyncMessage));
+
+
                     console.log(`[WEBRTC] Host sending initial mob state to ${user}`);
                     for (const mob of mobs) {
                         dc.send(JSON.stringify({
@@ -7039,6 +7050,20 @@ self.onmessage = async function(e) {
                                     peers.set(newPlayerUsername, { pc: null, dc: null, address: null });
                                 }
                                 updateHudButtons();
+                            }
+                            break;
+                        case 'world_sync':
+                            if (!isHost) {
+                                console.log(`[WEBRTC] Received world_sync`);
+                                if (data.chunkDeltas) {
+                                    const deltas = new Map(data.chunkDeltas);
+                                    for (const [chunkKey, changes] of deltas.entries()) {
+                                        chunkManager.applyDeltasToChunk(chunkKey, changes);
+                                    }
+                                }
+                                if (data.foreignBlockOrigins) {
+                                    foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+                                }
                             }
                             break;
                         case 'state_update':
