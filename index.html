@@ -5324,6 +5324,7 @@ self.onmessage = async function(e) {
             this.hasPollen = false;
             this.lingerTime = 0;
             this.animationTime = Math.random() * Math.PI * 2;
+            this.isMoving = false;
 
             if (this.type === 'bee') {
                 const worldBeeAggressionFactor = makeSeededRandom(worldSeed + '_bee_aggro')();
@@ -5442,6 +5443,7 @@ self.onmessage = async function(e) {
 
                     const segmentGeo = new THREE.BoxGeometry(segmentSize * 1.2, segmentSize * 0.8, segmentSize * 0.8);
                     const segment = new THREE.Mesh(segmentGeo, bodyMaterials);
+                    segment.userData.originalMaterial = segment.material; // Store original material
 
                     this.segments.push(segment);
 
@@ -5560,11 +5562,85 @@ self.onmessage = async function(e) {
                 }
 
                 if (Date.now() < this.flashEnd) {
-                    if (this.mesh.material) this.mesh.material.color.set(0xff0000);
-                    else this.mesh.children[0].material.color.set(0xff0000);
-                } else if (this.originalColor) { // Check if originalColor is not null
-                    if (this.mesh.material) this.mesh.material.color.copy(this.originalColor);
-                    else this.mesh.children[0].material.color.copy(this.originalColor);
+                    if (this.type === 'grub') {
+                        // Special handling for multi-part grub model
+                        this.segments.forEach(segment => {
+                            const redMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                            segment.material = Array(segment.material.length).fill(redMaterial);
+                        });
+                    } else if (this.mesh.material) {
+                        this.mesh.material.color.set(0xff0000);
+                    } else {
+                        this.mesh.children[0].material.color.set(0xff0000);
+                    }
+                } else {
+                    if (this.type === 'grub') {
+                        // Restore original materials for grub
+                        this.segments.forEach(segment => {
+                            // Assuming all materials on a segment should be the same, restore from the first one.
+                            // This part might need adjustment if segments have different original materials.
+                            const originalMaterial = segment.userData.originalMaterial;
+                            if (originalMaterial) {
+                                segment.material = originalMaterial;
+                            }
+                        });
+                    } else if (this.originalColor) { // Check if originalColor is not null
+                        if (this.mesh.material) {
+                            this.mesh.material.color.copy(this.originalColor);
+                        } else {
+                            this.mesh.children[0].material.color.copy(this.originalColor);
+                        }
+                    }
+                }
+
+                if (this.type === 'crawley' && this.mesh.legs) {
+                    if (this.isMoving) {
+                        this.animationTime += dt * 15; // Animation speed
+                        this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
+                        this.mesh.legs.forEach((leg, i) => {
+                            const side = (i % 2 === 0) ? 1 : -1;
+                            leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
+                        });
+                    } else {
+                        this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
+                    }
+                }
+
+                if (this.type === 'grub') {
+                    const isEating = this.aiState === 'EATING_CACTUS';
+                    const animationSpeed = (this.isMoving ? 8 : 4) / 2; // Halved animation speed
+                    this.animationTime += dt * animationSpeed;
+
+                    this.segments.forEach((segment, i) => {
+                        if (i > 0) {
+                            if (i === 1 && isEating) {
+                                segment.position.y = 0;
+                            } else {
+                                segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
+                            }
+                        }
+                    });
+
+                    if (isEating) {
+                        this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
+                        const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
+                        this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
+                        this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
+                    } else {
+                        this.headPivot.rotation.x = 0;
+                        this.pinchers[0].rotation.z = Math.PI / 6;
+                        this.pinchers[1].rotation.z = -Math.PI / 6;
+                    }
+
+                    if (this.isMoving || isEating) {
+                        this.legs.forEach((leg, i) => {
+                            const side = (i % 2 === 0) ? -1 : 1;
+                            const legGroup = Math.floor(i / 2);
+                            leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
+                        });
+                    } else {
+                        this.legs.forEach(leg => leg.rotation.x = 0);
+                    }
                 }
                 return;
             }
@@ -6008,63 +6084,12 @@ self.onmessage = async function(e) {
                     isMoving = true;
                 }
             }
+            this.isMoving = isMoving;
 
-            if (this.type === 'crawley' && this.mesh.legs) {
-                if (isMoving) {
-                    this.animationTime += dt * 15; // Animation speed
-                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
-                    this.mesh.legs.forEach((leg, i) => {
-                        const side = (i % 2 === 0) ? 1 : -1;
-                        leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
-                    });
-                } else {
-                    this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
-                }
-            }
-
-            if (this.type === 'grub') {
-                const isEating = this.aiState === 'EATING_CACTUS';
-                const animationSpeed = (isMoving ? 8 : 4) / 2; // Halved animation speed
-                this.animationTime += dt * animationSpeed;
-
-                this.segments.forEach((segment, i) => {
-                    if (i > 0) {
-                        // The second segment (i=1) should only undulate when not eating
-                        if (i === 1 && isEating) {
-                            segment.position.y = 0;
-                        } else {
-                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
-                        }
-                    }
-                });
-
-                if (isEating) {
-                    this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
-                    const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
-                    this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
-                    this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
-                } else {
-                    this.headPivot.rotation.x = 0;
-                    this.pinchers[0].rotation.z = Math.PI / 6;
-                    this.pinchers[1].rotation.z = -Math.PI / 6;
-                }
-
-                // Leg movement
-                if (isMoving || isEating) {
-                    this.legs.forEach((leg, i) => {
-                        const side = (i % 2 === 0) ? -1 : 1;
-                        const legGroup = Math.floor(i / 2);
-                        leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
-                    });
-                } else {
-                    this.legs.forEach(leg => leg.rotation.x = 0);
-                }
-
-                if (target) {
-                    const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(target.x, this.pos.y, target.z), this.pos).normalize();
-                    const angle = Math.atan2(targetDirection.x, targetDirection.z);
-                    this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
-                }
+            if (this.type === 'grub' && target) {
+                const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(target.x, this.pos.y, target.z), this.pos).normalize();
+                const angle = Math.atan2(targetDirection.x, targetDirection.z);
+                this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
             }
 
 
@@ -6087,10 +6112,7 @@ self.onmessage = async function(e) {
                 const dz = this.pos.z - attackerZ;
                 const dist = Math.hypot(dx, dz);
                 const knockbackStrength = 8;
-            // a mobs hurt routine can be called when a player is inside of it
-            // which can cause a division by zero error NaN'ing out the mobs x and z
-            // this check prevents that from happening and the mob will just take damage
-            if (dist > 0.0001) { // check for dist being very close to zero
+                if (dist > 0) { // SAFEGUARD: Prevent division by zero
                     this.vx += (dx / dist) * knockbackStrength;
                     this.vz += (dz / dist) * knockbackStrength;
                 }
@@ -7217,6 +7239,8 @@ self.onmessage = async function(e) {
                                     mob.targetPos.set(mobState.x, mobState.y, mobState.z);
                                     mob.hp = mobState.hp;
                                     mob.isAggressive = mobState.isAggressive;
+                                     mob.isMoving = mobState.isMoving; // <<< Update isMoving
+                                     mob.aiState = mobState.aiState; // <<< Update aiState
                                     mob.lastUpdateTime = performance.now();
                                 }
                                 mobs = mobs.filter(mob => {
@@ -9437,7 +9461,9 @@ self.onmessage = async function(e) {
                         z: mob.pos.z,
                         hp: mob.hp,
                         type: mob.type,
-                        isAggressive: mob.isAggressive
+                        isAggressive: mob.isAggressive,
+                        isMoving: mob.isMoving, // <<< Add isMoving state
+                        aiState: mob.aiState,     // <<< Add aiState
                     }));
 
                     const batchMessage = JSON.stringify({
