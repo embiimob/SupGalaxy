@@ -6087,7 +6087,10 @@ self.onmessage = async function(e) {
                 const dz = this.pos.z - attackerZ;
                 const dist = Math.hypot(dx, dz);
                 const knockbackStrength = 8;
-                if (dist > 0) {
+            // a mobs hurt routine can be called when a player is inside of it
+            // which can cause a division by zero error NaN'ing out the mobs x and z
+            // this check prevents that from happening and the mob will just take damage
+            if (dist > 0.0001) { // check for dist being very close to zero
                     this.vx += (dx / dist) * knockbackStrength;
                     this.vz += (dz / dist) * knockbackStrength;
                 }
