@@ -5655,10 +5655,12 @@ self.onmessage = async function(e) {
 
             if (this.type === 'grub') {
                 if (this.aiState === 'IDLE' || this.aiState === 'SEARCHING_FOR_CACTUS') {
-                    const scanRadius = 12;
+                    this.aiState = 'SEARCHING_FOR_CACTUS'; // Explicitly set state
+                    const scanRadius = 16;
                     let closestCactus = null;
                     let minCactusDist = Infinity;
 
+                    // 1. Find the closest cactus stalk
                     for (let dx = -scanRadius; dx <= scanRadius; dx++) {
                         for (let dz = -scanRadius; dz <= scanRadius; dz++) {
                             for (let dy = -4; dy <= 4; dy++) {
@@ -5679,36 +5681,56 @@ self.onmessage = async function(e) {
                     }
 
                     if (closestCactus) {
+                        // 2. Find the highest block of that cactus stalk
+                        let highestY = closestCactus.y;
+                        while (getBlockAt(closestCactus.x, highestY + 1, closestCactus.z) === 9) {
+                            highestY++;
+                        }
                         this.aiState = 'MOVING_TO_CACTUS';
-                        this.targetBlock = closestCactus;
+                        this.targetBlock = { x: closestCactus.x, y: highestY, z: closestCactus.z };
                     } else {
+                        // No cactus found, enter wandering state. This will be handled in the movement section.
                         this.aiState = 'IDLE';
                     }
                 }
 
                 if (this.aiState === 'MOVING_TO_CACTUS' && this.targetBlock) {
-                    target = { x: this.targetBlock.x + 0.5, y: this.targetBlock.y + 0.5, z: this.targetBlock.z + 0.5 };
+                    target = new THREE.Vector3(this.targetBlock.x + 0.5, this.targetBlock.y + 0.5, this.targetBlock.z + 0.5);
                     targetDistance = this.pos.distanceTo(target);
 
-                    if (targetDistance < 1.5) {
+                    if (targetDistance < 1.8) { // A bit larger distance to start eating
                         this.aiState = 'EATING_CACTUS';
-                        this.lingerTime = Date.now();
+                        this.lingerTime = Date.now(); // Start linger timer
                     }
-                } else if (this.aiState === 'EATING_CACTUS') {
-                    if (Date.now() - this.lingerTime > 2500) { // Slower eating
-                        chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0);
-                        this.cactusEaten++;
+                } else if (this.aiState === 'EATING_CACTUS' && this.targetBlock) {
+                    if (Date.now() - this.lingerTime > 2500) { // 2.5 second eating time
+                        // Ensure the target block is still a cactus before eating
+                        if (getBlockAt(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z) === 9) {
+                            chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0); // Eat block
+                            this.cactusEaten++;
 
-                        if (this.cactusEaten >= 5) {
-                            this.cactusEaten = 0;
-                            const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-                            const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2));
-                            const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
-                            chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed);
+                            if (this.cactusEaten >= 5) { // After eating 5 blocks
+                                this.cactusEaten = 0;
+                                // Create an emerald behind the grub
+                                const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+                                const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2.5 * 3)); // Drop it a bit further back
+                                const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
+                                chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed); // Emerald
+                            }
                         }
 
-                        this.aiState = 'IDLE';
-                        this.targetBlock = null;
+                        // Target the block below
+                        const blockBelow = { x: this.targetBlock.x, y: this.targetBlock.y - 1, z: this.targetBlock.z };
+
+                        if (getBlockAt(blockBelow.x, blockBelow.y, blockBelow.z) === 9) {
+                            // If there's more cactus below, continue eating
+                            this.targetBlock = blockBelow;
+                            this.lingerTime = Date.now(); // Reset linger for the next block
+                        } else {
+                            // Cactus finished, go back to searching
+                            this.aiState = 'IDLE';
+                            this.targetBlock = null;
+                        }
                     }
                 }
             } else { // All other mobs can target players
@@ -5957,6 +5979,13 @@ self.onmessage = async function(e) {
                     }
                 }
 
+                if (this.type === 'grub' || this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1.2) { // Allow climbing slightly more than 1 block
+                        this.pos.y = frontY + 0.5;
+                    }
+                }
+
                 if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
                     this.pos.x = newX;
                     this.pos.z = newZ;
@@ -5967,6 +5996,12 @@ self.onmessage = async function(e) {
                 const wanderSpeed = this.speed * 0.5;
                 const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
                 const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
+                if (this.type === 'grub' || this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1.2) {
+                        this.pos.y = frontY + 0.5;
+                    }
+                }
                  if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
                     this.pos.x = newX;
                     this.pos.z = newZ;
@@ -6070,7 +6105,8 @@ self.onmessage = async function(e) {
                     y: this.pos.y,
                     z: this.pos.z,
                     hp: this.hp,
-                    flash: true // Tell clients to trigger the flash
+                    flash: true, // Tell clients to trigger the flash
+                    mobType: this.type
                 });
                 for (const [peerUser, peerData] of peers.entries()) {
                     if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
@@ -6965,7 +7001,8 @@ self.onmessage = async function(e) {
                             x: mob.pos.x,
                             y: mob.pos.y,
                             z: mob.pos.z,
-                            hp: mob.hp
+                                    hp: mob.hp,
+                                    mobType: mob.type
                         }));
                     }
                 }
