@@ -5964,7 +5964,7 @@ self.onmessage = async function(e) {
             }
 
             let isMoving = false;
-            if (target) {
+            if (target && targetDistance > 0.01) { // Check for distance to avoid division by zero
                 const dx = target.x - this.pos.x;
                 const dz = target.z - this.pos.z;
                 const vx = dx / targetDistance * this.speed;
@@ -7207,9 +7207,15 @@ self.onmessage = async function(e) {
                             if (!mob) {
                                 mob = new Mob(data.x, data.z, data.id, data.mobType);
                                 mobs.push(mob);
+                                // For new mobs, set the initial position directly.
+                                // The `targetPos` will also be set below, ensuring no initial lerp.
+                                mob.pos.set(data.x, data.y, data.z);
                             }
-                            mob.pos.set(data.x, data.y, data.z);
+                            // For all mobs (new and existing), update the target position.
+                            // The game loop will handle smoothly interpolating to this new target.
+                            mob.targetPos.set(data.x, data.y, data.z);
                             mob.hp = data.hp;
+                            mob.lastUpdateTime = performance.now(); // Trigger the interpolation logic.
                             if (data.flash) mob.flashEnd = Date.now() + 200;
                             break;
 
