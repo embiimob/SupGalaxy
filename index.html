@@ -5604,7 +5604,6 @@ self.onmessage = async function(e) {
                     }
                 }
 
-                }
             } else {
             // Apply velocity from knockback
             this.pos.x += this.vx * dt;
@@ -6054,7 +6053,7 @@ self.onmessage = async function(e) {
             }
 
             this.mesh.position.copy(this.pos);
-
+            }
             // Grub and Crawley animations are now client-side, driven by host state.
             if (this.type === 'grub') {
                 const isEating = this.aiState === 'EATING_CACTUS';
