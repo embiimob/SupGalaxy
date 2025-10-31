@@ -6105,7 +6105,8 @@ self.onmessage = async function(e) {
                     y: this.pos.y,
                     z: this.pos.z,
                     hp: this.hp,
-                    flash: true // Tell clients to trigger the flash
+                    flash: true, // Tell clients to trigger the flash
+                    mobType: this.type
                 });
                 for (const [peerUser, peerData] of peers.entries()) {
                     if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
@@ -7000,7 +7001,8 @@ self.onmessage = async function(e) {
                             x: mob.pos.x,
                             y: mob.pos.y,
                             z: mob.pos.z,
-                            hp: mob.hp
+                                    hp: mob.hp,
+                                    mobType: mob.type
                         }));
                     }
                 }
