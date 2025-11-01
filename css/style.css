@@ -24,7 +24,7 @@
             align-items: center;
             justify-content: center;
             z-index: 200;
-            background: url('SupGalaxy.jpg') no-repeat center center;
+            background: url('../SupGalaxy.jpg') no-repeat center center;
             background-size: cover;
         }
 
