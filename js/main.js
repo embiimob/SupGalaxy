@@ -3816,7 +3816,7 @@ self.onmessage = async function(e) {
             scene.add(projectile);
         }
 
-        function createDroppedItemOrb(dropId, position, blockId, originSeed) {
+        function createDroppedItemOrb(dropId, position, blockId, originSeed, dropper) {
             const blockInfo = BLOCKS[blockId];
             if (!blockInfo) return;
 
@@ -3840,7 +3840,8 @@ self.onmessage = async function(e) {
                 originSeed: originSeed,
                 mesh: orb,
                 light: light,
-                createdAt: Date.now()
+                createdAt: Date.now(),
+                dropper: dropper
             };
 
             droppedItems.push(droppedItem);
@@ -3863,7 +3864,7 @@ self.onmessage = async function(e) {
 
 
             // Create the visual orb
-            createDroppedItemOrb(dropId, position, itemToDrop.id, itemToDrop.originSeed);
+            createDroppedItemOrb(dropId, position, itemToDrop.id, itemToDrop.originSeed, userName);
 
             // Remove one item from the inventory stack
             itemToDrop.count--;
@@ -3878,7 +3879,8 @@ self.onmessage = async function(e) {
                 dropId: dropId,
                 blockId: itemToDrop.id,
                 originSeed: itemToDrop.originSeed,
-                position: { x: position.x, y: position.y, z: position.z }
+                position: { x: position.x, y: position.y, z: position.z },
+                dropper: userName
             });
             for (const [peerUser, peerData] of peers.entries()) {
                 if (peerData.dc && peerData.dc.readyState === 'open') {
@@ -6530,7 +6532,7 @@ self.onmessage = async function(e) {
                             break;
                         case 'item_dropped':
                             if (!droppedItems.some(item => item.id === data.dropId)) {
-                                createDroppedItemOrb(data.dropId, new THREE.Vector3(data.position.x, data.position.y, data.position.z), data.blockId, data.originSeed);
+                                createDroppedItemOrb(data.dropId, new THREE.Vector3(data.position.x, data.position.y, data.position.z), data.blockId, data.originSeed, data.dropper);
                             }
                             break;
                         case 'item_picked_up':
@@ -8825,6 +8827,11 @@ self.onmessage = async function(e) {
                     // Pickup logic
                     const distToPlayer = item.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + 0.9, player.z));
                     if (distToPlayer < 1.5) {
+                        // If the item was dropped by the current player, check for a 2-second cooldown
+                        if (item.dropper === userName && Date.now() - item.createdAt < 2000) {
+                            continue; // Skip pickup for this item
+                        }
+
                         addToInventory(item.blockId, 1, item.originSeed);
 
                         scene.remove(item.mesh);
