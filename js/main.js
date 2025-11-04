@@ -85,6 +85,7 @@
             123: { name: 'Hive', color: '#e3c27d' },
             124: { name: 'Iron Ore', color: '#a8a8a8' },
             125: { name: 'Emerald', color: '#00ff7b' },
+            126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -117,6 +118,7 @@
             { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
             { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
             { id: 'laser_gun', out: { id: 121, count: 1 }, requires: { 111: 1, 11: 1, 106: 1 } },
+            { id: 'green_laser_gun', out: { id: 126, count: 1 }, requires: { 121: 1, 113: 1, 16: 1 } },
         ];
         var scene, camera, renderer, controls;
         var meshGroup;
@@ -203,6 +205,7 @@ var previousIsSprinting = false;
         var gravity = 16.0;
         var offerPollingIntervals = new Map();
         var projectiles = [];
+        var projectilesToAdd = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
         var localVideoStream = null;
@@ -3776,34 +3779,16 @@ self.onmessage = async function(e) {
             return slot;
         }
 
-        function createProjectile(id, user, position, direction) {
-            const projectileSpeed = 10;
-            const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
-            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            const projectile = new THREE.Mesh(geometry, material);
-
-            // Align projectile with camera direction
-            const quaternion = new THREE.Quaternion();
-            const up = new THREE.Vector3(0, 1, 0);
-            quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
-            projectile.quaternion.copy(quaternion);
-
-            projectile.position.copy(position);
-
-            const light = new THREE.PointLight(0xff0000, 1, 10);
-            light.position.copy(projectile.position);
-            projectile.light = light;
-            scene.add(light);
-
-            projectiles.push({
+        function createProjectile(id, user, position, direction, damage, laserType = 'red') {
+            projectilesToAdd.push({
                 id: id,
                 user: user,
-                mesh: projectile,
-                velocity: direction.multiplyScalar(projectileSpeed),
+                position: position.clone(),
+                direction: direction.clone(),
+                damage: damage,
                 createdAt: Date.now(),
-                light: light,
+                laserType: laserType
             });
-            scene.add(projectile);
         }
 
         function onPointerDown(e) {
@@ -3811,13 +3796,34 @@ self.onmessage = async function(e) {
             e.preventDefault();
 
             const selectedItem = INVENTORY[selectedHotIndex];
-            if (selectedItem && selectedItem.id === 121) { // Laser Gun
+            if (selectedItem && (selectedItem.id === 121 || selectedItem.id === 126)) { // Laser Guns
+                const isGreen = selectedItem.id === 126;
+                const cooldown = isGreen ? 500 : 1000;
                 const now = Date.now();
-                if (now - (player.lastFireTime || 0) < 1000) { // 1000ms cooldown
+                if (now - (player.lastFireTime || 0) < cooldown) {
                     return;
                 }
+
+                if (isGreen) {
+                    let hasEmerald = false;
+                    for (let i = 0; i < INVENTORY.length; i++) {
+                        if (INVENTORY[i] && INVENTORY[i].id === 125) { // Emerald
+                            INVENTORY[i].count--;
+                            if (INVENTORY[i].count <= 0) {
+                                INVENTORY[i] = null;
+                            }
+                            hasEmerald = true;
+                            updateHotbarUI();
+                            break;
+                        }
+                    }
+                    if (!hasEmerald) {
+                        addMessage('No emeralds to fire green laser!', 1000);
+                        return;
+                    }
+                }
+
                 player.lastFireTime = now;
-                const projectileId = `${userName}-${Date.now()}`;
                 const direction = new THREE.Vector3();
                 camera.getWorldDirection(direction);
 
@@ -3829,18 +3835,46 @@ self.onmessage = async function(e) {
                     position = new THREE.Vector3(player.x, player.y + 1.5, player.z);
                 }
 
-                createProjectile(projectileId, userName, position, direction.clone());
+                if (isGreen) {
+                    const damage = 10; // Green laser damage
+                    const right = new THREE.Vector3().crossVectors(direction, camera.up).normalize().multiplyScalar(0.2);
+                    const p1_pos = position.clone().add(right);
+                    const p2_pos = position.clone().sub(right);
+                    const id1 = `${userName}-${Date.now()}-1`;
+                    const id2 = `${userName}-${Date.now()}-2`;
 
-                const message = JSON.stringify({
-                    type: 'laser_fired',
-                    id: projectileId,
-                    user: userName,
-                    position: { x: position.x, y: position.y, z: position.z },
-                    direction: { x: direction.x, y: direction.y, z: direction.z }
-                });
-                for (const [peerUser, peerData] of peers.entries()) {
-                    if (peerData.dc && peerData.dc.readyState === 'open') {
-                        peerData.dc.send(message);
+                    createProjectile(id1, userName, p1_pos, direction.clone(), damage, 'green');
+                    createProjectile(id2, userName, p2_pos, direction.clone(), damage, 'green');
+
+                    const message = JSON.stringify({
+                        type: 'laser_fired',
+                        lasers: [
+                            { id: id1, position: { x: p1_pos.x, y: p1_pos.y, z: p1_pos.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage },
+                            { id: id2, position: { x: p2_pos.x, y: p2_pos.y, z: p2_pos.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage }
+                        ],
+                        user: userName,
+                        laserType: 'green'
+                    });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(message);
+                        }
+                    }
+
+                } else {
+                    const damage = 5; // Red laser damage
+                    const projectileId = `${userName}-${Date.now()}`;
+                    createProjectile(projectileId, userName, position, direction.clone(), damage, 'red');
+                    const message = JSON.stringify({
+                        type: 'laser_fired',
+                        lasers: [{ id: projectileId, position: { x: position.x, y: position.y, z: position.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage }],
+                        user: userName,
+                        laserType: 'red'
+                    });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(message);
+                        }
                     }
                 }
                 return;
@@ -6359,7 +6393,14 @@ self.onmessage = async function(e) {
                             break;
                         case 'laser_fired':
                             if (data.user !== userName) {
-                                createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z));
+                                if (data.laserType === 'green') {
+                                    for (const laser of data.lasers) {
+                                        createProjectile(laser.id, data.user, new THREE.Vector3(laser.position.x, laser.position.y, laser.position.z), new THREE.Vector3(laser.direction.x, laser.direction.y, laser.direction.z), laser.damage, 'green');
+                                    }
+                                } else {
+                                    const laser = data.lasers[0];
+                                    createProjectile(laser.id, data.user, new THREE.Vector3(laser.position.x, laser.position.y, laser.position.z), new THREE.Vector3(laser.direction.x, laser.direction.y, laser.direction.z), laser.damage, 'red');
+                                }
                             }
                             break;
                         case 'video_started':
@@ -8152,6 +8193,37 @@ self.onmessage = async function(e) {
             console.log('[MINIMAP] Events attached: double-click and drag-and-drop enabled');
         }
         function gameLoop(now) {
+            while (projectilesToAdd.length > 0) {
+                const p = projectilesToAdd.shift();
+                const isGreen = p.laserType === 'green';
+                const projectileSpeed = isGreen ? 20 : 10;
+                const color = isGreen ? 0x00ff00 : 0xff0000;
+
+                const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
+                const material = new THREE.MeshBasicMaterial({ color: color });
+                const projectile = new THREE.Mesh(geometry, material);
+
+                const quaternion = new THREE.Quaternion();
+                quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), p.direction);
+                projectile.quaternion.copy(quaternion);
+                projectile.position.copy(p.position);
+
+                const light = new THREE.PointLight(color, 1, 10);
+                light.position.copy(projectile.position);
+                scene.add(light);
+
+                projectiles.push({
+                    id: p.id,
+                    user: p.user,
+                    mesh: projectile,
+                    velocity: p.direction.multiplyScalar(projectileSpeed),
+                    createdAt: p.createdAt,
+                    light: light,
+                    damage: p.damage,
+                    laserType: p.laserType
+                });
+                scene.add(projectile);
+            }
             if (isDying) {
                 const fallDuration = 1500; // 1.5 seconds for a more dramatic fall
                 const sinkDuration = 1000; // 1 second to sink
@@ -8645,7 +8717,7 @@ self.onmessage = async function(e) {
                     for (const mob of mobs) {
                         if (p.mesh.position.distanceTo(mob.pos) < 1) {
                             if (isHost || peers.size === 0) {
-                                mob.hurt(5, p.user);
+                                mob.hurt(p.damage, p.user);
                             } else {
                                 // Client sends hit notification to host
                                 for (const [peerUser, peerData] of peers.entries()) {
@@ -8653,7 +8725,7 @@ self.onmessage = async function(e) {
                                         peerData.dc.send(JSON.stringify({
                                             type: 'mob_hit',
                                             id: mob.id,
-                                            damage: 5,
+                                            damage: p.damage,
                                             username: p.user
                                         }));
                                     }
@@ -8673,8 +8745,7 @@ self.onmessage = async function(e) {
                         const myPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
                         if (p.mesh.position.distanceTo(myPlayerPos) < 1.5) {
                             // I've been hit!
-                            const damage = Math.ceil(player.health / 4);
-                            player.health -= damage;
+                            player.health -= p.damage;
 
                             // Update UI
                             document.getElementById('health').innerText = player.health;
