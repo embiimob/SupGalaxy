@@ -205,7 +205,8 @@ var previousIsSprinting = false;
         var gravity = 16.0;
         var offerPollingIntervals = new Map();
         var projectiles = [];
-        var projectilesToAdd = [];
+        var laserQueue = [];
+        var droppedItems = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
         var localVideoStream = null;
@@ -628,8 +629,11 @@ const BLOCKS = {
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
         120: { name: 'Torch', color: '#ff9900', light: true },
+        121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
         122: { name: 'Honey', color: '#ffb74a' },
         123: { name: 'Hive', color: '#e3c27d' },
+        125: { name: 'Emerald', color: '#00ff7b' },
+        126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
 };
 
 const BIOMES = [
@@ -3779,16 +3783,108 @@ self.onmessage = async function(e) {
             return slot;
         }
 
-        function createProjectile(id, user, position, direction, damage, laserType = 'red') {
-            projectilesToAdd.push({
+        function createProjectile(id, user, position, direction, color = 'red') {
+            const isGreen = color === 'green';
+            const projectileSpeed = isGreen ? 20 : 10;
+            const laserColor = isGreen ? 0x00ff00 : 0xff0000;
+
+            const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
+            const material = new THREE.MeshBasicMaterial({ color: laserColor });
+            const projectile = new THREE.Mesh(geometry, material);
+
+            // Align projectile with camera direction
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
+            projectile.quaternion.copy(quaternion);
+
+            projectile.position.copy(position);
+
+            const light = new THREE.PointLight(laserColor, 1, 10);
+            light.position.copy(projectile.position);
+            projectile.light = light;
+            scene.add(light);
+
+            projectiles.push({
                 id: id,
                 user: user,
-                position: position.clone(),
-                direction: direction.clone(),
-                damage: damage,
+                mesh: projectile,
+                velocity: direction.multiplyScalar(projectileSpeed),
                 createdAt: Date.now(),
-                laserType: laserType
+                light: light,
+                isGreen: isGreen
             });
+            scene.add(projectile);
+        }
+
+        function createDroppedItemOrb(dropId, position, blockId, originSeed) {
+            const blockInfo = BLOCKS[blockId];
+            if (!blockInfo) return;
+
+            const geometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const material = new THREE.MeshStandardMaterial({
+                color: blockInfo.color,
+                emissive: blockInfo.color,
+                emissiveIntensity: 0.5
+            });
+            const orb = new THREE.Mesh(geometry, material);
+            orb.position.copy(position);
+
+            const light = new THREE.PointLight(blockInfo.color, 0.8, 5);
+            light.position.copy(position);
+            orb.light = light;
+            scene.add(light);
+
+            const droppedItem = {
+                id: dropId,
+                blockId: blockId,
+                originSeed: originSeed,
+                mesh: orb,
+                light: light,
+                createdAt: Date.now()
+            };
+
+            droppedItems.push(droppedItem);
+            scene.add(orb);
+        }
+
+        function dropSelectedItem() {
+            const itemToDrop = INVENTORY[selectedHotIndex];
+            if (!itemToDrop || itemToDrop.count <= 0) {
+                addMessage("Nothing to drop!");
+                return;
+            }
+
+            const dropId = `${userName}-${Date.now()}`;
+
+            // Drop in front of player
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            const position = new THREE.Vector3(player.x, player.y + 1, player.z).add(direction.multiplyScalar(1.5));
+
+
+            // Create the visual orb
+            createDroppedItemOrb(dropId, position, itemToDrop.id, itemToDrop.originSeed);
+
+            // Remove one item from the inventory stack
+            itemToDrop.count--;
+            if (itemToDrop.count <= 0) {
+                INVENTORY[selectedHotIndex] = null;
+            }
+            updateHotbarUI();
+
+            // Broadcast to other players
+            const message = JSON.stringify({
+                type: 'item_dropped',
+                dropId: dropId,
+                blockId: itemToDrop.id,
+                originSeed: itemToDrop.originSeed,
+                position: { x: position.x, y: position.y, z: position.z }
+            });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(message);
+                }
+            }
         }
 
         function onPointerDown(e) {
@@ -3796,34 +3892,19 @@ self.onmessage = async function(e) {
             e.preventDefault();
 
             const selectedItem = INVENTORY[selectedHotIndex];
-            if (selectedItem && (selectedItem.id === 121 || selectedItem.id === 126)) { // Laser Guns
-                const isGreen = selectedItem.id === 126;
-                const cooldown = isGreen ? 500 : 1000;
+
+            if (e.button === 2 && selectedItem && BLOCKS[selectedItem.id] && BLOCKS[selectedItem.id].hand_attachable) {
+                dropSelectedItem();
+                return;
+            }
+
+            if (selectedItem && selectedItem.id === 121) { // Laser Gun
                 const now = Date.now();
-                if (now - (player.lastFireTime || 0) < cooldown) {
+                if (now - (player.lastFireTime || 0) < 1000) { // 1000ms cooldown
                     return;
                 }
-
-                if (isGreen) {
-                    let hasEmerald = false;
-                    for (let i = 0; i < INVENTORY.length; i++) {
-                        if (INVENTORY[i] && INVENTORY[i].id === 125) { // Emerald
-                            INVENTORY[i].count--;
-                            if (INVENTORY[i].count <= 0) {
-                                INVENTORY[i] = null;
-                            }
-                            hasEmerald = true;
-                            updateHotbarUI();
-                            break;
-                        }
-                    }
-                    if (!hasEmerald) {
-                        addMessage('No emeralds to fire green laser!', 1000);
-                        return;
-                    }
-                }
-
                 player.lastFireTime = now;
+                const projectileId = `${userName}-${Date.now()}`;
                 const direction = new THREE.Vector3();
                 camera.getWorldDirection(direction);
 
@@ -3835,46 +3916,99 @@ self.onmessage = async function(e) {
                     position = new THREE.Vector3(player.x, player.y + 1.5, player.z);
                 }
 
-                if (isGreen) {
-                    const damage = 10; // Green laser damage
-                    const right = new THREE.Vector3().crossVectors(direction, camera.up).normalize().multiplyScalar(0.2);
-                    const p1_pos = position.clone().add(right);
-                    const p2_pos = position.clone().sub(right);
-                    const id1 = `${userName}-${Date.now()}-1`;
-                    const id2 = `${userName}-${Date.now()}-2`;
+                createProjectile(projectileId, userName, position, direction.clone(), 'red');
 
-                    createProjectile(id1, userName, p1_pos, direction.clone(), damage, 'green');
-                    createProjectile(id2, userName, p2_pos, direction.clone(), damage, 'green');
-
-                    const message = JSON.stringify({
-                        type: 'laser_fired',
-                        lasers: [
-                            { id: id1, position: { x: p1_pos.x, y: p1_pos.y, z: p1_pos.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage },
-                            { id: id2, position: { x: p2_pos.x, y: p2_pos.y, z: p2_pos.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage }
-                        ],
-                        user: userName,
-                        laserType: 'green'
-                    });
-                    for (const [peerUser, peerData] of peers.entries()) {
-                        if (peerData.dc && peerData.dc.readyState === 'open') {
-                            peerData.dc.send(message);
-                        }
+                const message = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId,
+                    user: userName,
+                    position: { x: position.x, y: position.y, z: position.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'red'
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message);
                     }
+                }
+                return;
+            }
 
+            if (selectedItem && selectedItem.id === 126) { // Green Laser Gun
+                const now = Date.now();
+                if (now - (player.lastFireTime || 0) < 500) { // 500ms cooldown
+                    return;
+                }
+
+                // Check for emerald ammo
+                let emeraldIndex = -1;
+                for (let i = 0; i < INVENTORY.length; i++) {
+                    if (INVENTORY[i] && INVENTORY[i].id === 125) {
+                        emeraldIndex = i;
+                        break;
+                    }
+                }
+
+                if (emeraldIndex === -1) {
+                    addMessage("No emeralds to fire!", 1000);
+                    return;
+                }
+
+                // Consume one emerald
+                INVENTORY[emeraldIndex].count--;
+                if (INVENTORY[emeraldIndex].count <= 0) {
+                    INVENTORY[emeraldIndex] = null;
+                }
+                updateHotbarUI();
+
+
+                player.lastFireTime = now;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+
+                const right = new THREE.Vector3();
+                right.crossVectors(camera.up, direction).normalize();
+
+                let basePosition;
+                if (cameraMode === 'third' && avatarGroup && avatarGroup.gun) {
+                    basePosition = new THREE.Vector3();
+                    avatarGroup.gun.getWorldPosition(basePosition);
                 } else {
-                    const damage = 5; // Red laser damage
-                    const projectileId = `${userName}-${Date.now()}`;
-                    createProjectile(projectileId, userName, position, direction.clone(), damage, 'red');
-                    const message = JSON.stringify({
-                        type: 'laser_fired',
-                        lasers: [{ id: projectileId, position: { x: position.x, y: position.y, z: position.z }, direction: { x: direction.x, y: direction.y, z: direction.z }, damage: damage }],
-                        user: userName,
-                        laserType: 'red'
-                    });
-                    for (const [peerUser, peerData] of peers.entries()) {
-                        if (peerData.dc && peerData.dc.readyState === 'open') {
-                            peerData.dc.send(message);
-                        }
+                    basePosition = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+                }
+
+                // Create two projectiles, side by side
+                const projectileId1 = `${userName}-${Date.now()}-1`;
+                const position1 = basePosition.clone().add(right.clone().multiplyScalar(0.2));
+                createProjectile(projectileId1, userName, position1, direction.clone(), 'green');
+
+                const projectileId2 = `${userName}-${Date.now()}-2`;
+                const position2 = basePosition.clone().add(right.clone().multiplyScalar(-0.2));
+                createProjectile(projectileId2, userName, position2, direction.clone(), 'green');
+
+
+                const message1 = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId1,
+                    user: userName,
+                    position: { x: position1.x, y: position1.y, z: position1.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'green'
+                });
+
+                const message2 = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId2,
+                    user: userName,
+                    position: { x: position2.x, y: position2.y, z: position2.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'green'
+                });
+
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message1);
+                        peerData.dc.send(message2);
                     }
                 }
                 return;
@@ -6392,15 +6526,20 @@ self.onmessage = async function(e) {
                             }
                             break;
                         case 'laser_fired':
-                            if (data.user !== userName) {
-                                if (data.laserType === 'green') {
-                                    for (const laser of data.lasers) {
-                                        createProjectile(laser.id, data.user, new THREE.Vector3(laser.position.x, laser.position.y, laser.position.z), new THREE.Vector3(laser.direction.x, laser.direction.y, laser.direction.z), laser.damage, 'green');
-                                    }
-                                } else {
-                                    const laser = data.lasers[0];
-                                    createProjectile(laser.id, data.user, new THREE.Vector3(laser.position.x, laser.position.y, laser.position.z), new THREE.Vector3(laser.direction.x, laser.direction.y, laser.direction.z), laser.damage, 'red');
-                                }
+                            laserQueue.push(data);
+                            break;
+                        case 'item_dropped':
+                            if (!droppedItems.some(item => item.id === data.dropId)) {
+                                createDroppedItemOrb(data.dropId, new THREE.Vector3(data.position.x, data.position.y, data.position.z), data.blockId, data.originSeed);
+                            }
+                            break;
+                        case 'item_picked_up':
+                            const itemIndex = droppedItems.findIndex(item => item.id === data.dropId);
+                            if (itemIndex !== -1) {
+                                const item = droppedItems[itemIndex];
+                                scene.remove(item.mesh);
+                                scene.remove(item.light);
+                                droppedItems.splice(itemIndex, 1);
                             }
                             break;
                         case 'video_started':
@@ -8193,37 +8332,6 @@ self.onmessage = async function(e) {
             console.log('[MINIMAP] Events attached: double-click and drag-and-drop enabled');
         }
         function gameLoop(now) {
-            while (projectilesToAdd.length > 0) {
-                const p = projectilesToAdd.shift();
-                const isGreen = p.laserType === 'green';
-                const projectileSpeed = isGreen ? 20 : 10;
-                const color = isGreen ? 0x00ff00 : 0xff0000;
-
-                const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
-                const material = new THREE.MeshBasicMaterial({ color: color });
-                const projectile = new THREE.Mesh(geometry, material);
-
-                const quaternion = new THREE.Quaternion();
-                quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), p.direction);
-                projectile.quaternion.copy(quaternion);
-                projectile.position.copy(p.position);
-
-                const light = new THREE.PointLight(color, 1, 10);
-                light.position.copy(projectile.position);
-                scene.add(light);
-
-                projectiles.push({
-                    id: p.id,
-                    user: p.user,
-                    mesh: projectile,
-                    velocity: p.direction.multiplyScalar(projectileSpeed),
-                    createdAt: p.createdAt,
-                    light: light,
-                    damage: p.damage,
-                    laserType: p.laserType
-                });
-                scene.add(projectile);
-            }
             if (isDying) {
                 const fallDuration = 1500; // 1.5 seconds for a more dramatic fall
                 const sinkDuration = 1000; // 1 second to sink
@@ -8693,6 +8801,56 @@ self.onmessage = async function(e) {
                     hasMovedSubstantially = false;
                 }
 
+                // Dropped item physics and pickup
+                for (let i = droppedItems.length - 1; i >= 0; i--) {
+                    const item = droppedItems[i];
+
+                    // Simple gravity
+                    const groundY = chunkManager.getSurfaceY(item.mesh.position.x, item.mesh.position.z);
+                    if (item.mesh.position.y > groundY + 0.25) {
+                        item.mesh.position.y -= 4 * dt;
+                    } else {
+                        item.mesh.position.y = groundY + 0.25;
+                    }
+                    item.light.position.copy(item.mesh.position);
+
+                    // Despawn after 5 minutes
+                    if (Date.now() - item.createdAt > 300000) {
+                        scene.remove(item.mesh);
+                        scene.remove(item.light);
+                        droppedItems.splice(i, 1);
+                        continue;
+                    }
+
+                    // Pickup logic
+                    const distToPlayer = item.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + 0.9, player.z));
+                    if (distToPlayer < 1.5) {
+                        addToInventory(item.blockId, 1, item.originSeed);
+
+                        scene.remove(item.mesh);
+                        scene.remove(item.light);
+                        droppedItems.splice(i, 1);
+
+                        // Broadcast pickup
+                        const message = JSON.stringify({
+                            type: 'item_picked_up',
+                            dropId: item.id
+                        });
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(message);
+                            }
+                        }
+                    }
+                }
+
+                // Process laser queue
+                if (laserQueue.length > 0) {
+                    const data = laserQueue.shift();
+                    if (data.user !== userName) {
+                        createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z), data.color);
+                    }
+                }
                 // Update projectiles
                 for (let i = projectiles.length - 1; i >= 0; i--) {
                     const p = projectiles[i];
@@ -8716,8 +8874,9 @@ self.onmessage = async function(e) {
                     let hitMob = false;
                     for (const mob of mobs) {
                         if (p.mesh.position.distanceTo(mob.pos) < 1) {
+                            const damage = p.isGreen ? 10 : 5;
                             if (isHost || peers.size === 0) {
-                                mob.hurt(p.damage, p.user);
+                                mob.hurt(damage, p.user);
                             } else {
                                 // Client sends hit notification to host
                                 for (const [peerUser, peerData] of peers.entries()) {
@@ -8725,7 +8884,7 @@ self.onmessage = async function(e) {
                                         peerData.dc.send(JSON.stringify({
                                             type: 'mob_hit',
                                             id: mob.id,
-                                            damage: p.damage,
+                                            damage: damage,
                                             username: p.user
                                         }));
                                     }
@@ -8745,7 +8904,8 @@ self.onmessage = async function(e) {
                         const myPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
                         if (p.mesh.position.distanceTo(myPlayerPos) < 1.5) {
                             // I've been hit!
-                            player.health -= p.damage;
+                            const damage = p.isGreen ? 10 : 5;
+                            player.health -= damage;
 
                             // Update UI
                             document.getElementById('health').innerText = player.health;
