@@ -3841,7 +3841,8 @@ self.onmessage = async function(e) {
                 mesh: orb,
                 light: light,
                 createdAt: Date.now(),
-                dropper: dropper
+                dropper: dropper,
+                justDropped: true
             };
 
             droppedItems.push(droppedItem);
@@ -3860,7 +3861,7 @@ self.onmessage = async function(e) {
             // Drop in front of player
             const direction = new THREE.Vector3();
             camera.getWorldDirection(direction);
-            const position = new THREE.Vector3(player.x, player.y + 1, player.z).add(direction.multiplyScalar(1.5));
+            const position = new THREE.Vector3(player.x, player.y + 1, player.z).add(direction.multiplyScalar(2.5));
 
 
             // Create the visual orb
@@ -8804,6 +8805,8 @@ self.onmessage = async function(e) {
                 }
 
                 // Dropped item physics and pickup
+                // We need to iterate in two passes.
+                // Pass 1: Handle physics and pickup logic.
                 for (let i = droppedItems.length - 1; i >= 0; i--) {
                     const item = droppedItems[i];
 
@@ -8826,7 +8829,10 @@ self.onmessage = async function(e) {
 
                     // Pickup logic
                     const distToPlayer = item.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + 0.9, player.z));
-                    if (distToPlayer < 1.5) {
+
+                    // The `justDropped` flag prevents the item from being picked up in the same frame it was dropped.
+                    // This is crucial for the host in multiplayer to avoid instantly grabbing their own items.
+                    if (distToPlayer < 1.5 && !item.justDropped) {
                         // If the item was dropped by the current player, check for a 2-second cooldown
                         if (item.dropper === userName && Date.now() - item.createdAt < 2000) {
                             continue; // Skip pickup for this item
@@ -8848,6 +8854,13 @@ self.onmessage = async function(e) {
                                 peerData.dc.send(message);
                             }
                         }
+                    }
+                }
+
+                // Pass 2: After all logic for the frame, reset the `justDropped` flag for the next frame.
+                for (const item of droppedItems) {
+                    if (item.justDropped) {
+                        item.justDropped = false;
                     }
                 }
 
