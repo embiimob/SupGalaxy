@@ -967,52 +967,55 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
             const nx = (wx % MAP_SIZE) / MAP_SIZE;
             const nz = (wz % MAP_SIZE) / MAP_SIZE;
 
-            // Dunes
-            let duneHeight = 20 + fbm(duneNoise, nx * 2, nz * 2, 6, 0.5) * 25; // Increased depth
+            // Base terrain: sand dunes
+            let height = 20 + fbm(duneNoise, nx * 2, nz * 2, 6, 0.5) * 25;
 
             // Buttes
             const butteValue = fbm(butteNoise, nx * 5, nz * 5, 4, 0.6);
+            let isButte = false;
             if (butteValue > 0.75) {
-                const butteHeight = duneHeight + (butteValue - 0.75) * 150;
-                 for (let y = 0; y <= butteHeight; y++) {
-                    let id;
-                    if (y === 0) id = 1; // Bedrock
-                    else if (y < butteHeight - 10) id = 4; // Stone
-                    else id = 118; // Sandstone
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
-                }
-                continue; // Skip to next column after building a butte
+                isButte = true;
+                height += (butteValue - 0.75) * 150; // Add to dune height
             }
 
-            // Oases
+            // Oases (don't carve oases into buttes)
             const oasisValue = fbm(oasisNoise, nx * 10, nz * 10, 3, 0.5);
-            let height = duneHeight;
             let isOasis = false;
-            if (oasisValue > 0.65) {
+            if (!isButte && oasisValue > 0.65) {
                 isOasis = true;
                 const oasisDepth = (oasisValue - 0.65) * 30;
                 height -= oasisDepth;
             }
 
+            height = Math.floor(height);
+
             for (let y = 0; y <= height; y++) {
                 let id;
-                if (y === 0) id = 1; // Bedrock
-                else if (y < height - 5) id = 118; // Sandstone base
-                else id = 5; // Sand
+                if (y === 0) {
+                    id = 1; // Bedrock
+                } else if (isButte) {
+                    if (y < height - 10) id = 4; // Stone
+                    else id = 118; // Sandstone
+                } else {
+                    if (y < height - 5) id = 118; // Sandstone base
+                    else id = 5; // Sand
+                }
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }
 
-            if (isOasis && height < SEA_LEVEL + 2) {
-                 for (let y = Math.floor(height) + 1; y <= SEA_LEVEL; y++) {
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+            if (isOasis) {
+                 if (height < SEA_LEVEL + 2) {
+                    for (let y = height + 1; y <= SEA_LEVEL; y++) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+                    }
                 }
-            }
 
-            if (isOasis && cactusRnd() < 0.2) {
-                 const cactusY = Math.floor(height) + 1;
-                 if (chunkData[cactusY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === BLOCK_AIR) {
-                    placeCactus(chunkData, lx, cactusY, lz, cactusRnd);
-                 }
+                if (cactusRnd() < 0.2) {
+                     const cactusY = height + 1;
+                     if (chunkData[cactusY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === BLOCK_AIR) {
+                        placeCactus(chunkData, lx, cactusY, lz, cactusRnd);
+                     }
+                }
             }
         }
     }
