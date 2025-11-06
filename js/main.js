@@ -2852,6 +2852,21 @@ self.onmessage = async function(e) {
             }
             return SEA_LEVEL;
         };
+        ChunkManager.prototype.getSurfaceYForBoulders = function (wx, wz) {
+            var wrappedWx = modWrap(Math.floor(wx), MAP_SIZE);
+            var wrappedWz = modWrap(Math.floor(wz), MAP_SIZE);
+            var cx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var cz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var chunk = this.getChunk(cx, cz);
+            if (!chunk.generated) this.generateChunk(chunk);
+            var lx = Math.floor(wrappedWx % CHUNK_SIZE);
+            var lz = Math.floor(wrappedWz % CHUNK_SIZE);
+            for (var y = MAX_HEIGHT - 1; y >= 0; y--) {
+                const blockId = chunk.get(lx, y, lz);
+                if (blockId !== BLOCK_AIR && blockId !== 6 && blockId !== 16) return y + 1; // Ignore lava (16)
+            }
+            return SEA_LEVEL;
+        };
         ChunkManager.prototype.preloadChunks = function (cx, cz, radius) {
             var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
             var queue = [];
@@ -5712,7 +5727,9 @@ self.onmessage = async function(e) {
                 }
                 setTimeout(() => {
                     activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
-                    if (sound) sound.pause();
+                    if (sound) {
+                        sound.loop = false; // Stop looping, will end after current playthrough
+                    }
                 }, duration);
             }
         }
@@ -8193,6 +8210,17 @@ function handleBoulderEruption(data) {
                     respawnPlayer();
                     this.blur();
                 });
+
+            // Add ended event listeners to eruption sounds to re-enable looping
+            ['rumble0', 'rumble1', 'rumble2'].forEach(id => {
+                const sound = document.getElementById(id);
+                if (sound) {
+                    sound.addEventListener('ended', () => {
+                        sound.loop = true;
+                    });
+                }
+            });
+
                 document.getElementById('acceptPending').addEventListener('click', function() {
                     acceptPendingOffers();
                     this.blur();
@@ -9288,7 +9316,7 @@ function handleBoulderEruption(data) {
                             block.velocity.y -= gravity * dt;
                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
 
-                            const groundY = chunkManager.getSurfaceY(block.mesh.position.x, block.mesh.position.z) + block.size / 2;
+                            const groundY = chunkManager.getSurfaceYForBoulders(block.mesh.position.x, block.mesh.position.z) + block.size / 2;
                             if (block.mesh.position.y <= groundY) {
                                 block.mesh.position.y = groundY;
                                 if (block.mass === 2 && !block.isRolling) { // Medium boulder rolls
