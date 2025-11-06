@@ -86,6 +86,7 @@
             124: { name: 'Iron Ore', color: '#a8a8a8' },
             125: { name: 'Emerald', color: '#00ff7b' },
             126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+            127: { name: 'Volcano', color: '#ff6a00' },
         };
         var BIOMES = [
             { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
@@ -205,6 +206,7 @@ var previousIsSprinting = false;
         var gravity = 16.0;
         var offerPollingIntervals = new Map();
         var projectiles = [];
+        var eruptedBlocks = [];
         var laserQueue = [];
         var droppedItems = [];
         var localAudioStream = null;
@@ -570,7 +572,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
+        mobSpawnRules: { day: ['crawley', 'volcano'], night: ['crawley', 'volcano'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
@@ -634,6 +636,7 @@ const BLOCKS = {
         123: { name: 'Hive', color: '#e3c27d' },
         125: { name: 'Emerald', color: '#00ff7b' },
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+        127: { name: 'Volcano', color: '#ff6a00' },
 };
 
 const BIOMES = [
@@ -2398,6 +2401,62 @@ self.onmessage = async function(e) {
             }
         }
 
+        function createSmokeParticles(x, y, z, particleCount = 50) {
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = x + (Math.random() - 0.5) * 2;
+                positions[i * 3 + 1] = y + Math.random() * 2;
+                positions[i * 3 + 2] = z + (Math.random() - 0.5) * 2;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 0.02,
+                    y: Math.random() * 0.1,
+                    z: (Math.random() - 0.5) * 0.02,
+                    life: Math.random() * 2
+                });
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.velocities = velocities;
+
+            const material = new THREE.PointsMaterial({
+                color: 0x333333,
+                size: 1,
+                transparent: true,
+                opacity: 0.5,
+                blending: THREE.NormalBlending,
+                depthWrite: false
+            });
+
+            const particleSystem = new THREE.Points(particles, material);
+            particleSystem.position.set(x, y, z);
+            return particleSystem;
+        }
+
+        function erupt(x, y, z, seed) {
+            const rnd = makeSeededRandom(seed.toString());
+            safePlayAudio(document.getElementById('soundRumbling'));
+            for (let i = 0; i < 10; i++) {
+                const blockType = [16, 11, 4][Math.floor(rnd() * 3)];
+                const block = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 1, 1),
+                    new THREE.MeshLambertMaterial({ color: BLOCKS[blockType].color })
+                );
+                block.position.set(x, y, z);
+                const angle = rnd() * Math.PI * 2;
+                const force = 10 + rnd() * 10;
+                block.velocity = new THREE.Vector3(
+                    Math.cos(angle) * force,
+                    20 + rnd() * 10,
+                    Math.sin(angle) * force
+                );
+                eruptedBlocks.push(block);
+                scene.add(block);
+            }
+        }
         function createFlameParticles(x, y, z) {
             const particleCount = 20;
             const particles = new THREE.BufferGeometry();
@@ -4585,6 +4644,20 @@ self.onmessage = async function(e) {
                 }
 
                 this.originalColor = new THREE.Color(0x4a4a4a);
+            } else if (this.type === 'volcano') {
+                this.hp = 100;
+                this.speed = 0;
+                this.aiState = 'ERUPTING';
+                this.isAggressive = false;
+                this.eruptionTime = 0;
+                this.smokeParticles = createSmokeParticles(this.pos.x, this.pos.y, this.pos.z);
+                scene.add(this.smokeParticles);
+                this.mesh = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff6a00 });
+                const bodyGeo = new THREE.CylinderGeometry(2, 2, 1, 8);
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.mesh.add(body);
+                this.originalColor = new THREE.Color(0xff6a00);
             } else if (this.type === 'grub') {
                 this.hp = 20;
                 this.speed = (0.01 + Math.random() * 0.005) / 2; // Slower movement, halved
@@ -4706,6 +4779,44 @@ self.onmessage = async function(e) {
             scene.add(this.mesh);
         }
         Mob.prototype.update = function (dt) {
+            if (this.type === 'volcano') {
+                const positions = this.smokeParticles.geometry.attributes.position.array;
+                const velocities = this.smokeParticles.geometry.velocities;
+                const eruptionIntensity = this.aiState === 'ERUPTING' ? 2 : 1;
+                for (let i = 0; i < velocities.length; i++) {
+                    positions[i * 3 + 1] += velocities[i].y * dt * 60 * eruptionIntensity;
+                    velocities[i].life -= dt;
+                    if (velocities[i].life <= 0) {
+                        positions[i * 3] = this.pos.x + (Math.random() - 0.5) * 2;
+                        positions[i * 3 + 1] = this.pos.y + Math.random() * 2;
+                        positions[i * 3 + 2] = this.pos.z + (Math.random() - 0.5) * 2;
+                        velocities[i].life = Math.random() * 2;
+                    }
+                }
+                this.smokeParticles.geometry.attributes.position.needsUpdate = true;
+                if (this.aiState === 'ERUPTING') {
+                    this.eruptionTime += dt;
+                    if (this.eruptionTime > 30) {
+                        this.hp = 0;
+                        this.die();
+                    } else if (Math.random() < 0.1) {
+                        const EruptionSeed = Math.random();
+                        erupt(this.pos.x, this.pos.y, this.pos.z, EruptionSeed);
+                        const message = JSON.stringify({
+                            type: 'volcano_erupt',
+                            x: this.pos.x,
+                            y: this.pos.y,
+                            z: this.pos.z,
+                            seed: EruptionSeed
+                        });
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(message);
+                            }
+                        }
+                    }
+                }
+            }
             // Ensure mesh is at the correct initial position for clients
             if (peers.size > 0 && !isHost) {
                 this.mesh.position.copy(this.pos);
@@ -5370,6 +5481,7 @@ self.onmessage = async function(e) {
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
             const GRUB_CAP = 2;
+            const VOLCANO_CAP = 5;
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -5404,6 +5516,7 @@ self.onmessage = async function(e) {
                 if (mobType === 'crawley') mobCap = CRAWLEY_CAP;
                 else if (mobType === 'bee') mobCap = BEE_CAP;
                 else if (mobType === 'grub') mobCap = GRUB_CAP;
+                else if (mobType === 'volcano') mobCap = VOLCANO_CAP;
                 else continue;
 
                 const currentCount = mobs.filter(m => m.type === mobType).length;
@@ -6533,6 +6646,11 @@ self.onmessage = async function(e) {
                         case 'item_dropped':
                             if (!droppedItems.some(item => item.id === data.dropId)) {
                                 createDroppedItemOrb(data.dropId, new THREE.Vector3(data.position.x, data.position.y, data.position.z), data.blockId, data.originSeed, data.dropper);
+                            }
+                            break;
+                        case 'volcano_erupt':
+                            if (!isHost) {
+                                erupt(data.x, data.y, data.z, data.seed);
                             }
                             break;
                         case 'item_picked_up':
@@ -8803,6 +8921,18 @@ self.onmessage = async function(e) {
                     hasMovedSubstantially = false;
                 }
 
+                // Erupted block physics
+                for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
+                    const block = eruptedBlocks[i];
+                    block.velocity.y -= gravity * dt;
+                    block.position.x += block.velocity.x * dt;
+                    block.position.y += block.velocity.y * dt;
+                    block.position.z += block.velocity.z * dt;
+                    if (block.position.y < chunkManager.getSurfaceY(block.position.x, block.position.z)) {
+                        scene.remove(block);
+                        eruptedBlocks.splice(i, 1);
+                    }
+                }
                 // Dropped item physics and pickup
                 for (let i = droppedItems.length - 1; i >= 0; i--) {
                     const item = droppedItems[i];
