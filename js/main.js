@@ -4528,7 +4528,7 @@ self.onmessage = async function(e) {
         function respawnPlayer(x, y, z) {
             var targetX = modWrap(x || spawnPoint.x, MAP_SIZE);
             var targetZ = modWrap(z || spawnPoint.z, MAP_SIZE);
-            var targetY = y || 100;
+            var targetY = y || chunkManager.getSurfaceY(targetX, targetZ) + 1;
             if (!checkCollision(targetX, targetY, targetZ)) {
                 player.x = targetX;
                 player.y = targetY;
@@ -5722,6 +5722,7 @@ self.onmessage = async function(e) {
                 });
                 const sound = document.getElementById(soundId);
                 if (sound) {
+                    sound.loop = true;
                     sound.currentTime = 0;
                     safePlayAudio(sound);
                 }
@@ -5798,6 +5799,7 @@ function handleBoulderEruption(data) {
     const smokeCount = 150;
     const smokeSystem = createEruptionSmoke(data.volcano.x, data.volcano.y, data.volcano.z, smokeCount);
     smokeSystem.userData.chunkKey = data.volcano.chunkKey; // Not strictly necessary but good for consistency
+    smokeSystem.createdAt = Date.now();
     smokeParticles.push(smokeSystem);
     scene.add(smokeSystem);
 
@@ -5824,7 +5826,7 @@ function handleBoulderEruption(data) {
 
         const angle = rnd() * Math.PI * 2;
         const horizontal_force = 20 + rnd() * 30; // Increased force
-        const vertical_force = 60 + rnd() * 30; // Increased vertical force for higher arc
+        const vertical_force = 120 + rnd() * 60; // Increased vertical force for higher arc
         const velocity = new THREE.Vector3(
             Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
             vertical_force, // High arc
@@ -8011,7 +8013,7 @@ function handleBoulderEruption(data) {
                     console.log('[LOGIN] Calculating spawn point');
                     var spawn = calculateSpawnPoint(userWorldKey);
                     player.x = spawn.x;
-                    player.y = spawn.y;
+            player.y = chunkManager.getSurfaceY(spawn.x, spawn.z) + 1;
                     player.z = spawn.z;
                     spawnPoint = { x: player.x, y: player.y, z: player.z };
                     player.vy = 0;
@@ -8210,17 +8212,6 @@ function handleBoulderEruption(data) {
                     respawnPlayer();
                     this.blur();
                 });
-
-            // Add ended event listeners to eruption sounds to re-enable looping
-            ['rumble0', 'rumble1', 'rumble2'].forEach(id => {
-                const sound = document.getElementById(id);
-                if (sound) {
-                    sound.addEventListener('ended', () => {
-                        sound.loop = true;
-                    });
-                }
-            });
-
                 document.getElementById('acceptPending').addEventListener('click', function() {
                     acceptPendingOffers();
                     this.blur();
@@ -9051,6 +9042,17 @@ function handleBoulderEruption(data) {
                         hasColor.needsUpdate = true;
                     }
                 }
+
+                // Cleanup smoke particles
+                for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                    const smokeSystem = smokeParticles[i];
+                    if (smokeSystem.createdAt && Date.now() - smokeSystem.createdAt > 20000) { // 20-second lifespan for eruption smoke
+                        scene.remove(smokeSystem);
+                        disposeObject(smokeSystem);
+                        smokeParticles.splice(i, 1);
+                    }
+                }
+
                 updateMinimap();
                 var posLabel = document.getElementById('posLabel');
                 if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
@@ -9282,8 +9284,9 @@ function handleBoulderEruption(data) {
                     const sound = document.getElementById(eruption.soundId);
                     if (sound && !sound.paused) {
                         const dist = Math.hypot(player.x - eruption.volcano.x, player.y - eruption.volcano.y, player.z - eruption.volcano.z);
-                        if (dist < 64) {
-                            sound.volume = Math.max(0, 1 - (dist / 64));
+                        const maxDist = 192; // 64 * 3
+                        if (dist < maxDist) {
+                            sound.volume = Math.max(0, 1 - (dist / maxDist));
                         } else {
                             sound.volume = 0;
                         }
