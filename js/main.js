@@ -706,43 +706,6 @@ function placeTree(chunkData, lx, cy, lz, rnd) {
             }
         }
 
-        function createPebble(x, y, z, isGlowing) {
-            const size = isGlowing ? 0.2 : 0.1;
-            const color = isGlowing ? 0xff6a00 : 0x333333;
-            const material = isGlowing ? new THREE.MeshBasicMaterial({ color: color }) : new THREE.MeshStandardMaterial({ color: color });
-            const pebble = new THREE.Mesh(
-                new THREE.BoxGeometry(size, size, size),
-                material
-            );
-            pebble.position.set(x, y, z);
-            return pebble;
-        }
-
-        function handlePebbleRain(data) {
-            const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
-            if (dist < 64) {
-                const rumble = document.getElementById('rumble1');
-                rumble.volume = Math.max(0, 1 - (dist / 64));
-                safePlayAudio(rumble);
-            }
-
-            const rnd = makeSeededRandom(data.seed);
-            const rainCount = 100 + Math.floor(rnd() * 100);
-            for (let i = 0; i < rainCount; i++) {
-                const isGlowing = rnd() < 0.2;
-                const radius = rnd() * 32;
-                const angle = rnd() * Math.PI * 2;
-                const x = data.volcano.x + Math.cos(angle) * radius;
-                const z = data.volcano.z + Math.sin(angle) * radius;
-                const y = data.volcano.y + 20 + rnd() * 20;
-
-                const pebbleMesh = createPebble(x, y, z, isGlowing);
-                const velocity = new THREE.Vector3(0, -5 - rnd() * 5, 0);
-                pebbles.push({ mesh: pebbleMesh, velocity: velocity, createdAt: Date.now(), isGlowing: isGlowing });
-                scene.add(pebbleMesh);
-            }
-        }
-
         // Canopy
         for (let dy = -canopySize; dy <= canopySize; dy++) {
             for (let dx = -canopySize; dx <= canopySize; dx++) {
@@ -889,40 +852,6 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
             }
         }
     }
-    // After generating the terrain, scan for volcanoes
-    const calderaThreshold = 50; // Min lava blocks to be considered a caldera
-    const minCalderaAltitude = 60;
-    let lavaCount = 0;
-    let totalLavaX = 0, totalLavaY = 0, totalLavaZ = 0;
-
-    for (let y = minCalderaAltitude; y < MAX_HEIGHT; y++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-                if (chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 16) { // Lava
-                    lavaCount++;
-                    totalLavaX += baseX + lx;
-                    totalLavaY += y;
-                    totalLavaZ += baseZ + lz;
-                }
-            }
-        }
-    }
-
-    if (lavaCount > calderaThreshold) {
-        const centerX = totalLavaX / lavaCount;
-        const centerY = totalLavaY / lavaCount;
-        const centerZ = totalLavaZ / lavaCount;
-        self.postMessage({
-            type: 'volcano_location',
-            location: {
-                x: centerX,
-                y: centerY,
-                z: centerZ,
-                lavaCount: lavaCount,
-                chunkKey: chunkKey
-            }
-        });
-    }
 }
 
 function generateVulcanTerrain(chunkData, chunkKey, archetype) {
@@ -1022,6 +951,41 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
                 }
             }
         }
+    }
+
+    // After generating the terrain, scan for volcanoes
+    const calderaThreshold = 50; // Min lava blocks to be considered a caldera
+    const minCalderaAltitude = 60;
+    let lavaCount = 0;
+    let totalLavaX = 0, totalLavaY = 0, totalLavaZ = 0;
+
+    for (let y = minCalderaAltitude; y < MAX_HEIGHT; y++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+                if (chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 16) { // Lava
+                    lavaCount++;
+                    totalLavaX += baseX + lx;
+                    totalLavaY += y;
+                    totalLavaZ += baseZ + lz;
+                }
+            }
+        }
+    }
+
+    if (lavaCount > calderaThreshold) {
+        const centerX = totalLavaX / lavaCount;
+        const centerY = totalLavaY / lavaCount;
+        const centerZ = totalLavaZ / lavaCount;
+        self.postMessage({
+            type: 'volcano_location',
+            location: {
+                x: centerX,
+                y: centerY,
+                z: centerZ,
+                lavaCount: lavaCount,
+                chunkKey: chunkKey
+            }
+        });
     }
 }
 
@@ -5689,6 +5653,43 @@ self.onmessage = async function(e) {
             }
         }
 
+        function createPebble(x, y, z, isGlowing) {
+            const size = isGlowing ? 0.2 : 0.1;
+            const color = isGlowing ? 0xff6a00 : 0x333333;
+            const material = isGlowing ? new THREE.MeshBasicMaterial({ color: color }) : new THREE.MeshStandardMaterial({ color: color });
+            const pebble = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size),
+                material
+            );
+            pebble.position.set(x, y, z);
+            return pebble;
+        }
+
+        function handlePebbleRain(data) {
+            const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
+            if (dist < 64) {
+                const rumble = document.getElementById('rumble1');
+                rumble.volume = Math.max(0, 1 - (dist / 64));
+                safePlayAudio(rumble);
+            }
+
+            const rnd = makeSeededRandom(data.seed);
+            const rainCount = 100 + Math.floor(rnd() * 100);
+            for (let i = 0; i < rainCount; i++) {
+                const isGlowing = rnd() < 0.2;
+                const radius = rnd() * 32;
+                const angle = rnd() * Math.PI * 2;
+                const x = data.volcano.x + Math.cos(angle) * radius;
+                const z = data.volcano.z + Math.sin(angle) * radius;
+                const y = data.volcano.y + 20 + rnd() * 20;
+
+                const pebbleMesh = createPebble(x, y, z, isGlowing);
+                const velocity = new THREE.Vector3(0, -5 - rnd() * 5, 0);
+                pebbles.push({ mesh: pebbleMesh, velocity: velocity, createdAt: Date.now(), isGlowing: isGlowing });
+                scene.add(pebbleMesh);
+            }
+        }
+
         function handleVolcanoEvent(data) {
             switch (data.eventType) {
                 case 'lava_eruption':
@@ -5758,46 +5759,41 @@ function handleBoulderEruption(data) {
     }
 }
         function manageVolcanoes() {
-            if (!isHost && peers.size > 0) return;
-            if (Date.now() - lastVolcanoManagement < 10000) return; // Run every 10 seconds
-            lastVolcanoManagement = Date.now();
-
-            const allPlayers = [{ x: player.x, y: player.y, z: player.z }];
-            for (const pos of Object.values(userPositions)) {
-                if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
-            }
-
-            for (const volcano of volcanoes) {
-                const isNearPlayer = allPlayers.some(p => Math.hypot(volcano.x - p.x, volcano.z - p.z) < 256);
-                if (isNearPlayer) {
-                    const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(Date.now() / 60000)); // Change event seed every minute
-                    if (eventRnd() < 0.1) { // 10% chance per minute to trigger an event
-                        const eventTypeRnd = eventRnd();
-                        let eventType;
-                        if (eventTypeRnd < 0.33) {
-                            eventType = 'lava_eruption';
-                        } else if (eventTypeRnd < 0.66) {
-                            eventType = 'pebble_rain';
-                        } else {
-                            eventType = 'boulder_eruption';
-                        }
-
-                        console.log(`[Volcano] Triggering event: ${eventType} at volcano ${volcano.chunkKey}`);
-
-                        const eventMessage = {
-                            type: 'volcano_event',
-                            volcano: { x: volcano.x, y: volcano.y, z: volcano.z },
-                            eventType: eventType,
-                            seed: worldSeed + '_event_' + Date.now()
-                        };
-
-                        // Host triggers the event locally
-                        handleVolcanoEvent(eventMessage);
-
-                        // Broadcast to all clients
-                        for (const [peerUser, peerData] of peers.entries()) {
-                            if (peerData.dc && peerData.dc.readyState === 'open') {
-                                peerData.dc.send(JSON.stringify(eventMessage));
+            if (isHost || peers.size === 0) {
+                if (Date.now() - lastVolcanoManagement < 10000) return; // Run every 10 seconds
+                lastVolcanoManagement = Date.now();
+                const allPlayers = [{ x: player.x, y: player.y, z: player.z }];
+                for (const pos of Object.values(userPositions)) {
+                    if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                }
+                for (const volcano of volcanoes) {
+                    const isNearPlayer = allPlayers.some(p => Math.hypot(volcano.x - p.x, volcano.z - p.z) < 256);
+                    if (isNearPlayer) {
+                        const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(Date.now() / 60000)); // Change event seed every minute
+                        if (eventRnd() < 0.1) { // 10% chance per minute to trigger an event
+                            const eventTypeRnd = eventRnd();
+                            let eventType;
+                            if (eventTypeRnd < 0.33) {
+                                eventType = 'lava_eruption';
+                            } else if (eventTypeRnd < 0.66) {
+                                eventType = 'pebble_rain';
+                            } else {
+                                eventType = 'boulder_eruption';
+                            }
+                            console.log(`[Volcano] Triggering event: ${eventType} at volcano ${volcano.chunkKey}`);
+                            const eventMessage = {
+                                type: 'volcano_event',
+                                volcano: { x: volcano.x, y: volcano.y, z: volcano.z },
+                                eventType: eventType,
+                                seed: worldSeed + '_event_' + Date.now()
+                            };
+                            // Host triggers the event locally
+                            handleVolcanoEvent(eventMessage);
+                            // Broadcast to all clients
+                            for (const [peerUser, peerData] of peers.entries()) {
+                                if (peerData.dc && peerData.dc.readyState === 'open') {
+                                    peerData.dc.send(JSON.stringify(eventMessage));
+                                }
                             }
                         }
                     }
