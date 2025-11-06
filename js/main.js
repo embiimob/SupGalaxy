@@ -2490,13 +2490,13 @@ self.onmessage = async function(e) {
                 positions[i * 3] = x + (Math.random() - 0.5) * 10;
                 positions[i * 3 + 1] = y + (Math.random() - 0.5) * 5;
                 positions[i * 3 + 2] = z + (Math.random() - 0.5) * 10;
-                opacities[i] = 1;
+                opacities[i] = 1.0;
 
                 velocities.push({
-                    x: (Math.random() - 0.5) * 0.2,
-                    y: 0.5 + Math.random() * 0.5,
-                    z: (Math.random() - 0.5) * 0.2,
-                    life: Math.random() * 5
+                    x: (Math.random() - 0.5) * 2,
+                    y: 5 + Math.random() * 5, // Increased upward velocity
+                    z: (Math.random() - 0.5) * 2,
+                    life: 3 + Math.random() * 4 // Randomized lifespan
                 });
             }
 
@@ -2505,12 +2505,12 @@ self.onmessage = async function(e) {
             particles.velocities = velocities;
 
             const material = new THREE.PointsMaterial({
-                size: 2,
-                map: new THREE.CanvasTexture(document.createElement('canvas')), // Placeholder, will be updated
+                size: 4,
+                map: new THREE.CanvasTexture(document.createElement('canvas')),
                 blending: THREE.NormalBlending,
                 depthWrite: false,
                 transparent: true,
-                vertexColors: false, // We are not using vertex colors
+                vertexColors: true, // Use vertex alpha
                 color: 0x888888
             });
 
@@ -2528,7 +2528,8 @@ self.onmessage = async function(e) {
 
 
             const particleSystem = new THREE.Points(particles, material);
-            particleSystem.position.set(x, y, z);
+            // We set the particle system position to the origin because the individual particle positions are already in world space.
+            particleSystem.position.set(0, 0, 0);
             return particleSystem;
         }
 
@@ -5739,27 +5740,34 @@ function handleBoulderEruption(data) {
         );
 
         const angle = rnd() * Math.PI * 2;
-        const radius = rnd() * 32;
+        const horizontal_force = 20 + rnd() * 30; // Increased force
+        const vertical_force = 30 + rnd() * 15; // Increased vertical force for higher arc
         const velocity = new THREE.Vector3(
-            Math.cos(angle) * radius / (2 * mass), // Heavier boulders travel less far
-            25 + rnd() * 10, // High arc
-            Math.sin(angle) * radius / (2 * mass)
+            Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
+            vertical_force, // High arc
+            Math.sin(angle) * horizontal_force / mass
         );
 
+        // Spawn boulders lower down, inside the caldera, to give them a launch trajectory
         boulder.position.set(
-            data.volcano.x,
-            data.volcano.y,
-            data.volcano.z
+            data.volcano.x + (rnd() - 0.5) * 8, // Randomize start position within caldera
+            data.volcano.y - 10 - rnd() * 5, // Start from below lava surface
+            data.volcano.z + (rnd() - 0.5) * 8
         );
 
+        const boulderId = 'boulder_' + Date.now() + '_' + i;
         eruptedBlocks.push({
+            id: boulderId,
             mesh: boulder,
             velocity: velocity,
             createdAt: Date.now(),
             type: 'boulder',
             size: size,
             mass: mass,
-            isRolling: false
+            isRolling: false,
+            targetPosition: boulder.position.clone(),
+            targetQuaternion: boulder.quaternion.clone(),
+            lastUpdate: 0
         });
         scene.add(boulder);
     }
@@ -6882,8 +6890,18 @@ function handleBoulderEruption(data) {
                             }
                             break;
                         case 'volcano_event':
+                            handleVolcanoEvent(data);
+                            break;
+                        case 'boulder_update':
                             if (!isHost) {
-                                handleVolcanoEvent(data);
+                                for (const boulderState of data.boulders) {
+                                    let boulder = eruptedBlocks.find(b => b.id === boulderState.id);
+                                    if (boulder) {
+                                        boulder.targetPosition = new THREE.Vector3().fromArray(boulderState.position);
+                                        boulder.targetQuaternion = new THREE.Quaternion().fromArray(boulderState.quaternion);
+                                        boulder.lastUpdate = performance.now();
+                                    }
+                                }
                             }
                             break;
                     }
@@ -8888,10 +8906,14 @@ function handleBoulderEruption(data) {
                 }
 
                 for (const smokeSystem of smokeParticles) {
+                    if (!smokeSystem.geometry.attributes.alpha || !smokeSystem.geometry.attributes.position) {
+                        console.warn('[Volcano] Smoke particle system is missing attributes, skipping animation.');
+                        continue;
+                    }
+
                     const positions = smokeSystem.geometry.attributes.position.array;
                     const alphas = smokeSystem.geometry.attributes.alpha.array;
                     const velocities = smokeSystem.geometry.velocities;
-                    let activeParticles = 0;
 
                     for (let i = 0; i < velocities.length; i++) {
                         velocities[i].life -= dt;
@@ -8899,8 +8921,20 @@ function handleBoulderEruption(data) {
                             positions[i * 3] += velocities[i].x * dt;
                             positions[i * 3 + 1] += velocities[i].y * dt;
                             positions[i * 3 + 2] += velocities[i].z * dt;
-                            alphas[i] = velocities[i].life / 5; // Fade out
-                            activeParticles++;
+                            alphas[i] = Math.min(1, velocities[i].life / 5); // Fade out, clamp alpha
+                        } else {
+                            // Respawn particle
+                            const volcano = volcanoes.find(v => v.chunkKey === smokeSystem.userData.chunkKey);
+                            if (volcano) {
+                                positions[i * 3] = volcano.x + (Math.random() - 0.5) * 10;
+                                positions[i * 3 + 1] = volcano.y + (Math.random() - 0.5) * 5;
+                                positions[i * 3 + 2] = volcano.z + (Math.random() - 0.5) * 10;
+                                velocities[i].life = 3 + Math.random() * 4;
+                                velocities[i].x = (Math.random() - 0.5) * 2;
+                                velocities[i].y = 5 + Math.random() * 5;
+                                velocities[i].z = (Math.random() - 0.5) * 2;
+                                alphas[i] = 1;
+                            }
                         }
                     }
                     smokeSystem.geometry.attributes.position.needsUpdate = true;
@@ -9149,60 +9183,96 @@ function handleBoulderEruption(data) {
                 }
 
                 // Update erupted blocks
-                for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
-                    const block = eruptedBlocks[i];
-                    block.velocity.y -= gravity * dt;
-                    block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
+                if (isHost || peers.size === 0) {
+                    // Host calculates physics and broadcasts
+                    for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
+                        const block = eruptedBlocks[i];
+                        if (block.type === 'boulder') {
+                            block.velocity.y -= gravity * dt;
+                            block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
 
-                    if (block.type === 'boulder') {
-                        const groundY = chunkManager.getSurfaceY(block.mesh.position.x, block.mesh.position.z) + block.size / 2;
-                        if (block.mesh.position.y <= groundY) {
-                            block.mesh.position.y = groundY;
-                            if (block.mass === 2 && !block.isRolling) { // Medium boulder rolls
-                                block.isRolling = true;
-                                block.velocity.y = 0;
-                                block.velocity.x *= 0.8; // Lose some horizontal velocity on impact
-                                block.velocity.z *= 0.8;
-                            } else {
-                                block.velocity.set(0, 0, 0);
+                            const groundY = chunkManager.getSurfaceY(block.mesh.position.x, block.mesh.position.z) + block.size / 2;
+                            if (block.mesh.position.y <= groundY) {
+                                block.mesh.position.y = groundY;
+                                if (block.mass === 2 && !block.isRolling) { // Medium boulder rolls
+                                    block.isRolling = true;
+                                    block.velocity.y = 0;
+                                    block.velocity.x *= 0.8;
+                                    block.velocity.z *= 0.8;
+                                } else {
+                                    block.velocity.set(0, 0, 0);
+                                }
                             }
+
+                            if (block.isRolling) {
+                                block.mesh.rotation.x += block.velocity.z * dt * 2;
+                                block.mesh.rotation.z -= block.velocity.x * dt * 2;
+                                block.velocity.multiplyScalar(1 - (0.5 * dt));
+                                if (block.velocity.length() < 0.1) block.isRolling = false;
+                            }
+
+                            if (block.mass === 4) {
+                                const playerBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth));
+                                const boulderBox = new THREE.Box3().setFromObject(block.mesh);
+                                if (playerBox.intersectsBox(boulderBox) && now - lastDamageTime > 1000) {
+                                    player.health = Math.max(0, player.health - 10);
+                                    lastDamageTime = now;
+                                    document.getElementById('health').innerText = player.health;
+                                    updateHealthBar();
+                                    addMessage('Hit by a boulder! -10 HP', 2000);
+                                    flashDamageEffect();
+                                    if (player.health <= 0) handlePlayerDeath();
+                                }
+                            }
+                        } else {
+                             block.velocity.y -= gravity * dt;
+                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
                         }
 
-                        if (block.isRolling) {
-                            block.mesh.rotation.x += block.velocity.z * dt;
-                            block.mesh.rotation.z -= block.velocity.x * dt;
-                            block.velocity.multiplyScalar(1 - (0.5 * dt)); // Friction
-                            if (block.velocity.length() < 0.1) {
-                                block.isRolling = false;
-                            }
-                        }
 
-                        // Player collision for large boulders
-                        if (block.mass === 4) {
-                            const playerBox = new THREE.Box3().setFromCenterAndSize(
-                                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
-                                new THREE.Vector3(player.width, player.height, player.depth)
-                            );
-                            const boulderBox = new THREE.Box3().setFromObject(block.mesh);
-                            if (playerBox.intersectsBox(boulderBox) && now - lastDamageTime > 1000) {
-                                player.health = Math.max(0, player.health - 10);
-                                lastDamageTime = now;
-                                document.getElementById('health').innerText = player.health;
-                                updateHealthBar();
-                                addMessage('Hit by a boulder! -10 HP', 2000);
-                                flashDamageEffect();
-                                if (player.health <= 0) handlePlayerDeath();
-                            }
+                        if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
+                            scene.remove(block.mesh);
+                            disposeObject(block.mesh);
+                            eruptedBlocks.splice(i, 1);
                         }
-
                     }
 
-                    if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) { // Despawn after 15s or if fallen off world
-                        scene.remove(block.mesh);
-                        disposeObject(block.mesh);
-                        eruptedBlocks.splice(i, 1);
+                    if (now - (lastStateUpdateTime || 0) > 100) { // Send updates every 100ms
+                        const boulderStates = eruptedBlocks
+                            .filter(b => b.type === 'boulder')
+                            .map(b => ({
+                                id: b.id,
+                                position: b.mesh.position.toArray(),
+                                quaternion: b.mesh.quaternion.toArray()
+                            }));
+
+                        if (boulderStates.length > 0) {
+                            const boulderUpdateMessage = { type: 'boulder_update', boulders: boulderStates };
+                            for (const [peerUser, peerData] of peers.entries()) {
+                                if (peerData.dc && peerData.dc.readyState === 'open') {
+                                    peerData.dc.send(JSON.stringify(boulderUpdateMessage));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Client interpolates
+                    for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
+                        const block = eruptedBlocks[i];
+                        if (block.type === 'boulder' && block.lastUpdate > 0) {
+                            const timeSinceUpdate = now - block.lastUpdate;
+                            const alpha = Math.min(1.0, timeSinceUpdate / 100); // 100ms interpolation time
+                            block.mesh.position.lerp(block.targetPosition, alpha);
+                            block.mesh.quaternion.slerp(block.targetQuaternion, alpha);
+                        }
+                         if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
+                            scene.remove(block.mesh);
+                            disposeObject(block.mesh);
+                            eruptedBlocks.splice(i, 1);
+                        }
                     }
                 }
+
 
                 // Update pebbles
                 for (let i = pebbles.length - 1; i >= 0; i--) {
