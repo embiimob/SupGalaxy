@@ -949,7 +949,60 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
 }
 
 function generateDesertTerrain(chunkData, chunkKey, archetype) {
-    generateStandardTerrain(chunkData, chunkKey, archetype);
+    const worldSeed = chunkKey.split(':')[0];
+    const noise = makeNoise(worldSeed);
+    const mountainNoise = makeNoise(worldSeed + '_mountains');
+    const cactusNoise = makeNoise(worldSeed + '_cactus');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
+
+            let mountainHeight = fbm(mountainNoise, nx * 0.3, nz * 0.3, 8, 0.55);
+            mountainHeight = Math.pow(mountainHeight, 2.0) * 80; // Reduced height
+
+            let groundHeight = 10 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
+            let height = Math.max(mountainHeight, groundHeight);
+
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
+
+            for (let y = 0; y <= height; y++) {
+                let id;
+                if (y < height - 10) {
+                    id = 4; // Stone
+                } else if (y < height - 1) {
+                    id = 118; // Sandstone
+                } else {
+                    id = 5; // Sand
+                }
+                if (y === 0) id = 1; // Bedrock
+
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+
+            // Reduced water level and less water
+            const DESERT_SEA_LEVEL = 8;
+            for (let y = height + 1; y <= DESERT_SEA_LEVEL; y++) {
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+            }
+
+            // Place cacti in clumps using a noise map
+            const topBlockId = chunkData[height * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx];
+            if (topBlockId === 5) { // Only place on sand
+                const cactusValue = fbm(cactusNoise, nx * 0.2, nz * 0.2, 3, 0.5);
+                if (cactusValue > 0.8) {
+                    placeCactus(chunkData, lx, height + 1, lz, makeSeededRandom(chunkKey + lx + lz));
+                }
+            }
+        }
+    }
 }
 
 function generateChunkData(chunkKey) {
