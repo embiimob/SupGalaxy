@@ -952,11 +952,15 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
     const worldSeed = chunkKey.split(':')[0];
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
+    const oasisNoise = makeNoise(worldSeed + '_oases');
     const cactusNoise = makeNoise(worldSeed + '_cactus');
+    const resourceNoise = makeNoise(worldSeed + '_resources');
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
     const baseX = cx * CHUNK_SIZE;
     const baseZ = cz * CHUNK_SIZE;
+
+    const heightMap = new Array(CHUNK_SIZE * CHUNK_SIZE);
 
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -965,40 +969,65 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
             const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
             const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
 
-            let mountainHeight = fbm(mountainNoise, nx * 0.3, nz * 0.3, 8, 0.55);
-            mountainHeight = Math.pow(mountainHeight, 2.0) * 80; // Reduced height
+            let mountainHeight = fbm(mountainNoise, nx * 0.2, nz * 0.2, 6, 0.5);
+            mountainHeight = Math.pow(mountainHeight, 2.0) * 120;
 
-            let groundHeight = 10 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
+            let groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 15;
             let height = Math.max(mountainHeight, groundHeight);
 
+            const oasisValue = fbm(oasisNoise, nx * 0.5, nz * 0.5, 3, 0.5);
+            if (oasisValue > 0.75) {
+                const oasisDepth = (oasisValue - 0.75) * 25;
+                height -= oasisDepth;
+            }
+
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
+            heightMap[lz * CHUNK_SIZE + lx] = height;
 
             for (let y = 0; y <= height; y++) {
                 let id;
-                if (y < height - 10) {
+                if (y < height - 5) {
                     id = 4; // Stone
-                } else if (y < height - 1) {
-                    id = 118; // Sandstone
+                    if (height > groundHeight + 5) {
+                        const r = resourceNoise(nx * 2, y * 0.1, nz * 2);
+                        if (r > 0.9) id = 15; // Gravel
+                        else if (r > 0.85) id = 11; // Coal
+                    }
                 } else {
                     id = 5; // Sand
                 }
                 if (y === 0) id = 1; // Bedrock
-
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }
 
-            // Reduced water level and less water
-            const DESERT_SEA_LEVEL = 8;
-            for (let y = height + 1; y <= DESERT_SEA_LEVEL; y++) {
-                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+            const oasisWaterLevel = Math.floor(groundHeight - 2);
+            if (height < oasisWaterLevel) {
+                for (let y = height; y > height - 3 && y > 0; y--) {
+                   chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5;
+                }
+                for (let y = height + 1; y <= oasisWaterLevel; y++) {
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
+                }
             }
+        }
+    }
+    // Cactus generation pass
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const height = heightMap[lz * CHUNK_SIZE + lx];
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
 
-            // Place cacti in clumps using a noise map
-            const topBlockId = chunkData[height * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx];
-            if (topBlockId === 5) { // Only place on sand
-                const cactusValue = fbm(cactusNoise, nx * 0.2, nz * 0.2, 3, 0.5);
-                if (cactusValue > 0.8) {
-                    placeCactus(chunkData, lx, height + 1, lz, makeSeededRandom(chunkKey + lx + lz));
+            const mountainHeight = Math.pow(fbm(mountainNoise, nx * 0.2, nz * 0.2, 6, 0.5), 2.0) * 120;
+            const groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 15;
+            const isFlat = Math.abs(mountainHeight - groundHeight) < 2;
+
+            if (isFlat && chunkData[height * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 5) {
+                const cactusValue = fbm(cactusNoise, nx * 0.8, nz * 0.8, 4, 0.6);
+                if (cactusValue > 0.82) { // Slightly higher threshold
+                     placeCactus(chunkData, lx, height + 1, lz, makeSeededRandom(chunkKey + lx + lz));
                 }
             }
         }
