@@ -213,6 +213,7 @@ var previousIsSprinting = false;
         var userVideoStreams = new Map();
         let proximityVideoUsers = [];
         let currentProximityVideoIndex = 0;
+        var activeVolcanoes = [];
         var eruptedBlocks = [];
         let lastProximityVideoChangeTime = 0;
         var hiveLocations = [];
@@ -571,7 +572,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley', 'volcano'], night: ['crawley'] },
+        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
@@ -2399,22 +2400,25 @@ self.onmessage = async function(e) {
             }
         }
 
-        function createSmokeParticles(x, y, z) {
-            const particleCount = 50;
+        function createVolcanoSmoke(x, y, z) {
+            const particleCount = 200;
             const particles = new THREE.BufferGeometry();
             const positions = new Float32Array(particleCount * 3);
             const velocities = [];
+            const radius = 16;
 
             for (let i = 0; i < particleCount; i++) {
-                positions[i * 3] = x + (Math.random() - 0.5) * 2;
-                positions[i * 3 + 1] = y + (Math.random() - 0.5);
-                positions[i * 3 + 2] = z + (Math.random() - 0.5) * 2;
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.random() * radius;
+                positions[i * 3] = x + Math.cos(angle) * r;
+                positions[i * 3 + 1] = y + (Math.random() - 0.5) * 2;
+                positions[i * 3 + 2] = z + Math.sin(angle) * r;
 
                 velocities.push({
-                    x: (Math.random() - 0.5) * 0.02,
-                    y: Math.random() * 0.1 + 0.05,
-                    z: (Math.random() - 0.5) * 0.02,
-                    life: Math.random() * 4 + 1
+                    x: (Math.random() - 0.5) * 0.01,
+                    y: Math.random() * 0.1 + 0.1,
+                    z: (Math.random() - 0.5) * 0.01,
+                    life: Math.random() * 8 + 4
                 });
             }
 
@@ -2422,10 +2426,10 @@ self.onmessage = async function(e) {
             particles.velocities = velocities;
 
             const material = new THREE.PointsMaterial({
-                color: 0x666666,
-                size: 0.8,
+                color: 0x333333,
+                size: 2.5,
                 transparent: true,
-                opacity: 0.5,
+                opacity: 0.3,
                 blending: THREE.NormalBlending,
                 depthWrite: false
             });
@@ -2435,7 +2439,6 @@ self.onmessage = async function(e) {
             return particleSystem;
         }
 
-        // *** VOLCANO SMOKE EFFECT ***
         function createFlameParticles(x, y, z) {
             const particleCount = 20;
             const particles = new THREE.BufferGeometry();
@@ -4627,37 +4630,6 @@ self.onmessage = async function(e) {
                 this.hp = 20;
                 this.speed = (0.01 + Math.random() * 0.005) / 2; // Slower movement, halved
                 this.aiState = 'IDLE';
-            } else if (this.type === 'volcano') {
-                this.hp = 100; // Volcanoes are tough
-                this.speed = 0; // Stationary
-                this.isAggressive = true; // Always a threat
-                this.aiState = 'IDLE';
-                this.eruptTime = 0;
-                this.lastEruptionCheck = Date.now();
-
-                // *** VOLCANO MOB APPEARANCE ***
-                this.mesh = new THREE.Group();
-                const bodyMat = new THREE.MeshStandardMaterial({ map: createBlockTexture(worldSeed, 110) }); // Obsidian
-                const lavaMat = new THREE.MeshBasicMaterial({ map: createBlockTexture(worldSeed, 16) }); // Lava
-
-                const height = 8;
-                const radius = 6;
-                const bodyGeo = new THREE.ConeGeometry(radius, height, 16);
-                const body = new THREE.Mesh(bodyGeo, bodyMat);
-                body.position.y = height / 2;
-                this.mesh.add(body);
-
-                const lavaGeo = new THREE.ConeGeometry(radius * 0.6, height / 8, 16);
-                const lava = new THREE.Mesh(lavaGeo, lavaMat);
-                lava.position.y = height - (height/16);
-                this.mesh.add(lava);
-
-                // Find a suitable ground position, as it's large
-                this.pos.y = chunkManager.getSurfaceY(this.pos.x, this.pos.z) - 0.5;
-
-                // Create smoke particle system
-                this.smokeParticles = createSmokeParticles(this.pos.x, this.pos.y + height, this.pos.z);
-                scene.add(this.smokeParticles);
                 this.animationTime = Math.random() * Math.PI * 2;
                 this.cactusEaten = 0;
                 this.isAggressive = false; // Grubs are not aggressive
@@ -4774,42 +4746,6 @@ self.onmessage = async function(e) {
             this.mesh.position.copy(this.pos);
             scene.add(this.mesh);
         }
-
-        Mob.prototype.triggerEruption = function (eruptionSeed) {
-            // *** VOLCANO ERUPTION LOGIC ***
-            const rnd = makeSeededRandom(eruptionSeed);
-            const numBoulders = 10 + Math.floor(rnd() * 23); // 10 to 32 boulders
-            const volcanoHeight = 8;
-            const launchPoint = new THREE.Vector3(this.pos.x, this.pos.y + volcanoHeight, this.pos.z);
-
-            for (let i = 0; i < numBoulders; i++) {
-                const size = 0.5 + rnd() * 1.5; // Small to large boulders
-                const blockId = rnd() > 0.3 ? 4 : 110; // Stone or Obsidian
-                const geometry = new THREE.BoxGeometry(size, size, size);
-                const material = new THREE.MeshStandardMaterial({ map: createBlockTexture(worldSeed, blockId) });
-                const boulder = new THREE.Mesh(geometry, material);
-                boulder.position.copy(launchPoint);
-
-                const angle = rnd() * Math.PI * 2;
-                const distance = 8 + rnd() * 24; // 8 to 32 blocks away
-                const speed = 15 + rnd() * 10;
-                const vx = Math.cos(angle) * speed * (distance / 32);
-                const vz = Math.sin(angle) * speed * (distance / 32);
-                const vy = 20 + rnd() * 15; // Vertical speed
-
-                eruptedBlocks.push({
-                    mesh: boulder,
-                    vx: vx,
-                    vy: vy,
-                    vz: vz,
-                    spawnTime: Date.now(),
-                    blockId: blockId,
-                    size: size
-                });
-                scene.add(boulder);
-            }
-        };
-
         Mob.prototype.update = function (dt) {
             // Ensure mesh is at the correct initial position for clients
             if (peers.size > 0 && !isHost) {
@@ -5334,47 +5270,8 @@ self.onmessage = async function(e) {
 
             this.mesh.position.copy(this.pos);
             }
-            if (this.type === 'volcano') {
-                 // Eruption check
-                if (Date.now() - this.lastEruptionCheck > 60000) { // Check every minute
-                    this.lastEruptionCheck = Date.now();
-                    const eruptionRnd = makeSeededRandom(worldSeed + '_eruption_' + this.id + '_' + this.lastEruptionCheck)();
-                    // Seed-based chance to erupt (approx. 2 times per minute on average if threshold is low)
-                    if (eruptionRnd < 0.1) { // 10% chance each minute
-                        this.eruptTime = Date.now();
-                        // Synchronize the eruption event with the exact seed for all players
-                        const eruptionSeed = worldSeed + '_eruption_' + this.id + '_' + this.eruptTime;
-                        const message = JSON.stringify({
-                            type: 'volcano_erupt',
-                            id: this.id,
-                            eruptionSeed: eruptionSeed
-                        });
-                        for (const [peerUser, peerData] of peers.entries()) {
-                            if (peerData.dc && peerData.dc.readyState === 'open') {
-                                peerData.dc.send(message);
-                            }
-                        }
-                        // Host triggers its own eruption
-                        this.triggerEruption(eruptionSeed);
-                    }
-                }
-
-                if (this.smokeParticles) {
-                    const positions = this.smokeParticles.geometry.attributes.position.array;
-                    const velocities = this.smokeParticles.velocities;
-
-                    for (let i = 0; i < velocities.length; i++) {
-                        positions[i * 3 + 1] += velocities[i].y * dt * 60; // Y position
-                        velocities[i].life -= dt;
-
-                        if (velocities[i].life <= 0) {
-                            positions[i * 3 + 1] = this.smokeParticles.baseY + (Math.random() - 0.5);
-                            velocities[i].life = Math.random() * 4 + 1;
-                        }
-                    }
-                    this.smokeParticles.geometry.attributes.position.needsUpdate = true;
-                }
-            } else if (this.type === 'grub') {
+            // Grub and Crawley animations are now client-side, driven by host state.
+            if (this.type === 'grub') {
                 const isEating = this.aiState === 'EATING_CACTUS';
                 const animationSpeed = (this.isMoving ? 8 : 4) / 2;
                 this.animationTime += dt * animationSpeed;
@@ -5514,7 +5411,6 @@ self.onmessage = async function(e) {
             const CRAWLEY_CAP = 20;
             const BEE_CAP = 10;
             const GRUB_CAP = 2;
-            const VOLCANO_CAP = 3; // Limit the number of volcanoes
             const SPAWN_RADIUS = 64;
             const DESPAWN_RADIUS = 96;
 
@@ -5549,56 +5445,183 @@ self.onmessage = async function(e) {
                 if (mobType === 'crawley') mobCap = CRAWLEY_CAP;
                 else if (mobType === 'bee') mobCap = BEE_CAP;
                 else if (mobType === 'grub') mobCap = GRUB_CAP;
-                else if (mobType === 'volcano') mobCap = VOLCANO_CAP;
                 else continue;
 
                 const currentCount = mobs.filter(m => m.type === mobType).length;
 
                 if (currentCount < mobCap) {
-                    let spawnAttempts = 0;
-                    const maxSpawnAttempts = 10;
-                    let mobSpawned = false;
+                    const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
 
-                    while (!mobSpawned && spawnAttempts < maxSpawnAttempts) {
-                        spawnAttempts++;
-                        const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
-                        const angle = Math.random() * Math.PI * 2;
-                        const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
-                        const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
-                        const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
+                    const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
+                    const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
 
-                        if (mobType === 'volcano') {
-                            const groundY = chunkManager.getSurfaceY(x, z);
-                            const groundBlockId = getBlockAt(x, groundY - 1, z);
-                            // Must spawn above sea level + 15 blocks, and on stone or obsidian.
-                            if (groundY < (32 + 15) || (groundBlockId !== 4 && groundBlockId !== 110)) {
-                                continue; // Invalid location for volcano, try again.
+                    const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
+                    mobs.push(newMob);
+
+                    const spawnMessage = JSON.stringify({
+                        type: 'mob_spawn',
+                        id: newMob.id,
+                        x: newMob.pos.x,
+                        y: newMob.pos.y,
+                        z: newMob.pos.z,
+                        hp: newMob.hp,
+                        mobType: newMob.type,
+                        isAggressive: newMob.isAggressive
+                    });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(spawnMessage);
+                        }
+                    }
+                }
+            }
+        }
+
+        function triggerCalderaEruption(volcano, eruptionSeed) {
+            // *** CALDERA ERUPTION LOGIC ***
+            const rnd = makeSeededRandom(eruptionSeed);
+            const numBoulders = 20 + Math.floor(rnd() * 20);
+            const calderaRadius = 16;
+
+            for (let i = 0; i < numBoulders; i++) {
+                const angle = rnd() * Math.PI * 2;
+                const r = rnd() * calderaRadius;
+                const launchX = volcano.x + Math.cos(angle) * r;
+                const launchZ = volcano.z + Math.sin(angle) * r;
+                const launchPoint = new THREE.Vector3(launchX, volcano.y, launchZ);
+
+                const size = 0.5 + rnd() * 2.0;
+                const blockId = rnd() > 0.3 ? 4 : 110;
+                const geometry = new THREE.BoxGeometry(size, size, size);
+                const material = new THREE.MeshStandardMaterial({ map: createBlockTexture(worldSeed, blockId) });
+                const boulder = new THREE.Mesh(geometry, material);
+                boulder.position.copy(launchPoint);
+
+                const targetAngle = rnd() * Math.PI * 2;
+                const distance = 16 + rnd() * 32;
+                const speed = 20 + rnd() * 15;
+                const vx = Math.cos(targetAngle) * speed * (distance / 48);
+                const vz = Math.sin(targetAngle) * speed * (distance / 48);
+                const vy = 25 + rnd() * 20;
+
+                eruptedBlocks.push({
+                    mesh: boulder,
+                    vx: vx, vy: vy, vz: vz,
+                    spawnTime: Date.now(),
+                    size: size
+                });
+                scene.add(boulder);
+            }
+        }
+
+        function findAndManageVolcanoes() {
+            // *** DISCOVER AND MANAGE ACTIVE VOLCANOES ***
+            if (!worldArchetype || worldArchetype.name !== 'Vulcan') return;
+            if (!isHost && peers.size > 0) return;
+
+            const SCAN_RADIUS = 128;
+            const MIN_LAVA_BLOCKS = 20; // Minimum lava blocks to be considered a caldera
+            const VOLCANO_ALTITUDE = 80;
+
+            // Scan around the host player
+            const px = Math.floor(player.x);
+            const pz = Math.floor(player.z);
+
+            for (let x = px - SCAN_RADIUS; x < px + SCAN_RADIUS; x += 16) {
+                for (let z = pz - SCAN_RADIUS; z < pz + SCAN_RADIUS; z += 16) {
+                    const groundY = chunkManager.getSurfaceY(x, z);
+                    if (groundY > VOLCANO_ALTITUDE) {
+                        const blockId = getBlockAt(x, groundY - 1, z);
+                        if (blockId === 16) { // Lava
+                            // Check if this is already a known volcano
+                            const isKnown = activeVolcanoes.some(v => Math.hypot(v.x - x, v.z - z) < 32);
+                            if (isKnown) continue;
+
+                            // Found a potential caldera, now verify its size
+                            let lavaBlockCount = 0;
+                            const q = [{x:x, z:z}];
+                            const visited = new Set();
+                            visited.add(`${x},${z}`);
+                            let sumX = 0, sumZ = 0;
+
+                            while(q.length > 0) {
+                                const curr = q.shift();
+                                lavaBlockCount++;
+                                sumX += curr.x;
+                                sumZ += curr.z;
+
+                                for(let dx = -8; dx <= 8; dx+=8) {
+                                    for(let dz = -8; dz <= 8; dz+=8) {
+                                        if(dx === 0 && dz === 0) continue;
+                                        const nx = curr.x + dx;
+                                        const nz = curr.z + dz;
+                                        if(!visited.has(`${nx},${nz}`)) {
+                                            const ny = chunkManager.getSurfaceY(nx, nz);
+                                            if(ny > VOLCANO_ALTITUDE && getBlockAt(nx, ny - 1, nz) === 16) {
+                                                q.push({x:nx, z:nz});
+                                                visited.add(`${nx},${nz}`);
+                                            }
+                                        }
+                                    }
+                                }
+                                if(lavaBlockCount > MIN_LAVA_BLOCKS) break; // Optimization
+                            }
+
+                            if (lavaBlockCount >= MIN_LAVA_BLOCKS) {
+                                const centerX = sumX / lavaBlockCount;
+                                const centerZ = sumZ / lavaBlockCount;
+                                console.log(`[Volcano] New active caldera found at ${Math.floor(centerX)}, ${Math.floor(centerZ)}`);
+                                const smoke = createVolcanoSmoke(centerX, groundY, centerZ);
+                                scene.add(smoke);
+                                activeVolcanoes.push({
+                                    x: centerX,
+                                    z: centerZ,
+                                    y: groundY,
+                                    smokeParticles: smoke,
+                                    lastEruptionCheck: Date.now() + Math.random() * 60000 // Stagger initial checks
+                                });
                             }
                         }
+                    }
+                }
+            }
 
-                        const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
-                        mobs.push(newMob);
-                        mobSpawned = true; // Mob spawned, exit loop.
+            // Remove volcanoes that are too far away
+            activeVolcanoes = activeVolcanoes.filter(v => {
+                const isClose = Math.hypot(v.x - player.x, v.z - player.z) < SCAN_RADIUS * 2;
+                if (!isClose) {
+                    scene.remove(v.smokeParticles);
+                    disposeObject(v.smokeParticles);
+                }
+                return isClose;
+            });
 
-                        const spawnMessage = JSON.stringify({
-                            type: 'mob_spawn',
-                            id: newMob.id,
-                            x: newMob.pos.x,
-                            y: newMob.pos.y,
-                            z: newMob.pos.z,
-                            hp: newMob.hp,
-                            mobType: newMob.type,
-                            isAggressive: newMob.isAggressive
+            // Trigger eruptions
+            for (const volcano of activeVolcanoes) {
+                if (Date.now() - volcano.lastEruptionCheck > 60000) {
+                    volcano.lastEruptionCheck = Date.now();
+                    const eruptionRnd = makeSeededRandom(worldSeed + '_eruption_' + Math.floor(volcano.x) + '_' + Math.floor(volcano.z) + '_' + volcano.lastEruptionCheck)();
+                    if (eruptionRnd < 0.1) {
+                        const eruptionSeed = worldSeed + '_eruption_' + Math.floor(volcano.x) + '_' + Math.floor(volcano.z) + '_' + volcano.lastEruptionCheck;
+                        triggerCalderaEruption(volcano, eruptionSeed);
+                        //sync
+                        const message = JSON.stringify({
+                            type: 'caldera_erupt',
+                            volcano: { x: volcano.x, y: volcano.y, z: volcano.z },
+                            eruptionSeed: eruptionSeed
                         });
                         for (const [peerUser, peerData] of peers.entries()) {
-                            if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
-                                peerData.dc.send(spawnMessage);
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(message);
                             }
                         }
                     }
                 }
             }
         }
+
         function isSolid(id) {
             return id !== 0 && id !== 6 && id !== 12 && id !== 8 && id !== 16 && id !== 17 && id !== 100 && id !== 101 && id !== 102 && id !== 103 && id !== 104 && id !== 111 && id !== 112 && id !== 113 && id !== 114 && id !== 116 && id !== 117;
         }
@@ -6740,11 +6763,8 @@ self.onmessage = async function(e) {
                                     .catch(e => console.error("Renegotiation error (answer):", e));
                             }
                             break;
-                        case 'volcano_erupt':
-                            const volcano = mobs.find(m => m.id === data.id);
-                            if (volcano) {
-                                volcano.triggerEruption(data.eruptionSeed);
-                            }
+                        case 'caldera_erupt':
+                            triggerCalderaEruption(data.volcano, data.eruptionSeed);
                             break;
                     }
                 } catch (err) {
@@ -8703,11 +8723,33 @@ self.onmessage = async function(e) {
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                 mobs.forEach(function (m) { m.update(dt); });
                 manageMobs();
+                findAndManageVolcanoes();
                 updateSky(dt);
 
                 // Make skybox elements follow the camera
                 if (stars) stars.position.copy(camera.position);
                 if (clouds) clouds.position.copy(camera.position);
+
+                // Update volcano smoke
+                for (const volcano of activeVolcanoes) {
+                    const positions = volcano.smokeParticles.geometry.attributes.position.array;
+                    const velocities = volcano.smokeParticles.velocities;
+                    for (let i = 0; i < velocities.length; i++) {
+                        positions[i * 3] += velocities[i].x * dt * 60;
+                        positions[i * 3 + 1] += velocities[i].y * dt * 60;
+                        positions[i * 3 + 2] += velocities[i].z * dt * 60;
+                        velocities[i].life -= dt;
+                        if (velocities[i].life <= 0) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const r = Math.random() * 16;
+                            positions[i * 3] = volcano.x + Math.cos(angle) * r;
+                            positions[i * 3 + 1] = volcano.y + (Math.random() - 0.5) * 2;
+                            positions[i * 3 + 2] = volcano.z + Math.sin(angle) * r;
+                            velocities[i].life = Math.random() * 8 + 4;
+                        }
+                    }
+                    volcano.smokeParticles.geometry.attributes.position.needsUpdate = true;
+                }
 
                 for (const [key, particleSystem] of torchParticles.entries()) {
                     const positions = particleSystem.geometry.attributes.position.array;
@@ -8979,7 +9021,6 @@ self.onmessage = async function(e) {
                     block.mesh.position.y += block.vy * dt;
                     block.mesh.position.z += block.vz * dt;
 
-                    // Simple ground collision
                     if (block.mesh.position.y < chunkManager.getSurfaceY(block.mesh.position.x, block.mesh.position.z)) {
                         scene.remove(block.mesh);
                         disposeObject(block.mesh);
@@ -8987,8 +9028,7 @@ self.onmessage = async function(e) {
                         continue;
                     }
 
-                    // Player collision for damage
-                    if (block.size > 1.0) { // Only large boulders cause damage
+                    if (block.size > 1.0) {
                         const playerBox = new THREE.Box3().setFromCenterAndSize(
                             new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
                             new THREE.Vector3(player.width, player.height, player.depth)
@@ -9008,7 +9048,6 @@ self.onmessage = async function(e) {
                         }
                     }
 
-                    // Despawn after 15 seconds
                     if (Date.now() - block.spawnTime > 15000) {
                         scene.remove(block.mesh);
                         disposeObject(block.mesh);
