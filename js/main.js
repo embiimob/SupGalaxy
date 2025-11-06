@@ -5648,7 +5648,7 @@ self.onmessage = async function(e) {
                 );
                 const velocity = new THREE.Vector3(
                     (rnd() - 0.5) * 2,
-                    10 + rnd() * 10,
+                    20 + rnd() * 20,
                     (rnd() - 0.5) * 2
                 );
                 eruptedBlocks.push({ mesh: block, velocity: velocity, createdAt: Date.now() });
@@ -5708,6 +5708,67 @@ self.onmessage = async function(e) {
                     break;
             }
         }
+function createEruptionSmoke(x, y, z, count) {
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = [];
+    const opacities = new Float32Array(count);
+    const smokeColors = [
+        new THREE.Color(0xffffff), // White
+        new THREE.Color(0x888888), // Grey
+        new THREE.Color(0x222222)  // Dark grey/black
+    ];
+
+    for (let i = 0; i < count; i++) {
+        positions[i * 3] = x + (Math.random() - 0.5) * 15;
+        positions[i * 3 + 1] = y + (Math.random() - 0.5) * 10;
+        positions[i * 3 + 2] = z + (Math.random() - 0.5) * 15;
+        opacities[i] = 1.0;
+
+        const color = smokeColors[Math.floor(Math.random() * smokeColors.length)];
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+
+        velocities.push({
+            x: (Math.random() - 0.5) * 3,
+            y: 10 + Math.random() * 10, // Higher velocity
+            z: (Math.random() - 0.5) * 3,
+            life: 5 + Math.random() * 5 // Longer lifespan
+        });
+    }
+
+    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    particles.setAttribute('alpha', new THREE.BufferAttribute(opacities, 1));
+    particles.velocities = velocities;
+
+    const material = new THREE.PointsMaterial({
+        size: 5,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        transparent: true,
+        vertexColors: true
+    });
+
+    const smokeTextureCanvas = document.createElement('canvas');
+    smokeTextureCanvas.width = 64;
+    smokeTextureCanvas.height = 64;
+    const context = smokeTextureCanvas.getContext('2d');
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(200, 200, 200, 0.5)');
+    gradient.addColorStop(1, 'rgba(200, 200, 200, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+    material.map = new THREE.CanvasTexture(smokeTextureCanvas);
+    material.map.needsUpdate = true;
+
+
+    const particleSystem = new THREE.Points(particles, material);
+    particleSystem.position.set(0, 0, 0);
+    return particleSystem;
+}
 function handleBoulderEruption(data) {
     const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
     if (dist < 64) {
@@ -5717,6 +5778,11 @@ function handleBoulderEruption(data) {
             safePlayAudio(rumble);
         }
     }
+    const smokeCount = 150;
+    const smokeSystem = createEruptionSmoke(data.volcano.x, data.volcano.y, data.volcano.z, smokeCount);
+    smokeSystem.userData.chunkKey = data.volcano.chunkKey; // Not strictly necessary but good for consistency
+    smokeParticles.push(smokeSystem);
+    scene.add(smokeSystem);
 
     const rnd = makeSeededRandom(data.seed);
     const eruptionCount = 10 + Math.floor(rnd() * 10);
@@ -5741,7 +5807,7 @@ function handleBoulderEruption(data) {
 
         const angle = rnd() * Math.PI * 2;
         const horizontal_force = 20 + rnd() * 30; // Increased force
-        const vertical_force = 30 + rnd() * 15; // Increased vertical force for higher arc
+        const vertical_force = 60 + rnd() * 30; // Increased vertical force for higher arc
         const velocity = new THREE.Vector3(
             Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
             vertical_force, // High arc
@@ -8906,13 +8972,18 @@ function handleBoulderEruption(data) {
                 }
 
                 for (const smokeSystem of smokeParticles) {
-                    if (!smokeSystem.geometry.attributes.alpha || !smokeSystem.geometry.attributes.position) {
+                    const hasAlpha = smokeSystem.geometry.attributes.alpha;
+                    const hasPosition = smokeSystem.geometry.attributes.position;
+                    const hasColor = smokeSystem.geometry.attributes.color;
+
+                    if (!hasAlpha || !hasPosition) {
                         console.warn('[Volcano] Smoke particle system is missing attributes, skipping animation.');
                         continue;
                     }
 
-                    const positions = smokeSystem.geometry.attributes.position.array;
-                    const alphas = smokeSystem.geometry.attributes.alpha.array;
+                    const positions = hasPosition.array;
+                    const alphas = hasAlpha.array;
+                    const colors = hasColor ? hasColor.array : null;
                     const velocities = smokeSystem.geometry.velocities;
 
                     for (let i = 0; i < velocities.length; i++) {
@@ -8921,24 +8992,19 @@ function handleBoulderEruption(data) {
                             positions[i * 3] += velocities[i].x * dt;
                             positions[i * 3 + 1] += velocities[i].y * dt;
                             positions[i * 3 + 2] += velocities[i].z * dt;
-                            alphas[i] = Math.min(1, velocities[i].life / 5); // Fade out, clamp alpha
+                            const lifeRatio = velocities[i].life / (velocities.length > 150 ? 10 : 5); // Longer life for eruption smoke
+                            alphas[i] = Math.min(1, lifeRatio);
                         } else {
-                            // Respawn particle
-                            const volcano = volcanoes.find(v => v.chunkKey === smokeSystem.userData.chunkKey);
-                            if (volcano) {
-                                positions[i * 3] = volcano.x + (Math.random() - 0.5) * 10;
-                                positions[i * 3 + 1] = volcano.y + (Math.random() - 0.5) * 5;
-                                positions[i * 3 + 2] = volcano.z + (Math.random() - 0.5) * 10;
-                                velocities[i].life = 3 + Math.random() * 4;
-                                velocities[i].x = (Math.random() - 0.5) * 2;
-                                velocities[i].y = 5 + Math.random() * 5;
-                                velocities[i].z = (Math.random() - 0.5) * 2;
-                                alphas[i] = 1;
-                            }
+                            // Particle is dead, remove it by setting alpha to 0
+                            alphas[i] = 0;
                         }
                     }
-                    smokeSystem.geometry.attributes.position.needsUpdate = true;
-                    smokeSystem.geometry.attributes.alpha.needsUpdate = true;
+
+                    hasPosition.needsUpdate = true;
+                    hasAlpha.needsUpdate = true;
+                    if (hasColor) {
+                        hasColor.needsUpdate = true;
+                    }
                 }
                 updateMinimap();
                 var posLabel = document.getElementById('posLabel');
