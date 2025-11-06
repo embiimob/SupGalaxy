@@ -8351,12 +8351,31 @@ self.onmessage = async function(e) {
             volcano.eruptionSeed = seed;
             volcano.lastEruption = Date.now();
             volcano.eruptionDuration = 60000;
+            volcano.eruptionFrame = 0;
 
             const rumbleSound = document.getElementById('rumbleSound');
             if (rumbleSound) {
                 rumbleSound.loop = true;
                 safePlayAudio(rumbleSound);
             }
+        }
+
+        function getLowestNeighbor(x, y, z) {
+            let lowestY = y;
+            let lowestPos = {x, y, z};
+            const neighbors = [
+                {dx: 1, dz: 0}, {dx: -1, dz: 0}, {dx: 0, dz: 1}, {dx: 0, dz: -1}
+            ];
+            for (const n of neighbors) {
+                const nx = x + n.dx;
+                const nz = z + n.dz;
+                const ny = chunkManager.getSurfaceY(nx, nz);
+                if (ny < lowestY) {
+                    lowestY = ny;
+                    lowestPos = {x: nx, y: ny, z: nz};
+                }
+            }
+            return lowestPos;
         }
 
         function animateRemoteFall(avatar) {
@@ -8405,36 +8424,75 @@ self.onmessage = async function(e) {
                     }
                 }
                  if (v.state === 'erupting') {
-                    const rnd = makeSeededRandom(v.eruptionSeed + Date.now());
+                    v.eruptionFrame++;
+                    const rnd = makeSeededRandom(v.eruptionSeed + v.eruptionFrame);
+
                     // Spew boulders
-                    if (rnd() < 0.2) { // Chance to spew boulders each frame
+                    if (v.eruptionFrame % 10 === 0 && rnd() < 0.5) {
                         const boulderSize = 1 + rnd() * 3;
                         const geometry = new THREE.BoxGeometry(boulderSize, boulderSize, boulderSize);
                         const material = new THREE.MeshStandardMaterial({ color: 0x333333 });
                         const boulder = new THREE.Mesh(geometry, material);
                         boulder.position.set(v.x, v.y, v.z);
                         const velocity = new THREE.Vector3(
-                            (rnd() - 0.5) * 20,
-                            20 + rnd() * 10,
-                            (rnd() - 0.5) * 20
+                            (rnd() - 0.5) * 30,
+                            30 + rnd() * 15,
+                            (rnd() - 0.5) * 30
                         );
                         eruptedBlocks.push({ mesh: boulder, velocity: velocity, life: 15 });
                         scene.add(boulder);
                     }
-                    // Spew lava clumps
-                    if (rnd() < 0.5) {
-                        const clumpSize = 0.5 + rnd() * 1.5;
+                    // Spew lava clumps - reduced frequency for "clump" effect
+                    if (v.eruptionFrame % 5 === 0) {
+                        const clumpSize = 0.8 + rnd() * 2.5;
                         const geometry = new THREE.SphereGeometry(clumpSize, 8, 8);
-                        const material = new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true, opacity: 0.8 });
+                        const material = new THREE.MeshStandardMaterial({
+                            color: 0xff6a00,
+                            emissive: 0xff6a00,
+                            emissiveIntensity: 1,
+                            transparent: true,
+                            opacity: 0.9
+                        });
                         const clump = new THREE.Mesh(geometry, material);
                         clump.position.set(v.x, v.y, v.z);
                         const velocity = new THREE.Vector3(
-                            (rnd() - 0.5) * 5,
-                            15 + rnd() * 15,
-                            (rnd() - 0.5) * 5
+                            (rnd() - 0.5) * 6,       // Reduced horizontal spread
+                            45 + rnd() * 15,         // Increased height (x3)
+                            (rnd() - 0.5) * 6        // Reduced horizontal spread
                         );
-                        eruptedBlocks.push({ mesh: clump, velocity: velocity, life: 10, isLava: true });
+                        const light = new THREE.PointLight(0xff6a00, 1, 20);
+                        light.position.copy(clump.position);
+                        scene.add(light);
+                        eruptedBlocks.push({ mesh: clump, velocity: velocity, life: 12, isLava: true, light: light });
                         scene.add(clump);
+                    }
+                     // Lava flow effect
+                    if (v.eruptionFrame > 100 && v.eruptionFrame % 20 === 0) { // Start flow after a delay
+                        const flowRnd = makeSeededRandom(v.eruptionSeed + '_flow_' + v.eruptionFrame);
+                        const angle = flowRnd() * Math.PI * 2;
+                        const radius = 5 + flowRnd() * (v.lavaAmount / 100);
+                        const startX = Math.floor(v.x + Math.cos(angle) * radius);
+                        const startZ = Math.floor(v.z + Math.sin(angle) * radius);
+                        const startY = chunkManager.getSurfaceY(startX, startZ);
+
+                        // Place a new lava source block
+                        chunkManager.setBlockGlobal(startX, startY, startZ, 16);
+
+                        // Simulate a few steps of flow
+                        let currentX = startX;
+                        let currentY = startY;
+                        let currentZ = startZ;
+                        for(let i=0; i<5; i++) {
+                             const lowestNeighbor = getLowestNeighbor(currentX, currentY, currentZ);
+                             if(lowestNeighbor.y < currentY) {
+                                chunkManager.setBlockGlobal(lowestNeighbor.x, lowestNeighbor.y, lowestNeighbor.z, 16);
+                                currentX = lowestNeighbor.x;
+                                currentY = lowestNeighbor.y;
+                                currentZ = lowestNeighbor.z;
+                             } else {
+                                 break;
+                             }
+                        }
                     }
                 }
 
@@ -9163,6 +9221,9 @@ self.onmessage = async function(e) {
                     const block = eruptedBlocks[i];
                     block.velocity.y -= gravity * dt;
                     block.mesh.position.addScaledVector(block.velocity, dt);
+                    if (block.light) {
+                        block.light.position.copy(block.mesh.position);
+                    }
                     block.life -= dt;
 
                     const groundY = chunkManager.getSurfaceY(block.mesh.position.x, block.mesh.position.z);
@@ -9170,6 +9231,7 @@ self.onmessage = async function(e) {
                         if (block.isLava) {
                             // Simple splash effect: remove and maybe add smaller particles
                             scene.remove(block.mesh);
+                            if (block.light) scene.remove(block.light);
                             eruptedBlocks.splice(i, 1);
                         } else {
                             block.mesh.position.y = groundY;
@@ -9181,6 +9243,7 @@ self.onmessage = async function(e) {
 
                     if (block.life <= 0) {
                         scene.remove(block.mesh);
+                        if (block.light) scene.remove(block.light);
                         eruptedBlocks.splice(i, 1);
                         continue;
                     }
