@@ -953,7 +953,7 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
     const oasisNoise = makeNoise(worldSeed + '_oases');
-    const cactusNoise = makeNoise(worldSeed + '_cactus');
+    const cactusBandNoise = makeNoise(worldSeed + '_cactus_bands'); // New noise for cactus bands
     const resourceNoise = makeNoise(worldSeed + '_resources');
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
@@ -1001,12 +1001,18 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
             }
 
             const oasisWaterLevel = Math.floor(groundHeight - 2);
-            if (height < oasisWaterLevel) {
-                for (let y = height; y > height - 3 && y > 0; y--) {
-                   chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5;
+            if (oasisValue > 0.73) { // This threshold includes the ring around the water
+                 if (height < oasisWaterLevel + 2 && height >= oasisWaterLevel -1) {
+                    // This is the shore of the oasis, place sandstone
+                    chunkData[height * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 118; // Sandstone
                 }
+            }
+
+
+            if (height < oasisWaterLevel) {
+                // Fill with water
                 for (let y = height + 1; y <= oasisWaterLevel; y++) {
-                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
                 }
             }
         }
@@ -1024,10 +1030,15 @@ function generateDesertTerrain(chunkData, chunkKey, archetype) {
             const groundHeight = 20 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 15;
             const isFlat = Math.abs(mountainHeight - groundHeight) < 2;
 
+            // Check if the block is sand and outside the oasis/sandstone ring
             if (isFlat && chunkData[height * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 5) {
-                const cactusValue = fbm(cactusNoise, nx * 0.8, nz * 0.8, 4, 0.6);
-                if (cactusValue > 0.82) { // Slightly higher threshold
-                     placeCactus(chunkData, lx, height + 1, lz, makeSeededRandom(chunkKey + lx + lz));
+                const oasisValue = fbm(oasisNoise, nx * 0.5, nz * 0.5, 3, 0.5);
+                if (oasisValue <= 0.73) { // Make sure we are not in an oasis or its sandstone ring
+                    // Use a new noise map to create wide, irregular bands
+                    const cactusBandValue = fbm(cactusBandNoise, nx * 0.1, nz * 0.1, 4, 0.5);
+                    if (cactusBandValue > 0.6 && height + 1 < MAX_HEIGHT) {
+                         placeCactus(chunkData, lx, height + 1, lz, makeSeededRandom(chunkKey + lx + lz));
+                    }
                 }
             }
         }
