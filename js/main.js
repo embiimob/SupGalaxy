@@ -5627,8 +5627,10 @@ self.onmessage = async function(e) {
             const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
             if (dist < 64) {
                 const rumble = document.getElementById('rumble0');
-                rumble.volume = Math.max(0, 1 - (dist / 64));
-                safePlayAudio(rumble);
+                if (rumble) {
+                    rumble.volume = Math.max(0, 1 - (dist / 64));
+                    safePlayAudio(rumble);
+                }
             }
 
             const rnd = makeSeededRandom(data.seed);
@@ -5669,8 +5671,10 @@ self.onmessage = async function(e) {
             const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
             if (dist < 64) {
                 const rumble = document.getElementById('rumble1');
-                rumble.volume = Math.max(0, 1 - (dist / 64));
-                safePlayAudio(rumble);
+                if (rumble) {
+                    rumble.volume = Math.max(0, 1 - (dist / 64));
+                    safePlayAudio(rumble);
+                }
             }
 
             const rnd = makeSeededRandom(data.seed);
@@ -5707,8 +5711,10 @@ function handleBoulderEruption(data) {
     const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
     if (dist < 64) {
         const rumble = document.getElementById('rumble2');
-        rumble.volume = Math.max(0, 1 - (dist / 64));
-        safePlayAudio(rumble);
+        if (rumble) {
+            rumble.volume = Math.max(0, 1 - (dist / 64));
+            safePlayAudio(rumble);
+        }
     }
 
     const rnd = makeSeededRandom(data.seed);
