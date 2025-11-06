@@ -212,6 +212,7 @@ var previousIsSprinting = false;
         var eruptedBlocks = [];
         var pebbles = [];
         var smokeParticles = [];
+        var activeEruptions = [];
         var localAudioStream = null;
         var userAudioStreams = new Map();
         var localVideoStream = null;
@@ -5625,15 +5626,6 @@ self.onmessage = async function(e) {
         }
 
         function handleLavaEruption(data) {
-            const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
-            if (dist < 64) {
-                const rumble = document.getElementById('rumble0');
-                if (rumble) {
-                    rumble.volume = Math.max(0, 1 - (dist / 64));
-                    safePlayAudio(rumble);
-                }
-            }
-
             const rnd = makeSeededRandom(data.seed);
             const eruptionCount = 20 + Math.floor(rnd() * 20);
             for (let i = 0; i < eruptionCount; i++) {
@@ -5669,15 +5661,6 @@ self.onmessage = async function(e) {
         }
 
         function handlePebbleRain(data) {
-            const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
-            if (dist < 64) {
-                const rumble = document.getElementById('rumble1');
-                if (rumble) {
-                    rumble.volume = Math.max(0, 1 - (dist / 64));
-                    safePlayAudio(rumble);
-                }
-            }
-
             const rnd = makeSeededRandom(data.seed);
             const rainCount = 100 + Math.floor(rnd() * 100);
             for (let i = 0; i < rainCount; i++) {
@@ -5696,16 +5679,41 @@ self.onmessage = async function(e) {
         }
 
         function handleVolcanoEvent(data) {
+            let soundId, duration;
             switch (data.eventType) {
                 case 'lava_eruption':
                     handleLavaEruption(data);
+                    soundId = 'rumble0';
+                    duration = 5000;
                     break;
                 case 'pebble_rain':
                     handlePebbleRain(data);
+                    soundId = 'rumble1';
+                    duration = 10000;
                     break;
                 case 'boulder_eruption':
                     handleBoulderEruption(data);
+                    soundId = 'rumble2';
+                    duration = 15000;
                     break;
+            }
+            if (soundId) {
+                const eruptionId = Date.now();
+                activeEruptions.push({
+                    id: eruptionId,
+                    volcano: data.volcano,
+                    soundId: soundId,
+                    endTime: Date.now() + duration
+                });
+                const sound = document.getElementById(soundId);
+                if (sound) {
+                    sound.currentTime = 0;
+                    safePlayAudio(sound);
+                }
+                setTimeout(() => {
+                    activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
+                    if (sound) sound.pause();
+                }, duration);
             }
         }
 function createEruptionSmoke(x, y, z, count) {
@@ -5770,14 +5778,6 @@ function createEruptionSmoke(x, y, z, count) {
     return particleSystem;
 }
 function handleBoulderEruption(data) {
-    const dist = Math.hypot(player.x - data.volcano.x, player.y - data.volcano.y, player.z - data.volcano.z);
-    if (dist < 64) {
-        const rumble = document.getElementById('rumble2');
-        if (rumble) {
-            rumble.volume = Math.max(0, 1 - (dist / 64));
-            safePlayAudio(rumble);
-        }
-    }
     const smokeCount = 150;
     const smokeSystem = createEruptionSmoke(data.volcano.x, data.volcano.y, data.volcano.z, smokeCount);
     smokeSystem.userData.chunkKey = data.volcano.chunkKey; // Not strictly necessary but good for consistency
@@ -8983,20 +8983,37 @@ function handleBoulderEruption(data) {
 
                     const positions = hasPosition.array;
                     const alphas = hasAlpha.array;
-                    const colors = hasColor ? hasColor.array : null;
                     const velocities = smokeSystem.geometry.velocities;
+                    const isEruptionSmoke = !!hasColor;
 
                     for (let i = 0; i < velocities.length; i++) {
                         velocities[i].life -= dt;
+
                         if (velocities[i].life > 0) {
                             positions[i * 3] += velocities[i].x * dt;
                             positions[i * 3 + 1] += velocities[i].y * dt;
                             positions[i * 3 + 2] += velocities[i].z * dt;
-                            const lifeRatio = velocities[i].life / (velocities.length > 150 ? 10 : 5); // Longer life for eruption smoke
+                            const maxLife = isEruptionSmoke ? 10 : 7;
+                            const lifeRatio = velocities[i].life / maxLife;
                             alphas[i] = Math.min(1, lifeRatio);
                         } else {
-                            // Particle is dead, remove it by setting alpha to 0
-                            alphas[i] = 0;
+                            if (isEruptionSmoke) {
+                                // Eruption smoke particles fade and die
+                                alphas[i] = 0;
+                            } else {
+                                // Caldera smoke particles respawn at the bottom
+                                const volcano = volcanoes.find(v => v.chunkKey === smokeSystem.userData.chunkKey);
+                                if (volcano) {
+                                    positions[i * 3] = volcano.x + (Math.random() - 0.5) * 10;
+                                    positions[i * 3 + 1] = volcano.y + (Math.random() - 0.5) * 5;
+                                    positions[i * 3 + 2] = volcano.z + (Math.random() - 0.5) * 10;
+                                    velocities[i].life = 3 + Math.random() * 4;
+                                    alphas[i] = 1.0;
+                                } else {
+                                    // If volcano not found, just let it die
+                                    alphas[i] = 0;
+                                }
+                            }
                         }
                     }
 
@@ -9232,6 +9249,19 @@ function handleBoulderEruption(data) {
                     }
                 }
 
+                // Update eruption sound volumes
+                for (const eruption of activeEruptions) {
+                    const sound = document.getElementById(eruption.soundId);
+                    if (sound && !sound.paused) {
+                        const dist = Math.hypot(player.x - eruption.volcano.x, player.y - eruption.volcano.y, player.z - eruption.volcano.z);
+                        if (dist < 64) {
+                            sound.volume = Math.max(0, 1 - (dist / 64));
+                        } else {
+                            sound.volume = 0;
+                        }
+                    }
+                }
+
                 updateProximityVideo();
 
                 if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
@@ -9249,10 +9279,11 @@ function handleBoulderEruption(data) {
                 }
 
                 // Update erupted blocks
-                if (isHost || peers.size === 0) {
-                    // Host calculates physics and broadcasts
-                    for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
-                        const block = eruptedBlocks[i];
+                for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
+                    const block = eruptedBlocks[i];
+
+                    if (isHost || peers.size === 0) {
+                        // Host calculates physics
                         if (block.type === 'boulder') {
                             block.velocity.y -= gravity * dt;
                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
@@ -9277,7 +9308,7 @@ function handleBoulderEruption(data) {
                                 if (block.velocity.length() < 0.1) block.isRolling = false;
                             }
 
-                            if (block.mass === 4) {
+                             if (block.mass === 4) { // Large boulder damage
                                 const playerBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth));
                                 const boulderBox = new THREE.Box3().setFromObject(block.mesh);
                                 if (playerBox.intersectsBox(boulderBox) && now - lastDamageTime > 1000) {
@@ -9290,51 +9321,50 @@ function handleBoulderEruption(data) {
                                     if (player.health <= 0) handlePlayerDeath();
                                 }
                             }
-                        } else {
+
+                        } else { // Lava block physics
                              block.velocity.y -= gravity * dt;
                              block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
                         }
 
-
-                        if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
-                            scene.remove(block.mesh);
-                            disposeObject(block.mesh);
-                            eruptedBlocks.splice(i, 1);
-                        }
-                    }
-
-                    if (now - (lastStateUpdateTime || 0) > 100) { // Send updates every 100ms
-                        const boulderStates = eruptedBlocks
-                            .filter(b => b.type === 'boulder')
-                            .map(b => ({
-                                id: b.id,
-                                position: b.mesh.position.toArray(),
-                                quaternion: b.mesh.quaternion.toArray()
-                            }));
-
-                        if (boulderStates.length > 0) {
-                            const boulderUpdateMessage = { type: 'boulder_update', boulders: boulderStates };
-                            for (const [peerUser, peerData] of peers.entries()) {
-                                if (peerData.dc && peerData.dc.readyState === 'open') {
-                                    peerData.dc.send(JSON.stringify(boulderUpdateMessage));
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Client interpolates
-                    for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
-                        const block = eruptedBlocks[i];
+                    } else {
+                        // Client interpolates
                         if (block.type === 'boulder' && block.lastUpdate > 0) {
                             const timeSinceUpdate = now - block.lastUpdate;
                             const alpha = Math.min(1.0, timeSinceUpdate / 100); // 100ms interpolation time
                             block.mesh.position.lerp(block.targetPosition, alpha);
                             block.mesh.quaternion.slerp(block.targetQuaternion, alpha);
+                        } else if (block.type !== 'boulder'){
+                             // Client-side prediction for non-boulder projectiles for smoother visuals
+                             block.velocity.y -= gravity * dt;
+                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
                         }
-                         if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
-                            scene.remove(block.mesh);
-                            disposeObject(block.mesh);
-                            eruptedBlocks.splice(i, 1);
+                    }
+
+                    // Cleanup logic for all clients
+                    if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
+                        scene.remove(block.mesh);
+                        disposeObject(block.mesh);
+                        eruptedBlocks.splice(i, 1);
+                    }
+                }
+
+                // Host broadcasts boulder states
+                if ((isHost || peers.size === 0) && now - (lastStateUpdateTime || 0) > 100) {
+                    const boulderStates = eruptedBlocks
+                        .filter(b => b.type === 'boulder')
+                        .map(b => ({
+                            id: b.id,
+                            position: b.mesh.position.toArray(),
+                            quaternion: b.mesh.quaternion.toArray()
+                        }));
+
+                    if (boulderStates.length > 0) {
+                        const boulderUpdateMessage = { type: 'boulder_update', boulders: boulderStates };
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify(boulderUpdateMessage));
+                            }
                         }
                     }
                 }
