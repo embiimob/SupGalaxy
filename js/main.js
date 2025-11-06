@@ -8280,12 +8280,25 @@ self.onmessage = async function(e) {
                 }
             }
 
-            // Update existing volcanoes
+            // Update existing volcanoes and clean up old ones
+            volcanoes = volcanoes.filter(v => {
+                const cx = Math.floor(v.x / CHUNK_SIZE);
+                const cz = Math.floor(v.z / CHUNK_SIZE);
+                const chunkKey = makeChunkKey(worldName, cx, cz);
+                if (!chunkManager.chunks.has(chunkKey)) {
+                    console.log(`[VOLCANO] Unloading volcano ${v.id} as its chunk is no longer loaded.`);
+                    scene.remove(v.smokeParticles);
+                    disposeObject(v.smokeParticles);
+                    return false;
+                }
+                return true;
+            });
+
             for (const v of volcanoes) {
                 if (v.state === 'smoking') {
                     if (v.lavaAmount === 0) { // Calculate lava amount once
-                         let lavaCount = 0;
-                         const calderaRadius = 32;
+                        let lavaCount = 0;
+                        const calderaRadius = 32;
                          for (let dx = -calderaRadius; dx <= calderaRadius; dx++) {
                              for (let dz = -calderaRadius; dz <= calderaRadius; dz++) {
                                  if (getBlockAt(v.x + dx, v.y - 1, v.z + dz) === 16) {
@@ -8296,8 +8309,8 @@ self.onmessage = async function(e) {
                          v.lavaAmount = lavaCount;
                     }
 
-                    const eruptionChance = 0.01; // 1% chance per check (every 10s)
-                    if (Math.random() < eruptionChance && now - v.lastEruption > 300000) { // 5 minute cooldown
+                    const eruptionChance = 0.1; // 10% chance per check (every 10s)
+                    if (Math.random() < eruptionChance && now - v.lastEruption > 120000) { // 2 minute cooldown
                         v.state = 'erupting';
                         v.lastEruption = now;
                         v.eruptionDuration = 60000; // 1 minute eruption
@@ -8383,10 +8396,10 @@ self.onmessage = async function(e) {
                             );
                             particle.userData.velocity = new THREE.Vector3(
                                 (Math.random() - 0.5) * 0.5,
-                                2 + Math.random() * 2,
+                                4 + Math.random() * 4, // Increased vertical speed
                                 (Math.random() - 0.5) * 0.5
                             );
-                            particle.userData.life = 10 + Math.random() * 10; // 10-20 seconds lifetime
+                            particle.userData.life = 20 + Math.random() * 20; // 20-40 seconds lifetime
                             v.smokeParticles.add(particle);
                         }
                     }
