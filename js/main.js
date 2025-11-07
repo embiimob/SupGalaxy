@@ -5822,8 +5822,8 @@ function handleBoulderEruption(data) {
         );
 
         const angle = rnd() * Math.PI * 2;
-        const horizontal_force = 20 + rnd() * 30;
-        const vertical_force = 50 + rnd() * 20; // Reduced vertical force to prevent space travel
+                const horizontal_force = 50 + rnd() * 50;
+                const vertical_force = 40 + rnd() * 20;
         const velocity = new THREE.Vector3(
             Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
             vertical_force, // High arc
