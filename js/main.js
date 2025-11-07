@@ -6001,9 +6001,9 @@ function handleBoulderEruption(data) {
                 if (e.key.toLowerCase() === 'p') {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
-                    document.getElementById('teleportX').value = '';
-                    document.getElementById('teleportY').value = '';
-                    document.getElementById('teleportZ').value = '';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
                 }
                 if (e.key.toLowerCase() === 'x' && CHUNK_DELTAS.size > 0) downloadSession();
                 if (e.key.toLowerCase() === 'u') openUsersModal();
@@ -7930,6 +7930,18 @@ function handleBoulderEruption(data) {
         }
                 document.addEventListener('DOMContentLoaded', async function () {
             try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const worldSeedParam = urlParams.get('world-seed');
+                const userNameParam = urlParams.get('user-name');
+                const locParam = urlParams.get('loc');
+
+                if (worldSeedParam) {
+                    document.getElementById('worldNameInput').value = worldSeedParam;
+                }
+                if (userNameParam) {
+                    document.getElementById('userInput').value = userNameParam;
+                }
+
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
                 var announceLoginBtn = document.getElementById('announceLoginBtn');
@@ -7965,6 +7977,19 @@ function handleBoulderEruption(data) {
                     if (worldInput.length > 8) {
                         addMessage('World name too long (max 8 chars)', 3000);
                         return;
+                    }
+                    if (locParam) {
+                        const locParts = locParam.split(',');
+                        if (locParts.length === 3) {
+                            const x = parseFloat(locParts[0]);
+                            const y = parseFloat(locParts[1]);
+                            const z = parseFloat(locParts[2]);
+                            if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                                player.x = x;
+                                player.y = y;
+                                player.z = z;
+                            }
+                        }
                     }
                     if (userInput.length > 20) {
                         addMessage('Username too long (max 20 chars)', 3000);
@@ -8166,6 +8191,22 @@ function handleBoulderEruption(data) {
                 document.getElementById('teleportBtn').addEventListener('click', function () {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
+                    this.blur();
+                });
+
+                document.getElementById('shareWorldBtn').addEventListener('click', function () {
+                    var x = document.getElementById('teleportX').value;
+                    var y = document.getElementById('teleportY').value;
+                    var z = document.getElementById('teleportZ').value;
+                    var url = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${x},${y},${z}`;
+                    navigator.clipboard.writeText(url).then(function () {
+                        addMessage('Shareable URL copied to clipboard!', 3000);
+                    }, function (err) {
+                        addMessage('Failed to copy URL.', 3000);
+                    });
                     this.blur();
                 });
                 document.getElementById('switchWorldBtn').addEventListener('click', function() {
