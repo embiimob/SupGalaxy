@@ -7944,6 +7944,9 @@ function handleBoulderEruption(data) {
 
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
+                if (worldSeedParam && userNameParam) {
+                    startBtn.click();
+                }
                 var announceLoginBtn = document.getElementById('announceLoginBtn');
                 var newUserJoinScriptBtn = document.getElementById('newUserJoinScriptBtn');
                 var acceptAll = document.getElementById('acceptAll');
