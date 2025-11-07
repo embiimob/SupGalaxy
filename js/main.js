@@ -5694,50 +5694,45 @@ self.onmessage = async function(e) {
         }
 
         function handleVolcanoEvent(data) {
-            let soundId, duration;
+            let soundId;
             switch (data.eventType) {
                 case 'lava_eruption':
                     handleLavaEruption(data);
                     soundId = 'rumble0';
-                    duration = 5000;
                     break;
                 case 'pebble_rain':
                     handlePebbleRain(data);
                     soundId = 'rumble1';
-                    duration = 10000;
                     break;
                 case 'boulder_eruption':
                     handleBoulderEruption(data);
                     const sounds = ['rumble2', 'rumble3', 'rumble4', 'rumble5'];
                     soundId = sounds[Math.floor(Math.random() * sounds.length)];
-                    duration = 15000;
                     break;
             }
             if (soundId) {
                 const eruptionId = Date.now();
-                activeEruptions.push({
-                    id: eruptionId,
-                    volcano: data.volcano,
-                    soundId: soundId,
-                    endTime: Date.now() + duration
-                });
                 const sound = document.getElementById(soundId);
+
                 if (sound) {
-                    sound.loop = true;
+                    // Add to active eruptions *before* playing for immediate volume scaling
+                    const eruptionInfo = {
+                        id: eruptionId,
+                        volcano: data.volcano,
+                        soundId: soundId,
+                    };
+                    activeEruptions.push(eruptionInfo);
+
                     sound.currentTime = 0;
                     safePlayAudio(sound);
 
-                    // Stop the loop after the event duration
-                    setTimeout(() => {
-                        sound.loop = false;
-                    }, duration);
+                    // Use the 'onended' event to know precisely when the sound finishes
+                    sound.onended = () => {
+                        console.log(`[Audio] Sound ${soundId} finished playing.`);
+                        activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
+                        sound.onended = null; // Clean up the event listener
+                    };
                 }
-
-                // The activeEruptions array is used for volume control.
-                // We'll remove the eruption from the active list after its sound has finished.
-                setTimeout(() => {
-                    activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
-                }, duration);
             }
         }
 function createEruptionSmoke(x, y, z, count) {
@@ -5873,8 +5868,15 @@ function handleBoulderEruption(data) {
                 for (const volcano of volcanoes) {
                     const isNearPlayer = allPlayers.some(p => Math.hypot(volcano.x - p.x, volcano.z - p.z) < 256);
                     if (isNearPlayer) {
-                        const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(Date.now() / 60000)); // Change event seed every minute
+                        const now = Date.now();
+                        // Cooldown check: one event per minute per volcano
+                        if (now - (volcano.lastEventTime || 0) < 60000) {
+                            continue;
+                        }
+
+                        const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(now / 60000)); // Change event seed every minute
                         if (eventRnd() < 0.05) { // 5% chance per minute to trigger an event
+                            volcano.lastEventTime = now; // Set cooldown timestamp
                             const eventTypeRnd = eventRnd();
                             let eventType;
                             if (eventTypeRnd < 0.33) {
@@ -5889,7 +5891,7 @@ function handleBoulderEruption(data) {
                                 type: 'volcano_event',
                                 volcano: { x: volcano.x, y: volcano.y, z: volcano.z },
                                 eventType: eventType,
-                                seed: worldSeed + '_event_' + Date.now()
+                                seed: worldSeed + '_event_' + now
                             };
                             // Host triggers the event locally
                             handleVolcanoEvent(eventMessage);
@@ -9287,7 +9289,7 @@ function handleBoulderEruption(data) {
                 // Update eruption sound volumes
                 for (const eruption of activeEruptions) {
                     const sound = document.getElementById(eruption.soundId);
-                    if (sound && !sound.paused) {
+                    if (sound) { // Check if sound element exists
                         const dist = Math.hypot(player.x - eruption.volcano.x, player.y - eruption.volcano.y, player.z - eruption.volcano.z);
                         const maxDist = 192; // 64 * 3
                         if (dist < maxDist) {
