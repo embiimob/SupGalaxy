@@ -6885,7 +6885,11 @@ function handleBoulderEruption(data) {
                                 lastDamageTime = Date.now();
                                 document.getElementById('health').innerText = player.health;
                                 updateHealthBar();
-                                addMessage('Hit! HP: ' + player.health, 1000);
+                                if (data.attacker === 'lava') {
+                                    addMessage('Burning in lava! HP: ' + player.health, 1000);
+                                } else {
+                                    addMessage('Hit! HP: ' + player.health, 1000);
+                                }
                                 flashDamageEffect();
                                 safePlayAudio(soundHit);
                                 if (data.kx !== undefined && data.kz !== undefined) {
@@ -8934,17 +8938,36 @@ function handleBoulderEruption(data) {
                 }
 
                 // Lava damage
-                const playerBlockId = getBlockAt(player.x, player.y + 0.5, player.z); // Check at feet level
-                if (playerBlockId === 16 && now - lastLavaDamageTime > 500) { // Lava is ID 16, 2 damage per second
-                    player.health = Math.max(0, player.health - 1);
-                    lastLavaDamageTime = now;
-                    lastRegenTime = now; // Reset regen timer
-                    document.getElementById('health').innerText = player.health;
-                    updateHealthBar();
-                    addMessage('Burning in lava! HP: ' + player.health, 1000);
-                    flashDamageEffect();
-                    if (player.health <= 0) {
-                        handlePlayerDeath();
+                if (isHost || peers.size === 0) {
+                    const playerBlockId = getBlockAt(player.x, player.y + 0.5, player.z); // Check at feet level
+                    if (playerBlockId === 16 && now - lastLavaDamageTime > 500) { // Lava is ID 16, 2 damage per second
+                        player.health = Math.max(0, player.health - 1);
+                        lastLavaDamageTime = now;
+                        lastRegenTime = now; // Reset regen timer
+                        document.getElementById('health').innerText = player.health;
+                        updateHealthBar();
+                        addMessage('Burning in lava! HP: ' + player.health, 1000);
+                        flashDamageEffect();
+                        if (player.health <= 0) {
+                            handlePlayerDeath();
+                        }
+                    }
+                }
+
+                if (isHost) {
+                    for (const [username, peerData] of peers.entries()) {
+                        if (userPositions[username]) {
+                            const userPos = userPositions[username];
+                            const playerBlockId = getBlockAt(userPos.targetX, userPos.targetY + 0.5, userPos.targetZ);
+                            if (playerBlockId === 16) {
+                                if (!peerData.lastLavaDamageTime || now - peerData.lastLavaDamageTime > 500) {
+                                    peerData.lastLavaDamageTime = now;
+                                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                                        peerData.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'lava' }));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
