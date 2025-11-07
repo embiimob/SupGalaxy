@@ -406,6 +406,22 @@ var previousIsSprinting = false;
                 userName = playerData.user;
                 worldSeed = playerData.seed;
 
+                // Added this to fix the styling bug
+                const colorRnd = makeSeededRandom(worldSeed + '_colors');
+                for (const blockId in BLOCKS) {
+                    if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
+                        const block = BLOCKS[blockId];
+                        const baseColor = new THREE.Color(block.color);
+                        const hsv = {};
+                        baseColor.getHSL(hsv);
+                        const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05);
+                        const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2));
+                        const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2));
+                        baseColor.setHSL(newHue, newSat, newLight);
+                        block.color = '#' + baseColor.getHexString();
+                    }
+                }
+
                 document.getElementById('worldNameInput').value = worldName;
                 document.getElementById('userInput').value = userName;
 
