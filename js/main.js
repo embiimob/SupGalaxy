@@ -5708,7 +5708,8 @@ self.onmessage = async function(e) {
                     break;
                 case 'boulder_eruption':
                     handleBoulderEruption(data);
-                    soundId = 'rumble2';
+                    const sounds = ['rumble2', 'rumble3', 'rumble4', 'rumble5'];
+                    soundId = sounds[Math.floor(Math.random() * sounds.length)];
                     duration = 15000;
                     break;
             }
