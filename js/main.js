@@ -5723,10 +5723,18 @@ self.onmessage = async function(e) {
                 });
                 const sound = document.getElementById(soundId);
                 if (sound) {
-                    sound.currentTime = 0; // Play from the beginning
-                    safePlayAudio(sound); // Play once, no loop
+                    sound.loop = true;
+                    sound.currentTime = 0;
+                    safePlayAudio(sound);
+
+                    // Stop the loop after the event duration
+                    setTimeout(() => {
+                        sound.loop = false;
+                    }, duration);
                 }
-                // The activeEruptions array is still used for volume control, so we keep the timeout to clear it.
+
+                // The activeEruptions array is used for volume control.
+                // We'll remove the eruption from the active list after its sound has finished.
                 setTimeout(() => {
                     activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
                 }, duration);
