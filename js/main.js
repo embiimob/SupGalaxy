@@ -164,7 +164,6 @@ var previousIsSprinting = false;
         var isDying = false;
         var isNight = false;
         var deathAnimationStart = 0;
-        var lastLavaDamageTime = 0;
         var lastPollPosition = new THREE.Vector3();
         var pauseTimer = 0;
         var lastMoveTime = 0;
@@ -6880,7 +6879,7 @@ function handleBoulderEruption(data) {
                             break;
 
                         case 'player_damage':
-                            if (Date.now() - lastDamageTime > 800) {
+                            if (Date.now() - lastDamageTime > 400) {
                                 player.health = Math.max(0, player.health - (data.damage || 1));
                                 lastDamageTime = Date.now();
                                 document.getElementById('health').innerText = player.health;
@@ -6888,7 +6887,7 @@ function handleBoulderEruption(data) {
                                 if (data.attacker === 'lava') {
                                     addMessage('Burning in lava! HP: ' + player.health, 1000);
                                 } else {
-                                    addMessage('Hit! HP: ' + player.health, 1000);
+                                    addMessage('Hit by ' + data.attacker + '! HP: ' + player.health, 1000);
                                 }
                                 flashDamageEffect();
                                 safePlayAudio(soundHit);
@@ -8940,10 +8939,9 @@ function handleBoulderEruption(data) {
                 // Lava damage
                 if (isHost || peers.size === 0) {
                     const playerBlockId = getBlockAt(player.x, player.y + 0.5, player.z); // Check at feet level
-                    if (playerBlockId === 16 && now - lastLavaDamageTime > 500) { // Lava is ID 16, 2 damage per second
+                    if (playerBlockId === 16 && now - lastDamageTime > 500) { // Using lastDamageTime now
                         player.health = Math.max(0, player.health - 1);
-                        lastLavaDamageTime = now;
-                        lastRegenTime = now; // Reset regen timer
+                        lastDamageTime = now; // Use the general damage timer
                         document.getElementById('health').innerText = player.health;
                         updateHealthBar();
                         addMessage('Burning in lava! HP: ' + player.health, 1000);
