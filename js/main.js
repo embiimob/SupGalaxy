@@ -5722,15 +5722,12 @@ self.onmessage = async function(e) {
                 });
                 const sound = document.getElementById(soundId);
                 if (sound) {
-                    sound.loop = true;
-                    sound.currentTime = 0;
-                    safePlayAudio(sound);
+                    sound.currentTime = 0; // Play from the beginning
+                    safePlayAudio(sound); // Play once, no loop
                 }
+                // The activeEruptions array is still used for volume control, so we keep the timeout to clear it.
                 setTimeout(() => {
                     activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
-                    if (sound) {
-                        sound.loop = false; // Stop looping, will end after current playthrough
-                    }
                 }, duration);
             }
         }
@@ -5825,8 +5822,8 @@ function handleBoulderEruption(data) {
         );
 
         const angle = rnd() * Math.PI * 2;
-        const horizontal_force = 20 + rnd() * 30; // Increased force
-        const vertical_force = 120 + rnd() * 60; // Increased vertical force for higher arc
+        const horizontal_force = 20 + rnd() * 30;
+        const vertical_force = 50 + rnd() * 20; // Reduced vertical force to prevent space travel
         const velocity = new THREE.Vector3(
             Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
             vertical_force, // High arc
