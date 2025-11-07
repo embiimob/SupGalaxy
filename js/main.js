@@ -2494,10 +2494,10 @@ self.onmessage = async function(e) {
                 opacities[i] = 1.0;
 
                 velocities.push({
-                    x: (Math.random() - 0.5) * 2,
-                    y: 5 + Math.random() * 5, // Increased upward velocity
-                    z: (Math.random() - 0.5) * 2,
-                    life: 3 + Math.random() * 4 // Randomized lifespan
+                    x: (Math.random() - 0.5) * 4,
+                    y: 10 + Math.random() * 15,
+                    z: (Math.random() - 0.5) * 4,
+                    life: 6 + Math.random() * 6
                 });
             }
 
@@ -2611,8 +2611,8 @@ self.onmessage = async function(e) {
 
             // Add smoke for volcanoes
             const volcano = volcanoes.find(v => v.chunkKey === chunk.key);
-            if (volcano) {
-                const smokeCount = Math.floor(volcano.lavaCount / 2);
+            if (volcano && Math.random() < 0.3) { // Make smoke intermittent
+                const smokeCount = Math.floor(volcano.lavaCount / 4); // And less dense
                 const smokeSystem = createSmokeParticle(volcano.x, volcano.y, volcano.z, smokeCount);
                 smokeSystem.userData.chunkKey = chunk.key;
                 smokeParticles.push(smokeSystem);
@@ -5740,7 +5740,6 @@ function createEruptionSmoke(x, y, z, count) {
     const smokeColors = [
         new THREE.Color(0xffffff), // White
         new THREE.Color(0x888888), // Grey
-        new THREE.Color(0x222222)  // Dark grey/black
     ];
 
     for (let i = 0; i < count; i++) {
@@ -5866,7 +5865,7 @@ function handleBoulderEruption(data) {
                     const isNearPlayer = allPlayers.some(p => Math.hypot(volcano.x - p.x, volcano.z - p.z) < 256);
                     if (isNearPlayer) {
                         const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(Date.now() / 60000)); // Change event seed every minute
-                        if (eventRnd() < 0.1) { // 10% chance per minute to trigger an event
+                        if (eventRnd() < 0.05) { // 5% chance per minute to trigger an event
                             const eventTypeRnd = eventRnd();
                             let eventType;
                             if (eventTypeRnd < 0.33) {
