@@ -4496,7 +4496,7 @@ self.onmessage = async function(e) {
             if (!chunk.generated) chunkManager.generateChunk(chunk);
             var lx = Math.floor(wrappedWx % CHUNK_SIZE);
             var lz = Math.floor(wrappedWz % CHUNK_SIZE);
-            return chunk.get(lx, wy, lz);
+            return chunk.get(lx, Math.floor(wy), lz);
         }
         function handlePlayerDeath() {
             if (deathScreenShown || isDying) return;
