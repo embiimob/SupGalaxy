@@ -1,4 +1,3 @@
-var keywordCache = new Map();
 var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
