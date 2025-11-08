@@ -224,6 +224,7 @@ var previousIsSprinting = false;
         const maxAudioDistance = 32;
         const rolloffFactor = 2;
         var volcanoes = [];
+        var initialTeleportLocation = null;
 
         const lightManager = {
             lights: [],
@@ -7942,6 +7943,18 @@ function handleBoulderEruption(data) {
                     document.getElementById('userInput').value = userNameParam;
                 }
 
+                if (locParam) {
+                    const locParts = locParam.split(',');
+                    if (locParts.length === 3) {
+                        const x = parseFloat(locParts[0]);
+                        const y = parseFloat(locParts[1]);
+                        const z = parseFloat(locParts[2]);
+                        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                            initialTeleportLocation = { x, y, z };
+                        }
+                    }
+                }
+
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
                 if (worldSeedParam && userNameParam) {
@@ -7980,19 +7993,6 @@ function handleBoulderEruption(data) {
                     if (worldInput.length > 8) {
                         addMessage('World name too long (max 8 chars)', 3000);
                         return;
-                    }
-                    if (locParam) {
-                        const locParts = locParam.split(',');
-                        if (locParts.length === 3) {
-                            const x = parseFloat(locParts[0]);
-                            const y = parseFloat(locParts[1]);
-                            const z = parseFloat(locParts[2]);
-                            if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-                                player.x = x;
-                                player.y = y;
-                                player.z = z;
-                            }
-                        }
                     }
                     if (userInput.length > 20) {
                         addMessage('Username too long (max 20 chars)', 3000);
@@ -8111,6 +8111,11 @@ function handleBoulderEruption(data) {
                     startWorker();
                     setInterval(pollServers, POLL_INTERVAL);
                     addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
+
+                    if (initialTeleportLocation) {
+                        respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z);
+                        initialTeleportLocation = null;
+                    }
                 });
                 announceLoginBtn.addEventListener('click', async function () {
                     this.blur();
