@@ -224,6 +224,7 @@ var previousIsSprinting = false;
         const maxAudioDistance = 32;
         const rolloffFactor = 2;
         var volcanoes = [];
+        var initialTeleportLocation = null;
 
         const lightManager = {
             lights: [],
@@ -6001,9 +6002,9 @@ function handleBoulderEruption(data) {
                 if (e.key.toLowerCase() === 'p') {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
-                    document.getElementById('teleportX').value = '';
-                    document.getElementById('teleportY').value = '';
-                    document.getElementById('teleportZ').value = '';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
                 }
                 if (e.key.toLowerCase() === 'x' && CHUNK_DELTAS.size > 0) downloadSession();
                 if (e.key.toLowerCase() === 'u') openUsersModal();
@@ -7928,10 +7929,171 @@ function handleBoulderEruption(data) {
                 isPromptOpen = false;
             };
         }
-                document.addEventListener('DOMContentLoaded', async function () {
+        async function startGame() {
+            var startBtn = document.getElementById('startBtn');
+            if(startBtn) startBtn.blur();
+            console.log('[LOGIN] Start game triggered');
+            isPromptOpen = false;
+            var worldInput = document.getElementById('worldNameInput').value;
+            var userInput = document.getElementById('userInput').value;
+            if (worldInput.length > 8) {
+                addMessage('World name too long (max 8 chars)', 3000);
+                return;
+            }
+            if (userInput.length > 20) {
+                addMessage('Username too long (max 20 chars)', 3000);
+                return;
+            }
+            if (!worldInput || !userInput) {
+                addMessage('Please enter a world and username', 3000);
+                return;
+            }
+            worldName = worldInput.slice(0, 8);
+            userName = userInput.slice(0, 20);
+            worldSeed = worldName;
+
+            const colorRnd = makeSeededRandom(worldSeed + '_colors');
+            for (const blockId in BLOCKS) {
+                if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
+                    const block = BLOCKS[blockId];
+                    const baseColor = new THREE.Color(block.color);
+                    const hsv = {};
+                    baseColor.getHSL(hsv);
+                    const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05); // Less hue shift
+                    const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2)); // Saturate a bit
+                    const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2)); // Darker
+                    baseColor.setHSL(newHue, newSat, newLight);
+                    block.color = '#' + baseColor.getHexString();
+                }
+            }
+
+            var userWorldKey = userName + '@' + worldName;
+            var profile;
             try {
+                profile = await GetProfileByURN(userName);
+            } catch (e) {
+                console.error("Failed to get profile by URN", e);
+                profile = null;
+            }
+            userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
+            if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+            if (!knownWorlds.has(worldName)) {
+                knownWorlds.set(worldName, { discoverer: userName, users: new Set([userName]), toAddress: userAddress });
+            } else {
+                knownWorlds.get(worldName).users.add(userName);
+            }
+            keywordCache.set(userAddress, userWorldKey);
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            document.getElementById('hotbar').style.display = 'flex';
+            document.getElementById('rightPanel').style.display = 'flex';
+            document.getElementById('worldLabel').textContent = worldName;
+            document.getElementById('seedLabel').textContent = 'User ' + userName;
+            updateHudButtons();
+            console.log('[LOGIN] Initializing Three.js');
+            try {
+                await initAudio();
+            } catch (e) {
+                console.error("Failed to initialize audio:", e);
+                addMessage("Could not initialize audio, continuing without it.", 3000);
+            }
+            console.log('[LOGIN] Initializing Three.js after audio');
+            initThree();
+            initMusicPlayer();
+            initVideoPlayer();
+            INVENTORY[0] = { id: 120, count: 8 };
+            INVENTORY[1] = { id: 121, count: 1 };
+            selectedHotIndex = 0; // Auto-select torch
+            selectedBlockId = 120; // Explicitly set selected block
+            initHotbar();
+            updateHotbarUI(); // Explicitly update UI and selectedBlockId
+            console.log('[LOGIN] Creating ChunkManager');
+            chunkManager = new ChunkManager(worldSeed);
+            populateSpawnChunks();
+            console.log('[LOGIN] Calculating spawn point');
+            var spawn = calculateSpawnPoint(userWorldKey);
+            player.x = spawn.x;
+            player.y = chunkManager.getSurfaceY(spawn.x, spawn.z) + 1;
+            player.z = spawn.z;
+            spawnPoint = { x: player.x, y: player.y, z: player.z };
+            player.vy = 0;
+            player.onGround = true;
+            var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+            var spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
+            var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
+            console.log('[LOGIN] Preloading initial chunks');
+            chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
+            setupMobile();
+            initMinimap();
+            updateHotbarUI();
+            cameraMode = 'first';
+            controls.enabled = false;
+            avatarGroup.visible = false;
+            camera.position.set(player.x, player.y + 1.62, player.z);
+            camera.rotation.set(0, 0, 0, 'YXZ');
+            if (!isMobile()) {
+                try {
+                    renderer.domElement.requestPointerLock();
+                    mouseLocked = true;
+                    document.getElementById('crosshair').style.display = 'block';
+                } catch (e) {
+                    addMessage('Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.', 3000);
+                }
+            }
+            player.yaw = 0;
+            player.pitch = 0;
+            lastFrame = performance.now();
+            lastRegenTime = lastFrame;
+            var unregisterKeyEvents = registerKeyEvents();
+            console.log('[LOGIN] Starting game loop');
+            requestAnimationFrame(gameLoop);
+            addMessage('Welcome — world wraps at edges. Toggle camera with T. Good luck!', 5000);
+            var healthElement = document.getElementById('health');
+            if (healthElement) healthElement.innerText = player.health;
+            var scoreElement = document.getElementById('score');
+            if (scoreElement) scoreElement.innerText = player.score;
+            initServers(); // Do not await, let it run in the background
+            worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
+            startWorker();
+            setInterval(pollServers, POLL_INTERVAL);
+            addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
+
+            if (initialTeleportLocation) {
+                respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z);
+                initialTeleportLocation = null;
+            }
+        }
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const worldSeedParam = urlParams.get('world-seed');
+                const userNameParam = urlParams.get('user-name');
+                const locParam = urlParams.get('loc');
+
+                if (worldSeedParam) {
+                    document.getElementById('worldNameInput').value = worldSeedParam;
+                }
+                if (userNameParam) {
+                    document.getElementById('userInput').value = userNameParam;
+                }
+
+                if (locParam) {
+                    const locParts = locParam.split(',');
+                    if (locParts.length === 3) {
+                        const x = parseFloat(locParts[0]);
+                        const y = parseFloat(locParts[1]);
+                        const z = parseFloat(locParts[2]);
+                        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                            initialTeleportLocation = { x, y, z };
+                        }
+                    }
+                }
+
                 console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
                 var startBtn = document.getElementById('startBtn');
+                if (worldSeedParam && userNameParam) {
+                    startGame();
+                }
                 var announceLoginBtn = document.getElementById('announceLoginBtn');
                 var newUserJoinScriptBtn = document.getElementById('newUserJoinScriptBtn');
                 var acceptAll = document.getElementById('acceptAll');
@@ -7956,134 +8118,7 @@ function handleBoulderEruption(data) {
                 } else {
                     console.warn('[MODAL] pendingModal element not found');
                 }
-                startBtn.addEventListener('click', async function () {
-                    this.blur();
-                    console.log('[LOGIN] Start button clicked');
-                    isPromptOpen = false;
-                    var worldInput = document.getElementById('worldNameInput').value;
-                    var userInput = document.getElementById('userInput').value;
-                    if (worldInput.length > 8) {
-                        addMessage('World name too long (max 8 chars)', 3000);
-                        return;
-                    }
-                    if (userInput.length > 20) {
-                        addMessage('Username too long (max 20 chars)', 3000);
-                        return;
-                    }
-                    if (!worldInput || !userInput) {
-                        addMessage('Please enter a world and username', 3000);
-                        return;
-                    }
-                    worldName = worldInput.slice(0, 8);
-                    userName = userInput.slice(0, 20);
-                    worldSeed = worldName;
-
-                    const colorRnd = makeSeededRandom(worldSeed + '_colors');
-                    for (const blockId in BLOCKS) {
-                        if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
-                            const block = BLOCKS[blockId];
-                            const baseColor = new THREE.Color(block.color);
-                            const hsv = {};
-                            baseColor.getHSL(hsv);
-                            const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05); // Less hue shift
-                            const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2)); // Saturate a bit
-                            const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2)); // Darker
-                            baseColor.setHSL(newHue, newSat, newLight);
-                            block.color = '#' + baseColor.getHexString();
-                        }
-                    }
-
-                    var userWorldKey = userName + '@' + worldName;
-                    var profile;
-                    try {
-                        profile = await GetProfileByURN(userName);
-                    } catch (e) {
-                        console.error("Failed to get profile by URN", e);
-                        profile = null;
-                    }
-                    userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
-                    if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
-                    if (!knownWorlds.has(worldName)) {
-                        knownWorlds.set(worldName, { discoverer: userName, users: new Set([userName]), toAddress: userAddress });
-                    } else {
-                        knownWorlds.get(worldName).users.add(userName);
-                    }
-                    keywordCache.set(userAddress, userWorldKey);
-                    document.getElementById('loginOverlay').style.display = 'none';
-                    document.getElementById('hud').style.display = 'block';
-                    document.getElementById('hotbar').style.display = 'flex';
-                    document.getElementById('rightPanel').style.display = 'flex';
-                    document.getElementById('worldLabel').textContent = worldName;
-                    document.getElementById('seedLabel').textContent = 'User ' + userName;
-                    updateHudButtons();
-                    console.log('[LOGIN] Initializing Three.js');
-                    try {
-                        await initAudio();
-                    } catch (e) {
-                        console.error("Failed to initialize audio:", e);
-                        addMessage("Could not initialize audio, continuing without it.", 3000);
-                    }
-                    console.log('[LOGIN] Initializing Three.js after audio');
-                    initThree();
-                    initMusicPlayer();
-                    initVideoPlayer();
-                    INVENTORY[0] = { id: 120, count: 8 };
-            INVENTORY[1] = { id: 121, count: 1 };
-                    selectedHotIndex = 0; // Auto-select torch
-                    selectedBlockId = 120; // Explicitly set selected block
-                    initHotbar();
-                    updateHotbarUI(); // Explicitly update UI and selectedBlockId
-                    console.log('[LOGIN] Creating ChunkManager');
-                    chunkManager = new ChunkManager(worldSeed);
-                    populateSpawnChunks();
-                    console.log('[LOGIN] Calculating spawn point');
-                    var spawn = calculateSpawnPoint(userWorldKey);
-                    player.x = spawn.x;
-            player.y = chunkManager.getSurfaceY(spawn.x, spawn.z) + 1;
-                    player.z = spawn.z;
-                    spawnPoint = { x: player.x, y: player.y, z: player.z };
-                    player.vy = 0;
-                    player.onGround = true;
-                    var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
-                    var spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
-                    var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
-                    console.log('[LOGIN] Preloading initial chunks');
-                    chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
-                    setupMobile();
-                    initMinimap();
-                    updateHotbarUI();
-                    cameraMode = 'first';
-                    controls.enabled = false;
-                    avatarGroup.visible = false;
-                    camera.position.set(player.x, player.y + 1.62, player.z);
-                    camera.rotation.set(0, 0, 0, 'YXZ');
-                    if (!isMobile()) {
-                        try {
-                            renderer.domElement.requestPointerLock();
-                            mouseLocked = true;
-                            document.getElementById('crosshair').style.display = 'block';
-                        } catch (e) {
-                            addMessage('Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.', 3000);
-                        }
-                    }
-                    player.yaw = 0;
-                    player.pitch = 0;
-                    lastFrame = performance.now();
-                    lastRegenTime = lastFrame;
-                    var unregisterKeyEvents = registerKeyEvents();
-                    console.log('[LOGIN] Starting game loop');
-                    requestAnimationFrame(gameLoop);
-                    addMessage('Welcome — world wraps at edges. Toggle camera with T. Good luck!', 5000);
-                    var healthElement = document.getElementById('health');
-                    if (healthElement) healthElement.innerText = player.health;
-                    var scoreElement = document.getElementById('score');
-                    if (scoreElement) scoreElement.innerText = player.score;
-                    initServers(); // Do not await, let it run in the background
-                    worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
-                    startWorker();
-                    setInterval(pollServers, POLL_INTERVAL);
-                    addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
-                });
+                startBtn.addEventListener('click', startGame);
                 announceLoginBtn.addEventListener('click', async function () {
                     this.blur();
                     console.log('[LOGIN] Announce Server button clicked');
@@ -8166,6 +8201,22 @@ function handleBoulderEruption(data) {
                 document.getElementById('teleportBtn').addEventListener('click', function () {
                     isPromptOpen = true;
                     document.getElementById('teleportModal').style.display = 'block';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
+                    this.blur();
+                });
+
+                document.getElementById('shareWorldBtn').addEventListener('click', function () {
+                    var x = document.getElementById('teleportX').value;
+                    var y = document.getElementById('teleportY').value;
+                    var z = document.getElementById('teleportZ').value;
+                    var url = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${x},${y},${z}`;
+                    navigator.clipboard.writeText(url).then(function () {
+                        addMessage('Shareable URL copied to clipboard!', 3000);
+                    }, function (err) {
+                        addMessage('Failed to copy URL.', 3000);
+                    });
                     this.blur();
                 });
                 document.getElementById('switchWorldBtn').addEventListener('click', function() {
