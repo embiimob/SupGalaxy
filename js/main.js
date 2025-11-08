@@ -9765,7 +9765,7 @@ function handleBoulderEruption(data) {
                     return;
                 }
 
-                const audioRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp3|wav))\b/i;
+                const audioRegex = /([a-zA-Z0-9\s\-_().]+\.(mp3|wav))/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 for (const msg of messages) {
@@ -9921,7 +9921,7 @@ function handleBoulderEruption(data) {
                 }
 
                 musicList.innerHTML = '';
-                const audioRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp3|wav))\b/i;
+                const audioRegex = /([a-zA-Z0-9\s\-_().]+\.(mp3|wav))/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 const filteredMessages = messages.filter(msg => {
@@ -10119,7 +10119,7 @@ function handleBoulderEruption(data) {
                     return;
                 }
 
-                const videoRegex = /(\b[a-zA-Z0-9\-_]+\.(mp4|webm|ogg|mov|avi))\b/i;
+                const videoRegex = /([a-zA-Z0-9\s\-_().]+\.(mp4|webm|ogg|mov|avi))/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 for (const msg of messages) {
@@ -10291,7 +10291,7 @@ function handleBoulderEruption(data) {
                 }
 
                 videoList.innerHTML = '';
-                const videoRegex = /(\b[a-zA-Z0-9\s\-_]+\.(mp4|webm|ogg|mov|avi))\b/i;
+                const videoRegex = /([a-zA-Z0-9\s\-_().]+\.(mp4|webm|ogg|mov|avi))/i;
                 const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
                 const filteredMessages = messages.filter(msg => {
