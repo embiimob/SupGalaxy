@@ -17,6 +17,7 @@
              */
         var knownWorlds = new Map();
         var knownUsers = new Map();
+        var keywordCache = new Map();
         var processedMessages = new Set();
         var peers = new Map();
         var pendingOffers = [];
