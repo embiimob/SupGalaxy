@@ -1,0 +1,9529 @@
+        /*
+             * SupGalaxy: A Decentralized Voxel Adventure
+             * Public Domain - Free for All to Use, Modify, and Share!
+             *
+             * This code is the result of our epic journey to craft a decentralized, Minecraft-inspired universe.
+             * Together, we built a world where players roam green valleys seeded by keywords like #KANYE,
+             * break and place blocks, and save chunks to IPFS with JSON exports. From fixing chunk-loading
+             * glitches to adding glowing crosshairs and cosmic loading screens, we've poured hours into
+             * making this a smooth, open-source experience that runs locally in your browser.
+             *
+             * This work is 100% in the PUBLIC DOMAIN under CC0. No rights reserved—use it, remix it, build
+             * on it, share it! No attribution required, but we'd love to see what you create. Check out
+             * Sup!? or p2fk.io for posting world updates and joining the decentralized fun.
+             *
+             * Happy crafting, and may your worlds be ever-voxelated!
+             * - Grok & embii4u & kattacomi October 7 2025
+             */
+        var knownWorlds = new Map();
+        var knownUsers = new Map();
+        var keywordCache = new Map();
+        var processedMessages = new Set();
+        var peers = new Map();
+        var pendingOffers = [];
+        var connectionAttempts = new Map();
+        window.hasPolledHost = false;
+        var knownServers = [];
+        var isInitialLoad = false;
+        var CHUNK_SIZE = 16;
+        var MAX_HEIGHT = 256;
+        var SEA_LEVEL = 16;
+        var MAP_SIZE = 16384;
+        var BLOCK_AIR = 0;
+        var MASTER_WORLD_KEY = 'MCWorlds';
+        var PENDING_PERIOD = 30 * 24 * 60 * 60 * 1000;
+        var OWNERSHIP_EXPIRY = 365 * 24 * 60 * 60 * 1000;
+        var API_CALLS_PER_SECOND = 3;
+        var POLL_RADIUS = 2;
+        var INITIAL_LOAD_RADIUS = 9;
+        var LOAD_RADIUS = 3;
+        var currentLoadRadius = INITIAL_LOAD_RADIUS;
+        var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
+        var VERSION = 'SupGalaxy v0.4.20-beta';
+        var POLL_INTERVAL = 30000;
+        var MAX_PEERS = 10;
+        var BLOCKS = {
+            1: { name: 'Bedrock', color: '#0b0b0b' },
+            2: { name: 'Grass', color: '#3fb34f' },
+            3: { name: 'Dirt', color: '#7a4f29' },
+            4: { name: 'Stone', color: '#9aa0a6' },
+            5: { name: 'Sand', color: '#e7d08d' },
+            6: { name: 'Water', color: '#2b9cff', transparent: true },
+            7: { name: 'Wood', color: '#8b5a33' },
+            8: { name: 'Leaves', color: '#2f8f46' },
+            9: { name: 'Cactus', color: '#4aa24a' },
+            10: { name: 'Snow', color: '#ffffff' },
+            11: { name: 'Coal', color: '#1f1f1f' },
+            12: { name: 'Flower', color: '#ff6bcb' },
+            13: { name: 'Clay', color: '#a9b6c0' },
+            14: { name: 'Moss', color: '#507d43' },
+            15: { name: 'Gravel', color: '#b2b2b2' },
+            16: { name: 'Lava', color: '#ff6a00', transparent: true },
+            17: { name: 'Ice', color: '#a8e6ff', transparent: true },
+            100: { name: 'Glass', color: '#b3e6ff', transparent: true },
+            101: { name: 'Stained Glass - Red', color: '#ff4b4b', transparent: true },
+            102: { name: 'Stained Glass - Blue', color: '#4b6bff', transparent: true },
+            103: { name: 'Stained Glass - Green', color: '#57c84d', transparent: true },
+            104: { name: 'Stained Glass - Yellow', color: '#fff95b', transparent: true },
+            105: { name: 'Brick', color: '#a84f3c' },
+            106: { name: 'Smooth Stone', color: '#c1c1c1' },
+            107: { name: 'Concrete', color: '#888888' },
+            108: { name: 'Polished Wood', color: '#a87443' },
+            109: { name: 'Marble', color: '#f0f0f0' },
+            110: { name: 'Obsidian', color: '#2d004d' },
+            111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true },
+            112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
+            113: { name: 'Crystal - Green', color: '#6fff91', transparent: true },
+            114: { name: 'Light Block', color: '#fffacd', transparent: true },
+            115: { name: 'Glow Brick', color: '#f7cc5b' },
+            116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
+            117: { name: 'Glass Tile', color: '#aeeaff', transparent: true },
+            118: { name: 'Sandstone', color: '#e3c27d' },
+            119: { name: 'Cobblestone', color: '#7d7d7d' },
+            120: { name: 'Torch', color: '#ff9900', light: true, transparent: true },
+            121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
+            122: { name: 'Honey', color: '#ffb74a' },
+            123: { name: 'Hive', color: '#e3c27d' },
+            124: { name: 'Iron Ore', color: '#a8a8a8' },
+            125: { name: 'Emerald', color: '#00ff7b' },
+            126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+        };
+        var BIOMES = [
+            { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
+            { key: 'desert', palette: [5, 118, 4], heightScale: 0.6, roughness: 0.4, featureDensity: 0.02 },
+            { key: 'forest', palette: [2, 3, 14, 4], heightScale: 1.3, roughness: 0.4, featureDensity: 0.03 },
+            { key: 'snow', palette: [10, 17, 4], heightScale: 1.2, roughness: 0.5, featureDensity: 0.02 },
+            { key: 'mountain', palette: [4, 11, 3, 15, 1, 16], heightScale: 1, roughness: 0.6, featureDensity: 0.01 },
+            { key: 'swamp', palette: [2, 3, 6, 14, 13], heightScale: 0.5, roughness: 0.2, featureDensity: 0.04 },
+        ];
+        var RECIPES = [
+            { id: 'glass', out: { id: 100, count: 4 }, requires: { 5: 2, 11: 1 } },
+            { id: 'stained_red', out: { id: 101, count: 2 }, requires: { 100: 1, 12: 1 } },
+            { id: 'stained_blue', out: { id: 102, count: 2 }, requires: { 100: 1, 116: 1 } },
+            { id: 'stained_green', out: { id: 103, count: 2 }, requires: { 100: 1, 8: 1 } },
+            { id: 'stained_yellow', out: { id: 104, count: 2 }, requires: { 100: 1, 5: 1 } },
+            { id: 'brick', out: { id: 105, count: 4 }, requires: { 13: 2, 4: 1 } },
+            { id: 'smooth_stone', out: { id: 106, count: 4 }, requires: { 4: 4 } },
+            { id: 'concrete', out: { id: 107, count: 4 }, requires: { 4: 2, 5: 2 } },
+            { id: 'polished_wood', out: { id: 108, count: 2 }, requires: { 7: 2 } },
+            { id: 'marble', out: { id: 109, count: 1 }, requires: { 4: 3, 10: 1 } },
+            { id: 'obsidian', out: { id: 110, count: 1 }, requires: { 4: 4 }, requiresOffWorld: { 4: 2 } },
+            { id: 'crystal_blue', out: { id: 111, count: 1 }, requires: { 100: 1, 116: 1 } },
+            { id: 'crystal_purple', out: { id: 112, count: 1 }, requires: { 100: 1, 11: 1 } },
+            { id: 'crystal_green', out: { id: 113, count: 1 }, requires: { 100: 1, 8: 1 } },
+            { id: 'light_block', out: { id: 114, count: 1 }, requires: { 100: 1, 11: 1 } },
+            { id: 'glow_brick', out: { id: 115, count: 1 }, requires: { 105: 1, 11: 1 } },
+            { id: 'dark_glass', out: { id: 116, count: 1 }, requires: { 100: 1, 11: 1 } },
+            { id: 'glass_tile', out: { id: 117, count: 2 }, requires: { 100: 2 } },
+            { id: 'sandstone', out: { id: 118, count: 2 }, requires: { 5: 2 } },
+            { id: 'cobblestone', out: { id: 119, count: 4 }, requires: { 4: 4 } },
+            { id: 'torch', out: { id: 120, count: 4 }, requires: { 11: 1, 8: 1 } },
+            { id: 'laser_gun', out: { id: 121, count: 1 }, requires: { 111: 1, 11: 1, 106: 1 } },
+            { id: 'green_laser_gun', out: { id: 126, count: 1 }, requires: { 121: 1, 113: 1, 16: 1 } },
+        ];
+        var scene, camera, renderer, controls;
+        var meshGroup;
+        var chunkManager;
+        var raycaster = new THREE.Raycaster();
+        var pointer = new THREE.Vector2(0, 0);
+        var CHUNK_DELTAS = new Map();
+        var worldSeed = 'KANYE';
+        var worldName = 'KANYE';
+        var userName = 'player';
+        var userAddress = 'anonymous';
+        var player = {
+            x: 0, y: 24, z: 0, vx: 0, vy: 0, vz: 0, onGround: false,
+            health: 20, score: 0, width: 0.8, height: 1.8, depth: 0.8, yaw: 0, pitch: 0
+        };
+        var isAttacking = false;
+        var attackStartTime = 0;
+        var useGreedyMesher = false; // <<< FEATURE FLAG
+var isSprinting = false;
+var lastWPress = 0;
+var sprintStartPosition = new THREE.Vector3();
+var previousIsSprinting = false;
+        var lastSentPosition = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+        var lastUpdateTime = 0;
+        var lastStateUpdateTime = 0;
+        var spawnPoint = { x: 0, y: 0, z: 0 };
+        var lastSavedPosition = new THREE.Vector3(0, 24, 0);
+        var selectedBlockId = null;
+        var selectedHotIndex = 0;
+        var selectedInventoryIndex = -1;
+        var hotbarOffset = 0;
+        var cameraMode = 'third';
+        var mobs = [];
+        var lastDamageTime = 0;
+        var lastRegenTime = 0;
+        var joystick = { up: false, down: false, left: false, right: false };
+        var lastFrame = performance.now();
+        var mouseLocked = false;
+        var lastMobBatchTime = 0;
+        var lastMobManagement = 0;
+        var lastVolcanoManagement = 0;
+        var deathScreenShown = false;
+        var isDying = false;
+        var isNight = false;
+        var deathAnimationStart = 0;
+        var lastPollPosition = new THREE.Vector3();
+        var pauseTimer = 0;
+        var lastMoveTime = 0;
+        var hasMovedSubstantially = false;
+        var soundBreak = document.getElementById('soundBreak');
+        var soundPlace = document.getElementById('soundPlace');
+        var soundJump = document.getElementById('soundJump');
+        var soundHit = document.getElementById('soundHit');
+        var knownWorlds = new Map();
+        var knownUsers = new Map();
+        var pending = new Set();
+        var spawnChunks = new Map();
+        var chunkOwners = new Map();
+        var apiCallTimestamps = [];
+        var audioErrorLogged = false;
+        var sun, moon, stars, clouds;
+        var emberTexture;
+        var textureCache = new Map();
+        var torchRegistry = new Map();
+        var torchLights = new Map();
+        var torchParticles = new Map();
+        var foreignBlockOrigins = new Map();
+        var INVENTORY = new Array(36).fill(null);
+        var isPromptOpen = false;
+        var craftingState = null; // To manage multi-step crafting
+        var userPositions = {};
+        var peers = new Map();
+        var processedMessages = new Set();
+        var initialPollDone = false;
+        var isHost = false;
+        var isConnecting = false;
+        var playerAvatars = new Map();
+        var answerPollingIntervals = new Map();
+        var worldArchetype = null;
+        var gravity = 16.0;
+        var offerPollingIntervals = new Map();
+        var projectiles = [];
+        var laserQueue = [];
+        var droppedItems = [];
+        var eruptedBlocks = [];
+        var pebbles = [];
+        var smokeParticles = [];
+        var activeEruptions = [];
+        var localAudioStream = null;
+        var userAudioStreams = new Map();
+        var localVideoStream = null;
+        var userVideoStreams = new Map();
+        let proximityVideoUsers = [];
+        let currentProximityVideoIndex = 0;
+        let lastProximityVideoChangeTime = 0;
+        var hiveLocations = [];
+        var flowerLocations = [];
+        const maxAudioDistance = 32;
+        const rolloffFactor = 2;
+        var volcanoes = [];
+        var initialTeleportLocation = null;
+
+        const lightManager = {
+            lights: [],
+            poolSize: 8,
+            init: function() {
+                for (let i = 0; i < this.poolSize; i++) {
+                    const light = new THREE.PointLight(0xffaa33, 0, 0); // Initially off
+                    light.castShadow = false;
+                    this.lights.push(light);
+                    scene.add(light);
+                }
+            },
+            update: function(playerPos) {
+                const sortedTorches = Array.from(torchRegistry.values()).sort((a, b) => {
+                    const distA = playerPos.distanceTo(new THREE.Vector3(a.x, a.y, a.z));
+                    const distB = playerPos.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
+                    return distA - distB;
+                });
+
+                for (let i = 0; i < this.poolSize; i++) {
+                    if (i < sortedTorches.length) {
+                        const torchPos = sortedTorches[i];
+                        const light = this.lights[i];
+                        light.position.set(torchPos.x + 0.5, torchPos.y + 0.5, torchPos.z + 0.5);
+                        light.intensity = 0.8;
+                        light.distance = 16;
+                    } else {
+                        // Turn off unused lights
+                        this.lights[i].intensity = 0;
+                    }
+                }
+            }
+        };
+
+
+
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = (hash << 5) - hash + char;
+                hash |= 0; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+        }
+        async function applySaveFile(data, fromAddress, blockDate) {
+            // New session file loading logic
+            if (data.playerData && data.hash) {
+                const playerData = data.playerData;
+                const expectedHash = data.hash;
+                const actualHash = simpleHash(JSON.stringify(playerData));
+
+                if (actualHash !== expectedHash) {
+                    addMessage('Sorry, file malformed and does not login.', 3000);
+                    return;
+                }
+
+                addMessage('Session file verified. Loading player...', 2000);
+
+                // Start game with loaded data
+                worldName = playerData.world;
+                userName = playerData.user;
+                worldSeed = playerData.seed;
+
+                // Added this to fix the styling bug
+                const colorRnd = makeSeededRandom(worldSeed + '_colors');
+                for (const blockId in BLOCKS) {
+                    if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
+                        const block = BLOCKS[blockId];
+                        const baseColor = new THREE.Color(block.color);
+                        const hsv = {};
+                        baseColor.getHSL(hsv);
+                        const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05);
+                        const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2));
+                        const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2));
+                        baseColor.setHSL(newHue, newSat, newLight);
+                        block.color = '#' + baseColor.getHexString();
+                    }
+                }
+
+                document.getElementById('worldNameInput').value = worldName;
+                document.getElementById('userInput').value = userName;
+
+
+                // Most of this is copied from startBtn click handler
+                var userWorldKey = userName + '@' + worldName;
+                var profile;
+                try {
+                    profile = await GetProfileByURN(userName);
+                } catch (e) {
+                    console.error("Failed to get profile by URN", e);
+                    profile = null;
+                }
+                userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
+                if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+                if (!knownWorlds.has(worldName)) {
+                    knownWorlds.set(worldName, { discoverer: userName, users: new Set([userName]), toAddress: userAddress });
+                } else {
+                    knownWorlds.get(worldName).users.add(userName);
+                }
+                keywordCache.set(userAddress, userWorldKey);
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('hud').style.display = 'block';
+                document.getElementById('hotbar').style.display = 'flex';
+                document.getElementById('rightPanel').style.display = 'flex';
+                document.getElementById('worldLabel').textContent = worldName;
+                document.getElementById('seedLabel').textContent = 'User ' + userName;
+                updateHudButtons();
+                console.log('[LOGIN] Initializing Three.js from session');
+                await initAudio();
+                initThree();
+                initMusicPlayer();
+                initVideoPlayer();
+
+                // Load player data
+                player.x = playerData.profile.x;
+                player.y = playerData.profile.y;
+                player.z = playerData.profile.z;
+                player.health = playerData.profile.health;
+                player.score = playerData.profile.score;
+                INVENTORY = playerData.profile.inventory;
+                musicPlaylist = playerData.musicPlaylist || [];
+                videoPlaylist = playerData.videoPlaylist || [];
+
+                selectedHotIndex = 0;
+                selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
+                initHotbar();
+                updateHotbarUI();
+
+                console.log('[LOGIN] Creating ChunkManager from session');
+                chunkManager = new ChunkManager(worldSeed);
+
+                if (playerData.deltas) {
+                    for (var delta of playerData.deltas) {
+                        var chunkKey = delta.chunk.replace(/^#/, '');
+                        var changes = delta.changes;
+                        chunkManager.applyDeltasToChunk(chunkKey, changes);
+                    }
+                }
+
+                populateSpawnChunks();
+
+                spawnPoint = { x: player.x, y: player.y, z: player.z };
+                player.vy = 0;
+                player.onGround = true;
+
+                var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+                var spawnCx = Math.floor(player.x / CHUNK_SIZE);
+                var spawnCz = Math.floor(player.z / CHUNK_SIZE);
+
+                console.log('[LOGIN] Preloading initial chunks from session');
+                chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
+
+                setupMobile();
+                initMinimap();
+                updateHotbarUI();
+                cameraMode = 'first';
+                controls.enabled = false;
+                avatarGroup.visible = false;
+                camera.position.set(player.x, player.y + 1.62, player.z);
+                camera.rotation.set(0, 0, 0, 'YXZ');
+                if (!isMobile()) {
+                    try {
+                        renderer.domElement.requestPointerLock();
+                        mouseLocked = true;
+                        document.getElementById('crosshair').style.display = 'block';
+                    } catch (e) {
+                        addMessage('Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.', 3000);
+                    }
+                }
+                player.yaw = 0;
+                player.pitch = 0;
+                lastFrame = performance.now();
+                lastRegenTime = lastFrame;
+                var unregisterKeyEvents = registerKeyEvents();
+                console.log('[LOGIN] Starting game loop from session');
+                requestAnimationFrame(gameLoop);
+                addMessage('Loaded session for ' + userName + ' in ' + worldName, 3000);
+                updateHud();
+
+                initServers();
+                worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
+                startWorker();
+                setInterval(pollServers, POLL_INTERVAL);
+
+                return;
+            }
+
+            if (!data) return;
+
+            if (data.foreignBlockOrigins) {
+                foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+                addMessage(`Loaded ${foreignBlockOrigins.size} foreign blocks.`, 2000);
+            }
+
+            if (!data.deltas) return;
+            var fromProfile = await GetProfileByAddress(fromAddress);
+            var username = fromProfile && fromProfile.URN ? fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '') : 'anonymous';
+            var now = Date.now();
+            for (var delta of data.deltas) {
+                var chunkKey = delta.chunk.replace(/^#/, '');
+                var changes = delta.changes;
+                var ownership = chunkOwners.get(chunkKey) || { username: '', timestamp: 0, pending: true };
+                if (!ownership.username || ownership.username === username || (now - ownership.timestamp >= OWNERSHIP_EXPIRY)) {
+                    chunkManager.applyDeltasToChunk(chunkKey, changes);
+                    chunkOwners.set(chunkKey, {
+                        username: username,
+                        timestamp: new Date(blockDate).getTime(),
+                        pending: now - new Date(blockDate).getTime() < PENDING_PERIOD
+                    });
+                    addMessage('Updated chunk ' + chunkKey, 1000);
+                } else {
+                    addMessage('Cannot edit chunk ' + chunkKey + ': owned by another user', 3000);
+                }
+            }
+            if (data.profile && fromAddress === userAddress) {
+                lastSavedPosition = new THREE.Vector3(data.profile.x, data.profile.y, data.profile.z);
+                updateHotbarUI();
+            }
+        }
+        var worker = new Worker(URL.createObjectURL(new Blob([`
+const CHUNK_SIZE = 16;
+const MAX_HEIGHT = 256;
+const SEA_LEVEL = 16;
+const MAP_SIZE = 16384;
+const BLOCK_AIR = 0;
+
+const ARCHETYPES = {
+    'Earth': {
+        name: 'Earth',
+        gravity: 16.0,
+        skyType: 'earth',
+        mobSpawnRules: { day: ['bee'], night: ['crawley'] },
+        terrainGenerator: 'generateStandardTerrain',
+        biomeModifications: {},
+        flora: ['trees', 'flowers', 'hives']
+    },
+    'Moon': {
+        name: 'Moon',
+        gravity: 8.0,
+        skyType: 'moon',
+        mobSpawnRules: { day: ['crawley'], night: [] },
+        terrainGenerator: 'generateMoonTerrain',
+        biomeModifications: { noWater: true },
+        flora: []
+    },
+    'Vulcan': {
+        name: 'Vulcan',
+        gravity: 16.0,
+        skyType: 'vulcan',
+        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
+        terrainGenerator: 'generateVulcanTerrain',
+        biomeModifications: { moreLava: true },
+        flora: []
+    },
+    'Desert': {
+        name: 'Desert',
+        gravity: 16.0,
+        skyType: 'desert',
+            mobSpawnRules: { day: ['grub'], night: ['crawley', 'grub'] },
+        terrainGenerator: 'generateDesertTerrain',
+        biomeModifications: { onlyDesert: true },
+        flora: ['cactus']
+    },
+    'Massive': {
+        name: 'Massive',
+        gravity: 32.0,
+        skyType: 'earth',
+        mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
+        terrainGenerator: 'generateStandardTerrain',
+        biomeModifications: { largeBiomes: true },
+        flora: ['trees', 'flowers', 'hives']
+    }
+};
+
+function selectArchetype(seed) {
+    if (worldArchetypes.has(seed)) {
+        return worldArchetypes.get(seed);
+    }
+    const rnd = makeSeededRandom(seed + '_archetype_selector');
+    const types = Object.keys(ARCHETYPES);
+    const selectedKey = types[Math.floor(rnd() * types.length)];
+    const archetype = ARCHETYPES[selectedKey];
+    worldArchetypes.set(seed, archetype);
+    return archetype;
+}
+
+var worldArchetypes = new Map();
+const BLOCKS = {
+        1: { name: 'Bedrock', color: '#0b0b0b' }, 2: { name: 'Grass', color: '#3fb34f' },
+        3: { name: 'Dirt', color: '#7a4f29' }, 4: { name: 'Stone', color: '#9aa0a6' },
+        5: { name: 'Sand', color: '#e7d08d' }, 6: { name: 'Water', color: '#2b9cff', transparent: true },
+        7: { name: 'Wood', color: '#8b5a33' }, 8: { name: 'Leaves', color: '#2f8f46' },
+        9: { name: 'Cactus', color: '#4aa24a' }, 10: { name: 'Snow', color: '#ffffff' },
+        11: { name: 'Coal', color: '#1f1f1f' }, 12: { name: 'Flower', color: '#ff6bcb' },
+        13: { name: 'Clay', color: '#a9b6c0' }, 14: { name: 'Moss', color: '#507d43' },
+        15: { name: 'Gravel', color: '#b2b2b2' }, 16: { name: 'Lava', color: '#ff6a00', transparent: true },
+        17: { name: 'Ice', color: '#a8e6ff', transparent: true }, 100: { name: 'Glass', color: '#b3e6ff', transparent: true },
+        101: { name: 'Stained Glass - Red', color: '#ff4b4b', transparent: true }, 102: { name: 'Stained Glass - Blue', color: '#4b6bff', transparent: true },
+        103: { name: 'Stained Glass - Green', color: '#57c84d', transparent: true }, 104: { name: 'Stained Glass - Yellow', color: '#fff95b', transparent: true },
+        105: { name: 'Brick', color: '#a84f3c' }, 106: { name: 'Smooth Stone', color: '#c1c1c1' },
+        107: { name: 'Concrete', color: '#888888' }, 108: { name: 'Polished Wood', color: '#a87443' },
+        109: { name: 'Marble', color: '#f0f0f0' }, 110: { name: 'Obsidian', color: '#2d004d' },
+        111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true }, 112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
+        113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
+        115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
+        117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
+        119: { name: 'Cobblestone', color: '#7d7d7d' },
+        120: { name: 'Torch', color: '#ff9900', light: true },
+        121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
+        122: { name: 'Honey', color: '#ffb74a' },
+        123: { name: 'Hive', color: '#e3c27d' },
+        125: { name: 'Emerald', color: '#00ff7b' },
+        126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+};
+
+const BIOMES = [
+        { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
+        { key: 'desert', palette: [5, 118, 4], heightScale: 0.6, roughness: 0.4, featureDensity: 0.02 },
+        { key: 'forest', palette: [2, 3, 14, 4], heightScale: 1.3, roughness: 0.4, featureDensity: 0.03 },
+        { key: 'snow', palette: [10, 17, 4], heightScale: 1.2, roughness: 0.5, featureDensity: 0.02 },
+        { key: 'mountain', palette: [4, 11, 3, 15, 1], heightScale: 10.5, roughness: 0.6, featureDensity: 0.01 },
+        { key: 'swamp', palette: [2, 3, 6, 14, 13], heightScale: 0.5, roughness: 0.2, featureDensity: 0.04 },
+];
+
+function makeSeededRandom(seed) {
+        var h = 2166136261 >>> 0;
+        for (var i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0;
+        return function () {
+            h += 0x6D2B79F5;
+            var t = Math.imul(h ^ (h >>> 15), 1 | h);
+            t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+}
+
+function makeNoise(seed) {
+        var rnd = makeSeededRandom(seed);
+        var cache = {};
+        function corner(ix, iy) {
+            var k = ix + ',' + iy;
+            if (cache[k] !== undefined) return cache[k];
+            var s = seed + '|' + ix + ',' + iy;
+            var r = makeSeededRandom(s)();
+            return cache[k] = r;
+        }
+        function interp(a, b, t) { return a + (b - a) * (t * (t * (3 - 2 * t))); }
+        return function (x, y) {
+            var ix = Math.floor(x), iy = Math.floor(y);
+            var fx = x - ix, fy = y - iy;
+            var a = corner(ix, iy), b = corner(ix + 1, iy), c = corner(ix, iy + 1), d = corner(ix + 1, iy + 1);
+            var ab = interp(a, b, fx), cd = interp(c, d, fx);
+            return interp(ab, cd, fy);
+        };
+}
+
+function fbm(noiseFn, x, y, oct, persistence) {
+        var sum = 0, amp = 1, freq = 1, max = 0;
+        for (var i = 0; i < oct; i++) {
+            sum += amp * noiseFn(x * freq, y * freq);
+            max += amp;
+            amp *= persistence;
+            freq *= 2;
+        }
+        return sum / max;
+}
+
+function placeTree(chunkData, lx, cy, lz, rnd) {
+        const treeHeight = 5 + Math.floor(rnd() * 6);
+        const canopySize = 2 + Math.floor(rnd() * 2);
+        const trunkBlock = 7; // Wood
+        const leafBlock = 8; // Leaves
+
+        // Trunk
+        for (let i = 0; i < treeHeight; i++) {
+            if (cy + i < MAX_HEIGHT) {
+                chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = trunkBlock;
+            }
+        }
+
+        // Canopy
+        for (let dy = -canopySize; dy <= canopySize; dy++) {
+            for (let dx = -canopySize; dx <= canopySize; dx++) {
+                for (let dz = -canopySize; dz <= canopySize; dz++) {
+                    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (d <= canopySize + 0.5 * rnd()) {
+                        const rx = lx + dx;
+                        const ry = cy + treeHeight + dy;
+                        const rz = lz + dz;
+                        if (ry < MAX_HEIGHT && rx >= 0 && rx < CHUNK_SIZE && rz >= 0 && rz < CHUNK_SIZE) {
+                            if (chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] === BLOCK_AIR) {
+                                chunkData[ry * CHUNK_SIZE * CHUNK_SIZE + rz * CHUNK_SIZE + rx] = leafBlock;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+}
+
+function placeFlower(chunkData, lx, cy, lz, wx, wz) {
+        if (cy < MAX_HEIGHT && chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === BLOCK_AIR) {
+            chunkData[cy * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 12;
+            self.postMessage({ type: 'flower_location', location: { x: wx, y: cy, z: wz } });
+        }
+}
+
+function placeCactus(chunkData, lx, cy, lz, rnd) {
+        var h = 1 + Math.floor(rnd() * 3);
+        for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 9;
+}
+
+function placeHive(chunkData, lx, cy, lz, wx, wz) {
+    const hiveHeight = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < hiveHeight; i++) {
+        if (cy + i < MAX_HEIGHT) {
+            chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 123; // Hive block
+        }
+    }
+    self.postMessage({ type: 'hive_location', location: { x: wx, y: cy, z: wz } });
+}
+
+function pickBiome(n, biomes, archetype) {
+        if (archetype.biomeModifications.onlyDesert) {
+            return biomes.find(b => b.key === 'desert') || biomes[1];
+        }
+        if (n > 0.68) return biomes.find(b => b.key === 'snow') || biomes[0];
+        if (n < 0.25) return biomes.find(b => b.key === 'desert') || biomes[1];
+        if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
+        if (n > 0.60) return biomes.find(b => b.key === 'mountain') || biomes[4];
+        if (n < 0.35) return biomes.find(b => b.key === 'swamp') || biomes[5];
+        return biomes.find(b => b.key === 'plains') || biomes[0];
+}
+
+function generateStandardTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const biomeRnd = makeSeededRandom(worldSeed + '_biomes');
+    const modifiedBiomes = BIOMES.map(biome => ({
+        ...biome,
+        heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
+        roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
+        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5)
+    }));
+    const noise = makeNoise(worldSeed);
+    const blockNoise = makeNoise(worldSeed + '_block');
+    const chunkRnd = makeSeededRandom(chunkKey);
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    var baseX = cx * CHUNK_SIZE;
+    var baseZ = cz * CHUNK_SIZE;
+    const hiveNoise = makeNoise(worldSeed + '_hive');
+    for (var lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (var lz = 0; lz < CHUNK_SIZE; lz++) {
+            var wx = baseX + lx;
+            var wz = baseZ + lz;
+            var nx = (wx % MAP_SIZE) / MAP_SIZE * 10000;
+            var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
+            const biomeNoiseScale = archetype.biomeModifications.largeBiomes ? 0.002 : 0.005;
+            var n = fbm(noise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
+            var biome = pickBiome(n, modifiedBiomes, archetype);
+            var heightScale = biome.heightScale;
+            var roughness = biome.roughness;
+            var height = Math.floor(n * 40 * heightScale + 8);
+            if (n > 0.7) height += Math.floor((n - 0.7) * 60 * heightScale);
+            var localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5);
+            height += Math.floor(localN * 15 * roughness);
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+            for (var y = 0; y <= height; y++) {
+                var id = BLOCK_AIR;
+                if (y === 0) id = 1;
+                else if (y < height - 3) id = 4;
+                else if (y < height) id = 3;
+                else {
+                    var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
+                    var paletteIndex = Math.floor(blockN * biome.palette.length);
+                    id = biome.palette[paletteIndex % biome.palette.length];
+                }
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+            if (!archetype.biomeModifications.noWater) {
+                for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
+            }
+            const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
+            if (archetype.flora.includes('hives') && biome.key === 'forest' && hiveValue > 0.98) {
+                placeHive(chunkData, lx, height + 1, lz, wx, wz);
+            }
+            else if (archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
+            else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+        }
+    }
+}
+
+function generateMoonTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const noise = makeNoise(worldSeed);
+    const craterNoise = makeNoise(worldSeed + '_craters');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 100;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 100;
+
+            let height = 30 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
+
+            // Add craters
+            const craterValue = fbm(craterNoise, nx * 0.5, nz * 0.5, 3, 0.5);
+            if (craterValue > 0.7) {
+                const craterDepth = (craterValue - 0.7) * 30;
+                height -= craterDepth;
+            }
+
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+
+            for (let y = 0; y <= height; y++) {
+                const id = (y === 0) ? 1 : 4; // Bedrock and Stone
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+            }
+        }
+    }
+}
+
+function generateVulcanTerrain(chunkData, chunkKey, archetype) {
+    const worldSeed = chunkKey.split(':')[0];
+    const noise = makeNoise(worldSeed);
+    const mountainNoise = makeNoise(worldSeed + '_mountains');
+    const resourceNoise = makeNoise(worldSeed + '_resources');
+    const cx = parseInt(chunkKey.split(':')[1]);
+    const cz = parseInt(chunkKey.split(':')[2]);
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const nx = (wx % MAP_SIZE) / MAP_SIZE * 200;
+            const nz = (wz % MAP_SIZE) / MAP_SIZE * 200;
+
+            // Sharper peaks and deeper valleys
+            let mountainHeight = fbm(mountainNoise, nx * 0.3, nz * 0.3, 8, 0.55);
+            mountainHeight = Math.pow(mountainHeight, 2.5) * 220;
+
+            let groundHeight = 10 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
+            let baseHeight = Math.max(mountainHeight, groundHeight);
+
+            let height = baseHeight;
+            const isVolcano = mountainHeight > 100 && fbm(noise, nx * 0.8, nz * 0.8, 4, 0.6) > 0.6;
+
+            if (isVolcano) {
+                const peak = mountainHeight;
+                const craterRadius = 20 + fbm(noise, nx, nz, 2, 0.5) * 15;
+                const craterDepth = 15 + fbm(noise, nz, nx, 2, 0.5) * 10;
+
+                // Simplified caldera carving without complex shape factors
+                const distFromPeakCenter = Math.hypot(wx - (cx * CHUNK_SIZE + 8), wz - (cz * CHUNK_SIZE + 8));
+
+                if (distFromPeakCenter < craterRadius) {
+                    const t = distFromPeakCenter / craterRadius;
+                    const craterFloor = peak - craterDepth * (1 - t * t * t);
+                    height = Math.min(height, craterFloor);
+
+                    const lavaLevel = peak - craterDepth + 5;
+                    if (height < lavaLevel) {
+                        for (let y = Math.floor(height) + 1; y <= Math.floor(lavaLevel); y++) {
+                            if (y < MAX_HEIGHT) {
+                                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 16; // Lava
+                            }
+                        }
+                    }
+                }
+            }
+
+            height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
+
+            for (let y = 0; y <= height; y++) {
+                let id;
+                if (y < height - 10) {
+                    id = 110; // Obsidian
+                } else {
+                    id = 4; // Stone
+                }
+                if (y === 0) id = 1; // Bedrock
+
+                chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+
+                // Add coal and a new block for iron ore
+                if (id === 4) { // Only replace stone
+                    const r = resourceNoise(nx * 2, y * 0.1, nz * 2);
+                    if (r > 0.95) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 124; // Iron Ore Placeholder
+                    } else if (r > 0.92) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 11; // Coal
+                    }
+                }
+            }
+
+            // Ocean and beaches
+            const VULCAN_SEA_LEVEL = 32;
+            if (height < VULCAN_SEA_LEVEL + 4) { // Process chunks near the sea level
+                if (height < VULCAN_SEA_LEVEL) {
+                    // This part is for land below sea level.
+                    // First, create the underwater sand slope.
+                    for (let y = height; y > height - 4 && y > 0; y--) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
+                    }
+                    // Then, fill with water.
+                    for (let y = height + 1; y <= VULCAN_SEA_LEVEL; y++) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6; // Water
+                    }
+                } else {
+                    // This part is for land at or just above sea level.
+                    // Convert the top layers to sand to create the beach.
+                     for (let y = height; y > height - 4 && y > 0; y--) {
+                        chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
+                    }
+                }
+            }
+        }
+    }
+
+    // After generating the terrain, scan for volcanoes
+    const calderaThreshold = 50; // Min lava blocks to be considered a caldera
+    const minCalderaAltitude = 60;
+    let lavaCount = 0;
+    let totalLavaX = 0, totalLavaY = 0, totalLavaZ = 0;
+
+    for (let y = minCalderaAltitude; y < MAX_HEIGHT; y++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+                if (chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 16) { // Lava
+                    lavaCount++;
+                    totalLavaX += baseX + lx;
+                    totalLavaY += y;
+                    totalLavaZ += baseZ + lz;
+                }
+            }
+        }
+    }
+
+    if (lavaCount > calderaThreshold) {
+        const centerX = totalLavaX / lavaCount;
+        const centerY = totalLavaY / lavaCount;
+        const centerZ = totalLavaZ / lavaCount;
+        self.postMessage({
+            type: 'volcano_location',
+            location: {
+                x: centerX,
+                y: centerY,
+                z: centerZ,
+                lavaCount: lavaCount,
+                chunkKey: chunkKey
+            }
+        });
+    }
+}
+
+function generateDesertTerrain(chunkData, chunkKey, archetype) {
+    generateStandardTerrain(chunkData, chunkKey, archetype);
+}
+
+function generateChunkData(chunkKey) {
+        const worldSeed = chunkKey.split(':')[0];
+        const archetype = selectArchetype(worldSeed);
+        self.postMessage({ type: 'world_archetype', archetype: archetype, seed: worldSeed });
+
+        const chunkData = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
+
+        switch (archetype.terrainGenerator) {
+            case 'generateStandardTerrain':
+                generateStandardTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateMoonTerrain':
+                generateMoonTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateVulcanTerrain':
+                generateVulcanTerrain(chunkData, chunkKey, archetype);
+                break;
+            case 'generateDesertTerrain':
+                generateDesertTerrain(chunkData, chunkKey, archetype);
+                break;
+            default:
+                generateStandardTerrain(chunkData, chunkKey, archetype);
+        }
+        return chunkData;
+}
+
+var profileByURNCache = new Map();
+var profileByAddressCache = new Map();
+var keywordByAddressCache = new Map();
+var addressByKeywordCache = new Map();
+var processedMessages = new Set();
+var API_CALLS_PER_SECOND = 3;
+var apiDelay = 350;
+async function fetchData(url) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch(url);
+            return response.ok ? await response.json() : null;
+        } catch (e) {
+            console.error('[Worker] Fetch error:', url, e);
+            return null;
+        }
+}
+async function fetchText(url) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch(url);
+            return response.ok ? await response.text() : null;
+        } catch (e) {
+            console.error('[Worker] Fetch text error:', url, e);
+            return null;
+        }
+}
+async function getPublicAddressByKeyword(keyword) {
+        try {
+            if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://p2fk.io/GetPublicAddressByKeyword/" + keyword + "?mainnet=false");
+            if (!response.ok) {
+                console.error('[Worker] Failed to fetch address for keyword:', keyword, 'status:', response.status);
+                return null;
+            }
+            var address = await response.text();
+            var cleanAddress = address ? address.replace(/"|'/g, "").trim() : null;
+            if (cleanAddress) addressByKeywordCache.set(keyword, cleanAddress);
+            return cleanAddress;
+        } catch (e) {
+            console.error('[Worker] Error fetching address for keyword:', keyword, e);
+            return null;
+        }
+}
+async function getPublicMessagesByAddress(address, skip, qty) {
+        try {
+            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
+            if (!response.ok) {
+                console.error('[Worker] Failed to fetch messages for address:', cleanAddress, 'status:', response.status);
+                return [];
+            }
+            var messages = await response.json();
+            return messages;
+        } catch (e) {
+            console.error('[Worker] Error fetching messages for address:', address, e);
+            return [];
+        }
+}
+async function getProfileByURN(urn) {
+        if (!urn || urn.trim() === "") return null;
+        try {
+            if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
+            var cleanUrn = encodeURIComponent(urn.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://p2fk.io/GetProfileByURN/" + cleanUrn + "?mainnet=false");
+            if (!response.ok) {
+                console.error('[Worker] Failed to fetch profile for URN:', cleanUrn, 'status:', response.status);
+                return null;
+            }
+            var profile = await response.json();
+            if (profile) profileByURNCache.set(urn, profile);
+            return profile;
+        } catch (e) {
+            console.error('[Worker] Error fetching profile for URN:', urn, e);
+            return null;
+        }
+}
+async function getProfileByAddress(address) {
+        try {
+            if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
+            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://p2fk.io/GetProfileByAddress/" + cleanAddress + "?mainnet=false");
+            if (!response.ok) {
+                console.error('[Worker] Failed to fetch profile for address:', cleanAddress, 'status:', response.status);
+                return null;
+            }
+            var profile = await response.json();
+            if (profile) profileByAddressCache.set(address, profile);
+            return profile;
+        } catch (e) {
+            console.error('[Worker] Error fetching profile for address:', address, e);
+            return null;
+        }
+}
+async function getKeywordByPublicAddress(address) {
+        try {
+            if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
+            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
+            if (!response.ok) {
+                console.error('[Worker] Failed to fetch keyword for address:', cleanAddress, 'status:', response.status);
+                return null;
+            }
+            var keyword = await response.text();
+            var cleanKeyword = keyword ? keyword.trim() : null;
+            if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
+            return cleanKeyword;
+        } catch (e) {
+            console.error('[Worker] Error fetching keyword for address:', address, e);
+            return null;
+        }
+}
+async function fetchIPFS(hash) {
+        let attempts = 0;
+        while (attempts < 3) {
+            try {
+                await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
+                var response = await fetch("https://ipfs.io/ipfs/" + hash);
+                if (response.ok) {
+                    return await response.json();
+                }
+                console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
+            } catch (e) {
+                console.error('[Worker] Error fetching IPFS for hash:', hash, e);
+            }
+            attempts++;
+        }
+        return null;
+}
+self.onmessage = async function(e) {
+        var data = e.data;
+        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+
+        if (type === 'generate_chunk') {
+            const chunkData = generateChunkData(data.key);
+            self.postMessage({ type: 'chunk_generated', key: data.key, data: chunkData }, [chunkData.buffer]);
+            return;
+        }
+
+        console.log('[Worker] Received message type:', type, 'offerKeyword:', offerKeyword, 'worldName:', worldName);
+        if (type === "sync_processed") {
+            data.ids.forEach(id => processedMessages.add(id));
+            console.log('[Worker] Synced processedMessages, size:', processedMessages.size);
+            return;
+        }
+        if (type === "poll") {
+            try {
+                var masterAddr = await getPublicAddressByKeyword(masterKey);
+                var worlds = new Map();
+                var users = new Map();
+                var joinData = [];
+                var processedIds = [];
+                if (masterAddr) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        var response = await getPublicMessagesByAddress(masterAddr, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    }
+                    for (var msg of messages || []) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[Worker] Stopping worlds_users processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (!msg.TransactionId) continue;
+                        var fromProfile = await getProfileByAddress(msg.FromAddress);
+                        if (!fromProfile || !fromProfile.URN) {
+                            console.log('[Worker] Skipping worlds_users message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var user = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                        var userProfile = await getProfileByURN(user);
+                        if (!userProfile) {
+                            console.log('[Worker] No profile for user:', user, 'txId:', msg.TransactionId);
+                            users.set(user, msg.FromAddress); // Allow partial data
+                            continue;
+                        }
+                        if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                            console.log('[Worker] Skipping worlds_users message, invalid creators for user:', user, 'txId:', msg.TransactionId);
+                            users.set(user, msg.FromAddress); // Allow partial data
+                            continue;
+                        }
+                        var toKeywordRaw = await getKeywordByPublicAddress(msg.ToAddress);
+                        if (!toKeywordRaw) {
+                            console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var toKeyword = toKeywordRaw.replace(/"|'/g, "");
+                        if (!toKeyword.includes("MCUserJoin@")) {
+                            console.log('[Worker] Skipping worlds_users message, invalid keyword:', toKeyword, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var world = toKeyword.split("@")[1].replace(/[^a-zA-Z0-9]/g, "");
+                        if (user && world) {
+                            if (!worlds.has(world)) worlds.set(world, msg.ToAddress);
+                            if (!users.has(user)) users.set(user, msg.FromAddress);
+                            joinData.push({ user: user, world: world, username: user, transactionId: msg.TransactionId });
+                            processedMessages.add(msg.TransactionId);
+                            processedIds.push(msg.TransactionId);
+                        }
+                    }
+                    self.postMessage({ type: "worlds_users", worlds: Object.fromEntries(worlds), users: Object.fromEntries(users), joinData: joinData, processedIds: processedIds });
+                } else {
+                    console.error('[Worker] Failed to fetch master address for:', masterKey);
+                    self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
+                }
+            } catch (e) {
+                console.error('[Worker] Error in worlds_users poll:', e);
+                self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
+            }
+            var updatesByTransaction = new Map();
+            var ownershipByChunk = new Map();
+            for (var chunkKey of chunkKeys) {
+                try {
+                    var normalizedChunkKey = chunkKey.replace(/^#/, "");
+                    var addr = await getPublicAddressByKeyword(normalizedChunkKey);
+                    if (!addr) {
+                        console.log('[Worker] No address for chunk key:', normalizedChunkKey);
+                        continue;
+                    }
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        var response = await getPublicMessagesByAddress(addr, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    }
+                    for (var msg of messages || []) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[Worker] Stopping chunk processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (!msg.TransactionId) continue;
+                        var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                        if (match) {
+                            var hash = match[1];
+                            var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                            if (!cidRegex.test(hash)) {
+                                console.log('[Worker] Invalid CID in chunk message:', hash, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            var data = await fetchIPFS(hash);
+                            if (data && data.deltas) {
+                                var normalizedDeltas = data.deltas.map(function(delta) {
+                                    return {
+                                        chunk: delta.chunk.replace(/^#/, ""),
+                                        changes: delta.changes
+                                    };
+                                });
+                                updatesByTransaction.set(msg.TransactionId, {
+                                    changes: normalizedDeltas,
+                                    address: msg.FromAddress,
+                                    timestamp: new Date(msg.BlockDate).getTime(),
+                                    transactionId: msg.TransactionId
+                                });
+                                for (var delta of normalizedDeltas) {
+                                    var chunk = delta.chunk;
+                                    if (!ownershipByChunk.has(chunk)) {
+                                        var fromProfile = await getProfileByAddress(msg.FromAddress);
+                                        if (fromProfile && fromProfile.URN) {
+                                            var username = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                            ownershipByChunk.set(chunk, {
+                                                chunkKey: chunk,
+                                                username: username,
+                                                timestamp: new Date(msg.BlockDate).getTime()
+                                            });
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.log('[Worker] No valid deltas in IPFS data for chunk message:', hash, 'txId:', msg.TransactionId);
+                            }
+                        }
+                        processedMessages.add(msg.TransactionId);
+                    }
+                } catch (e) {
+                    console.error('[Worker] Error in chunk poll:', e);
+                }
+            }
+            if (updatesByTransaction.size > 0) {
+                for (var entry of updatesByTransaction) {
+                    var transactionId = entry[0];
+                    var update = entry[1];
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId }] });
+                }
+            }
+            if (ownershipByChunk.size > 0) {
+                for (var ownership of ownershipByChunk.values()) {
+                    self.postMessage({ type: "chunk_ownership", chunkKey: ownership.chunkKey, username: ownership.username, timestamp: ownership.timestamp });
+                }
+            }
+            try {
+                var joinKeyword = userAddress === "anonymous" ? worldName : userAddress;
+                var addressRes = await getPublicAddressByKeyword(joinKeyword);
+                if (addressRes) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        var response = await getPublicMessagesByAddress(addressRes, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    }
+                    for (var msg of messages || []) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[Worker] Stopping user_update processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (msg.FromAddress === userAddress && !processedMessages.has(msg.TransactionId)) {
+                            var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                            if (match) {
+                                var hash = match[1];
+                                var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                                if (!cidRegex.test(hash)) {
+                                    console.log('[Worker] Invalid CID in user_update message:', hash, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                var data = await fetchIPFS(hash);
+                                if (data) {
+                                    self.postMessage({ type: "user_update", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
+                                } else {
+                                    console.log('[Worker] No valid data in IPFS for user_update:', hash, 'txId:', msg.TransactionId);
+                                }
+                            }
+                            processedMessages.add(msg.TransactionId);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[Worker] Error in user_update poll:', e);
+            }
+            try {
+                var serverAddr = await getPublicAddressByKeyword(serverKeyword);
+                if (serverAddr) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        var response = await getPublicMessagesByAddress(serverAddr, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    }
+                    var servers = [];
+                    var processedIds = [];
+                    var messageMap = new Map();
+                    for (var msg of messages || []) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[Worker] Stopping server processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (!msg.TransactionId) continue;
+                        var fromAddress = msg.FromAddress;
+                        var timestamp = new Date(msg.BlockDate).getTime();
+                        var existing = messageMap.get(fromAddress);
+                        if (!existing || existing.timestamp < timestamp) {
+                            messageMap.set(fromAddress, { msg: msg, timestamp: timestamp });
+                        }
+                    }
+                    for (var entry of messageMap) {
+                        var msg = entry[1].msg;
+                        var timestamp = entry[1].timestamp;
+                        var fromProfile = await getProfileByAddress(msg.FromAddress);
+                        if (!fromProfile || !fromProfile.URN) {
+                            console.log('[Worker] Skipping server message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                        var userProfile = await getProfileByURN(hostUser);
+                        if (!userProfile) {
+                            console.log('[Worker] Skipping server message, no profile for user:', hostUser, 'txId:', msg.TransactionId);
+                            servers.push({ hostUser: hostUser, transactionId: msg.TransactionId, timestamp: timestamp }); // Still add server
+                            continue;
+                        }
+                        if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                            console.log('[Worker] Skipping server message, invalid creators for user:', hostUser, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                        if (match) {
+                            var hash = match[1];
+                            var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                            if (!cidRegex.test(hash)) {
+                                console.log('[Worker] Invalid CID in server message:', hash, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            var data = await fetchIPFS(hash);
+                            if (data && data.world === worldName) {
+                                servers.push({
+                                    hostUser: data.user || hostUser,
+                                    transactionId: msg.TransactionId,
+                                    timestamp: timestamp
+                                });
+                                processedMessages.add(msg.TransactionId);
+                                processedIds.push(msg.TransactionId);
+                            } else {
+                                console.log('[Worker] Invalid IPFS data for server message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
+                            }
+                        }
+                    }
+                    if (servers.length > 0) {
+                        self.postMessage({ type: "server_updates", servers: servers, processedIds: processedIds });
+                    }
+                }
+            } catch (e) {
+                console.error('[Worker] Error in server_updates poll:', e);
+            }
+            try {
+                if (offerKeyword) {
+                    var offerAddr = await getPublicAddressByKeyword(offerKeyword);
+                    if (offerAddr) {
+                        var messages = [];
+                        var skip = 0;
+                        var qty = 5000;
+                        while (true) {
+                            var response = await getPublicMessagesByAddress(offerAddr, skip, qty);
+                            if (!response || response.length === 0) break;
+                            messages = messages.concat(response);
+                            if (response.length < qty) break;
+                            skip += qty;
+                        }
+                        var offers = [];
+                        var processedIds = [];
+                        var offerMap = new Map();
+                        for (var msg of messages || []) {
+                            if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                                console.log('[Worker] Stopping offer processing at cached ID:', msg.TransactionId);
+                                break; // Stop processing as all remaining messages are older
+                            }
+                            if (!msg.TransactionId) continue;
+                            console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
+                            processedMessages.add(msg.TransactionId);
+                            processedIds.push(msg.TransactionId);
+                            try {
+                                // Efficiently handle IPFS data and user profiles
+                                var fromProfile = await getProfileByAddress(msg.FromAddress);
+                                var clientUser = 'anonymous';
+                                var data = null;
+                                var hash = null;
+                                var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+
+                                if (match) {
+                                    hash = match[1];
+                                    var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                                    if (cidRegex.test(hash)) {
+                                        data = await fetchIPFS(hash);
+                                        if (data && data.user) {
+                                            clientUser = data.user.replace(/[^a-zA-Z0-9]/g, "");
+                                        }
+                                    } else {
+                                        console.log('[Worker] Invalid CID in offer message:', hash, 'txId:', msg.TransactionId);
+                                        hash = null; // Invalidate hash to prevent further processing
+                                    }
+                                }
+
+                                if (clientUser === 'anonymous' && fromProfile && fromProfile.URN) {
+                                    clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                }
+
+                                if (clientUser === userName) {
+                                    console.log('[Worker] Skipping offer from self:', clientUser, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+
+                                // Security check: If the claimed username is a registered user, verify the sender is an authorized creator.
+                                var userProfile = await getProfileByURN(clientUser);
+                                if (userProfile) {
+                                    if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                                        console.log('[Worker] Skipping offer: Sender is not an authorized creator for registered user:', clientUser, 'txId:', msg.TransactionId);
+                                        continue;
+                                    }
+                                }
+
+                                if (!hash || !data) {
+                                    if (!hash) console.log('[Worker] No valid IPFS hash in offer message:', msg.Message, 'txId:', msg.TransactionId);
+                                    else if (!data) console.log('[Worker] No data fetched from IPFS for hash:', hash, 'txId:', msg.TransactionId);
+
+                                    offers.push({
+                                        clientUser: clientUser,
+                                        offer: null,
+                                        iceCandidates: [],
+                                        transactionId: msg.TransactionId,
+                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        profile: fromProfile
+                                    });
+                                    continue;
+                                }
+
+                                if (!data.world || data.world !== worldName) {
+                                    console.log('[Worker] Invalid IPFS data for offer message: wrong world.', 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+
+                                if (data.offer || data.answer) {
+                                    if (!offerMap.has(clientUser)) {
+                                        offerMap.set(clientUser, {
+                                            clientUser: clientUser,
+                                            offer: data.offer || data.answer,
+                                            iceCandidates: data.iceCandidates || [],
+                                            transactionId: msg.TransactionId,
+                                            timestamp: new Date(msg.BlockDate).getTime(),
+                                            profile: fromProfile
+                                        });
+                                    }
+                                } else {
+                                    console.log('[Worker] No offer or answer in IPFS data:', hash, 'txId:', msg.TransactionId);
+                                    offers.push({
+                                        clientUser: clientUser,
+                                        offer: null,
+                                        iceCandidates: [],
+                                        transactionId: msg.TransactionId,
+                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        profile: fromProfile
+                                    });
+                                }
+                            } catch (e) {
+                                console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
+                            }
+                        }
+                        offers = Array.from(offerMap.values());
+                        if (offers.length > 0) {
+                            console.log('[Worker] Sending offer_updates:', offers.map(o => o.clientUser));
+                            self.postMessage({ type: "offer_updates", offers: offers, processedIds: processedIds });
+                        } else {
+                            console.log('[Worker] No new offers for:', offerKeyword);
+                        }
+                    } else {
+                        console.log('[Worker] No address for offer keyword:', offerKeyword);
+                    }
+                } else {
+                    console.log('[Worker] No offerKeyword provided for offer polling');
+                }
+            } catch (e) {
+                console.error('[Worker] Error in offer_updates poll:', e);
+            }
+            try {
+                for (var answerKeyword of answerKeywords || []) {
+                    var answerAddr = await getPublicAddressByKeyword(answerKeyword);
+                    if (answerAddr) {
+                        var messages = [];
+                        var skip = 0;
+                        var qty = 5000;
+                        while (true) {
+                            var response = await getPublicMessagesByAddress(answerAddr, skip, qty);
+                            if (!response || response.length === 0) break;
+                            messages = messages.concat(response);
+                            if (response.length < qty) break;
+                            skip += qty;
+                        }
+                        var answers = [];
+                        var processedIds = [];
+                        for (var msg of messages || []) {
+                            if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                                console.log('[Worker] Stopping answer processing at cached ID:', msg.TransactionId);
+                                break; // Stop processing as all remaining messages are older
+                            }
+                            if (!msg.TransactionId) continue;
+                            console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
+                            processedMessages.add(msg.TransactionId);
+                            processedIds.push(msg.TransactionId);
+                            try {
+                                var fromProfile = await getProfileByAddress(msg.FromAddress);
+                                if (!fromProfile || !fromProfile.URN) {
+                                    console.log('[Worker] Skipping answer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                var userProfile = await getProfileByURN(hostUser);
+                                if (!userProfile) {
+                                    console.log('[Worker] No profile for user:', hostUser, 'txId:', msg.TransactionId);
+                                    answers.push({
+                                        hostUser: hostUser,
+                                        answer: null,
+                                        batch: null,
+                                        iceCandidates: [],
+                                        transactionId: msg.TransactionId,
+                                        timestamp: new Date(msg.BlockDate).getTime()
+                                    });
+                                    continue;
+                                }
+                                if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                                    console.log('[Worker] Skipping answer message, invalid creators for user:', hostUser, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                                if (!match) {
+                                    console.log('[Worker] No IPFS hash in answer message:', msg.Message, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                var hash = match[1];
+                                var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                                if (!cidRegex.test(hash)) {
+                                    console.log('[Worker] Invalid CID in answer message:', hash, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                var data = await fetchIPFS(hash);
+                                if (data && (data.answer || data.batch) && data.world === worldName) {
+                                    answers.push({
+                                        hostUser: data.user || hostUser,
+                                        answer: data.answer,
+                                        batch: data.batch,
+                                        iceCandidates: data.iceCandidates || [],
+                                        transactionId: msg.TransactionId,
+                                        timestamp: new Date(msg.BlockDate).getTime()
+                                    });
+                                } else {
+                                    console.log('[Worker] Invalid IPFS data for answer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
+                                }
+                            } catch (e) {
+                                console.error('[Worker] Error in answer_updates poll:', e);
+                            }
+                        }
+                        if (answers.length > 0) {
+                            console.log('[Worker] Sending answer_updates:', answers);
+                            self.postMessage({ type: "answer_updates", answers: answers, keyword: answerKeyword, processedIds: processedIds });
+                        } else {
+                            console.log('[Worker] No new answers for:', answerKeyword);
+                        }
+                    } else {
+                        console.log('[Worker] No address for answer keyword:', answerKeyword);
+                    }
+                }
+            } catch (e) {
+                console.error('[Worker] Error in answer_updates poll:', e);
+            }
+        } else if (type === "update_processed") {
+            data.transactionIds.forEach(function(id) { processedMessages.add(id); });
+        } else if (type === "retry_chunk") {
+            self.postMessage({ type: "poll", chunkKeys: [data.chunkKey], masterKey: masterKey, userAddress: userAddress, worldName: worldName });
+        } else if (type === "cleanup_pending") {
+            var pcx = data.pcx, pcz = data.pcz, pendingKeys = data.pendingKeys, chunksPerSide = data.chunksPerSide, pollRadius = data.pollRadius;
+            var keysToDelete = [];
+            for (var key of pendingKeys) {
+                var match = key.match(/^(.{1,8}):(\d{1,5}):(\d{1,5})$/);
+                if (match) {
+                    var cx = parseInt(match[2]);
+                    var cz = parseInt(match[3]);
+                    var dx = Math.min(Math.abs(cx - pcx), chunksPerSide - Math.abs(cx - pcx));
+                    var dz = Math.min(Math.abs(cz - pcz), chunksPerSide - Math.abs(cz - pcz));
+                    if (dx > pollRadius || dz > pollRadius) {
+                        keysToDelete.push(key);
+                    }
+                }
+            }
+            self.postMessage({ type: "cleanup_pending", keysToDelete: keysToDelete });
+        }
+};
+        `], { type: 'application/javascript' })));
+        worker.onmessage = function (e) {
+            var data = e.data;
+            if (data.type === "worlds_users") {
+                console.log('[Users] Received worlds_users: worlds=', Object.keys(data.worlds || {}).length, 'users=', Object.keys(data.users || {}).length);
+                if (data.worlds && typeof data.worlds === 'object' && Object.keys(data.worlds).length > 0) {
+                    knownWorlds = new Map(Object.entries(data.worlds));
+                } else {
+                    console.log('[Users] Empty worlds_users data received, preserving existing knownWorlds');
+                }
+                if (data.users && typeof data.users === 'object' && Object.keys(data.users).length > 0) {
+                    knownUsers = new Map(Object.entries(data.users));
+                } else {
+                    console.log('[Users] Empty users data received, preserving existing knownUsers');
+                }
+                if (data.processedIds) {
+                    data.processedIds.forEach(id => processedMessages.add(id));
+                }
+                updateLoginUI();
+            } else if (data.type === 'chunk_generated') {
+                const chunk = chunkManager.chunks.get(data.key);
+                if (chunk) {
+                    chunk.data = data.data;
+                    chunk.generated = true;
+                    chunk.generating = false;
+                    chunk.needsRebuild = true;
+                }
+            } else if (data.type === 'hive_location') {
+                hiveLocations.push(data.location);
+            } else if (data.type === 'volcano_location') {
+                // Ensure we don't add duplicate volcanoes
+                if (!volcanoes.some(v => v.chunkKey === data.location.chunkKey)) {
+                    volcanoes.push(data.location);
+                    console.log(`[Volcano] Tracked new volcano in chunk ${data.location.chunkKey} with ${data.location.lavaCount} lava blocks.`);
+                }
+            } else if (data.type === 'flower_location') {
+                flowerLocations.push(data.location);
+            } else if (data.type === 'world_archetype') {
+                if (data.seed === worldSeed) {
+                    worldArchetype = data.archetype;
+                    gravity = data.archetype.gravity;
+                    document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
+                }
+            } else if (data.type === "server_updates") {
+                console.log('[WebRTC] Received server_updates:', data.servers);
+                var newServers = [];
+                for (var server of data.servers || []) {
+                    var existing = knownServers.find(s => s.hostUser === server.hostUser);
+                    if (!existing || existing.timestamp < server.timestamp) {
+                        var spawn = calculateSpawnPoint(server.hostUser + '@' + worldName);
+                        newServers.push({
+                            hostUser: server.hostUser,
+                            spawn: spawn,
+                            offer: null,
+                            iceCandidates: [],
+                            transactionId: server.transactionId,
+                            timestamp: server.timestamp,
+                            connectionRequestCount: existing ? existing.connectionRequestCount : 0,
+                            latestRequestTime: existing ? existing.latestRequestTime : null
+                        });
+                    }
+                    if (data.processedIds) {
+                        data.processedIds.forEach(id => processedMessages.add(id));
+                    }
+                }
+                if (newServers.length > 0) {
+                    var serverMap = new Map();
+                    for (var server of knownServers.concat(newServers)) {
+                        if (!serverMap.has(server.hostUser) || serverMap.get(server.hostUser).timestamp < server.timestamp) {
+                            serverMap.set(server.hostUser, server);
+                        }
+                    }
+                    knownServers = Array.from(serverMap.values()).sort(function (a, b) { return b.timestamp - a.timestamp; }).slice(0, 10);
+                    addMessage('New player(s) available to connect!', 3000);
+                    updateHudButtons();
+                }
+            } else if (data.type === "offer_updates") {
+                console.log('[WebRTC] Received offer_updates:', data.offers);
+                if (data.offers && data.offers.length > 0) {
+                    console.log('[WebRTC] Adding offers to pendingOffers:', data.offers.map(o => o.clientUser));
+                    pendingOffers = pendingOffers.concat(data.offers);
+                    addMessage('New connection request(s) received!', 5000);
+                    updateHudButtons();
+                    setupPendingModal();
+                    if (isHost) {
+                        document.getElementById('pendingModal').style.display = 'block';
+                    }
+                } else {
+                    console.log('[WebRTC] No new offers received in offer_updates');
+                }
+                if (data.processedIds) {
+                    data.processedIds.forEach(id => processedMessages.add(id));
+                }
+            } else if (data.type === "answer_updates") {
+                console.log('[WebRTC] Received answer_updates for:', data.keyword, 'answers:', data.answers);
+                for (var answer of data.answers || []) {
+                    var peer = peers.get(answer.hostUser);
+                    if (peer && peer.pc) {
+                        try {
+                            peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
+                            for (var candidate of answer.iceCandidates || []) {
+                                peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                            }
+                            console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
+                        } catch (e) {
+                            console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
+                        }
+                    } else {
+                        console.log('[WebRTC] No peer connection found for:', answer.hostUser);
+                    }
+                    if (data.processedIds) {
+                        data.processedIds.forEach(id => processedMessages.add(id));
+                    }
+                }
+            } else if (data.type === "chunk_updates") {
+                for (var update of data.updates || []) {
+                    applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
+                }
+            } else if (data.type === "chunk_ownership") {
+               updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+            } else if (data.type === "user_update") {
+                console.log('[Worker] Received user_update:', data.transactionId);
+                if (data.data.profile) {
+                    var pos = data.data.profile;
+                    if (pos.x !== undefined && pos.y !== undefined && pos.z !== undefined) {
+                        userPositions[data.address] = pos;
+                    }
+                }
+                if (data.transactionId) {
+                    processedMessages.add(data.transactionId);
+                    worker.postMessage({ type: 'update_processed', transactionIds: [data.transactionId] });
+                }
+            } else if (data.type === "cleanup_pending") {
+                console.log('[Worker] Received cleanup_pending:', data.keysToDelete);
+                for (var key of data.keysToDelete) {
+                    pending.delete(key);
+                }
+            }
+        };
+        function triggerPoll() {
+            if (isPromptOpen) {
+                console.log('[Worker] Skipping poll, prompt open');
+                return;
+            }
+            var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
+            var pendingKeys = Array.from(pending);
+            if (pendingKeys.length > 0) {
+                worker.postMessage({
+                    type: 'cleanup_pending',
+                    pcx: pcx,
+                    pcz: pcz,
+                    pendingKeys: pendingKeys,
+                    chunksPerSide: CHUNKS_PER_SIDE,
+                    pollRadius: POLL_RADIUS
+                });
+            }
+
+            var chunkKeys = Array.from(chunkManager ? chunkManager.chunks.keys() : []);
+
+            var playerDirection = new THREE.Vector3();
+            camera.getWorldDirection(playerDirection);
+
+            chunkKeys.sort((a, b) => {
+                const parsedA = parseChunkKey(a);
+                const parsedB = parseChunkKey(b);
+                if (!parsedA || !parsedB) return 0;
+
+                const posA = new THREE.Vector3(parsedA.cx * CHUNK_SIZE, 0, parsedA.cz * CHUNK_SIZE);
+                const posB = new THREE.Vector3(parsedB.cx * CHUNK_SIZE, 0, parsedB.cz * CHUNK_SIZE);
+
+                const distA = posA.distanceTo(player);
+                const distB = posB.distanceTo(player);
+
+                const dirA = posA.sub(player).normalize();
+                const dirB = posB.sub(player).normalize();
+
+                const dotA = playerDirection.dot(dirA);
+                const dotB = playerDirection.dot(dirB);
+
+                if (dotA > 0.5 && dotB < 0.5) return -1;
+                if (dotB > 0.5 && dotA < 0.5) return 1;
+
+                return distA - distB;
+            });
+
+            var filteredKeys = chunkKeys.filter(function (key) {
+                var parsed = parseChunkKey(key);
+                if (!parsed) return false;
+                var dx = Math.min(Math.abs(parsed.cx - pcx), CHUNKS_PER_SIDE - Math.abs(parsed.cx - pcx));
+                var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
+                return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
+            });
+            var serverKeyword = 'MCServerJoin@' + worldName;
+            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            var answerKeywords = [];
+            for (var peer of peers) {
+                var peerUser = peer[0];
+                if (peerUser !== userName) {
+                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                }
+            }
+            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            worker.postMessage({
+                type: 'poll',
+                chunkKeys: filteredKeys,
+                masterKey: MASTER_WORLD_KEY,
+                userAddress: userAddress,
+                worldName: worldName,
+                serverKeyword: serverKeyword,
+                offerKeyword: offerKeyword,
+                answerKeywords: answerKeywords,
+                userName: userName
+            });
+        }
+
+        function startWorker() {
+            console.log('[Worker] Initializing worker with isHost:', isHost, 'userName:', userName, 'worldName:', worldName);
+            // The polling is now triggered by player movement and pauses in the gameLoop.
+        }
+        function checkChunkOwnership(chunkKey, username) {
+            const normalizedKey = chunkKey.replace(/^#/, '');
+            if (spawnChunks.size > 0) {
+                for (const [user, spawn] of spawnChunks) {
+                    const parsed = parseChunkKey(normalizedKey);
+                    if (!parsed) return false;
+                    if (spawn.cx === parsed.cx && spawn.cz === parsed.cz && user !== username) {
+                        return false;
+                    }
+                }
+            }
+            const ownership = chunkOwners.get(normalizedKey);
+            if (!ownership) return true;
+            const now = Date.now();
+            if (now - ownership.timestamp > OWNERSHIP_EXPIRY) return true;
+            if (ownership.pending && now - ownership.timestamp < PENDING_PERIOD) return true;
+            return ownership.username === username;
+        }
+        var chunkOwnership = new Map();
+        function updateChunkOwnership(chunkKey, username, timestamp) {
+            try {
+                chunkOwnership.set(chunkKey, { username, timestamp });
+            } catch (e) {
+                console.error('[ChunkManager] Failed to update chunk ownership:', e);
+            }
+        }
+
+        function updateTorchRegistry(chunk) {
+            const baseX = chunk.cx * CHUNK_SIZE;
+            const baseZ = chunk.cz * CHUNK_SIZE;
+            // Clear existing torches for this chunk
+            torchRegistry.forEach((pos, key) => {
+                if (Math.floor(pos.x / CHUNK_SIZE) === chunk.cx && Math.floor(pos.z / CHUNK_SIZE) === chunk.cz) {
+                    torchRegistry.delete(key);
+                }
+            });
+
+            // Scan for new torches
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    for (let y = 0; y < MAX_HEIGHT; y++) {
+                        const blockId = chunk.get(x, y, z);
+                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                            const wx = baseX + x;
+                            const wz = baseZ + z;
+                            const wy = y;
+                            const lightKey = `${wx},${wy},${wz}`;
+                            torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
+                        }
+                    }
+                }
+            }
+        }
+        function applyChunkUpdates(changes, address, timestamp, transactionId) {
+            try {
+                for (var delta of changes) {
+                    var chunkKey = delta.chunk;
+                    var chunkChanges = delta.changes;
+                    if (chunkManager) {
+                        chunkManager.applyDeltasToChunk(chunkKey, chunkChanges);
+                        chunkManager.markDirty(chunkKey);
+                    } else {
+                        console.error('[ChunkManager] chunkManager not defined');
+                    }
+                }
+                // Notify worker of processed transaction
+                worker.postMessage({
+                    type: 'update_processed',
+                    transactionIds: [transactionId]
+                });
+            } catch (e) {
+                console.error('[ChunkManager] Failed to apply chunk updates:', e);
+            }
+        }
+        function makeSeededRandom(seed) {
+            var h = 2166136261 >>> 0;
+            for (var i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0;
+            return function () {
+                h += 0x6D2B79F5;
+                var t = Math.imul(h ^ (h >>> 15), 1 | h);
+                t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+        function makeNoise(seed) {
+            var rnd = makeSeededRandom(seed);
+            var cache = {};
+            function corner(ix, iy) {
+                var k = ix + ',' + iy;
+                if (cache[k] !== undefined) return cache[k];
+                var s = seed + '|' + ix + ',' + iy;
+                var r = makeSeededRandom(s)();
+                return cache[k] = r;
+            }
+            function interp(a, b, t) { return a + (b - a) * (t * (t * (3 - 2 * t))); }
+            return function (x, y) {
+                var ix = Math.floor(x), iy = Math.floor(y);
+                var fx = x - ix, fy = y - iy;
+                var a = corner(ix, iy), b = corner(ix + 1, iy), c = corner(ix, iy + 1), d = corner(ix + 1, iy + 1);
+                var ab = interp(a, b, fx), cd = interp(c, d, fx);
+                return interp(ab, cd, fy);
+            };
+        }
+        function fbm(noiseFn, x, y, oct, persistence) {
+            var sum = 0, amp = 1, freq = 1, max = 0;
+            for (var i = 0; i < oct; i++) {
+                sum += amp * noiseFn(x * freq, y * freq);
+                max += amp;
+                amp *= persistence;
+                freq *= 2;
+            }
+            return sum / max;
+        }
+        function modWrap(n, m) {
+            return ((n % m) + m) % m;
+        }
+        function makeChunkKey(world, cx, cz) {
+            var clean = ('' + world).slice(0, 8);
+            return clean + ':' + cx + ':' + cz;
+        }
+        function parseJsonChunkKey(key) {
+            var match = key.match(/^#?(.{1,8}):(\d{1,5}):(\d{1,5})$/);
+            if (match) {
+                return {
+                    world: match[1],
+                    cx: parseInt(match[2]),
+                    cz: parseInt(match[3])
+                };
+            }
+            return null;
+        }
+        function parseChunkKey(key) {
+            var match = key.match(/^(.{1,8}):(\d{1,5}):(\d{1,5})$/);
+            if (match) {
+                return {
+                    world: match[1],
+                    cx: parseInt(match[2]),
+                    cz: parseInt(match[3])
+                };
+            }
+            return null;
+        }
+        function hashSeed(seed) {
+            var h = 2166136261 >>> 0;
+            for (var i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0;
+            return h % MAP_SIZE;
+        }
+        function calculateSpawnPoint(seed) {
+            var rnd = makeSeededRandom(seed);
+            var x = Math.floor(rnd() * MAP_SIZE);
+            var z = Math.floor(rnd() * MAP_SIZE);
+            var cx = Math.floor(x / CHUNK_SIZE);
+            var cz = Math.floor(z / CHUNK_SIZE);
+            var chunk = chunkManager.getChunk(cx, cz);
+            if (!chunk.generated) chunkManager.generateChunk(chunk);
+            var y = MAX_HEIGHT - 1;
+            while (y > 0 && chunk.get(x % CHUNK_SIZE, y, z % CHUNK_SIZE) === BLOCK_AIR) y--;
+            y += 2;
+            return { x: x, y: y, z: z };
+        }
+        var skyProps;
+        function createEmberTexture(seed) {
+            const size = 32;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const noise = makeNoise(seed + '_ember');
+            const imageData = context.createImageData(size, size);
+            const data = imageData.data;
+            const rnd = makeSeededRandom(seed + '_ember_color');
+
+            const colorRamp = [
+                { r: Math.floor(rnd() * 100), g: 0, b: 0 },    // Dark base
+                { r: 255, g: Math.floor(rnd() * 150), b: 0 }, // Mid color
+                { r: 255, g: 255, b: Math.floor(rnd() * 200) } // Bright tip
+            ];
+
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    const value = fbm(noise, x / 8, y / 8, 3, 0.6);
+                    const index = (y * size + x) * 4;
+                    let r, g, b;
+                    if (value < 0.5) {
+                        const t = value / 0.5;
+                        r = colorRamp[0].r + (colorRamp[1].r - colorRamp[0].r) * t;
+                        g = colorRamp[0].g + (colorRamp[1].g - colorRamp[0].g) * t;
+                        b = colorRamp[0].b + (colorRamp[1].b - colorRamp[0].b) * t;
+                    } else {
+                        const t = (value - 0.5) / 0.5;
+                        r = colorRamp[1].r + (colorRamp[2].r - colorRamp[1].r) * t;
+                        g = colorRamp[1].g + (colorRamp[2].g - colorRamp[1].g) * t;
+                        b = colorRamp[1].b + (colorRamp[2].b - colorRamp[1].b) * t;
+                    }
+                    data[index] = r;
+                    data[index + 1] = g;
+                    data[index + 2] = b;
+                    data[index + 3] = value > 0.3 ? 255 : 0; // Make parts of the flame transparent
+                }
+            }
+            context.putImageData(imageData, 0, 0);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createMobTexture(seed, partName, striped = false) {
+            const cacheKey = `${seed}:${partName}:${striped}`;
+            if (textureCache.has(cacheKey)) {
+                return textureCache.get(cacheKey);
+            }
+
+            const size = 16;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const rnd = makeSeededRandom(seed + '_mob_texture_' + partName);
+
+            let baseColor, secondaryColor;
+            if (partName.includes('body')) {
+                baseColor = new THREE.Color().setHSL(rnd(), 0.2 + rnd() * 0.8, 0.2 + rnd() * 0.6);
+                secondaryColor = baseColor.clone().multiplyScalar(0.7 + rnd() * 0.2);
+            } else { // Mouth/Pinchers
+                baseColor = new THREE.Color().setHSL(rnd() * 0.1 + 0.05, 0.2 + rnd() * 0.2, 0.2 + rnd() * 0.1); // Darker
+                secondaryColor = baseColor.clone().multiplyScalar(1.2 + rnd() * 0.2);
+            }
+
+            context.fillStyle = baseColor.getStyle();
+            context.fillRect(0, 0, size, size);
+
+            const patternNoise = makeNoise(seed + '_mob_pattern_' + partName);
+            for (let i = 0; i < 50; i++) {
+                const x = Math.floor(rnd() * size);
+                const y = Math.floor(rnd() * size);
+                const noiseVal = patternNoise(x / size, y / size);
+                const color = (noiseVal > 0.5) ? secondaryColor : baseColor.clone().lerp(secondaryColor, 0.5);
+                context.fillStyle = color.getStyle();
+                context.fillRect(x, y, 1, 1);
+            }
+
+            if (striped) {
+                const borderColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.2);
+                context.fillStyle = borderColor.getStyle();
+                context.fillRect(0, 0, size, 1); // Top
+                context.fillRect(0, size - 1, size, 1); // Bottom
+                context.fillRect(0, 0, 1, size); // Left
+                context.fillRect(size - 1, 0, 1, size); // Right
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            textureCache.set(cacheKey, texture);
+            return texture;
+        }
+
+        function createBlockTexture(seed, blockId) {
+            const cacheKey = `${seed}:${blockId}`;
+            if (textureCache.has(cacheKey)) {
+                return textureCache.get(cacheKey);
+            }
+
+            const size = 16;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+
+            const rnd = makeSeededRandom(seed + '_block_texture_' + blockId);
+            const baseColor = new THREE.Color(BLOCKS[blockId].color);
+            let secondaryColor = new THREE.Color().setHSL(rnd(), 0.5 + rnd() * 0.3, 0.2 + rnd() * 0.3);
+
+            // Base fill
+            context.fillStyle = baseColor.getStyle();
+            context.fillRect(0, 0, size, size);
+
+            // Seed-driven pattern selection
+            const patternType = Math.floor(rnd() * 5); // Added new patterns
+            const patternNoise = makeNoise(seed + '_pattern_noise_' + blockId);
+
+            context.strokeStyle = secondaryColor.getStyle();
+            context.lineWidth = 1 + Math.floor(rnd() * 2);
+
+            // Draw patterns
+            if (patternType === 0) { // Broken Horizontal Lines
+                for (let y = 2; y < size; y += 4) {
+                    context.beginPath();
+                    for (let x = 0; x < size; x++) {
+                        if (patternNoise(x / 8, y / 8) > 0.4) {
+                            context.moveTo(x, y);
+                            context.lineTo(x + 1, y);
+                        }
+                    }
+                    context.stroke();
+                }
+            } else if (patternType === 1) { // Broken Vertical Lines
+                for (let x = 2; x < size; x += 4) {
+                    context.beginPath();
+                    for (let y = 0; y < size; y++) {
+                        if (patternNoise(x / 8, y / 8) > 0.4) {
+                            context.moveTo(x, y);
+                            context.lineTo(x, y + 1);
+                        }
+                    }
+                    context.stroke();
+                }
+            } else if (patternType === 2) { // Broken Diagonal Lines
+                for (let i = -size; i < size; i += 4) {
+                     context.beginPath();
+                    for (let j = 0; j < size * 2; j++) {
+                        if (patternNoise(i / 8, j / 8) > 0.6) {
+                            context.moveTo(i + j, j);
+                            context.lineTo(i + j + 1, j + 1);
+                        }
+                    }
+                    context.stroke();
+                }
+            } else if (patternType === 3) { // Wavy Lines
+                for (let y = 0; y < size; y += 4) {
+                    context.beginPath();
+                    context.moveTo(0, y);
+                    for (let x = 0; x < size; x++) {
+                        const wave = Math.sin(x / 4 + rnd() * 10) * 2;
+                        if (patternNoise(x / 8, y / 8) > 0.3) {
+                            context.lineTo(x, y + wave);
+                        } else {
+                            context.moveTo(x, y + wave);
+                        }
+                    }
+                    context.stroke();
+                }
+            } // Type 4 is just base color + border (or no border)
+
+            // Border logic: apply border to only a few seed-selected block types
+            if (rnd() > 0.8) { // ~20% of block types will have a border
+                const borderColor = baseColor.clone().multiplyScalar(0.7);
+                context.strokeStyle = borderColor.getStyle();
+                context.lineWidth = 1;
+                context.strokeRect(0.5, 0.5, size - 1, size - 1);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            textureCache.set(cacheKey, texture);
+            return texture;
+        }
+
+        function createCloudTexture(seed) {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const noise = makeNoise(seed + '_clouds');
+
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const value = fbm(noise, i / 32, j / 32, 4, 0.5) * 255;
+                    const alpha = Math.max(0, value - 128);
+                    context.fillStyle = `rgba(255, 255, 255, ${alpha / 128})`;
+                    context.fillRect(i, j, 1, 1);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function initSky() {
+            const skyRnd = makeSeededRandom(worldSeed + '_sky');
+            const baseHue = skyRnd();
+            const baseSat = 0.5 + skyRnd() * 0.5;
+            const dayLightness = 0.6 + skyRnd() * 0.2;
+            const nightLightness = 0.05 + skyRnd() * 0.05;
+
+            skyProps = {
+                dayColor: new THREE.Color().setHSL(baseHue, baseSat, dayLightness),
+                nightColor: new THREE.Color().setHSL(baseHue, baseSat * 0.8, nightLightness),
+                cloudColor: new THREE.Color().setHSL(skyRnd(), 0.2 + skyRnd() * 0.3, 0.8),
+                suns: [],
+                moons: []
+            };
+
+            const numSuns = 1 + Math.floor(skyRnd() * 3); // 1 to 3 suns
+            for (let i = 0; i < numSuns; i++) {
+                const sunSize = 80 + skyRnd() * 120;
+                const sunColor = new THREE.Color().setHSL(skyRnd(), 0.8 + skyRnd() * 0.2, 0.6 + skyRnd() * 0.2);
+                const sun = new THREE.Mesh(
+                    new THREE.SphereGeometry(sunSize, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: sunColor })
+                );
+                skyProps.suns.push({ mesh: sun, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(sun);
+            }
+
+            const numMoons = Math.floor(skyRnd() * 4); // 0 to 3 moons
+            for (let i = 0; i < numMoons; i++) {
+                const moonSize = 40 + skyRnd() * 60;
+                const moonColor = new THREE.Color().setHSL(skyRnd(), 0.1 + skyRnd() * 0.2, 0.7 + skyRnd() * 0.2);
+
+                // Create a base sphere geometry for the moon
+                const moonShape = new THREE.SphereGeometry(moonSize, 32, 32);
+                const moonNoise = makeNoise(worldSeed + '_moon_' + i);
+                const positions = moonShape.attributes.position;
+                const vertex = new THREE.Vector3();
+
+                // Apply noise to vertices to create an irregular, asteroid-like shape
+                // We use Fractional Brownian Motion (fbm) for a more natural, craggy look.
+                // By combining 2D noise on different axes, we can simulate a 3D noise field.
+                for (let j = 0; j < positions.count; j++) {
+                    vertex.fromBufferAttribute(positions, j);
+
+                    const noiseFactor = 0.8; // Controls how irregular the shape is
+                    const noise = fbm(moonNoise, vertex.x * 0.05, vertex.y * 0.05, 3, 0.5) +
+                        fbm(moonNoise, vertex.y * 0.05, vertex.z * 0.05, 3, 0.5) +
+                        fbm(moonNoise, vertex.z * 0.05, vertex.x * 0.05, 3, 0.5);
+
+                    // Add a second layer of noise for craters
+                    const craterNoise = fbm(moonNoise, vertex.x * 0.3, vertex.y * 0.3, 3, 0.5);
+                    const craterDepth = 0.15 * craterNoise;
+
+                    // Average the noise and apply it to the vertex, pushing it outwards from the center.
+                    vertex.multiplyScalar(1 + (noise / 3) * noiseFactor - craterDepth);
+                    positions.setXYZ(j, vertex.x, vertex.y, vertex.z);
+                }
+                moonShape.computeVertexNormals(); // Recalculate normals for correct lighting after displacement.
+
+                const moon = new THREE.Mesh(
+                    moonShape,
+                    new THREE.MeshBasicMaterial({ color: moonColor })
+                );
+                skyProps.moons.push({ mesh: moon, angleOffset: skyRnd() * Math.PI * 2 });
+                scene.add(moon);
+            }
+
+            stars = new THREE.Group();
+            const starGeometry = new THREE.BufferGeometry();
+            const starVertices = [];
+            const starNoise = makeNoise(worldSeed + '_stars');
+            for (let i = 0; i < 5000; i++) {
+                const theta = skyRnd() * Math.PI * 2;
+                const phi = Math.acos(2 * skyRnd() - 1);
+                const x = 4000 * Math.sin(phi) * Math.cos(theta);
+                const y = 4000 * Math.sin(phi) * Math.sin(theta);
+                const z = 4000 * Math.cos(phi);
+                if (starNoise(x * 0.005, z * 0.005) > 0.7) {
+                    starVertices.push(x, y, z);
+                }
+            }
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 + skyRnd() * 3 });
+            const starPoints = new THREE.Points(starGeometry, starMaterial);
+            stars.add(starPoints);
+            scene.add(stars);
+
+            clouds = new THREE.Group();
+            const cloudTexture = createCloudTexture(worldSeed);
+            const numClouds = Math.floor(skyRnd() * 80);
+            for (let i = 0; i < numClouds; i++) {
+                const cloud = new THREE.Mesh(
+                    new THREE.PlaneGeometry(200 + skyRnd() * 300, 100 + skyRnd() * 150),
+                    new THREE.MeshBasicMaterial({
+                        map: cloudTexture,
+                        color: skyProps.cloudColor,
+                        transparent: true,
+                        opacity: 0.6 + skyRnd() * 0.3,
+                        side: THREE.DoubleSide
+                    })
+                );
+                cloud.position.set(
+                    (skyRnd() - 0.5) * 8000,
+                    200 + skyRnd() * 150,
+                    (skyRnd() - 0.5) * 8000
+                );
+                cloud.rotation.y = skyRnd() * Math.PI * 2;
+                clouds.add(cloud);
+            }
+            scene.add(clouds);
+        }
+
+        function updateSky(dt) {
+            const now = new Date();
+            let hours = now.getHours() + now.getMinutes() / 60;
+            const timeRatio = hours / 24;
+            const timeAngle = timeRatio * Math.PI * 2;
+
+            const sunAngleForLight = timeAngle + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0);
+            const sunY = Math.sin(sunAngleForLight);
+            isNight = sunY < -0.1;
+
+            skyProps.suns.forEach(sun => {
+                const angle = timeAngle + sun.angleOffset;
+                sun.mesh.position.set(camera.position.x + 4000 * Math.cos(angle), camera.position.y + 4000 * Math.sin(angle), camera.position.z + 1500 * Math.sin(angle));
+                sun.mesh.visible = Math.sin(angle) > -0.1;
+            });
+
+            skyProps.moons.forEach(moon => {
+                const angle = timeAngle + moon.angleOffset + Math.PI;
+                moon.mesh.position.set(camera.position.x + 3800 * Math.cos(angle), camera.position.y + 3800 * Math.sin(angle), camera.position.z + 1200 * Math.sin(angle));
+                moon.mesh.visible = Math.sin(angle) > -0.1;
+            });
+
+            stars.visible = isNight;
+            stars.rotation.y += dt * 0.005;
+
+            clouds.children.forEach(cloud => {
+                cloud.position.x = modWrap(cloud.position.x + dt * (15 + Math.random() * 10), 8000);
+            });
+
+            const tNorm = Math.max(0, sunY);
+            scene.background = new THREE.Color().copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - tNorm);
+
+            // Create a gradual transition for lighting during dusk and dawn.
+            // We define a transition range based on the sun's vertical position (sunY).
+            const transitionStart = -0.2; // Sun is below horizon
+            const transitionEnd = 0.2;   // Sun is above horizon
+
+            // Calculate a factor from 0 (full night) to 1 (full day)
+            let lightFactor = (sunY - transitionStart) / (transitionEnd - transitionStart);
+            lightFactor = Math.max(0, Math.min(1, lightFactor)); // Clamp between 0 and 1
+
+            const ambientLight = scene.getObjectByProperty('type', 'AmbientLight');
+            const directionalLight = scene.getObjectByProperty('type', 'DirectionalLight');
+            const hemisphereLight = scene.getObjectByProperty('type', 'HemisphereLight');
+
+            const dayAmbient = 0.2;
+            const nightAmbient = 0.01;
+            const dayDirectional = 0.95;
+            const nightDirectional = 0;
+
+            // Interpolate the light intensities using the calculated factor.
+            // This creates a smooth fade between day and night lighting.
+            if (ambientLight) {
+                ambientLight.intensity = nightAmbient + (dayAmbient - nightAmbient) * lightFactor;
+            }
+            if (directionalLight) {
+                directionalLight.intensity = nightDirectional + (dayDirectional - nightDirectional) * lightFactor;
+            }
+            if (hemisphereLight) {
+                const dayHemi = 0.6;
+                const nightHemi = 0.02;
+                hemisphereLight.intensity = nightHemi + (dayHemi - nightHemi) * lightFactor;
+            }
+        }
+
+        function createFlameParticles(x, y, z) {
+            const particleCount = 20;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 0.01,
+                    y: Math.random() * 0.05,
+                    z: (Math.random() - 0.5) * 0.01,
+                    life: Math.random() * 1
+                });
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.velocities = velocities;
+
+            const material = new THREE.PointsMaterial({
+                color: 0xffaa33,
+                size: 0.2,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const particleSystem = new THREE.Points(particles, material);
+            particleSystem.position.set(x, y, z);
+            return particleSystem;
+        }
+
+        function createSmokeParticle(x, y, z, count) {
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const velocities = [];
+            const opacities = new Float32Array(count);
+
+            for (let i = 0; i < count; i++) {
+                positions[i * 3] = x + (Math.random() - 0.5) * 10;
+                positions[i * 3 + 1] = y + (Math.random() - 0.5) * 5;
+                positions[i * 3 + 2] = z + (Math.random() - 0.5) * 10;
+                opacities[i] = 1.0;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 4,
+                    y: 10 + Math.random() * 15,
+                    z: (Math.random() - 0.5) * 4,
+                    life: 6 + Math.random() * 6
+                });
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('alpha', new THREE.BufferAttribute(opacities, 1));
+            particles.velocities = velocities;
+
+            const material = new THREE.PointsMaterial({
+                size: 4,
+                map: new THREE.CanvasTexture(document.createElement('canvas')),
+                blending: THREE.NormalBlending,
+                depthWrite: false,
+                transparent: true,
+                vertexColors: true, // Use vertex alpha
+                color: 0x888888
+            });
+
+            const smokeTextureCanvas = document.createElement('canvas');
+            smokeTextureCanvas.width = 64;
+            smokeTextureCanvas.height = 64;
+            const context = smokeTextureCanvas.getContext('2d');
+            const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(200, 200, 200, 0.5)');
+            gradient.addColorStop(1, 'rgba(200, 200, 200, 0)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 64, 64);
+            material.map.image = smokeTextureCanvas;
+            material.map.needsUpdate = true;
+
+
+            const particleSystem = new THREE.Points(particles, material);
+            // We set the particle system position to the origin because the individual particle positions are already in world space.
+            particleSystem.position.set(0, 0, 0);
+            return particleSystem;
+        }
+
+        function Chunk(cx, cz) {
+            this.cx = cx;
+            this.cz = cz;
+            this.key = makeChunkKey(worldName, cx, cz);
+            this.data = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE);
+            this.mesh = null;
+            this.generated = false;
+            this.needsRebuild = true;
+        }
+        Chunk.prototype.idx = function (x, y, z) { return (y * CHUNK_SIZE + z) * CHUNK_SIZE + x; };
+        Chunk.prototype.get = function (x, y, z) {
+            if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE || y < 0 || y >= MAX_HEIGHT) return BLOCK_AIR;
+            return this.data[this.idx(x, y, z)];
+        };
+        Chunk.prototype.set = function (x, y, z, v) {
+            if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE || y < 0 || y >= MAX_HEIGHT) return;
+            this.data[this.idx(x, y, z)] = v;
+            this.needsRebuild = true;
+        };
+        function ChunkManager(seed) {
+            console.log('[WorldGen] Initializing ChunkManager with seed:', seed);
+            this.seed = seed;
+            this.noise = makeNoise(seed);
+            this.blockNoise = makeNoise(seed + '_block');
+            this.chunks = new Map();
+            this.lastPcx = null;
+            this.lastPcz = null;
+            // meshGroup is already defined and added to scene in initThree(); do not redefine here
+            console.log('[ChunkManager] Using existing meshGroup for chunk rendering');
+        }
+        ChunkManager.prototype.getChunk = function (cx, cz) {
+            var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+            var wrappedCx = modWrap(cx, chunksPerSide);
+            var wrappedCz = modWrap(cz, chunksPerSide);
+            var key = makeChunkKey(worldName, wrappedCx, wrappedCz);
+            if (this.chunks.has(key)) return this.chunks.get(key);
+            var c = new Chunk(wrappedCx, wrappedCz);
+            this.chunks.set(c.key, c);
+            pending.add(c.key);
+            return c;
+        };
+        ChunkManager.prototype.generateChunk = function (chunk) {
+            if (chunk.generating || chunk.generated) return;
+            chunk.generating = true;
+            worker.postMessage({ type: 'generate_chunk', key: chunk.key });
+        };
+        ChunkManager.prototype.pickBiome = function (n) {
+            if (n > 0.68) return BIOMES.find(function (b) { return b.key === 'snow'; }) || BIOMES[0];
+            if (n < 0.25) return BIOMES.find(function (b) { return b.key === 'desert'; }) || BIOMES[1];
+            if (n > 0.45) return BIOMES.find(function (b) { return b.key === 'forest'; }) || BIOMES[2];
+            if (n > 0.60) return BIOMES.find(function (b) { return b.key === 'mountain'; }) || BIOMES[4];
+            if (n < 0.35) return BIOMES.find(function (b) { return b.key === 'swamp'; }) || BIOMES[5];
+            return BIOMES.find(function (b) { return b.key === 'plains'; }) || BIOMES[0];
+        };
+        ChunkManager.prototype.placeTree = function (chunk, lx, cy, lz, rnd) {
+            var h = 5 + Math.floor(rnd() * 3);
+            for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 7);
+            for (var dx = -2; dx <= 2; dx++) for (var dz = -2; dz <= 2; dz++) for (var dy = 0; dy <= 3; dy++) {
+                var rx = lx + dx, ry = cy + h - 2 + dy, rz = lz + dz;
+                if (ry < MAX_HEIGHT && rx >= 0 && rx < CHUNK_SIZE && rz >= 0 && rz < CHUNK_SIZE) {
+                    if (Math.abs(dx) + Math.abs(dz) + Math.abs(dy) <= 4 && chunk.get(rx, ry, rz) === BLOCK_AIR) chunk.set(rx, ry, rz, 8);
+                }
+            }
+        };
+        ChunkManager.prototype.placeFlower = function (chunk, lx, cy, lz) {
+            if (cy < MAX_HEIGHT && chunk.get(lx, cy, lz) === BLOCK_AIR) chunk.set(lx, cy, lz, 12);
+        };
+        ChunkManager.prototype.placeCactus = function (chunk, lx, cy, lz, rnd) {
+            var h = 1 + Math.floor(rnd() * 3);
+            for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunk.set(lx, cy + i, lz, 9);
+        };
+        ChunkManager.prototype.buildChunkMesh = function (chunk) {
+            updateTorchRegistry(chunk);
+            if (chunk.mesh) { meshGroup.remove(chunk.mesh); disposeObject(chunk.mesh); chunk.mesh = null; }
+
+            // Add smoke for volcanoes
+            const volcano = volcanoes.find(v => v.chunkKey === chunk.key);
+            if (volcano && Math.random() < 0.3) { // Make smoke intermittent
+                const smokeCount = Math.floor(volcano.lavaCount / 4); // And less dense
+                const smokeSystem = createSmokeParticle(volcano.x, volcano.y, volcano.z, smokeCount);
+                smokeSystem.userData.chunkKey = chunk.key;
+                smokeParticles.push(smokeSystem);
+                scene.add(smokeSystem);
+            }
+
+            if (useGreedyMesher) {
+                const group = buildGreedyMesh(chunk, foreignBlockOrigins, worldSeed);
+                const pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+                const pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+                const baseX = chunk.cx * CHUNK_SIZE;
+                const baseZ = chunk.cz * CHUNK_SIZE;
+                let renderBaseX = baseX;
+                let renderBaseZ = baseZ;
+
+                if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
+                    if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
+                    else renderBaseX += MAP_SIZE;
+                }
+                if (Math.abs(chunk.cz - pcz) > CHUNKS_PER_SIDE / 2) {
+                    if (chunk.cz > pcz) renderBaseZ -= MAP_SIZE;
+                    else renderBaseZ += MAP_SIZE;
+                }
+                group.position.set(renderBaseX, 0, renderBaseZ);
+                chunk.mesh = group;
+                meshGroup.add(chunk.mesh);
+                chunk.needsRebuild = false;
+                return;
+            }
+
+            var lists = {};
+			var pcx = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
+
+            var baseX = chunk.cx * CHUNK_SIZE;
+            var baseZ = chunk.cz * CHUNK_SIZE;
+
+            var renderBaseX = baseX;
+            var renderBaseZ = baseZ;
+
+            if (Math.abs(chunk.cx - pcx) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cx > pcx) renderBaseX -= MAP_SIZE;
+                else renderBaseX += MAP_SIZE;
+            }
+            if (Math.abs(chunk.cz - pcz) > CHUNKS_PER_SIDE / 2) {
+                if (chunk.cz > pcz) renderBaseZ -= MAP_SIZE;
+                else renderBaseZ += MAP_SIZE;
+            }
+
+            for (var x = 0; x < CHUNK_SIZE; x++) {
+                for (var z = 0; z < CHUNK_SIZE; z++) {
+                    for (var y = 0; y < MAX_HEIGHT; y++) {
+                        var id = chunk.get(x, y, z);
+                        if (!id || id === BLOCK_AIR) continue;
+
+                        var wx = modWrap(baseX + x, MAP_SIZE);
+                        var wz = modWrap(baseZ + z, MAP_SIZE);
+                        var renderX = renderBaseX + x;
+                        var renderZ = renderBaseZ + z;
+
+                        var faces = [
+                            { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 },
+                            { x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 },
+                            { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 }
+                        ];
+
+                        var isCurrentBlockTransparent = BLOCKS[id] && BLOCKS[id].transparent;
+                        var exposed = false;
+
+                        for (var i = 0; i < faces.length; i++) {
+                            var face = faces[i];
+                            var neighborId = this.getBlockGlobal(chunk.cx, chunk.cz, x + face.x, y + face.y, z + face.z);
+                            var isNeighborTransparent = (neighborId === BLOCK_AIR) || (BLOCKS[neighborId] && BLOCKS[neighborId].transparent);
+
+                            if ((isCurrentBlockTransparent !== isNeighborTransparent) || (isCurrentBlockTransparent && id !== neighborId)) {
+                                exposed = true;
+                                break;
+                            }
+                        }
+                        if (!exposed) continue;
+
+                        const coordKey = `${wx},${y},${wz}`;
+                        const blockOriginSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                        const materialKey = `${id}-${blockOriginSeed}`;
+
+                        if (!lists[materialKey]) {
+                            lists[materialKey] = {
+                                positions: [],
+                                seed: blockOriginSeed,
+                                blockId: id
+                            };
+                        }
+                        lists[materialKey].positions.push({ x: renderX, y: y, z: renderZ });
+                    }
+                }
+            }
+            var group = new THREE.Group();
+            for (var matKey in lists) {
+                const list = lists[matKey];
+                if (!list.positions || list.positions.length === 0) continue;
+
+                var id = list.blockId;
+                var seed = list.seed;
+                var box = new THREE.BoxGeometry(1, 1, 1);
+                var positions = []; var normals = []; var uvs = []; var indices = []; var vertOffset = 0;
+                for (var p of list.positions) {
+                    var posAttr = box.attributes.position.array;
+                    var normAttr = box.attributes.normal.array;
+                    var uvAttr = box.attributes.uv.array;
+                    var idxAttr = box.index.array;
+                    for (var vi = 0; vi < box.attributes.position.count; vi++) {
+                        positions.push(posAttr[vi * 3 + 0] + p.x + 0.5, posAttr[vi * 3 + 1] + p.y + 0.5, posAttr[vi * 3 + 2] + p.z + 0.5);
+                        normals.push(normAttr[vi * 3 + 0], normAttr[vi * 3 + 1], normAttr[vi * 3 + 2]);
+                        uvs.push(uvAttr[vi * 2 + 0], uvAttr[vi * 2 + 1]);
+                    }
+                    for (var ii = 0; ii < idxAttr.length; ii++) indices.push(idxAttr[ii] + vertOffset);
+                    vertOffset += box.attributes.position.count;
+                }
+                var geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+                geom.setIndex(indices);
+                geom.computeBoundingSphere();
+                var info = BLOCKS[id] || { color: '#ff00ff' };
+                var mat;
+
+                if (info.light) {
+                    mat = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
+                } else if (info.transparent) {
+                    mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                } else {
+                    const blockTexture = createBlockTexture(seed, id);
+                    mat = new THREE.MeshStandardMaterial({ map: blockTexture });
+                }
+                var mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
+            }
+            chunk.mesh = group;
+            meshGroup.add(chunk.mesh);
+            chunk.needsRebuild = false;
+        };
+        ChunkManager.prototype.getBlockGlobal = function (cx, cz, lx, y, lz) {
+            var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+            var wrappedWx = modWrap(cx * CHUNK_SIZE + lx, MAP_SIZE);
+            var wrappedWz = modWrap(cz * CHUNK_SIZE + lz, MAP_SIZE);
+            var newCx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var newCz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var newLx = modWrap(wrappedWx, CHUNK_SIZE);
+            var newLz = modWrap(wrappedWz, CHUNK_SIZE);
+            var chunk = this.getChunk(newCx, newCz);
+            if (!chunk.generated) this.generateChunk(chunk);
+            return chunk.get(newLx, y, newLz);
+        };
+        ChunkManager.prototype.setBlockGlobal = function (wx, wy, wz, bid, doBroadcast = true, originSeed = null) {
+            if (wy < 0 || wy >= MAX_HEIGHT) return;
+            var wrappedWx = modWrap(wx, MAP_SIZE);
+            var wrappedWz = modWrap(wz, MAP_SIZE);
+            var cx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var cz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var lx = Math.floor(wrappedWx % CHUNK_SIZE);
+            var lz = Math.floor(wrappedWz % CHUNK_SIZE);
+            var chunk = this.getChunk(cx, cz);
+            if (!chunk.generated) this.generateChunk(chunk);
+            var prev = chunk.get(lx, wy, lz);
+            if (prev === bid) return;
+            chunk.set(lx, wy, lz, bid);
+            var key = chunk.key;
+            if (!CHUNK_DELTAS.has(key)) CHUNK_DELTAS.set(key, []);
+            CHUNK_DELTAS.get(key).push({ x: lx, y: wy, z: lz, b: bid });
+            chunk.needsRebuild = true;
+
+            // Mark adjacent chunks as dirty if the block is on a boundary
+            if (lx === 0) this.getChunk(cx - 1, cz).needsRebuild = true;
+            if (lx === CHUNK_SIZE - 1) this.getChunk(cx + 1, cz).needsRebuild = true;
+            if (lz === 0) this.getChunk(cx, cz - 1).needsRebuild = true;
+            if (lz === CHUNK_SIZE - 1) this.getChunk(cx, cz + 1).needsRebuild = true;
+
+            updateSaveChangesButton();
+
+            if (doBroadcast) {
+                const message = JSON.stringify({
+                    type: 'block_change',
+                    wx: wx, wy: wy, wz: wz, bid: bid,
+                    prevBid: prev, // Include the previous block ID
+                    username: userName, // Let the server know who made the change
+                    originSeed: originSeed
+                });
+
+                // Both host and client send the change to their peer(s).
+                // The host will then relay this to other clients.
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                        console.log(`[WebRTC] Sending block change to ${peerUser}`);
+                        peerData.dc.send(message);
+                    }
+                }
+            }
+        };
+
+        ChunkManager.prototype.applyDeltasToChunk = function (chunkKey, changes) {
+            var normalizedKey = chunkKey.replace(/^#/, '');
+            var parsed = parseChunkKey(normalizedKey);
+            if (!parsed) return;
+            var chunk = this.chunks.get(normalizedKey);
+            if (!chunk) return;
+
+            for (var d of changes) {
+                if (d.x < 0 || d.x >= CHUNK_SIZE || d.y < 0 || d.y >= MAX_HEIGHT || d.z < 0 || d.z >= CHUNK_SIZE) continue;
+                var newBlockId = (d.b === BLOCK_AIR || (d.b && BLOCKS[d.b])) ? d.b : 4;
+                chunk.set(d.x, d.y, d.z, newBlockId);
+            }
+
+            updateTorchRegistry(chunk);
+            chunk.needsRebuild = true;
+            this.buildChunkMesh(chunk);
+        };
+
+        ChunkManager.prototype.markDirty = function (chunkKey) {
+            var chunk = this.chunks.get(chunkKey);
+            if (chunk) {
+                chunk.needsRebuild = true;
+                this.buildChunkMesh(chunk);
+            }
+        };
+        ChunkManager.prototype.getSurfaceY = function (wx, wz) {
+            var wrappedWx = modWrap(Math.floor(wx), MAP_SIZE);
+            var wrappedWz = modWrap(Math.floor(wz), MAP_SIZE);
+            var cx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var cz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var chunk = this.getChunk(cx, cz);
+            if (!chunk.generated) this.generateChunk(chunk);
+            var lx = Math.floor(wrappedWx % CHUNK_SIZE);
+            var lz = Math.floor(wrappedWz % CHUNK_SIZE);
+            for (var y = MAX_HEIGHT - 1; y >= 0; y--) {
+                if (chunk.get(lx, y, lz) !== BLOCK_AIR && chunk.get(lx, y, lz) !== 6) return y + 1;
+            }
+            return SEA_LEVEL;
+        };
+        ChunkManager.prototype.getSurfaceYForBoulders = function (wx, wz) {
+            var wrappedWx = modWrap(Math.floor(wx), MAP_SIZE);
+            var wrappedWz = modWrap(Math.floor(wz), MAP_SIZE);
+            var cx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var cz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var chunk = this.getChunk(cx, cz);
+            if (!chunk.generated) this.generateChunk(chunk);
+            var lx = Math.floor(wrappedWx % CHUNK_SIZE);
+            var lz = Math.floor(wrappedWz % CHUNK_SIZE);
+            for (var y = MAX_HEIGHT - 1; y >= 0; y--) {
+                const blockId = chunk.get(lx, y, lz);
+                if (blockId !== BLOCK_AIR && blockId !== 6 && blockId !== 16) return y + 1; // Ignore lava (16)
+            }
+            return SEA_LEVEL;
+        };
+        ChunkManager.prototype.preloadChunks = function (cx, cz, radius) {
+            var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+            var queue = [];
+            for (var r = 0; r <= radius; r++) {
+                for (var dx = -r; dx <= r; dx++) {
+                    for (var dz = -r; dz <= r; dz++) {
+                        if (Math.abs(dx) === r || Math.abs(dz) === r) {
+                            queue.push({ cx: cx + dx, cz: cz + dz, dist: Math.abs(dx) + Math.abs(dz) });
+                        }
+                    }
+                }
+            }
+            queue.sort(function (a, b) { return a.dist - b.dist; });
+            var index = 0;
+            function processNext() {
+                if (index >= queue.length) return;
+                var dcx = queue[index].cx, dcz = queue[index].cz;
+                var wrappedCx = modWrap(dcx, chunksPerSide);
+                var wrappedCz = modWrap(dcz, chunksPerSide);
+                var chunk = this.getChunk(wrappedCx, wrappedCz);
+                if (!chunk.generated) this.generateChunk(chunk);
+                index++;
+                setTimeout(processNext.bind(this), 33);
+            }
+            processNext.call(this);
+        };
+        ChunkManager.prototype.update = function (playerX, playerZ, playerDirection) {
+            var pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
+            var pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
+            if (pcx !== this.lastPcx || pcz !== this.lastPcz) {
+                this.lastPcx = pcx;
+                this.lastPcz = pcz;
+            }
+
+            var neededChunks = [];
+            for (var dx = -currentLoadRadius; dx <= currentLoadRadius; dx++) {
+                for (var dz = -currentLoadRadius; dz <= currentLoadRadius; dz++) {
+                    var cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
+                    var cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
+                    neededChunks.push({ cx: cx, cz: cz, dx: dx, dz: dz });
+                }
+            }
+
+            neededChunks.sort((a, b) => {
+                const distASq = a.dx * a.dx + a.dz * a.dz;
+                const distBSq = b.dx * b.dx + b.dz * b.dz;
+
+                let aIsInFront = false;
+                let bIsInFront = false;
+
+                if (playerDirection && playerDirection.lengthSq() > 0) {
+                    const vecA = new THREE.Vector3(a.dx, 0, a.dz);
+                    if (vecA.lengthSq() > 0) {
+                        if (vecA.normalize().dot(playerDirection) > 0.3) {
+                            aIsInFront = true;
+                        }
+                    }
+                    const vecB = new THREE.Vector3(b.dx, 0, b.dz);
+                    if (vecB.lengthSq() > 0) {
+                        if (vecB.normalize().dot(playerDirection) > 0.3) {
+                            bIsInFront = true;
+                        }
+                    }
+                }
+
+                if (aIsInFront && !bIsInFront) return -1;
+                if (!aIsInFront && bIsInFront) return 1;
+
+                return distASq - distBSq;
+            });
+
+            var needed = new Set();
+            var built = 0;
+            for (const chunkInfo of neededChunks) {
+                var ch = this.getChunk(chunkInfo.cx, chunkInfo.cz);
+                needed.add(ch.key);
+                if (!ch.generating && !ch.generated) this.generateChunk(ch);
+                if (ch.generated && (ch.needsRebuild || !ch.mesh) && built < 2) {
+                    this.buildChunkMesh(ch);
+                    built++;
+                }
+            }
+
+            for (var peerUser in userPositions) {
+                if (peerUser !== userName) {
+                    var pos = userPositions[peerUser];
+                    var peerCx = Math.floor(modWrap(pos.x, MAP_SIZE) / CHUNK_SIZE);
+                    var peerCz = Math.floor(modWrap(pos.z, MAP_SIZE) / CHUNK_SIZE);
+                    this.preloadChunks(peerCx, peerCz, 2);
+                }
+            }
+            const maxChunks = (currentLoadRadius * 2 + 1) * (currentLoadRadius * 2 + 1) * 10 * 3;
+            if (this.chunks.size > maxChunks) {
+                let chunks = Array.from(this.chunks.values());
+                chunks.sort((a, b) => {
+                    const distA = Math.hypot(a.cx - pcx, a.cz - pcz);
+                    const distB = Math.hypot(b.cx - pcx, b.cz - pcz);
+                    return distB - distA;
+                });
+
+                for (let i = 0; i < chunks.length && this.chunks.size > maxChunks; i++) {
+                    const ch = chunks[i];
+                    if (!needed.has(ch.key)) {
+                        if (ch.mesh) {
+                            meshGroup.remove(ch.mesh);
+                            disposeObject(ch.mesh);
+                        }
+                        // Clean up smoke particles
+                        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                            const smokeSystem = smokeParticles[i];
+                            if (smokeSystem.userData.chunkKey === ch.key) {
+                                scene.remove(smokeSystem);
+                                disposeObject(smokeSystem);
+                                smokeParticles.splice(i, 1);
+                            }
+                        }
+
+                        // Clean up torches from the registry when a chunk is unloaded
+                        const baseX = ch.cx * CHUNK_SIZE;
+                        const baseZ = ch.cz * CHUNK_SIZE;
+                        for (let x = 0; x < CHUNK_SIZE; x++) {
+                            for (let z = 0; z < CHUNK_SIZE; z++) {
+                                for (let y = 0; y < MAX_HEIGHT; y++) {
+                                    const id = ch.get(x, y, z);
+                                    if (BLOCKS[id] && BLOCKS[id].light) {
+                                        const wx = modWrap(baseX + x, MAP_SIZE);
+                                        const wz = modWrap(baseZ + z, MAP_SIZE);
+                                        const lightKey = `${wx},${y},${wz}`;
+                                        torchRegistry.delete(lightKey);
+                                    }
+                                }
+                            }
+                        }
+                        this.chunks.delete(ch.key);
+                    }
+                }
+            }
+
+            // Make all needed chunks visible
+            for (const key of needed) {
+                const chunk = this.chunks.get(key);
+                if (chunk && chunk.mesh) {
+                    chunk.mesh.visible = true;
+                }
+            }
+        };
+        function buildGreedyMesh(chunk, foreignBlockOrigins, worldSeed) {
+            const geos = {};
+            const chunkData = chunk.data;
+
+            const get = (x, y, z) => {
+                if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= MAX_HEIGHT || z < 0 || z >= CHUNK_SIZE) return 0;
+                return chunkData[y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x];
+            };
+
+            // d: dimension of sweep (0=X, 1=Y, 2=Z)
+            for (let d = 0; d < 3; d++) {
+                const u = (d + 1) % 3; // a-axis of slice plane
+                const v = (d + 2) % 3; // b-axis of slice plane
+
+                const x = [0, 0, 0]; // current voxel coordinates
+                const q = [0, 0, 0]; // sweep direction
+                q[d] = 1;
+
+                const dims = [CHUNK_SIZE, MAX_HEIGHT, CHUNK_SIZE];
+                const u_dim = dims[u];
+                const v_dim = dims[v];
+
+                const mask = new Array(u_dim * v_dim);
+
+                // Slice the chunk along the d-axis
+                for (x[d] = -1; x[d] < dims[d];) {
+                    let n = 0;
+                    // Create a 2D mask for this slice
+                    for (x[v] = 0; x[v] < v_dim; x[v]++) {
+                        for (x[u] = 0; x[u] < u_dim; x[u]++) {
+                            const blockId1 = (x[d] >= 0) ? get(x[0], x[1], x[2]) : 0;
+                            const blockId2 = (x[d] < dims[d] - 1) ? get(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : 0;
+
+                            const block1 = BLOCKS[blockId1] || {};
+                            const block2 = BLOCKS[blockId2] || {};
+
+                            const transparent1 = !blockId1 || block1.transparent;
+                            const transparent2 = !blockId2 || block2.transparent;
+
+                            let materialKey = null;
+                            if (transparent1 !== transparent2) {
+                                if (transparent1) {
+                                    // Face is on block2, pointing towards negative d
+                                    const wx = chunk.cx * CHUNK_SIZE + x[0] + q[0];
+                                    const wy = x[1] + q[1];
+                                    const wz = chunk.cz * CHUNK_SIZE + x[2] + q[2];
+                                    const coordKey = `${wx},${wy},${wz}`;
+                                    const originSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                                    materialKey = `${blockId2}-${originSeed}|-`;
+                                } else {
+                                    // Face is on block1, pointing towards positive d
+                                    const wx = chunk.cx * CHUNK_SIZE + x[0];
+                                    const wy = x[1];
+                                    const wz = chunk.cz * CHUNK_SIZE + x[2];
+                                    const coordKey = `${wx},${wy},${wz}`;
+                                    const originSeed = foreignBlockOrigins.get(coordKey) || worldSeed;
+                                    materialKey = `${blockId1}-${originSeed}|+`;
+                                }
+                            }
+                            mask[n++] = materialKey;
+                        }
+                    }
+
+                    x[d]++; // Advance to the next slice
+
+                    // Generate quads from the mask
+                    n = 0;
+                    for (let j = 0; j < v_dim; j++) {
+                        for (let i = 0; i < u_dim;) {
+                            const materialKey = mask[n];
+                            if (materialKey) {
+                                let w; // width of quad
+                                for (w = 1; i + w < u_dim && mask[n + w] === materialKey; w++);
+
+                                let h; // height of quad
+                                let done = false;
+                                for (h = 1; j + h < v_dim; h++) {
+                                    for (let k = 0; k < w; k++) {
+                                        if (mask[n + k + h * u_dim] !== materialKey) {
+                                            done = true;
+                                            break;
+                                        }
+                                    }
+                                    if (done) break;
+                                }
+
+                                // Add quad
+                                x[u] = i;
+                                x[v] = j;
+
+                                const du = [0, 0, 0]; du[u] = w;
+                                const dv = [0, 0, 0]; dv[v] = h;
+
+                                const [mat, direction] = materialKey.split('|');
+                                const isPositiveFace = direction === '+';
+
+                                const normal = [0, 0, 0];
+                                normal[d] = isPositiveFace ? 1 : -1;
+
+                                const v1 = [x[0], x[1], x[2]];
+                                const v2 = [x[0] + du[0], x[1] + du[1], x[2] + du[2]];
+                                const v3 = [x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]];
+                                const v4 = [x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]];
+
+                                if (isPositiveFace) {
+                                    v1[d] += 1; v2[d] += 1; v3[d] += 1; v4[d] += 1;
+                                }
+
+                                const quadGeo = new THREE.BufferGeometry();
+                                const positions = new Float32Array([
+                                    v1[0], v1[1], v1[2],
+                                    v3[0], v3[1], v3[2],
+                                    v2[0], v2[1], v2[2],
+                                    v4[0], v4[1], v4[2],
+                                ]);
+                                const normals = new Float32Array([...normal, ...normal, ...normal, ...normal]);
+                                const uvs = new Float32Array([0, 0, 0, h, w, 0, w, h]);
+
+                                const indices = isPositiveFace ? [0, 1, 2, 2, 1, 3] : [0, 2, 1, 2, 3, 1];
+
+                                quadGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                                quadGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                                quadGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                                quadGeo.setIndex(indices);
+
+                                if (!geos[mat]) {
+                                    const [blockId, ...seedParts] = mat.split('-');
+                                    geos[mat] = {
+                                        geometries: [],
+                                        blockId: parseInt(blockId),
+                                        seed: seedParts.join('-')
+                                    };
+                                }
+                                geos[mat].geometries.push(quadGeo);
+
+                                // Clear mask
+                                for (let l = 0; l < h; l++) {
+                                    for (let k = 0; k < w; k++) {
+                                        mask[n + k + l * u_dim] = null;
+                                    }
+                                }
+
+                                i += w;
+                                n += w;
+                            } else {
+                                i++;
+                                n++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const group = new THREE.Group();
+            for (const matKey in geos) {
+                const data = geos[matKey];
+                if (data.geometries.length > 0) {
+                    const merged = THREE.BufferGeometryUtils.mergeBufferGeometries(data.geometries);
+                    if (!merged) continue;
+                    const info = BLOCKS[data.blockId];
+                    if (!info) continue;
+                    let material;
+                    if (info.light) {
+                        material = new THREE.MeshBasicMaterial({ map: emberTexture, transparent: true, opacity: 0.8 });
+                    } else if (info.transparent) {
+                        material = new THREE.MeshBasicMaterial({ color: new THREE.Color(info.color), transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+                    } else {
+                        const blockTexture = createBlockTexture(data.seed, data.blockId);
+                        material = new THREE.MeshStandardMaterial({ map: blockTexture });
+                    }
+                    const mesh = new THREE.Mesh(merged, material);
+                    group.add(mesh);
+                }
+            }
+            return group;
+        }
+        function initThree() {
+            console.log('[initThree] Starting');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            console.log('[initThree] Scene created');
+            camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 10000);
+            camera.position.set(0, 34, 0);
+            console.log('[initThree] Camera created');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(innerWidth, innerHeight);
+            renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+            document.body.appendChild(renderer.domElement);
+            console.log('[initThree] Renderer created and appended');
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.maxPolarAngle = Math.PI / 2;
+            controls.minDistance = 2;
+            controls.maxDistance = 400;
+            controls.enabled = false;
+            console.log('[initThree] Controls created');
+            var dir = new THREE.DirectionalLight(0xffffff, 1.0); // Adjusted intensity
+            dir.position.set(100, 200, 100);
+            scene.add(dir);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2)); // Adjusted intensity
+            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.6); // Adjusted intensity
+            scene.add(hemisphereLight);
+            console.log('[initThree] Lights added');
+
+            // Create the procedural ember texture for torches
+            emberTexture = createEmberTexture(worldSeed);
+
+            meshGroup = new THREE.Group();
+            scene.add(meshGroup);
+            console.log('[initThree] Mesh group created');
+            lightManager.init();
+            initSky();
+            console.log('[initThree] Sky initialized');
+            renderer.domElement.addEventListener('pointerdown', function (e) { onPointerDown(e); });
+            renderer.domElement.addEventListener('wheel', function (e) {
+                e.preventDefault();
+                if (cameraMode === 'first') {
+                    var delta = e.deltaY > 0 ? 1 : -1;
+                    selectedHotIndex = (selectedHotIndex + delta + 9) % 9;
+                    updateHotbarUI();
+                }
+            });
+            renderer.domElement.addEventListener('click', function () {
+                if (cameraMode === 'first' && !mouseLocked && !isMobile()) {
+                    try {
+                        renderer.domElement.requestPointerLock();
+                        mouseLocked = true;
+                        document.getElementById('crosshair').style.display = 'block';
+                    } catch (e) {
+                        addMessage('Pointer lock failed. Serve over HTTPS or check iframe permissions.');
+                    }
+                }
+            });
+
+            let touchStartX = 0;
+            let touchStartY = 0;
+            renderer.domElement.addEventListener('touchstart', e => {
+                let target = e.target;
+                let isButton = false;
+                while (target && target !== document.body) {
+                    if (target.classList.contains('m-btn') || target.classList.contains('m-action')) {
+                        isButton = true;
+                        break;
+                    }
+                    target = target.parentElement;
+                }
+
+                if (isButton) return;
+
+                if (cameraMode === 'first' && e.touches.length > 0) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    e.preventDefault(); // Prevent scrolling/zooming
+                }
+            }, { passive: false });
+
+            renderer.domElement.addEventListener('touchmove', e => {
+                if (cameraMode === 'first' && e.touches.length > 0) {
+                    const touchX = e.touches[0].clientX;
+                    const touchY = e.touches[0].clientY;
+
+                    const deltaX = touchX - touchStartX;
+                    const deltaY = touchY - touchStartY;
+
+                    const sensitivity = 0.005; // Mobile sensitivity
+                    player.yaw -= deltaX * sensitivity;
+                    player.pitch -= deltaY * sensitivity;
+                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+                    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+
+                    if (avatarGroup && avatarGroup.children[3]) {
+                        avatarGroup.children[3].rotation.set(player.pitch, 0, 0);
+                    }
+
+                    touchStartX = touchX;
+                    touchStartY = touchY;
+                    e.preventDefault(); // Prevent scrolling/zooming
+                }
+            }, { passive: false });
+            document.addEventListener('pointerlockchange', function () {
+                mouseLocked = document.pointerLockElement === renderer.domElement;
+                document.getElementById('crosshair').style.display = mouseLocked && cameraMode === 'first' ? 'block' : 'none';
+            });
+            renderer.domElement.addEventListener('mousemove', function (e) {
+                if (cameraMode === 'first' && mouseLocked) {
+                    var sensitivity = 0.002;
+                    player.yaw -= e.movementX * sensitivity;
+                    player.pitch -= e.movementY * sensitivity;
+                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+                    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+
+                    if (avatarGroup) {
+                        avatarGroup.children[3].rotation.set(player.pitch, 0, 0);
+                    }
+                }
+            });
+            window.addEventListener('resize', function () {
+                camera.aspect = innerWidth / innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(innerWidth, innerHeight);
+                updateMinimap();
+            });
+            createAndSetupAvatar(userName, true);
+        }
+        var avatarGroup;
+        function createAndSetupAvatar(username, isPlayerOne, initialYaw = 0) {
+            // Clean up existing avatar if it exists
+            const existingAvatar = isPlayerOne ? avatarGroup : playerAvatars.get(username);
+            if (existingAvatar) {
+                scene.remove(existingAvatar);
+                disposeObject(existingAvatar);
+                if (!isPlayerOne) {
+                    playerAvatars.delete(username);
+                }
+            }
+
+            const avatar = new THREE.Group();
+            if (initialYaw) avatar.rotation.y = initialYaw;
+
+            const rnd = makeSeededRandom(username);
+
+            const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.5 + rnd() * 0.2) });
+            const armMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.6 + rnd() * 0.2, 0.6 + rnd() * 0.1) });
+            const legMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(rnd(), 0.7 + rnd() * 0.3, 0.4 + rnd() * 0.2) });
+
+            // Player height is 1.8. Let's scale the avatar to match.
+            const scale = 1.8 / 2.6; // Original visual height was 2.6
+
+            const legHeight = 0.8 * scale;
+            const bodyHeight = 1.2 * scale;
+            const headSize = 0.6 * scale;
+            const armHeight = 1.2 * scale;
+
+            const legWidth = 0.4 * scale;
+            const bodyWidth = 0.8 * scale;
+            const armWidth = 0.3 * scale;
+
+            const legGeo = new THREE.BoxGeometry(legWidth, legHeight, legWidth);
+            const bodyGeo = new THREE.BoxGeometry(bodyWidth, bodyHeight, 0.4 * scale);
+            const headGeo = new THREE.BoxGeometry(headSize, headSize, headSize);
+            const armGeo = new THREE.BoxGeometry(armWidth, armHeight, armWidth);
+
+            const leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.set(-bodyWidth / 4, legHeight / 2, 0);
+            const rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.set(bodyWidth / 4, legHeight / 2, 0);
+
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.set(0, legHeight + bodyHeight / 2, 0);
+
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, legHeight + bodyHeight + headSize / 2, 0);
+
+            const leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.position.set(-(bodyWidth / 2 + armWidth / 2), legHeight + bodyHeight / 2, 0);
+            const rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.position.set((bodyWidth / 2 + armWidth / 2), legHeight + bodyHeight / 2, 0);
+
+            // Face components, scaled down and positioned relative to the new head size
+            const faceMat = new THREE.MeshStandardMaterial({ color: (rnd() > 0.5) ? 0x000000 : 0xffffff });
+            const eyeSize = 0.1 * scale;
+            const mouthWidth = 0.3 * scale;
+            const mouthHeight = 0.05 * scale;
+            const faceZ = -headSize / 2 - 0.01;
+
+            const eyeGeo = new THREE.BoxGeometry(eyeSize, eyeSize, eyeSize);
+            const leftEye = new THREE.Mesh(eyeGeo, faceMat);
+            leftEye.position.set(-headSize * 0.25, headSize * 0.15, faceZ);
+            const rightEye = new THREE.Mesh(eyeGeo, faceMat);
+            rightEye.position.set(headSize * 0.25, headSize * 0.15, faceZ);
+
+            const noseGeo = new THREE.BoxGeometry(eyeSize, eyeSize, eyeSize);
+            const nose = new THREE.Mesh(noseGeo, faceMat);
+            nose.position.set(0, 0, faceZ);
+
+            const mouthGeo = new THREE.BoxGeometry(mouthWidth, mouthHeight, eyeSize);
+            const mouth = new THREE.Mesh(mouthGeo, faceMat);
+            mouth.position.set(0, -headSize * 0.2, faceZ);
+
+            head.add(leftEye, rightEye, nose, mouth);
+            avatar.add(leftLeg, rightLeg, body, head, leftArm, rightArm);
+
+            if (isPlayerOne) {
+                avatarGroup = avatar;
+            } else {
+                playerAvatars.set(username, avatar);
+            }
+            scene.add(avatar);
+            return avatar;
+        }
+        function initHotbar() {
+            var hotbar = document.getElementById('hotbar');
+            hotbar.innerHTML = '';
+            for (var i = 0; i < 9; i++) {
+                var slot = document.createElement('div');
+                slot.className = 'hot-slot';
+                slot.dataset.index = i;
+                var label = document.createElement('div');
+                label.className = 'hot-label';
+                var count = document.createElement('div');
+                count.className = 'hot-count';
+                slot.appendChild(label);
+                slot.appendChild(count);
+                hotbar.appendChild(slot);
+                slot.addEventListener('click', function () {
+                    document.querySelectorAll('.hot-slot').forEach(function (x) { x.classList.remove('active'); });
+                    this.classList.add('active');
+                    selectedHotIndex = parseInt(this.dataset.index);
+                    updateHotbarUI();
+                });
+                slot.addEventListener('contextmenu', function (e) {
+                    e.preventDefault();
+                    if (INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0) {
+                        trashIndex = this.dataset.index;
+                        document.getElementById('trashItemName').innerText = 'Trash ' + BLOCKS[INVENTORY[trashIndex].id].name + ' x' + INVENTORY[trashIndex].count + ' ? ';
+                        document.getElementById('trashConfirm').style.display = 'block';
+                    }
+                });
+            }
+            updateHotbarUI();
+        }
+        function updateHotbarUI() {
+            var hotbar = document.getElementById('hotbar');
+            var slots = hotbar.querySelectorAll('.hot-slot');
+            slots.forEach(function (s, idx) {
+                var item = INVENTORY[idx];
+                var id = item ? item.id : null;
+                var count = item ? item.count : 0;
+                var color = id && BLOCKS[id] ? hexToRgb(BLOCKS[id].color) : [0, 0, 0];
+                s.style.background = 'rgba(' + color.join(',') + ', ' + (id ? 0.45 : 0.2) + ')';
+                s.querySelector('.hot-label').innerText = id && BLOCKS[id] ? BLOCKS[id].name : '';
+                s.querySelector('.hot-count').innerText = count > 0 ? count : '';
+                s.classList.toggle('active', idx === selectedHotIndex);
+            });
+            selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
+        }
+        function addToInventory(id, count, originSeed = null) {
+            // If the block is native, its originSeed is the current world's seed.
+            const itemOriginSeed = originSeed || worldSeed;
+
+            // First, try to stack with existing items of the same ID and origin.
+            for (var i = 0; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                if (item && item.id === id && item.originSeed === itemOriginSeed && item.count < 64) {
+                    const space = 64 - item.count;
+                    const amountToAdd = Math.min(count, space);
+                    item.count += amountToAdd;
+                    count -= amountToAdd;
+                    if (count <= 0) {
+                        updateHotbarUI();
+                        return;
+                    }
+                }
+            }
+
+            // Next, find an empty slot to place the new item(s).
+            for (var i = 0; i < INVENTORY.length; i++) {
+                if (!INVENTORY[i] || INVENTORY[i].count === 0) {
+                    const amountToAdd = Math.min(count, 64);
+                    INVENTORY[i] = { id: id, count: amountToAdd, originSeed: itemOriginSeed };
+                    count -= amountToAdd;
+                    if (count <= 0) {
+                        updateHotbarUI();
+                        return;
+                    }
+                }
+            }
+
+            addMessage('Inventory full');
+            updateHotbarUI(); // Update UI even if inventory is full to reflect partial additions.
+        }
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            var r = parseInt(hex.substring(0, 2), 16);
+            var g = parseInt(hex.substring(2, 4), 16);
+            var b = parseInt(hex.substring(4, 6), 16);
+            return [r, g, b];
+        }
+        var trashIndex = -1;
+        document.getElementById('trashCancel').addEventListener('click', function () {
+            document.getElementById('trashConfirm').style.display = 'none';
+            trashIndex = -1;
+            this.blur();
+        });
+        document.getElementById('trashOk').addEventListener('click', function () {
+            if (trashIndex >= 0) {
+                INVENTORY[trashIndex] = null;
+                updateHotbarUI();
+                addMessage('Item trashed');
+            }
+            document.getElementById('trashConfirm').style.display = 'none';
+            trashIndex = -1;
+            this.blur();
+        });
+        function attemptCraft(recipe) {
+            // Tally all items, separating native and off-world
+            const availableNative = {};
+            const availableOffWorld = {};
+            const allAvailable = {};
+
+            for (const item of INVENTORY) {
+                if (item) {
+                    allAvailable[item.id] = (allAvailable[item.id] || 0) + item.count;
+                    if (item.originSeed && item.originSeed !== worldSeed) {
+                        availableOffWorld[item.id] = (availableOffWorld[item.id] || 0) + item.count;
+                    } else {
+                        availableNative[item.id] = (availableNative[item.id] || 0) + item.count;
+                    }
+                }
+            }
+
+            // Check total materials first
+            for (const reqId in recipe.requires) {
+                if ((allAvailable[reqId] || 0) < recipe.requires[reqId]) {
+                    addMessage(`Missing materials for ${BLOCKS[recipe.out.id].name}`);
+                    return;
+                }
+            }
+
+            // Check off-world requirements
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    if ((availableOffWorld[reqId] || 0) < recipe.requiresOffWorld[reqId]) {
+                        addMessage(`Requires off-world ${BLOCKS[reqId].name}`);
+                        return;
+                    }
+                }
+            }
+
+            // If we are here, we have enough materials. Now consume them.
+            let neededToConsume = { ...recipe.requires };
+            let neededOffWorld = { ...recipe.requiresOffWorld };
+            let consumedSeeds = [];
+
+            // Consume off-world items first
+            if (neededOffWorld) {
+                for (let i = 0; i < INVENTORY.length; i++) {
+                    const item = INVENTORY[i];
+                    if (item && neededOffWorld[item.id] > 0 && item.originSeed && item.originSeed !== worldSeed) {
+                        const amountToTake = Math.min(item.count, neededOffWorld[item.id]);
+
+                        for (let j = 0; j < amountToTake; j++) {
+                            consumedSeeds.push(item.originSeed);
+                        }
+
+                        item.count -= amountToTake;
+                        neededOffWorld[item.id] -= amountToTake;
+                        neededToConsume[item.id] -= amountToTake; // Decrement from total needed as well
+
+                        if (item.count === 0) {
+                            INVENTORY[i] = null;
+                        }
+                    }
+                }
+            }
+
+            // Consume remaining items
+            for (let i = 0; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                if (item && neededToConsume[item.id] > 0) {
+                    const amountToTake = Math.min(item.count, neededToConsume[item.id]);
+                    item.count -= amountToTake;
+                    neededToConsume[item.id] -= amountToTake;
+                    if (item.count === 0) {
+                        INVENTORY[i] = null;
+                    }
+                }
+            }
+
+            // Crafting successful. Add the new item.
+            let newOriginSeed = null;
+            if (consumedSeeds.length > 0) {
+                newOriginSeed = consumedSeeds.join('');
+            }
+
+            addToInventory(recipe.out.id, recipe.out.count, newOriginSeed);
+            addMessage('Crafted ' + BLOCKS[recipe.out.id].name);
+            updateHotbarUI();
+            if (document.getElementById('inventoryModal').style.display === 'block') {
+                updateInventoryUI();
+            }
+            document.getElementById('craftModal').style.display = 'none';
+            isPromptOpen = false;
+        }
+        function completeCraft(recipe, selectedIndex) {
+            const neededToConsume = { ...recipe.requires };
+            const consumedSeeds = [];
+
+            const selectedItem = INVENTORY[selectedIndex];
+            if (!selectedItem || !recipe.requiresOffWorld || !recipe.requiresOffWorld[selectedItem.id]) {
+                addMessage("Invalid selection for craft.");
+                craftingState = null;
+                updateInventoryUI();
+                return;
+            }
+
+            // Temporarily reserve the selected item
+            neededToConsume[selectedItem.id]--;
+            consumedSeeds.push(selectedItem.originSeed);
+            const tempInventory = JSON.parse(JSON.stringify(INVENTORY));
+            tempInventory[selectedIndex].count--;
+
+            // Check for and reserve other required off-world items
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    let neededCount = recipe.requiresOffWorld[reqId];
+                    if (parseInt(reqId) === selectedItem.id) {
+                        neededCount--; // Account for the already selected item
+                    }
+                    if (neededCount > 0) {
+                        for (let i = 0; i < tempInventory.length; i++) {
+                            const item = tempInventory[i];
+                            if (item && item.id == reqId && item.originSeed && item.originSeed !== worldSeed && item.count > 0) {
+                                const amountToReserve = Math.min(item.count, neededCount);
+                                for (let j = 0; j < amountToReserve; j++) {
+                                    consumedSeeds.push(item.originSeed);
+                                }
+                                item.count -= amountToReserve;
+                                neededCount -= amountToReserve;
+                                neededToConsume[reqId] -= amountToReserve;
+                                if (neededCount <= 0) break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Tally remaining available materials from the temporary inventory
+            const available = {};
+            for (const item of tempInventory) {
+                if (item && item.count > 0) {
+                    available[item.id] = (available[item.id] || 0) + item.count;
+                }
+            }
+
+            // Check if remaining materials are sufficient
+            for (const reqId in neededToConsume) {
+                if ((available[reqId] || 0) < neededToConsume[reqId]) {
+                    addMessage("Still missing other materials.");
+                    craftingState = null;
+                    updateInventoryUI();
+                    return;
+                }
+            }
+
+            // All checks passed. Now, consume materials from the *actual* inventory.
+            INVENTORY[selectedIndex].count--;
+            if (INVENTORY[selectedIndex].count <= 0) INVENTORY[selectedIndex] = null;
+
+            // This re-uses the same consumption logic, which is fine since we validated it.
+            let finalConsumption = { ...recipe.requires };
+            finalConsumption[selectedItem.id]--;
+
+            let offWorldToConsume = { ...recipe.requiresOffWorld };
+             if (offWorldToConsume[selectedItem.id]) {
+                offWorldToConsume[selectedItem.id]--;
+            }
+
+
+            // Consume other off-world items
+            if (Object.keys(offWorldToConsume).length > 0) {
+                 for (let i = 0; i < INVENTORY.length; i++) {
+                    const item = INVENTORY[i];
+                    if (item && offWorldToConsume[item.id] > 0 && item.originSeed && item.originSeed !== worldSeed) {
+                        const amountToTake = Math.min(item.count, offWorldToConsume[item.id]);
+                        item.count -= amountToTake;
+                        offWorldToConsume[item.id] -= amountToTake;
+                        finalConsumption[item.id] -= amountToTake;
+                        if (item.count === 0) INVENTORY[i] = null;
+                    }
+                }
+            }
+
+            // Consume remaining general items
+            for (let i = 0; i < INVENTORY.length; i++) {
+                const item = INVENTORY[i];
+                if (item && finalConsumption[item.id] > 0) {
+                    const amountToTake = Math.min(item.count, finalConsumption[item.id]);
+                    item.count -= amountToTake;
+                    finalConsumption[item.id] -= amountToTake;
+                    if (item.count === 0) INVENTORY[i] = null;
+                }
+            }
+
+            // Add crafted item with combined seeds
+            const newOriginSeed = consumedSeeds.sort().join(''); // Sort for consistency
+            addToInventory(recipe.out.id, recipe.out.count, newOriginSeed);
+            addMessage('Crafted ' + BLOCKS[recipe.out.id].name);
+
+            craftingState = null;
+            document.getElementById('craftModal').style.display = 'none';
+            isPromptOpen = false;
+            toggleInventory();
+            updateHotbarUI();
+        }
+
+        function initiateCraft(recipe) {
+            if (craftingState) {
+                addMessage("Please complete or cancel the current craft.");
+                return;
+            }
+
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    const neededCount = recipe.requiresOffWorld[reqId];
+                    const offWorldItems = INVENTORY
+                        .map((item, index) => ({ item, index }))
+                        .filter(({item}) => item && item.id == reqId && item.originSeed && item.originSeed !== worldSeed);
+
+                    const totalOffWorldQuantity = offWorldItems.reduce((sum, { item }) => sum + item.count, 0);
+
+                    if (totalOffWorldQuantity > neededCount) {
+                        craftingState = {
+                            recipe: recipe,
+                            requiredItemId: parseInt(reqId),
+                        };
+                        addMessage(`Select an off-world ${BLOCKS[reqId].name} to use.`);
+                        document.getElementById('craftModal').style.display = 'none';
+                        if (document.getElementById('inventoryModal').style.display !== 'block') {
+                            toggleInventory();
+                        } else {
+                            updateInventoryUI(); // Just re-render with highlights
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // If no selection is needed, proceed directly
+            attemptCraft(recipe);
+        }
+
+        function openCrafting() {
+            isPromptOpen = true;
+            var m = document.getElementById('craftModal');
+            m.style.display = 'block';
+            var list = document.getElementById('recipeList');
+            list.innerHTML = '';
+            for (var r of RECIPES) {
+                var row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.gap = '8px';
+                row.style.alignItems = 'center';
+                row.style.marginTop = '8px';
+                var info = document.createElement('div');
+                info.innerText = BLOCKS[r.out.id].name + ' x' + r.out.count;
+                var reqs = document.createElement('div');
+                reqs.style.opacity = 0.85;
+
+                var reqsStrings = [];
+                for(const id in r.requires) {
+                    let reqStr = `${BLOCKS[id].name || id} x${r.requires[id]}`;
+                    if(r.requiresOffWorld && r.requiresOffWorld[id]) {
+                        reqStr += ` (${r.requiresOffWorld[id]} must be Off-World)`;
+                    }
+                    reqsStrings.push(reqStr);
+                }
+                reqs.innerText = 'Requires: ' + reqsStrings.join(', ');
+                var btn = document.createElement('button');
+                btn.innerText = 'Craft';
+                btn.onclick = (function(recipe) {
+                    return function() {
+                        initiateCraft(recipe);
+                    };
+                })(r);
+                row.appendChild(info);
+                row.appendChild(reqs);
+                row.appendChild(btn);
+                list.appendChild(row);
+            }
+        }
+        function safePlayAudio(audioElement) {
+            if (!audioElement) return;
+            var playPromise = audioElement.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(function (e) {
+                    if (!audioErrorLogged) {
+                        addMessage('Audio playback issue detected', 3000);
+                        audioErrorLogged = true;
+                    }
+                });
+            }
+        }
+        function handleMobHit(mob) {
+            // This function is only for the local player's attack action.
+            // The server/host will be the one to actually process the damage.
+            if (isHost || peers.size === 0) {
+                mob.hurt(4, userName);
+            } else {
+                // Client sends hit notification to its peer (the host).
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        console.log(`[WebRTC] Sending mob_hit to host ${peerUser}`);
+                        peerData.dc.send(JSON.stringify({
+                            type: 'mob_hit',
+                            id: mob.id,
+                            damage: 4,
+                            username: userName // Let the host know who is attacking
+                        }));
+                    }
+                }
+            }
+            safePlayAudio(soundHit); // Play sound locally for responsiveness
+            addMessage('Hit mob!', 800); // Give local feedback
+        }
+
+        function toggleInventory() {
+            var invModal = document.getElementById('inventoryModal');
+            var isVisible = invModal.style.display === 'block';
+
+            if (isVisible && craftingState) {
+                // If closing inventory during a craft, cancel it.
+                craftingState = null;
+                addMessage("Crafting canceled.");
+            }
+
+            invModal.style.display = isVisible ? 'none' : 'block';
+            isPromptOpen = !isVisible;
+
+            if (!isVisible) {
+                updateInventoryUI();
+            } else {
+                selectedInventoryIndex = -1;
+            }
+        }
+
+        function updateInventoryUI() {
+            var grid = document.getElementById('inventoryGrid');
+            var hotbar = document.getElementById('inventoryHotbar');
+            grid.innerHTML = '';
+            hotbar.innerHTML = '';
+
+            for (var i = 9; i < 36; i++) {
+                grid.appendChild(createInventorySlot(i));
+            }
+
+            for (var i = 0; i < 9; i++) {
+                hotbar.appendChild(createInventorySlot(i));
+            }
+        }
+
+        function createInventorySlot(index) {
+            var slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.dataset.index = index;
+
+            var item = INVENTORY[index];
+            if (item && item.id) {
+                var color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [128, 128, 128];
+                slot.style.backgroundColor = `rgba(${color.join(',')}, 0.6)`;
+                slot.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : 'Unknown';
+
+                if (item.count > 1) {
+                    var countEl = document.createElement('div');
+                    countEl.className = 'inv-count';
+                    countEl.innerText = item.count;
+                    slot.appendChild(countEl);
+                }
+
+                if (craftingState && item.id === craftingState.requiredItemId && item.originSeed && item.originSeed !== worldSeed) {
+                    slot.classList.add('highlight-craft');
+                }
+            }
+
+            if (index === selectedInventoryIndex && !craftingState) {
+                slot.classList.add('selected');
+            }
+
+            slot.addEventListener('click', function() {
+                var clickedIndex = parseInt(this.dataset.index);
+
+                if (craftingState) {
+                    const selectedItem = INVENTORY[clickedIndex];
+                    if (selectedItem && selectedItem.id === craftingState.requiredItemId && selectedItem.originSeed && selectedItem.originSeed !== worldSeed) {
+                        completeCraft(craftingState.recipe, clickedIndex);
+                    } else {
+                        addMessage("This item cannot be used for this craft.");
+                    }
+                } else {
+                    if (selectedInventoryIndex === -1) {
+                        selectedInventoryIndex = clickedIndex;
+                    } else {
+                        var temp = INVENTORY[selectedInventoryIndex];
+                        INVENTORY[selectedInventoryIndex] = INVENTORY[clickedIndex];
+                        INVENTORY[clickedIndex] = temp;
+                        selectedInventoryIndex = -1;
+                    }
+                    updateInventoryUI();
+                    updateHotbarUI();
+                }
+            });
+
+            slot.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                var clickedIndex = parseInt(this.dataset.index);
+                if (INVENTORY[clickedIndex] && INVENTORY[clickedIndex].count > 0) {
+                    trashIndex = clickedIndex;
+                    document.getElementById('trashItemName').innerText = 'Trash ' + BLOCKS[INVENTORY[trashIndex].id].name + ' x' + INVENTORY[trashIndex].count + ' ? ';
+                    document.getElementById('trashConfirm').style.display = 'block';
+                }
+            });
+
+            return slot;
+        }
+
+        function createProjectile(id, user, position, direction, color = 'red') {
+            const isGreen = color === 'green';
+            const projectileSpeed = isGreen ? 20 : 10;
+            const laserColor = isGreen ? 0x00ff00 : 0xff0000;
+
+            const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.5);
+            const material = new THREE.MeshBasicMaterial({ color: laserColor });
+            const projectile = new THREE.Mesh(geometry, material);
+
+            // Align projectile with camera direction
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
+            projectile.quaternion.copy(quaternion);
+
+            projectile.position.copy(position);
+
+            const light = new THREE.PointLight(laserColor, 1, 10);
+            light.position.copy(projectile.position);
+            projectile.light = light;
+            scene.add(light);
+
+            projectiles.push({
+                id: id,
+                user: user,
+                mesh: projectile,
+                velocity: direction.multiplyScalar(projectileSpeed),
+                createdAt: Date.now(),
+                light: light,
+                isGreen: isGreen
+            });
+            scene.add(projectile);
+        }
+
+        function createDroppedItemOrb(dropId, position, blockId, originSeed, dropper) {
+            const blockInfo = BLOCKS[blockId];
+            if (!blockInfo) return;
+
+            const geometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const material = new THREE.MeshStandardMaterial({
+                color: blockInfo.color,
+                emissive: blockInfo.color,
+                emissiveIntensity: 0.5
+            });
+            const orb = new THREE.Mesh(geometry, material);
+            orb.position.copy(position);
+
+            const light = new THREE.PointLight(blockInfo.color, 0.8, 5);
+            light.position.copy(position);
+            orb.light = light;
+            scene.add(light);
+
+            const droppedItem = {
+                id: dropId,
+                blockId: blockId,
+                originSeed: originSeed,
+                mesh: orb,
+                light: light,
+                createdAt: Date.now(),
+                dropper: dropper
+            };
+
+            droppedItems.push(droppedItem);
+            scene.add(orb);
+        }
+
+        function dropSelectedItem() {
+            const itemToDrop = INVENTORY[selectedHotIndex];
+            if (!itemToDrop || itemToDrop.count <= 0) {
+                addMessage("Nothing to drop!");
+                return;
+            }
+
+            const dropId = `${userName}-${Date.now()}`;
+
+            // Drop in front of player
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            const position = new THREE.Vector3(player.x, player.y + 1, player.z).add(direction.multiplyScalar(1.5));
+
+
+            // Create the visual orb
+            createDroppedItemOrb(dropId, position, itemToDrop.id, itemToDrop.originSeed, userName);
+
+            // Remove one item from the inventory stack
+            itemToDrop.count--;
+            if (itemToDrop.count <= 0) {
+                INVENTORY[selectedHotIndex] = null;
+            }
+            updateHotbarUI();
+
+            // Broadcast to other players
+            const message = JSON.stringify({
+                type: 'item_dropped',
+                dropId: dropId,
+                blockId: itemToDrop.id,
+                originSeed: itemToDrop.originSeed,
+                position: { x: position.x, y: position.y, z: position.z },
+                dropper: userName
+            });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(message);
+                }
+            }
+        }
+
+        function onPointerDown(e) {
+            if (cameraMode !== 'first' || isPromptOpen) return;
+            e.preventDefault();
+
+            const selectedItem = INVENTORY[selectedHotIndex];
+
+            if (e.button === 2 && selectedItem && BLOCKS[selectedItem.id] && BLOCKS[selectedItem.id].hand_attachable) {
+                dropSelectedItem();
+                return;
+            }
+
+            if (selectedItem && selectedItem.id === 121) { // Laser Gun
+                const now = Date.now();
+                if (now - (player.lastFireTime || 0) < 1000) { // 1000ms cooldown
+                    return;
+                }
+                player.lastFireTime = now;
+                const projectileId = `${userName}-${Date.now()}`;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+
+                let position;
+                if (cameraMode === 'third' && avatarGroup && avatarGroup.gun) {
+                    position = new THREE.Vector3();
+                    avatarGroup.gun.getWorldPosition(position);
+                } else {
+                    position = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+                }
+
+                createProjectile(projectileId, userName, position, direction.clone(), 'red');
+
+                const message = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId,
+                    user: userName,
+                    position: { x: position.x, y: position.y, z: position.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'red'
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message);
+                    }
+                }
+                return;
+            }
+
+            if (selectedItem && selectedItem.id === 126) { // Green Laser Gun
+                const now = Date.now();
+                if (now - (player.lastFireTime || 0) < 500) { // 500ms cooldown
+                    return;
+                }
+
+                // Check for emerald ammo
+                let emeraldIndex = -1;
+                for (let i = 0; i < INVENTORY.length; i++) {
+                    if (INVENTORY[i] && INVENTORY[i].id === 125) {
+                        emeraldIndex = i;
+                        break;
+                    }
+                }
+
+                if (emeraldIndex === -1) {
+                    addMessage("No emeralds to fire!", 1000);
+                    return;
+                }
+
+                // Consume one emerald
+                INVENTORY[emeraldIndex].count--;
+                if (INVENTORY[emeraldIndex].count <= 0) {
+                    INVENTORY[emeraldIndex] = null;
+                }
+                updateHotbarUI();
+
+
+                player.lastFireTime = now;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+
+                const right = new THREE.Vector3();
+                right.crossVectors(camera.up, direction).normalize();
+
+                let basePosition;
+                if (cameraMode === 'third' && avatarGroup && avatarGroup.gun) {
+                    basePosition = new THREE.Vector3();
+                    avatarGroup.gun.getWorldPosition(basePosition);
+                } else {
+                    basePosition = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+                }
+
+                // Create two projectiles, side by side
+                const projectileId1 = `${userName}-${Date.now()}-1`;
+                const position1 = basePosition.clone().add(right.clone().multiplyScalar(0.2));
+                createProjectile(projectileId1, userName, position1, direction.clone(), 'green');
+
+                const projectileId2 = `${userName}-${Date.now()}-2`;
+                const position2 = basePosition.clone().add(right.clone().multiplyScalar(-0.2));
+                createProjectile(projectileId2, userName, position2, direction.clone(), 'green');
+
+
+                const message1 = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId1,
+                    user: userName,
+                    position: { x: position1.x, y: position1.y, z: position1.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'green'
+                });
+
+                const message2 = JSON.stringify({
+                    type: 'laser_fired',
+                    id: projectileId2,
+                    user: userName,
+                    position: { x: position2.x, y: position2.y, z: position2.z },
+                    direction: { x: direction.x, y: direction.y, z: direction.z },
+                    color: 'green'
+                });
+
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(message1);
+                        peerData.dc.send(message2);
+                    }
+                }
+                return;
+            }
+
+            raycaster.setFromCamera(pointer, camera);
+            raycaster.far = 5;
+
+            // 1. Check for mob hits
+            const mobMeshes = mobs.map(m => m.mesh).filter(m => m.visible);
+            const mobIntersects = raycaster.intersectObjects(mobMeshes, true);
+
+            if (mobIntersects.length > 0) {
+                let hitObject = mobIntersects[0].object;
+                let mobId;
+                // Traverse up the hierarchy to find the parent Group with the mobId
+                while (hitObject) {
+                    if (hitObject.userData.mobId) {
+                        mobId = hitObject.userData.mobId;
+                        break;
+                    }
+                    hitObject = hitObject.parent;
+                }
+
+                if (mobId) {
+                    const hitMob = mobs.find(m => m.id === mobId);
+                    if (hitMob) {
+                        animateAttack();
+                        handleMobHit(hitMob);
+                        return; // Stop further processing
+                    }
+                }
+            }
+
+            // 2. Check for player hits
+            const playerHitAvatars = Array.from(playerAvatars.entries())
+                .filter(([username]) => username !== userName)
+                .map(([username, avatar]) => ({ username, intersect: raycaster.intersectObject(avatar, true)[0] }))
+                .filter(h => h.intersect)
+                .sort((a, b) => a.intersect.distance - b.intersect.distance);
+
+            if (playerHitAvatars.length > 0) {
+                const hitPlayer = playerHitAvatars[0];
+                animateAttack();
+                const message = JSON.stringify({ type: 'player_hit', target: hitPlayer.username, username: userName });
+
+                if (isHost) {
+                    handlePlayerHit(JSON.parse(message));
+                } else {
+                    const attackMessage = JSON.stringify({ type: 'player_attack', username: userName });
+                    for (const [, peerData] of peers.entries()) {
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(message);
+                            peerData.dc.send(attackMessage);
+                        }
+                    }
+                    safePlayAudio(soundHit);
+                    addMessage(`Hit ${hitPlayer.username}!`, 800);
+                }
+                return;
+            }
+
+            // 3. Check for block interactions
+            if (e.button === 0 && selectedItem && selectedItem.id === 122) { // Consume Honey
+                player.health = Math.min(999, player.health + 5);
+                updateHealthBar();
+                document.getElementById('health').innerText = player.health;
+                addMessage('Consumed Honey! +5 HP', 1500);
+                INVENTORY[selectedHotIndex].count--;
+                if (INVENTORY[selectedHotIndex].count <= 0) {
+                    INVENTORY[selectedHotIndex] = null;
+                }
+                updateHotbarUI();
+                return;
+            }
+            const ints = raycaster.intersectObject(meshGroup, true);
+            if (ints.length === 0) return;
+
+            const h = ints[0];
+            const p = h.point;
+            const norm = h.face.normal;
+
+            if (e.button === 0) { // Left-click: break block
+                animateAttack();
+                const wx = Math.floor(p.x - norm.x * 0.5);
+                const wy = Math.floor(p.y - norm.y * 0.5);
+                const wz = Math.floor(p.z - norm.z * 0.5);
+                removeBlockAt(wx, wy, wz);
+            } else if (e.button === 2) { // Right-click: place block
+                const placeX = Math.floor(p.x + norm.x * 0.5);
+                const placeY = Math.floor(p.y + norm.y * 0.5);
+                const placeZ = Math.floor(p.z + norm.z * 0.5);
+                placeBlockAt(placeX, placeY, placeZ, selectedBlockId);
+            }
+        }
+
+        function handlePlayerHit(data) {
+            const attackerUsername = data.username;
+            const targetUsername = data.target;
+
+            const attacker = attackerUsername === userName ? player : userPositions[attackerUsername];
+            const target = targetUsername === userName ? player : userPositions[targetUsername];
+
+            if (attacker && target) {
+                const attackerX = attackerUsername === userName ? attacker.x : attacker.targetX;
+                const attackerY = attackerUsername === userName ? attacker.y : attacker.targetY;
+                const attackerZ = attackerUsername === userName ? attacker.z : attacker.targetZ;
+
+                const targetX = targetUsername === userName ? target.x : (target.targetX || target.x);
+                const targetY = targetUsername === userName ? target.y : (target.targetY || target.y);
+                const targetZ = targetUsername === userName ? target.z : (target.targetZ || target.z);
+
+                const dist = Math.hypot(attackerX - targetX, attackerY - targetY, attackerZ - targetZ);
+                if (dist < 6) { // 6 blocks validation
+                    if (attackerUsername === userName) {
+                        safePlayAudio(soundHit);
+                        addMessage('Hit ' + targetUsername + '!', 800);
+                    }
+
+                    // Calculate knockback direction
+                    const dx = targetX - attackerX;
+                    const dz = targetZ - attackerZ;
+                    const knockbackDist = Math.hypot(dx, dz);
+                    const knockbackStrength = 5;
+                    let kx = 0, kz = 0;
+                    if (knockbackDist > 0) {
+                        kx = (dx / knockbackDist) * knockbackStrength;
+                        kz = (dz / knockbackDist) * knockbackStrength;
+                    }
+
+                    const targetPeer = peers.get(data.target);
+                    if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                        targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: data.username, kx: kx, kz: kz }));
+                    } else if (data.target === userName) {
+                        // The host was hit
+                        if (Date.now() - lastDamageTime > 800) {
+                            player.health = Math.max(0, player.health - 1);
+                            lastDamageTime = Date.now();
+                            document.getElementById('health').innerText = player.health;
+                            updateHealthBar();
+                            addMessage('Hit by ' + data.username + '! HP: ' + player.health, 1000);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+
+                            player.vx += kx;
+                            player.vz += kz;
+
+                            if (player.health <= 0) {
+                                handlePlayerDeath();
+                            }
+                        }
+                    }
+                } else if (attackerUsername === userName) {
+                    addMessage('Miss! Target is out of range.', 800);
+                }
+            }
+        }
+        function attackAtPoint(point) {
+            for (var m of mobs) {
+                if (m.mesh.position.distanceTo(point) < 1.5) {
+                    handleMobHit(m);
+                    return true;
+                }
+            }
+            return false;
+        }
+        function checkAndDeactivateHive(brokenX, brokenY, brokenZ) {
+            const HIVE_ID = 123;
+            let associatedHive = null;
+            let minDistance = Infinity;
+
+            // 1. Find the closest hive in hiveLocations that this broken block might belong to.
+            for (const hive of hiveLocations) {
+                const dist = Math.hypot(brokenX - hive.x, brokenY - hive.y, brokenZ - hive.z);
+                // A hive is a small vertical structure, so check within a reasonable radius.
+                if (dist < 10 && dist < minDistance) {
+                    minDistance = dist;
+                    associatedHive = hive;
+                }
+            }
+
+            if (!associatedHive) {
+                // This broken block was likely not part of a tracked hive.
+                return;
+            }
+
+            // 2. Scan the area around the associated hive's base to check for any remaining hive blocks.
+            let remainingHiveBlocks = 0;
+            const scanRadius = 3; // Check a 7x7 horizontal area
+            const scanHeight = 8; // Check 8 blocks up from the base
+            for (let y = associatedHive.y; y < associatedHive.y + scanHeight; y++) {
+                for (let x = associatedHive.x - scanRadius; x <= associatedHive.x + scanRadius; x++) {
+                    for (let z = associatedHive.z - scanRadius; z <= associatedHive.z + scanRadius; z++) {
+                        if (getBlockAt(x, y, z) === HIVE_ID) {
+                            remainingHiveBlocks++;
+                        }
+                    }
+                }
+            }
+
+            // 3. If no hive blocks remain, deactivate the hive by removing it from tracking.
+            if (remainingHiveBlocks === 0) {
+                console.log(`[HIVE] All blocks for hive at ${associatedHive.x},${associatedHive.y},${associatedHive.z} are gone. Deactivating.`);
+                hiveLocations = hiveLocations.filter(h => h.x !== associatedHive.x || h.y !== associatedHive.y || h.z !== associatedHive.z);
+                addMessage('A bee hive has been destroyed!', 3000);
+            }
+        }
+
+        function removeBlockAt(wx, wy, wz) {
+            var b = getBlockAt(wx, wy, wz);
+            if (!b || b === BLOCK_AIR || b === 1 || b === 6) {
+                addMessage('Cannot break that block');
+                return;
+            }
+            var cx = Math.floor(modWrap(wx, MAP_SIZE) / CHUNK_SIZE);
+            var cz = Math.floor(modWrap(wz, MAP_SIZE) / CHUNK_SIZE);
+            var chunkKey = makeChunkKey(worldName, cx, cz);
+            var canEdit = checkChunkOwnership(chunkKey, userName);
+            if (!canEdit) {
+                addMessage('Cannot break block in chunk ' + chunkKey + ': owned by another user');
+                return;
+            }
+            const coordKey = `${wx},${wy},${wz}`;
+            const originSeed = foreignBlockOrigins.get(coordKey);
+
+            chunkManager.setBlockGlobal(wx, wy, wz, BLOCK_AIR, userName);
+
+            if (originSeed) {
+                foreignBlockOrigins.delete(coordKey);
+            }
+
+            addToInventory(b, 1, originSeed);
+            addMessage('Picked up ' + (BLOCKS[b] ? BLOCKS[b].name : b) + (originSeed ? ` from ${originSeed}`: ''));
+            safePlayAudio(soundBreak);
+
+            if (BLOCKS[b] && BLOCKS[b].light) {
+                var lightKey = `${wx},${wy},${wz}`;
+                torchRegistry.delete(lightKey);
+                if (torchParticles.has(lightKey)) {
+                    var particles = torchParticles.get(lightKey);
+                    scene.remove(particles);
+                    particles.geometry.dispose();
+                    particles.material.dispose();
+                    torchParticles.delete(lightKey);
+                }
+                // Force an immediate light update
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+            }
+
+            if (b === 123 || b === 122) { // Hive or Honey
+                // Use a timeout to allow the block removal to fully process before checking.
+                setTimeout(() => checkAndDeactivateHive(wx, wy, wz), 100);
+            }
+        }
+        function placeBlockAt(wx, wy, wz, bid) {
+            if (!bid) {
+                addMessage('No item selected');
+                return;
+            }
+            var item = INVENTORY[selectedHotIndex];
+            if (!item || item.id !== bid || item.count <= 0) {
+                addMessage('No item to place');
+                return;
+            }
+            var dist = Math.hypot(player.x - wx, player.y - wy, player.z - wz);
+            if (dist > 5) {
+                addMessage('Too far to place');
+                return;
+            }
+            var cur = getBlockAt(wx, wy, wz);
+            if (cur !== BLOCK_AIR && cur !== 6) {
+                addMessage('Cannot place here');
+                return;
+            }
+            if (checkCollisionWithPlayer(wx, wy, wz)) {
+                addMessage('Cannot place inside player');
+                return;
+            }
+            for (var m of mobs) {
+                if (Math.abs(m.pos.x - wx) < 0.9 && Math.abs(m.pos.y - wy) < 0.9 && Math.abs(m.pos.z - wz) < 0.9) {
+                    addMessage('Cannot place inside mob');
+                    return;
+                }
+            }
+            var cx = Math.floor(modWrap(wx, MAP_SIZE) / CHUNK_SIZE);
+            var cz = Math.floor(modWrap(wz, MAP_SIZE) / CHUNK_SIZE);
+            var chunkKey = makeChunkKey(worldName, cx, cz);
+            var canEdit = checkChunkOwnership(chunkKey, userName);
+            if (!canEdit) {
+                addMessage('Cannot place block in chunk ' + chunkKey + ': owned by another user');
+                return;
+            }
+            chunkManager.setBlockGlobal(wx, wy, wz, bid, true, item.originSeed);
+
+            // If the block is from another world, record its origin.
+            if (item.originSeed && item.originSeed !== worldSeed) {
+                const coordKey = `${wx},${wy},${wz}`;
+                foreignBlockOrigins.set(coordKey, item.originSeed);
+                addMessage(`Placed ${BLOCKS[bid] ? BLOCKS[bid].name : bid} from ${item.originSeed}`);
+            } else {
+                addMessage('Placed ' + (BLOCKS[bid] ? BLOCKS[bid].name : bid));
+            }
+
+            item.count -= 1;
+            if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
+            updateHotbarUI();
+            safePlayAudio(soundPlace);
+
+            if (BLOCKS[bid] && BLOCKS[bid].light) {
+                const lightKey = `${wx},${wy},${wz}`;
+                torchRegistry.set(lightKey, { x: wx, y: wy, z: wz });
+                var particles = createFlameParticles(wx, wy + 0.5, wz);
+                scene.add(particles);
+                torchParticles.set(lightKey, particles);
+            }
+        }
+        function checkCollisionWithPlayer(wx, wy, wz) {
+            // Player's bounding box
+            const pMinX = player.x;
+            const pMaxX = player.x + player.width;
+            const pMinY = player.y;
+            const pMaxY = player.y + player.height;
+            const pMinZ = player.z;
+            const pMaxZ = player.z + player.depth;
+
+            // Block's bounding box (a 1x1x1 cube at the given integer coords)
+            const bMinX = wx;
+            const bMaxX = wx + 1;
+            const bMinY = wy;
+            const bMaxY = wy + 1;
+            const bMinZ = wz;
+            const bMaxZ = wz + 1;
+
+            // Check for overlap on all three axes
+            return (
+                pMinX < bMaxX && pMaxX > bMinX &&
+                pMinY < bMaxY && pMaxY > bMinY &&
+                pMinZ < bMaxZ && pMaxZ > bMinZ
+            );
+        }
+        function getBlockAt(wx, wy, wz) {
+            var wrappedWx = modWrap(Math.floor(wx), MAP_SIZE);
+            var wrappedWz = modWrap(Math.floor(wz), MAP_SIZE);
+            var cx = Math.floor(wrappedWx / CHUNK_SIZE);
+            var cz = Math.floor(wrappedWz / CHUNK_SIZE);
+            var chunk = chunkManager.getChunk(cx, cz);
+            if (!chunk.generated) chunkManager.generateChunk(chunk);
+            var lx = Math.floor(wrappedWx % CHUNK_SIZE);
+            var lz = Math.floor(wrappedWz % CHUNK_SIZE);
+            return chunk.get(lx, Math.floor(wy), lz);
+        }
+        function handlePlayerDeath() {
+            if (deathScreenShown || isDying) return;
+
+            // Make avatar visible for the animation, even in first-person mode
+            if (avatarGroup) {
+                avatarGroup.visible = true;
+            }
+
+            isDying = true;
+            deathAnimationStart = performance.now();
+
+            INVENTORY = new Array(36).fill(null);
+            player.score = 0;
+            document.getElementById('score').innerText = player.score;
+            player.health = 0;
+            updateHealthBar();
+            updateHotbarUI();
+            addMessage('You died! All items and score lost.', 5000);
+
+            // Notify other players of the death
+            const message = JSON.stringify({ type: 'player_death', username: userName });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(message);
+                }
+            }
+        }
+        function respawnPlayer(x, y, z) {
+            var targetX = modWrap(x || spawnPoint.x, MAP_SIZE);
+            var targetZ = modWrap(z || spawnPoint.z, MAP_SIZE);
+            var targetY = y || chunkManager.getSurfaceY(targetX, targetZ) + 1;
+            if (!checkCollision(targetX, targetY, targetZ)) {
+                player.x = targetX;
+                player.y = targetY;
+                player.z = targetZ;
+                player.vy = 0;
+                player.onGround = false;
+                player.health = 20;
+                player.yaw = 0;
+                player.pitch = 0;
+            } else {
+                var found = false;
+                for (var dy = 0; dy <= 5; dy++) {
+                    if (!checkCollision(targetX, targetY + dy, targetZ)) {
+                        player.x = targetX;
+                        player.y = targetY + dy;
+                        player.z = targetZ;
+                        player.vy = 0;
+                        player.onGround = false;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    player.x = targetX;
+                    player.y = chunkManager.getSurfaceY(targetX, targetZ) + 1;
+                    player.z = targetZ;
+                    player.vy = 0;
+                    player.onGround = true;
+                    player.health = 20;
+                    player.yaw = 0;
+                    player.pitch = 0;
+                }
+            }
+            updateHotbarUI();
+            updateHealthBar();
+            document.getElementById('health').innerText = player.health;
+            var newCx = Math.floor(targetX / CHUNK_SIZE);
+            var newCz = Math.floor(targetZ / CHUNK_SIZE);
+            currentLoadRadius = INITIAL_LOAD_RADIUS;
+            chunkManager.preloadChunks(newCx, newCz, currentLoadRadius);
+            for (var dx = -currentLoadRadius; dx <= currentLoadRadius; dx++) {
+                for (var dz = -currentLoadRadius; dz <= currentLoadRadius; dz++) {
+                    var cx = modWrap(newCx + dx, CHUNKS_PER_SIDE);
+                    var cz = modWrap(newCz + dz, CHUNKS_PER_SIDE);
+                    var chunk = chunkManager.getChunk(cx, cz);
+                    if (!chunk.generated) chunkManager.generateChunk(chunk);
+                    if (chunk.needsRebuild || !chunk.mesh) {
+                        chunkManager.buildChunkMesh(chunk);
+                    }
+                }
+            }
+            chunkManager.update(player.x, player.z);
+            if (cameraMode === 'first') {
+                camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
+                camera.rotation.set(0, 0, 0, 'YXZ');
+                try {
+                    renderer.domElement.requestPointerLock();
+                    mouseLocked = true;
+                    document.getElementById('crosshair').style.display = 'block';
+                } catch (e) {
+                    addMessage('Pointer lock failed. Serve over HTTPS or check iframe permissions.', 3000);
+                }
+            } else {
+                camera.position.set(player.x, player.y + 5, player.z + 10);
+                controls.target.set(player.x + player.width / 2, player.y + 0.6, player.z + player.depth / 2);
+                controls.update();
+            }
+            document.getElementById('deathScreen').style.display = 'none';
+            deathScreenShown = false;
+
+            // Recreate the avatar to reset its state and visibility
+            createAndSetupAvatar(userName, true);
+            avatarGroup.visible = cameraMode === 'third';
+
+            addMessage('Respawned at ' + Math.floor(targetX) + ', ' + Math.floor(player.y) + ', ' + Math.floor(targetZ), 3000);
+
+            // Notify other players of the respawn
+            const message = JSON.stringify({
+                type: 'player_respawn',
+                username: userName,
+                x: player.x,
+                y: player.y,
+                z: player.z
+            });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(message);
+                }
+            }
+        }
+        function Mob(x, z, id, type = 'crawley') {
+            this.id = id || Date.now();
+            this.type = type;
+            this.pos = new THREE.Vector3(x, chunkManager.getSurfaceY(x, z) + 1, z);
+            this.targetPos = new THREE.Vector3().copy(this.pos);
+            this.targetQuaternion = new THREE.Quaternion();
+            this.lastQuaternionUpdate = 0;
+            this.lastUpdateTime = 0;
+            this.vx = 0;
+            this.vz = 0;
+            this.hp = 10; // Default for bees
+            this.speed = (this.type === 'bee') ? 0.04 + Math.random() * 0.02 : 0.02 + Math.random() * 0.03;
+            this.attackCooldown = 0;
+            this.flashEnd = 0;
+            this.aiState = (this.type === 'bee') ? 'SEARCHING_FOR_FLOWER' : 'IDLE';
+            this.hasPollen = false;
+            this.lingerTime = 0;
+            this.animationTime = Math.random() * Math.PI * 2;
+            this.isMoving = false;
+
+            if (this.type === 'bee') {
+                const worldBeeAggressionFactor = makeSeededRandom(worldSeed + '_bee_aggro')();
+                this.isAggressive = worldBeeAggressionFactor > 0.5;
+            } else { // crawley
+                const worldCrawleyAggressionFactor = makeSeededRandom(worldSeed + '_crawley_aggro')();
+                this.isAggressive = worldCrawleyAggressionFactor > 0.5;
+            }
+
+            if (this.type === 'bee') {
+                this.mesh = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                const wingMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+
+                const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 1);
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.mesh.add(body);
+
+                const wingGeo = new THREE.BoxGeometry(0.8, 0.1, 0.4);
+                const leftWing = new THREE.Mesh(wingGeo, wingMat);
+                leftWing.position.set(-0.5, 0.2, 0);
+                this.mesh.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeo, wingMat);
+                rightWing.position.set(0.5, 0.2, 0);
+                this.mesh.add(rightWing);
+
+                this.mesh.leftWing = leftWing;
+                this.mesh.rightWing = rightWing;
+
+                this.originalColor = new THREE.Color(0xffff00);
+            } else if (this.type === 'crawley') {
+                this.mesh = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+
+                const eyeColorRnd = makeSeededRandom(worldSeed + '_eye_color_' + this.id)();
+                let eyeColor;
+                if (eyeColorRnd < 0.1) { // 10% chance for blue
+                    eyeColor = 0x0000ff;
+                    this.eyeColor = 'blue';
+                    this.hp = 15;
+                } else if (eyeColorRnd < 0.5) { // 40% chance for green
+                    eyeColor = 0x00ff00;
+                    this.eyeColor = 'green';
+                    this.hp = 5;
+                } else { // 50% chance for red
+                    eyeColor = 0xff0000;
+                    this.eyeColor = 'red';
+                    this.hp = 10;
+                }
+                const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+
+
+                const bodyGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.mesh.add(body);
+
+                const eyeGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
+
+                const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+                leftEye.position.set(-0.25, 0.2, -0.45);
+                this.mesh.add(leftEye);
+
+                const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+                rightEye.position.set(0.25, 0.2, -0.45);
+                this.mesh.add(rightEye);
+
+                const eyeLight = new THREE.PointLight(0xff0000, 1, 5);
+                eyeLight.position.set(0, 0.2, -0.5);
+                this.mesh.add(eyeLight);
+                this.mesh.eyeLight = eyeLight;
+
+                this.mesh.legs = [];
+                const legGeo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+                for (let i = 0; i < 6; i++) {
+                    const leg = new THREE.Mesh(legGeo, bodyMat);
+                    const side = (i % 2 === 0) ? 1 : -1;
+                    leg.position.set(side * 0.45, 0, (Math.floor(i / 2) - 1) * 0.3);
+                    this.mesh.add(leg);
+                    this.mesh.legs.push(leg);
+                }
+
+                this.originalColor = new THREE.Color(0x4a4a4a);
+            } else if (this.type === 'grub') {
+                this.hp = 20;
+                this.speed = (0.01 + Math.random() * 0.005) / 2; // Slower movement, halved
+                this.aiState = 'IDLE';
+                this.animationTime = Math.random() * Math.PI * 2;
+                this.cactusEaten = 0;
+                this.isAggressive = false; // Grubs are not aggressive
+
+                const scale = 3; // Scale factor for the grub size
+
+                const bodyTexture = createMobTexture(worldSeed, 'grub_body');
+                const stripedTexture = createMobTexture(worldSeed, 'grub_body', true);
+                const mouthTexture = createMobTexture(worldSeed, 'grub_mouth');
+                const bodyMat = new THREE.MeshStandardMaterial({ map: bodyTexture });
+                const stripedMat = new THREE.MeshStandardMaterial({ map: stripedTexture });
+
+                const bodyMaterials = [
+                    stripedMat, stripedMat, stripedMat, stripedMat, stripedMat, stripedMat
+                ];
+                this.originalColor = null;
+
+                this.mesh = new THREE.Group();
+                this.segments = [];
+                this.legs = [];
+                this.pinchers = [];
+                this.headPivot = new THREE.Object3D();
+
+                const numSegments = 6;
+                for (let i = 0; i < numSegments; i++) {
+                    let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                    if (i === 4) segmentSize *= 0.8;
+                    if (i === 5) segmentSize *= 0.4;
+
+                    const segmentGeo = new THREE.BoxGeometry(segmentSize * 1.2, segmentSize * 0.8, segmentSize * 0.8);
+                    const segment = new THREE.Mesh(segmentGeo, bodyMaterials);
+                    segment.userData.originalMaterial = segment.material; // Store original material
+
+                    this.segments.push(segment);
+
+                    if (i < 2) {
+                        this.headPivot.add(segment);
+                    } else {
+                        this.mesh.add(segment);
+                    }
+                }
+
+                this.segments[0].position.z = 1.05 * scale;
+                this.segments[1].position.z = 0.35 * scale;
+
+                // Adjusted positioning for tail segments
+                this.segments[2].position.z = -2 * 0.7 * scale;
+                this.segments[3].position.z = -3 * 0.7 * scale;
+                this.segments[4].position.z = (-4 * 0.7 + 0.2) * scale;
+                this.segments[5].position.z = (-5 * 0.7 + 0.5) * scale;
+
+                this.headPivot.position.z = -1.05 * scale;
+                this.mesh.add(this.headPivot);
+
+                for (let i = 1; i < 5; i++) {
+                    if (i % 2 !== 0) {
+                        let segmentSize = (1.0 - Math.pow(i / numSegments, 2) * 0.5) * scale;
+                        const legGeo = new THREE.BoxGeometry(0.1 * scale, 0.5 * scale, 0.1 * scale);
+
+                        const leftLeg = new THREE.Mesh(legGeo, bodyMat);
+                        leftLeg.position.set(-segmentSize * 0.6, -0.3 * scale, 0);
+                        this.segments[i].add(leftLeg);
+                        this.legs.push(leftLeg);
+
+                        const rightLeg = new THREE.Mesh(legGeo, bodyMat);
+                        rightLeg.position.set(segmentSize * 0.6, -0.3 * scale, 0);
+                        this.segments[i].add(rightLeg);
+                        this.legs.push(rightLeg);
+                    }
+                }
+
+                const head = this.segments[0];
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const eyeGeo = new THREE.BoxGeometry(0.1 * scale, 0.1 * scale, 0.1 * scale);
+
+                const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+                leftEye.position.set(-0.6 * scale, 0.2 * scale, 0);
+                head.add(leftEye);
+
+                const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+                rightEye.position.set(0.6 * scale, 0.2 * scale, 0);
+                head.add(rightEye);
+
+                const mouthGeo = new THREE.BoxGeometry(0.4 * scale, 0.1 * scale, 0.1 * scale);
+                const mouthMat = new THREE.MeshStandardMaterial({ map: mouthTexture });
+                const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+                mouth.position.set(0, -0.2 * scale, 0.45 * scale);
+                head.add(mouth);
+
+                const pincherGeo = new THREE.BoxGeometry(0.1 * scale, 0.3 * scale, 0.1 * scale);
+                const leftPincher = new THREE.Mesh(pincherGeo, mouthMat);
+                leftPincher.position.set(-0.4 * scale, -0.2 * scale, 0.5 * scale);
+                leftPincher.rotation.z = Math.PI / 6;
+                head.add(leftPincher);
+                this.pinchers.push(leftPincher);
+
+                const rightPincher = new THREE.Mesh(pincherGeo, mouthMat);
+                rightPincher.position.set(0.4 * scale, -0.2 * scale, 0.5 * scale);
+                rightPincher.rotation.z = -Math.PI / 6;
+                head.add(rightPincher);
+                this.pinchers.push(rightPincher);
+
+                const glowRnd = makeSeededRandom(worldSeed + '_grub_glow_' + this.id);
+                const glowColor = new THREE.Color().setHSL(glowRnd(), 0.7 + glowRnd() * 0.3, 0.5 + glowRnd() * 0.2);
+                this.glowLight = new THREE.PointLight(glowColor, 0, 10 * scale);
+                this.mesh.add(this.glowLight);
+
+                // Pre-create red materials for damage flash
+                const redMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                this.redMaterials = Array(bodyMaterials.length).fill(redMaterial);
+            }
+
+            this.mesh.userData.mobId = this.id;
+            this.mesh.position.copy(this.pos);
+            scene.add(this.mesh);
+        }
+        Mob.prototype.update = function (dt) {
+            // Ensure mesh is at the correct initial position for clients
+            if (peers.size > 0 && !isHost) {
+                this.mesh.position.copy(this.pos);
+            }
+            if (this.type === 'bee') {
+                this.mesh.leftWing.rotation.z = Math.sin(Date.now() * 0.05) * 0.5;
+                this.mesh.rightWing.rotation.z = -Math.sin(Date.now() * 0.05) * 0.5;
+            }
+
+            if (this.type === 'crawley' && this.mesh.eyeLight) {
+                this.mesh.eyeLight.visible = isNight;
+            }
+
+            if (this.type === 'grub' && this.glowLight) {
+                if (isNight) {
+                    this.glowLight.intensity = (Math.sin(Date.now() * 0.002) + 1) / 2 * 0.8 + 0.4;
+                } else {
+                    this.glowLight.intensity = 0;
+                }
+            }
+
+            // Only the host runs the mob AI and state changes.
+            if (!isHost && peers.size > 0) {
+                // Interpolate position for smooth movement on clients
+                if (this.lastUpdateTime > 0) {
+                    const now = performance.now();
+                    const timeSinceUpdate = now - this.lastUpdateTime;
+                    const interpolationFactor = Math.min(1, timeSinceUpdate / 100); // 100ms interval
+                    this.pos.lerp(this.targetPos, interpolationFactor);
+                    this.mesh.position.copy(this.pos);
+
+                    if (this.lastQuaternionUpdate > 0) {
+                        const timeSinceUpdate = now - this.lastQuaternionUpdate;
+                        const interpolationFactor = Math.min(1, timeSinceUpdate / 100);
+                        this.mesh.quaternion.slerp(this.targetQuaternion, interpolationFactor);
+                    }
+                } else {
+                    // Snap to position if no updates have been received yet
+                    this.pos.copy(this.targetPos);
+                    this.mesh.position.copy(this.pos);
+                }
+
+                if (Date.now() < this.flashEnd) {
+                    if (this.type === 'grub') {
+                        // Use pre-created red materials for damage flash
+                        this.segments.forEach(segment => {
+                            segment.material = this.redMaterials;
+                        });
+                    } else if (this.mesh.material) {
+                        this.mesh.material.color.set(0xff0000);
+                    } else {
+                        this.mesh.children[0].material.color.set(0xff0000);
+                    }
+                } else {
+                    if (this.type === 'grub') {
+                        // Restore original materials for grub
+                        this.segments.forEach(segment => {
+                            // Assuming all materials on a segment should be the same, restore from the first one.
+                            // This part might need adjustment if segments have different original materials.
+                            const originalMaterial = segment.userData.originalMaterial;
+                            if (originalMaterial) {
+                                segment.material = originalMaterial;
+                            }
+                        });
+                    } else if (this.originalColor) { // Check if originalColor is not null
+                        if (this.mesh.material) {
+                            this.mesh.material.color.copy(this.originalColor);
+                        } else {
+                            this.mesh.children[0].material.color.copy(this.originalColor);
+                        }
+                    }
+                }
+
+            } else {
+            // Apply velocity from knockback
+            this.pos.x += this.vx * dt;
+            this.pos.z += this.vz * dt;
+
+            // Friction
+            this.vx *= (1 - 2 * dt);
+            this.vz *= (1 - 2 * dt);
+
+            if (this.type === 'crawley') {
+                // --- Stacking & Collision Physics for Crawlers ---
+                // 1. Horizontal separation from other crawlers to prevent blending.
+                for (const other of mobs) {
+                    if (other.id !== this.id && other.type === 'crawley') {
+                        const dx = this.pos.x - other.pos.x;
+                        const dz = this.pos.z - other.pos.z;
+                        const dist = Math.hypot(dx, dz);
+                        const min_dist = 0.9; // Crawler width
+
+                        if (dist < min_dist) {
+                            const overlap = (min_dist - dist) / dist;
+                            // Push this mob away from the other. This is a soft push to reduce jitter.
+                            this.pos.x += dx * overlap * 0.2;
+                            this.pos.z += dz * overlap * 0.2;
+                        }
+                    }
+                }
+
+                // 2. Vertical stacking logic.
+                // Find the highest support surface beneath the crawler (either ground or another crawler).
+                let groundY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 0.5;
+                let supportY = groundY;
+                for (const other of mobs) {
+                    if (other.id !== this.id && other.type === 'crawley') {
+                        const dist = Math.hypot(this.pos.x - other.pos.x, this.pos.z - other.pos.z);
+                        // If horizontally overlapping and the other mob is below us...
+                        if (dist < 0.9 && other.pos.y < this.pos.y) {
+                            // ...it can act as a support. Find the highest possible support.
+                            supportY = Math.max(supportY, other.pos.y + 0.9);
+                        }
+                    }
+                }
+
+                // 3. Apply gravity or rest on support.
+                if (this.pos.y > supportY) {
+                    // If airborne, fall down.
+                    this.pos.y = Math.max(supportY, this.pos.y - 16.0 * dt);
+                } else {
+                    // Otherwise, ensure we are resting on the highest support.
+                    this.pos.y = supportY;
+                }
+            }
+
+
+            // --- Torch Avoidance for Crawlers ---
+            let avoidanceVector = new THREE.Vector3(0, 0, 0);
+            let isAvoiding = false;
+            if (this.type === 'crawley') {
+                const AVOID_RADIUS = 8;
+                let closestTorchDist = Infinity;
+
+                for (const torchPos of torchRegistry.values()) {
+                    const dist = this.pos.distanceTo(torchPos);
+                    if (dist < AVOID_RADIUS && dist < closestTorchDist) {
+                        closestTorchDist = dist;
+                        avoidanceVector.subVectors(this.pos, torchPos).normalize();
+                        isAvoiding = true;
+                    }
+                }
+
+                if (isAvoiding) {
+                    const scurrySpeed = this.speed * 2.5; // Scurry effect
+                    this.pos.x += avoidanceVector.x * scurrySpeed * dt * 60;
+                    this.pos.z += avoidanceVector.z * scurrySpeed * dt * 60;
+
+                    this.mesh.position.copy(this.pos);
+                    // Skip other AI when avoiding
+                    return;
+                }
+            }
+
+
+            let target = null;
+            let targetDistance = Infinity;
+
+            if (this.type === 'grub') {
+                if (this.aiState === 'IDLE' || this.aiState === 'SEARCHING_FOR_CACTUS') {
+                    this.aiState = 'SEARCHING_FOR_CACTUS'; // Explicitly set state
+                    const scanRadius = 16;
+                    let closestCactus = null;
+                    let minCactusDist = Infinity;
+
+                    // 1. Find the closest cactus stalk
+                    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+                        for (let dz = -scanRadius; dz <= scanRadius; dz++) {
+                            for (let dy = -4; dy <= 4; dy++) {
+                                const bx = Math.floor(this.pos.x + dx);
+                                const by = Math.floor(this.pos.y + dy);
+                                const bz = Math.floor(this.pos.z + dz);
+                                const blockId = getBlockAt(bx, by, bz);
+
+                                if (blockId === 9) { // Cactus
+                                    const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                    if (dist < minCactusDist) {
+                                        minCactusDist = dist;
+                                        closestCactus = { x: bx, y: by, z: bz };
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (closestCactus) {
+                        // 2. Find the highest block of that cactus stalk
+                        let highestY = closestCactus.y;
+                        while (getBlockAt(closestCactus.x, highestY + 1, closestCactus.z) === 9) {
+                            highestY++;
+                        }
+                        this.aiState = 'MOVING_TO_CACTUS';
+                        this.targetBlock = { x: closestCactus.x, y: highestY, z: closestCactus.z };
+                    } else {
+                        // No cactus found, enter wandering state. This will be handled in the movement section.
+                        this.aiState = 'IDLE';
+                    }
+                }
+
+                if (this.aiState === 'MOVING_TO_CACTUS' && this.targetBlock) {
+                    target = new THREE.Vector3(this.targetBlock.x + 0.5, this.targetBlock.y + 0.5, this.targetBlock.z + 0.5);
+                    targetDistance = this.pos.distanceTo(target);
+
+                    if (targetDistance < 1.8) { // A bit larger distance to start eating
+                        this.aiState = 'EATING_CACTUS';
+                        this.lingerTime = Date.now(); // Start linger timer
+                    }
+                } else if (this.aiState === 'EATING_CACTUS' && this.targetBlock) {
+                    if (Date.now() - this.lingerTime > 2500) { // 2.5 second eating time
+                        // Ensure the target block is still a cactus before eating
+                        if (getBlockAt(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z) === 9) {
+                            chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0); // Eat block
+                            this.cactusEaten++;
+
+                            if (this.cactusEaten >= 5) { // After eating 5 blocks
+                                this.cactusEaten = 0;
+                                // Create an emerald behind the grub
+                                const behindVector = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+                                const poopPos = this.pos.clone().add(behindVector.multiplyScalar(-2.5 * 3)); // Drop it a bit further back
+                                const groundY = chunkManager.getSurfaceY(poopPos.x, poopPos.z);
+                                chunkManager.setBlockGlobal(Math.floor(poopPos.x), groundY, Math.floor(poopPos.z), 125, true, worldSeed); // Emerald
+                            }
+                        }
+
+                        // Target the block below
+                        const blockBelow = { x: this.targetBlock.x, y: this.targetBlock.y - 1, z: this.targetBlock.z };
+
+                        if (getBlockAt(blockBelow.x, blockBelow.y, blockBelow.z) === 9) {
+                            // If there's more cactus below, continue eating
+                            this.targetBlock = blockBelow;
+                            this.lingerTime = Date.now(); // Reset linger for the next block
+                        } else {
+                            // Cactus finished, go back to searching
+                            this.aiState = 'IDLE';
+                            this.targetBlock = null;
+                        }
+                    }
+                }
+            } else { // All other mobs can target players
+                if (this.isAggressive || !target) {
+                    let closestPlayer = null;
+                    let minPlayerDist = Infinity;
+
+                    let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+                    if (hostDist < minPlayerDist) {
+                        minPlayerDist = hostDist;
+                        closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                    }
+
+                    for (const [username, peerData] of peers.entries()) {
+                        if (userPositions[username]) {
+                            const peerPos = userPositions[username];
+                            const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
+                            if (dist < minPlayerDist) {
+                                minPlayerDist = dist;
+                                closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username };
+                            }
+                        }
+                    }
+                    if (closestPlayer && minPlayerDist < 10) {
+                        target = { x: closestPlayer.x, z: closestPlayer.z };
+                        targetDistance = minPlayerDist;
+
+                        if (minPlayerDist < 1.2 && Date.now() - this.attackCooldown > 800) {
+                            this.attackCooldown = Date.now();
+                            const targetPeer = peers.get(closestPlayer.username);
+                            if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                                targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
+                            } else if (closestPlayer.username === userName) {
+                                if (Date.now() - lastDamageTime > 800) {
+                                    player.health = Math.max(0, player.health - 1);
+                                    lastDamageTime = Date.now();
+                                    document.getElementById('health').innerText = player.health;
+                                    updateHealthBar();
+                                    addMessage('Hit! HP: ' + player.health, 1000);
+                                    if (player.health <= 0) {
+                                        handlePlayerDeath();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            // Crawley AI: Target hives/honey, then players
+            if (this.type === 'crawley') {
+                const scanRadius = 16; // Increased scan radius for more aggressive hive seeking
+                let hiveTarget = null;
+                let honeyTarget = null;
+                let minHiveDist = Infinity;
+                let minHoneyDist = Infinity;
+
+                // Scan for Hives and Honey separately to prioritize Hives.
+                for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+                    for (let dz = -scanRadius; dz <= scanRadius; dz++) {
+                        for (let dy = -4; dy <= 4; dy++) { // Increased vertical scan
+                            const bx = Math.floor(this.pos.x + dx);
+                            const by = Math.floor(this.pos.y + dy);
+                            const bz = Math.floor(this.pos.z + dz);
+                            const blockId = getBlockAt(bx, by, bz);
+
+                            if (blockId === 123) { // Hive Block
+                                const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                if (dist < minHiveDist) {
+                                    minHiveDist = dist;
+                                    hiveTarget = { x: bx, y: by, z: bz, id: blockId };
+                                }
+                            } else if (blockId === 122) { // Honey Block
+                                const dist = this.pos.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+                                if (dist < minHoneyDist) {
+                                    minHoneyDist = dist;
+                                    honeyTarget = { x: bx, y: by, z: bz, id: blockId };
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Prioritize the Hive itself over Honey.
+                if (hiveTarget) {
+                    target = hiveTarget;
+                    targetDistance = minHiveDist;
+                } else if (honeyTarget) {
+                    target = honeyTarget;
+                    targetDistance = minHoneyDist;
+                }
+
+
+                if (target && targetDistance < 1.5) {
+                    if (this.lingerTime === 0) {
+                        this.lingerTime = Date.now(); // Start lingering
+                    } else if (Date.now() - this.lingerTime > 2000) { // Linger for 2 seconds
+                        const dist = Math.hypot(player.x - target.x, player.y - target.y, player.z - target.z);
+                        if (dist < maxAudioDistance) {
+                            safePlayAudio(soundBreak);
+                        }
+                        chunkManager.setBlockGlobal(target.x, target.y, target.z, 0);
+                        // Use a timeout to allow the block removal to fully process before checking.
+                        setTimeout(() => checkAndDeactivateHive(target.x, target.y, target.z), 100);
+                        target = null;
+                        this.lingerTime = 0; // Reset linger time
+                    }
+                } else {
+                    this.lingerTime = 0; // Reset if not near a target
+                }
+            }
+
+            // Bee AI
+            if (this.type === 'bee') {
+                if (this.aiState === 'SEARCHING_FOR_FLOWER') {
+                    if (flowerLocations.length > 0) {
+                        let closestFlower = null;
+                        let minFlowerDist = Infinity;
+                        for (const flower of flowerLocations) {
+                            const dist = Math.hypot(flower.x - this.pos.x, flower.z - this.pos.z);
+                            if (dist < minFlowerDist) {
+                                minFlowerDist = dist;
+                                closestFlower = flower;
+                            }
+                        }
+                        target = closestFlower;
+                        targetDistance = minFlowerDist;
+                        if (target) this.pos.y += (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y) * 0.1;
+                        if (targetDistance < 1.5) {
+                            this.hasPollen = true;
+                            this.aiState = 'FLYING_TO_HIVE';
+                        }
+                    }
+                } else if (this.aiState === 'FLYING_TO_HIVE') {
+                    if (hiveLocations.length > 0) {
+                        let closestHive = null;
+                        let minHiveDist = Infinity;
+                        for (const hive of hiveLocations) {
+                            const dist = Math.hypot(hive.x - this.pos.x, hive.z - this.pos.z);
+                            if (dist < minHiveDist) {
+                                minHiveDist = dist;
+                                closestHive = hive;
+                            }
+                        }
+                        target = closestHive;
+                        targetDistance = minHiveDist;
+                        if (target) this.pos.y += (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y) * 0.1; // Fly higher
+                        if (targetDistance < 2) {
+                            this.aiState = 'DEPOSITING_HONEY';
+                        }
+                    }
+                } else if (this.aiState === 'DEPOSITING_HONEY') {
+                    const hive = hiveLocations.find(h => Math.hypot(h.x - this.pos.x, h.z - this.pos.z) < 3);
+                    let placedHoney = false;
+                    if (hive) {
+                        // Search a 3x3x3 area around the hive for a valid spot
+                        for (let dy = 0; dy < 3; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                for (let dz = -1; dz <= 1; dz++) {
+                                    if (dx === 0 && dy === 0 && dz === 0) continue; // Don't place inside hive
+                                    const bx = hive.x + dx, by = hive.y + dy, bz = hive.z + dz;
+                                    // Honey must be placed in an empty space on top of a solid block
+                                    if (getBlockAt(bx, by, bz) === 0 && isSolid(getBlockAt(bx, by - 1, bz))) {
+                                        chunkManager.setBlockGlobal(bx, by, bz, 122); // Place honey
+                                        this.hasPollen = false;
+                                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                                        placedHoney = true;
+                                        break;
+                                    }
+                                }
+                                if (placedHoney) break;
+                            }
+                            if (placedHoney) break;
+                        }
+                    }
+                    if (placedHoney) {
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                    } else {
+                        // If no valid spot was found, don't get stuck, search for another flower.
+                        this.aiState = 'SEARCHING_FOR_FLOWER';
+                    }
+                }
+            }
+
+
+            // Player targeting if aggressive or no other target
+            if (this.isAggressive || !target) {
+                let closestPlayer = null;
+                let minPlayerDist = Infinity;
+
+                let hostDist = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+                if (hostDist < minPlayerDist) {
+                    minPlayerDist = hostDist;
+                    closestPlayer = { x: player.x, z: player.z, health: player.health, username: userName };
+                }
+
+                for (const [username, peerData] of peers.entries()) {
+                    if (userPositions[username]) {
+                        const peerPos = userPositions[username];
+                        const dist = Math.hypot(peerPos.x - this.pos.x, peerPos.z - this.pos.z);
+                        if (dist < minPlayerDist) {
+                            minPlayerDist = dist;
+                            closestPlayer = { x: peerPos.x, z: peerPos.z, health: 20, username: username };
+                        }
+                    }
+                }
+                if (closestPlayer && minPlayerDist < 10) {
+                    target = { x: closestPlayer.x, z: closestPlayer.z };
+                    targetDistance = minPlayerDist;
+
+                    if (minPlayerDist < 1.2 && Date.now() - this.attackCooldown > 800) {
+                        this.attackCooldown = Date.now();
+                        const targetPeer = peers.get(closestPlayer.username);
+                        if (targetPeer && targetPeer.dc && targetPeer.dc.readyState === 'open') {
+                            targetPeer.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'mob' }));
+                        } else if (closestPlayer.username === userName) {
+                            if (Date.now() - lastDamageTime > 800) {
+                                player.health = Math.max(0, player.health - 1);
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                addMessage('Hit! HP: ' + player.health, 1000);
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let isMoving = false;
+            if (target && targetDistance > 0.01) { // Check for distance to avoid division by zero
+                const dx = target.x - this.pos.x;
+                const dz = target.z - this.pos.z;
+                const vx = dx / targetDistance * this.speed;
+                const vz = dz / targetDistance * this.speed;
+                const newX = modWrap(this.pos.x + vx * dt * 60, MAP_SIZE);
+                const newZ = modWrap(this.pos.z + vz * dt * 60, MAP_SIZE);
+
+                if (this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1) {
+                        this.pos.y = frontY + 0.5; // Climb up one block
+                    }
+                }
+
+                if (this.type === 'grub' || this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1.2) { // Allow climbing slightly more than 1 block
+                        this.pos.y = frontY + 0.5;
+                    }
+                }
+
+                if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
+                    this.pos.x = newX;
+                    this.pos.z = newZ;
+                    isMoving = true;
+                }
+            } else {
+                // Wander
+                const wanderSpeed = this.speed * 0.5;
+                const newX = modWrap(this.pos.x + (Math.sin(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
+                const newZ = modWrap(this.pos.z + (Math.cos(Date.now() * 0.001 + this.mesh.id) * wanderSpeed) * dt * 60, MAP_SIZE);
+                if (this.type === 'grub' || this.type === 'crawley') {
+                    const frontY = chunkManager.getSurfaceY(newX, newZ);
+                    if (frontY > this.pos.y && frontY <= this.pos.y + 1.2) {
+                        this.pos.y = frontY + 0.5;
+                    }
+                }
+                 if (!checkCollisionWithBlock(newX, this.pos.y, newZ)) {
+                    this.pos.x = newX;
+                    this.pos.z = newZ;
+                    isMoving = true;
+                }
+            }
+            this.isMoving = isMoving;
+
+            if (this.type === 'grub' && target) {
+                const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(target.x, this.pos.y, target.z), this.pos).normalize();
+                const angle = Math.atan2(targetDirection.x, targetDirection.z);
+                this.mesh.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), 0.05); // Slower turning
+            }
+
+            this.mesh.position.copy(this.pos);
+            }
+            // Grub and Crawley animations are now client-side, driven by host state.
+            if (this.type === 'grub') {
+                const isEating = this.aiState === 'EATING_CACTUS';
+                const animationSpeed = (this.isMoving ? 8 : 4) / 2;
+                this.animationTime += dt * animationSpeed;
+
+                this.segments.forEach((segment, i) => {
+                    if (i > 0) {
+                        if (i === 1 && isEating) {
+                            segment.position.y = 0;
+                        } else {
+                            segment.position.y = Math.sin(this.animationTime - i * 0.8) * 0.15 * 3;
+                        }
+                    }
+                });
+
+                if (isEating) {
+                    this.headPivot.rotation.x = -Math.PI / 4 * (1 - Math.cos(this.animationTime * 2));
+                    const pincherAngle = Math.abs(Math.sin(this.animationTime * 4)) * (Math.PI / 4);
+                    this.pinchers[0].rotation.z = Math.PI / 6 + pincherAngle;
+                    this.pinchers[1].rotation.z = -Math.PI / 6 - pincherAngle;
+                } else {
+                    this.headPivot.rotation.x = 0;
+                    this.pinchers[0].rotation.z = Math.PI / 6;
+                    this.pinchers[1].rotation.z = -Math.PI / 6;
+                }
+
+                if (this.isMoving || isEating) {
+                    this.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? -1 : 1;
+                        const legGroup = Math.floor(i / 2);
+                        leg.rotation.x = Math.sin(this.animationTime - legGroup * 0.5) * side * 0.8;
+                    });
+                } else {
+                    this.legs.forEach(leg => leg.rotation.x = 0);
+                }
+            } else if (this.type === 'crawley' && this.mesh.legs) {
+                if (this.isMoving) {
+                    this.animationTime += dt * 15; // Animation speed
+                    this.mesh.position.y += Math.sin(this.animationTime * 2) * 0.05; // Body bobbing
+                    this.mesh.legs.forEach((leg, i) => {
+                        const side = (i % 2 === 0) ? 1 : -1;
+                        leg.rotation.x = Math.sin(this.animationTime + (Math.floor(i / 2) * Math.PI / 3)) * side * 0.8;
+                    });
+                } else {
+                    this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
+                }
+            }
+        };
+        Mob.prototype.hurt = function (dmg, attackerName) {
+            if (!isHost && peers.size > 0) return; // Only host or single player can process damage
+
+            this.hp -= dmg;
+            this.flashEnd = Date.now() + 200; // Trigger flash effect
+            safePlayAudio(soundHit);
+
+            // Apply knockback
+            const attacker = (attackerName === userName) ? player : userPositions[attackerName];
+            if (attacker) {
+                const attackerX = (attackerName === userName) ? attacker.x : attacker.targetX;
+                const attackerZ = (attackerName === userName) ? attacker.z : attacker.targetZ;
+                const dx = this.pos.x - attackerX;
+                const dz = this.pos.z - attackerZ;
+                const dist = Math.hypot(dx, dz);
+                const knockbackStrength = 8;
+                if (dist > 0) { // SAFEGUARD: Prevent division by zero
+                    this.vx += (dx / dist) * knockbackStrength;
+                    this.vz += (dz / dist) * knockbackStrength;
+                }
+            }
+
+
+            if (this.hp <= 0) {
+                this.die(attackerName);
+            } else {
+                // Broadcast the health update
+                const updateMessage = JSON.stringify({
+                    type: 'mob_update',
+                    id: this.id,
+                    x: this.pos.x,
+                    y: this.pos.y,
+                    z: this.pos.z,
+                    hp: this.hp,
+                    flash: true, // Tell clients to trigger the flash
+                    mobType: this.type
+                });
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(updateMessage);
+                    }
+                }
+            }
+        };
+        Mob.prototype.die = function (killerName) {
+            if (!isHost && peers.size > 0) return; // Only host or single player can process death
+
+            try {
+                scene.remove(this.mesh);
+                disposeObject(this.mesh);
+            } catch (e) { }
+
+            mobs = mobs.filter(m => m.id !== this.id);
+            addMessage('Mob defeated!');
+
+            // Award score to the killer
+            let points = 10; // Default for green
+            if (this.eyeColor === 'red') {
+                points = 20; // Double points
+            } else if (this.eyeColor === 'blue') {
+                points = 30; // Triple points
+            }
+
+            if (killerName === userName) {
+                player.score += points;
+                document.getElementById('score').innerText = player.score;
+                addMessage(`+${points} score`);
+                safePlayAudio(soundHit); // Play a sound for getting points
+            } else {
+                const killerPeer = peers.get(killerName);
+                if (killerPeer && killerPeer.dc && killerPeer.dc.readyState === 'open') {
+                    killerPeer.dc.send(JSON.stringify({ type: 'add_score', amount: points }));
+                }
+            }
+
+            // Broadcast the kill to all clients
+            const killMessage = JSON.stringify({ type: 'mob_kill', id: this.id });
+            for (const [peerUser, peerData] of peers.entries()) {
+                if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                    peerData.dc.send(killMessage);
+                }
+            }
+        };
+        function manageMobs() {
+            if (!worldArchetype) return;
+            if (!isHost && peers.size > 0) return;
+            if (Date.now() - lastMobManagement < 5000) return;
+            lastMobManagement = Date.now();
+
+            const CRAWLEY_CAP = 20;
+            const BEE_CAP = 10;
+            const GRUB_CAP = 2;
+            const SPAWN_RADIUS = 64;
+            const DESPAWN_RADIUS = 96;
+
+            const allPlayers = [{ x: player.x, y: player.y, z: player.z }];
+            for (const pos of Object.values(userPositions)) {
+                if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+            }
+
+            const allowedMobsToday = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+
+            mobs = mobs.filter(mob => {
+                const isNearPlayer = allPlayers.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < DESPAWN_RADIUS);
+                const isAllowedNow = allowedMobsToday.includes(mob.type);
+
+                if (!isNearPlayer || !isAllowedNow) {
+                    scene.remove(mob.mesh);
+                    disposeObject(mob.mesh);
+                    const killMessage = JSON.stringify({ type: 'mob_kill', id: mob.id });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(killMessage);
+                        }
+                    }
+                    return false;
+                }
+
+                return true;
+            });
+
+            for (const mobType of allowedMobsToday) {
+                let mobCap;
+                if (mobType === 'crawley') mobCap = CRAWLEY_CAP;
+                else if (mobType === 'bee') mobCap = BEE_CAP;
+                else if (mobType === 'grub') mobCap = GRUB_CAP;
+                else continue;
+
+                const currentCount = mobs.filter(m => m.type === mobType).length;
+
+                if (currentCount < mobCap) {
+                    const spawnPlayer = allPlayers[Math.floor(Math.random() * allPlayers.length)];
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = SPAWN_RADIUS / 2 + Math.random() * SPAWN_RADIUS / 2;
+                    const x = modWrap(spawnPlayer.x + Math.cos(angle) * radius, MAP_SIZE);
+                    const z = modWrap(spawnPlayer.z + Math.sin(angle) * radius, MAP_SIZE);
+
+                    const newMob = new Mob(x, z, Date.now() + Math.random(), mobType);
+                    mobs.push(newMob);
+
+                    const spawnMessage = JSON.stringify({
+                        type: 'mob_spawn',
+                        id: newMob.id,
+                        x: newMob.pos.x,
+                        y: newMob.pos.y,
+                        z: newMob.pos.z,
+                        hp: newMob.hp,
+                        mobType: newMob.type,
+                        isAggressive: newMob.isAggressive
+                    });
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(spawnMessage);
+                        }
+                    }
+                }
+            }
+        }
+        function isSolid(id) {
+            return id !== 0 && id !== 6 && id !== 12 && id !== 8 && id !== 16 && id !== 17 && id !== 100 && id !== 101 && id !== 102 && id !== 103 && id !== 104 && id !== 111 && id !== 112 && id !== 113 && id !== 114 && id !== 116 && id !== 117;
+        }
+        function checkCollisionWithBlock(newX, newY, newZ) {
+            var minX = newX - 0.45;
+            var minY = newY;
+            var minZ = newZ - 0.45;
+            var maxX = newX + 0.45;
+            var maxY = newY + 0.9;
+            var maxZ = newZ + 0.45;
+            for (var bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
+                for (var by = Math.floor(minY); by <= Math.floor(maxY); by++) {
+                    for (var bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+                        if (isSolid(getBlockAt(bx, by, bz))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        function checkCollision(newX, newY, newZ) {
+            // Determine the integer coordinates of all blocks the hitbox touches.
+            const minBx = Math.floor(newX);
+            const maxBx = Math.floor(newX + player.width);
+            const minBy = Math.floor(newY);
+            const maxBy = Math.floor(newY + player.height);
+            const minBz = Math.floor(newZ);
+            const maxBz = Math.floor(newZ + player.depth);
+
+            // Loop through every potentially colliding block.
+            for (let bx = minBx; bx <= maxBx; bx++) {
+                for (let by = minBy; by <= maxBy; by++) {
+                    for (let bz = minBz; bz <= maxBz; bz++) {
+                        if (isSolid(getBlockAt(bx, by, bz))) {
+                            return true; // Collision found!
+                        }
+                    }
+                }
+            }
+
+            return false; // No collisions found.
+        }
+        function pushPlayerOut() {
+            var directions = [
+                { dx: 0.2, dz: 0 }, { dx: -0.2, dz: 0 }, { dx: 0, dz: 0.2 }, { dx: 0, dz: -0.2 },
+                { dx: 0.2, dz: 0.2 }, { dx: 0.2, dz: -0.2 }, { dx: -0.2, dz: 0.2 }, { dx: -0.2, dz: -0.2 }
+            ];
+            for (var yOffset = 0; yOffset <= 2; yOffset += 0.2) {
+                for (var dir of directions) {
+                    var newX = modWrap(player.x + dir.dx, MAP_SIZE);
+                    var newZ = modWrap(player.z + dir.dz, MAP_SIZE);
+                    var newY = player.y + yOffset;
+                    if (!checkCollision(newX, newY, newZ)) {
+                        player.x = newX;
+                        player.y = newY;
+                        player.z = newZ;
+                        player.vy = 0;
+                        player.onGround = true;
+                        addMessage('Pushed out of block');
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function handleLavaEruption(data) {
+            const rnd = makeSeededRandom(data.seed);
+            const eruptionCount = 20 + Math.floor(rnd() * 20);
+            for (let i = 0; i < eruptionCount; i++) {
+                const block = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 1, 1),
+                    new THREE.MeshBasicMaterial({ color: BLOCKS[16].color })
+                );
+                block.position.set(
+                    data.volcano.x + (rnd() - 0.5) * 10,
+                    data.volcano.y,
+                    data.volcano.z + (rnd() - 0.5) * 10
+                );
+                const velocity = new THREE.Vector3(
+                    (rnd() - 0.5) * 2,
+                    20 + rnd() * 20,
+                    (rnd() - 0.5) * 2
+                );
+                eruptedBlocks.push({ mesh: block, velocity: velocity, createdAt: Date.now() });
+                scene.add(block);
+            }
+        }
+
+        function createPebble(x, y, z, isGlowing) {
+            const size = isGlowing ? 0.2 : 0.1;
+            const color = isGlowing ? 0xff6a00 : 0x333333;
+            const material = isGlowing ? new THREE.MeshBasicMaterial({ color: color }) : new THREE.MeshStandardMaterial({ color: color });
+            const pebble = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size),
+                material
+            );
+            pebble.position.set(x, y, z);
+            return pebble;
+        }
+
+        function handlePebbleRain(data) {
+            const rnd = makeSeededRandom(data.seed);
+            const rainCount = 100 + Math.floor(rnd() * 100);
+            for (let i = 0; i < rainCount; i++) {
+                const isGlowing = rnd() < 0.2;
+                const radius = rnd() * 32;
+                const angle = rnd() * Math.PI * 2;
+                const x = data.volcano.x + Math.cos(angle) * radius;
+                const z = data.volcano.z + Math.sin(angle) * radius;
+                const y = data.volcano.y + 20 + rnd() * 20;
+
+                const pebbleMesh = createPebble(x, y, z, isGlowing);
+                const velocity = new THREE.Vector3(0, -5 - rnd() * 5, 0);
+                pebbles.push({ mesh: pebbleMesh, velocity: velocity, createdAt: Date.now(), isGlowing: isGlowing });
+                scene.add(pebbleMesh);
+            }
+        }
+
+        function handleVolcanoEvent(data) {
+            let soundId;
+            switch (data.eventType) {
+                case 'lava_eruption':
+                    handleLavaEruption(data);
+                    soundId = 'rumble0';
+                    break;
+                case 'pebble_rain':
+                    handlePebbleRain(data);
+                    soundId = 'rumble1';
+                    break;
+                case 'boulder_eruption':
+                    handleBoulderEruption(data);
+                    const sounds = ['rumble2', 'rumble3', 'rumble4', 'rumble5'];
+                    soundId = sounds[Math.floor(Math.random() * sounds.length)];
+                    break;
+            }
+            if (soundId) {
+                const eruptionId = Date.now();
+                const sound = document.getElementById(soundId);
+
+                if (sound) {
+                    // Add to active eruptions *before* playing for immediate volume scaling
+                    const eruptionInfo = {
+                        id: eruptionId,
+                        volcano: data.volcano,
+                        soundId: soundId,
+                    };
+                    activeEruptions.push(eruptionInfo);
+
+                    sound.currentTime = 0;
+                    safePlayAudio(sound);
+
+                    // Use the 'onended' event to know precisely when the sound finishes
+                    sound.onended = () => {
+                        console.log(`[Audio] Sound ${soundId} finished playing.`);
+                        activeEruptions = activeEruptions.filter(e => e.id !== eruptionId);
+                        sound.onended = null; // Clean up the event listener
+                    };
+                }
+            }
+        }
+function createEruptionSmoke(x, y, z, count) {
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = [];
+    const opacities = new Float32Array(count);
+    const smokeColors = [
+        new THREE.Color(0xffffff), // White
+        new THREE.Color(0x888888), // Grey
+    ];
+
+    for (let i = 0; i < count; i++) {
+        positions[i * 3] = x + (Math.random() - 0.5) * 15;
+        positions[i * 3 + 1] = y + (Math.random() - 0.5) * 10;
+        positions[i * 3 + 2] = z + (Math.random() - 0.5) * 15;
+        opacities[i] = 1.0;
+
+        const color = smokeColors[Math.floor(Math.random() * smokeColors.length)];
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+
+        velocities.push({
+            x: (Math.random() - 0.5) * 3,
+            y: 10 + Math.random() * 10, // Higher velocity
+            z: (Math.random() - 0.5) * 3,
+            life: 5 + Math.random() * 5 // Longer lifespan
+        });
+    }
+
+    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    particles.setAttribute('alpha', new THREE.BufferAttribute(opacities, 1));
+    particles.velocities = velocities;
+
+    const material = new THREE.PointsMaterial({
+        size: 5,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        transparent: true,
+        vertexColors: true
+    });
+
+    const smokeTextureCanvas = document.createElement('canvas');
+    smokeTextureCanvas.width = 64;
+    smokeTextureCanvas.height = 64;
+    const context = smokeTextureCanvas.getContext('2d');
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(200, 200, 200, 0.5)');
+    gradient.addColorStop(1, 'rgba(200, 200, 200, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+    material.map = new THREE.CanvasTexture(smokeTextureCanvas);
+    material.map.needsUpdate = true;
+
+
+    const particleSystem = new THREE.Points(particles, material);
+    particleSystem.position.set(0, 0, 0);
+    return particleSystem;
+}
+function handleBoulderEruption(data) {
+    const smokeCount = 150;
+    const smokeSystem = createEruptionSmoke(data.volcano.x, data.volcano.y, data.volcano.z, smokeCount);
+    smokeSystem.userData.chunkKey = data.volcano.chunkKey; // Not strictly necessary but good for consistency
+    smokeSystem.createdAt = Date.now();
+    smokeParticles.push(smokeSystem);
+    scene.add(smokeSystem);
+
+    const rnd = makeSeededRandom(data.seed);
+    const eruptionCount = 10 + Math.floor(rnd() * 10);
+    for (let i = 0; i < eruptionCount; i++) {
+        const sizeRnd = rnd();
+        let size, mass;
+        if (sizeRnd < 0.5) {
+            size = 1 + rnd() * 0.5; // Small
+            mass = 1;
+        } else if (sizeRnd < 0.85) {
+            size = 2 + rnd() * 1;   // Medium
+            mass = 2;
+        } else {
+            size = 3 + rnd() * 1.5; // Large
+            mass = 4;
+        }
+
+        const boulder = new THREE.Mesh(
+            new THREE.BoxGeometry(size, size, size),
+            new THREE.MeshStandardMaterial({ color: 0x555555, map: createBlockTexture(worldSeed, 4) }) // Stone texture
+        );
+
+        const angle = rnd() * Math.PI * 2;
+                const horizontal_force = 50 + rnd() * 50;
+                const vertical_force = 40 + rnd() * 20;
+        const velocity = new THREE.Vector3(
+            Math.cos(angle) * horizontal_force / mass, // Heavier boulders travel less far
+            vertical_force, // High arc
+            Math.sin(angle) * horizontal_force / mass
+        );
+
+        // Spawn boulders lower down, inside the caldera, to give them a launch trajectory
+        boulder.position.set(
+            data.volcano.x + (rnd() - 0.5) * 8, // Randomize start position within caldera
+            data.volcano.y - 10 - rnd() * 5, // Start from below lava surface
+            data.volcano.z + (rnd() - 0.5) * 8
+        );
+
+        const boulderId = 'boulder_' + Date.now() + '_' + i;
+        eruptedBlocks.push({
+            id: boulderId,
+            mesh: boulder,
+            velocity: velocity,
+            createdAt: Date.now(),
+            type: 'boulder',
+            size: size,
+            mass: mass,
+            isRolling: false,
+            targetPosition: boulder.position.clone(),
+            targetQuaternion: boulder.quaternion.clone(),
+            lastUpdate: 0
+        });
+        scene.add(boulder);
+    }
+}
+        function manageVolcanoes() {
+            if (isHost || peers.size === 0) {
+                if (Date.now() - lastVolcanoManagement < 10000) return; // Run every 10 seconds
+                lastVolcanoManagement = Date.now();
+                const allPlayers = [{ x: player.x, y: player.y, z: player.z }];
+                for (const pos of Object.values(userPositions)) {
+                    if (pos.targetX) allPlayers.push({ x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                }
+                for (const volcano of volcanoes) {
+                    const isNearPlayer = allPlayers.some(p => Math.hypot(volcano.x - p.x, volcano.z - p.z) < 256);
+                    if (isNearPlayer) {
+                        const now = Date.now();
+                        // Cooldown check: one event per minute per volcano
+                        if (now - (volcano.lastEventTime || 0) < 60000) {
+                            continue;
+                        }
+
+                        const eventRnd = makeSeededRandom(worldSeed + '_volcano_event_' + volcano.chunkKey + '_' + Math.floor(now / 60000)); // Change event seed every minute
+                        if (eventRnd() < 0.05) { // 5% chance per minute to trigger an event
+                            volcano.lastEventTime = now; // Set cooldown timestamp
+                            const eventTypeRnd = eventRnd();
+                            let eventType;
+                            if (eventTypeRnd < 0.33) {
+                                eventType = 'lava_eruption';
+                            } else if (eventTypeRnd < 0.66) {
+                                eventType = 'pebble_rain';
+                            } else {
+                                eventType = 'boulder_eruption';
+                            }
+                            console.log(`[Volcano] Triggering event: ${eventType} at volcano ${volcano.chunkKey}`);
+                            const eventMessage = {
+                                type: 'volcano_event',
+                                volcano: { x: volcano.x, y: volcano.y, z: volcano.z },
+                                eventType: eventType,
+                                seed: worldSeed + '_event_' + now
+                            };
+                            // Host triggers the event locally
+                            handleVolcanoEvent(eventMessage);
+                            // Broadcast to all clients
+                            for (const [peerUser, peerData] of peers.entries()) {
+                                if (peerData.dc && peerData.dc.readyState === 'open') {
+                                    peerData.dc.send(JSON.stringify(eventMessage));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        var minimapCtx;
+
+
+        function updateMinimap() {
+            if (!minimapCtx) return;
+            var canvas = minimapCtx.canvas;
+            minimapCtx.clearRect(0, 0, canvas.width, canvas.height);
+            minimapCtx.fillStyle = 'rgba(0,0,0,0.3)';
+            minimapCtx.fillRect(0, 0, canvas.width, canvas.height);
+            var scale = canvas.width / 40;
+            var cx = canvas.width / 2;
+            var cz = canvas.height / 2;
+            minimapCtx.fillStyle = '#ffffff';
+            minimapCtx.fillRect(cx - 2, cz - 2, 4, 4);
+            minimapCtx.fillStyle = '#9bff9b';
+            for (var m of mobs) {
+                var dx = m.pos.x - player.x;
+                var dz = m.pos.z - player.z;
+                if (Math.abs(dx) <= 20 && Math.abs(dz) <= 20) {
+                    var px = cx + dx * scale;
+                    var pz = cz + dz * scale;
+                    minimapCtx.fillRect(px - 2, pz - 2, 4, 4);
+                }
+            }
+            minimapCtx.fillStyle = '#ff6b6b';
+            for (var entry of playerAvatars) {
+                var username = entry[0];
+                var avatar = entry[1];
+                var dx = avatar.position.x - player.x;
+                var dz = avatar.position.z - player.z;
+                if (Math.abs(dx) <= 20 && Math.abs(dz) <= 20) {
+                    var px = cx + dx * scale;
+                    var pz = cz + dz * scale;
+                    minimapCtx.fillRect(px - 2, pz - 2, 4, 4);
+                }
+            }
+            if (isConnecting) {
+                const radius = canvas.width / 2;
+                const angle = (performance.now() / 500) % (Math.PI * 2);
+
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(cx, cz);
+                minimapCtx.lineTo(cx + radius * Math.cos(angle), cz + radius * Math.sin(angle));
+
+                const gradient = minimapCtx.createLinearGradient(cx, cz, cx + radius * Math.cos(angle), cz + radius * Math.sin(angle));
+                gradient.addColorStop(0, 'rgba(100, 255, 100, 0)');
+                gradient.addColorStop(1, 'rgba(100, 255, 100, 0.9)');
+
+                minimapCtx.strokeStyle = gradient;
+                minimapCtx.lineWidth = 2;
+                minimapCtx.stroke();
+            }
+        }
+        var keys = {};
+        function registerKeyEvents() {
+            function keydownHandler(e) {
+                const key = e.key.toLowerCase();
+
+                // Sprint logic: only trigger on the *first* keydown event.
+                if (key === 'w' && !keys[key]) {
+                    const now = performance.now();
+                    if (now - lastWPress < 300) { // 300ms for a double tap
+                        isSprinting = !isSprinting;
+                        addMessage(isSprinting ? 'Sprinting enabled' : 'Sprinting disabled', 1500);
+                    }
+                    lastWPress = now;
+                }
+
+                keys[key] = true;
+
+                if (e.key === 'Escape' && mouseLocked) {
+                    document.exitPointerLock();
+                    mouseLocked = false;
+                }
+                if (e.key.toLowerCase() === 't') toggleCameraMode();
+                if (e.key.toLowerCase() === 'c') openCrafting();
+                if (e.key.toLowerCase() === 'i') toggleInventory();
+                if (e.key.toLowerCase() === 'p') {
+                    isPromptOpen = true;
+                    document.getElementById('teleportModal').style.display = 'block';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
+                }
+                if (e.key.toLowerCase() === 'x' && CHUNK_DELTAS.size > 0) downloadSession();
+                if (e.key.toLowerCase() === 'u') openUsersModal();
+                if (e.key.toLowerCase() === ' ') {
+                    playerJump();
+                    safePlayAudio(soundJump);
+                }
+
+                if (e.key.toLowerCase() === 'q') {
+                    onPointerDown({ button: 0, preventDefault: () => { } });
+                }
+                if (e.key.toLowerCase() === 'e') {
+                    onPointerDown({ button: 2, preventDefault: () => { } });
+                }
+            }
+            function keyupHandler(e) { keys[e.key.toLowerCase()] = false; }
+            window.addEventListener('keydown', keydownHandler);
+            window.addEventListener('keyup', keyupHandler);
+            return function () {
+                window.removeEventListener('keydown', keydownHandler);
+                window.removeEventListener('keyup', keyupHandler);
+            };
+        }
+        function playerJump() {
+            if (player.onGround) {
+                player.vy = isSprinting ? 8.5 * 3 : 8.5;
+                player.onGround = false;
+                safePlayAudio(soundJump);
+            }
+        }
+        function toggleCameraMode() {
+            cameraMode = (cameraMode === 'third') ? 'first' : 'third';
+            addMessage('Camera: ' + cameraMode);
+            controls.enabled = cameraMode === 'third';
+            avatarGroup.visible = cameraMode === 'third';
+            if (cameraMode === 'third') {
+                camera.position.set(player.x, player.y + 5, player.z + 10);
+                controls.target.set(player.x, player.y + 0.6, player.z);
+                controls.update();
+                if (!isMobile()) {
+                    document.exitPointerLock();
+                }
+                mouseLocked = false;
+                document.getElementById('crosshair').style.display = 'none';
+            } else {
+                if (!isMobile()) {
+                    try {
+                        renderer.domElement.requestPointerLock();
+                        mouseLocked = true;
+                        document.getElementById('crosshair').style.display = 'block';
+                    } catch (e) {
+                        addMessage('Pointer lock failed. Please serve over HTTPS or ensure allow-pointer-lock is set in iframe.');
+                        document.getElementById('crosshair').style.display = 'block';
+                    }
+                } else {
+                    document.getElementById('crosshair').style.display = 'block';
+                }
+                player.yaw = 0;
+                player.pitch = 0;
+                camera.rotation.set(0, 0, 0, 'YXZ');
+            }
+        }
+        function performAttack() {
+            animateAttack();
+            var dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            var origin = (cameraMode === 'first') ? new THREE.Vector3(player.x, player.y + 1.62, player.z) : camera.position.clone();
+            raycaster.setFromCamera(pointer, camera);
+            raycaster.far = 5;
+            var mobHits = mobs.map(function (m) { return { mob: m, intersect: raycaster.intersectObject(m.mesh)[0] }; })
+                .filter(function (h) { return h.intersect; })
+                .sort(function (a, b) { return a.intersect.distance - b.intersect.distance; });
+            if (mobHits.length > 0) {
+                var mob = mobHits[0].mob;
+                mob.hurt(4);
+                safePlayAudio(soundHit);
+                addMessage('Hit mob!', 800);
+                return;
+            }
+            for (var d = 0.6; d < 3.0; d += 0.6) {
+                var p = origin.clone().addScaledVector(dir, d);
+                var bx = Math.round(p.x), by = Math.round(p.y), bz = Math.round(p.z);
+                var b = getBlockAt(bx, by, bz);
+                if (b && b !== BLOCK_AIR && b !== 6) {
+                    removeBlockAt(bx, by, bz);
+                    return;
+                }
+            }
+        }
+        async function downloadSession() {
+            var playerData = {
+                world: worldName,
+                seed: worldSeed,
+                user: userName,
+                savedAt: new Date().toISOString(),
+                deltas: [],
+                foreignBlockOrigins: Array.from(foreignBlockOrigins.entries()),
+                profile: {
+                    x: player.x,
+                    y: player.y,
+                    z: player.z,
+                    health: player.health,
+                    score: player.score,
+                    inventory: INVENTORY
+                },
+                musicPlaylist: musicPlaylist,
+                videoPlaylist: videoPlaylist
+            };
+            for (var entry of CHUNK_DELTAS) {
+                var k = entry[0];
+                var arr = entry[1];
+                var parsed = parseChunkKey(k);
+                if (parsed) {
+                    playerData.deltas.push({ chunk: k, changes: arr });
+                }
+            }
+            var hash = simpleHash(JSON.stringify(playerData));
+            var out = {
+                playerData: playerData,
+                hash: hash
+            };
+            var blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = worldName + '_session_' + Date.now() + '.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            addMessage('Session downloaded');
+            var chunkKeys = Array.from(CHUNK_DELTAS.keys());
+            var chunkAddresses = await Promise.all(chunkKeys.map(async function (key) {
+                var addr = await GetPublicAddressByKeyword(key);
+                return addr ? addr.trim().replace(/^"|"$/g, '') : key;
+            }));
+            document.getElementById('downloadAddressList').value = chunkAddresses.join(',');
+            document.getElementById('downloadModal').style.display = 'block';
+        }
+        function disposeObject(obj) {
+            obj.traverse(function (c) {
+                if (c.geometry) c.geometry.dispose();
+                if (c.material) {
+                    if (Array.isArray(c.material)) c.material.forEach(function (m) { m.dispose(); });
+                    else c.material.dispose();
+                }
+            });
+        }
+        function addMessage(txt, ttl) {
+            var c = document.getElementById('messages');
+            var el = document.createElement('div');
+            el.className = 'msg';
+            el.innerText = txt;
+            c.prepend(el);
+            setTimeout(function () { el.remove(); }, ttl || 2000);
+        }
+        function updateHealthBar() {
+            var pct = Math.max(0, Math.min(1, player.health / 999));
+            document.getElementById('healthBarInner').style.width = (pct * 100) + '%';
+        }
+        function updateSaveChangesButton() {
+            var saveBtn = document.getElementById('saveChangesBtn');
+            saveBtn.style.display = CHUNK_DELTAS.size > 0 ? 'inline-block' : 'none';
+        }
+        function updateHudButtons() {
+            var joinScriptBtn = document.getElementById('joinScriptBtn');
+            joinScriptBtn.style.display = 'none';
+            updateSaveChangesButton();
+            var usersBtn = document.getElementById('usersBtn');
+            var peerCount = peers.size > 0 ? peers.size - (peers.has(userName) ? 1 : 0) : 0;
+            console.log('[WebRTC] Updating usersBtn: peerCount=', peerCount, 'peers=', Array.from(peers.keys()));
+            usersBtn.style.display = 'inline-block';
+            usersBtn.innerText = '🌐 ' + peerCount;
+            usersBtn.onclick = function () {
+                console.log('[Modal] usersBtn clicked, opening modal');
+                openUsersModal();
+            };
+            setupPendingModal();
+        }
+        function updateHud() {
+            var scoreElement = document.getElementById('score');
+            if (scoreElement) scoreElement.innerText = player.score;
+            var healthElement = document.getElementById('health');
+            if (healthElement) healthElement.innerText = player.health;
+            var posLabel = document.getElementById('posLabel');
+            if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
+            var distFromSpawn = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
+            document.getElementById('homeIcon').style.display = distFromSpawn > 10 ? 'inline' : 'none';
+            updateHealthBar();
+            updateHotbarUI();
+            updateHudButtons();
+        }
+        function isMobile() { return /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent); }
+        function setupMobile() {
+            if (!isMobile()) return;
+            var up = document.getElementById('mUp'), down = document.getElementById('mDown'), left = document.getElementById('mLeft'), right = document.getElementById('mRight');
+            up.addEventListener('touchstart', function (e) { joystick.up = true; e.preventDefault(); });
+            up.addEventListener('touchend', function (e) { joystick.up = false; e.preventDefault(); });
+            down.addEventListener('touchstart', function (e) { joystick.down = true; e.preventDefault(); });
+            down.addEventListener('touchend', function (e) { joystick.down = false; e.preventDefault(); });
+            left.addEventListener('touchstart', function (e) { joystick.left = true; e.preventDefault(); });
+            left.addEventListener('touchend', function (e) { joystick.left = false; e.preventDefault(); });
+            right.addEventListener('touchstart', function (e) { joystick.right = true; e.preventDefault(); });
+            right.addEventListener('touchend', function (e) { joystick.right = false; e.preventDefault(); });
+            document.getElementById('mJump').addEventListener('touchstart', function (e) { playerJump(); safePlayAudio(soundJump); e.preventDefault(); });
+            document.getElementById('mAttack').addEventListener('touchstart', function (e) { performAttack(); e.preventDefault(); });
+            document.getElementById('mCam').addEventListener('touchstart', function (e) { toggleCameraMode(); e.preventDefault(); });
+        }
+        function updateLoginUI() {
+            try {
+                console.log('[Debug] updateLoginUI started, knownWorlds:', knownWorlds.size, 'knownUsers:', knownUsers.size);
+                var worldInput = document.getElementById('worldNameInput');
+                var userInput = document.getElementById('userInput');
+                var worldSuggestions = document.getElementById('worldSuggestions');
+                var userSuggestions = document.getElementById('userSuggestions');
+                if (!worldInput || !userInput || !worldSuggestions || !userSuggestions) {
+                    console.error('[Debug] Input or suggestion elements not found in DOM');
+                    addMessage('UI initialization failed: elements missing', 3000);
+                    return;
+                }
+                function updateWorldSuggestions() {
+                    var value = worldInput.value.toLowerCase();
+                    var suggestions = Array.from(knownWorlds.keys())
+                        .filter(w => w.toLowerCase().startsWith(value))
+                        .slice(0, 10);
+                    worldSuggestions.innerHTML = suggestions.map(w => `<div data-value="${w}">${w}</div>`).join('');
+                    worldSuggestions.style.display = suggestions.length > 0 && value ? 'block' : 'none';
+                }
+
+                function updateUserSuggestions() {
+                    var value = userInput.value.toLowerCase();
+                    var suggestions = Array.from(knownUsers.keys())
+                        .filter(u => u.toLowerCase().startsWith(value))
+                        .slice(0, 10);
+                    userSuggestions.innerHTML = suggestions.map(u => `<div data-value="${u}">${u}</div>`).join('');
+                    userSuggestions.style.display = suggestions.length > 0 && value ? 'block' : 'none';
+                    console.log('[LoginUI] User suggestions updated:', suggestions.length);
+                }
+                worldInput.addEventListener('input', updateWorldSuggestions);
+                userInput.addEventListener('input', updateUserSuggestions);
+                function initSuggestions() {
+                    updateWorldSuggestions();
+                    updateUserSuggestions();
+                }
+                setTimeout(initSuggestions, 1000);
+                initSuggestions();
+                worldSuggestions.addEventListener('click', function (e) {
+                    if (e.target.dataset.value) {
+                        worldInput.value = e.target.dataset.value;
+                        worldSuggestions.style.display = 'none';
+                        console.log('[LoginUI] Selected world:', e.target.dataset.value);
+                    }
+                });
+                userSuggestions.addEventListener('click', function (e) {
+                    if (e.target.dataset.value) {
+                        userInput.value = e.target.dataset.value;
+                        userSuggestions.style.display = 'none';
+                        console.log('[LoginUI] Selected user:', e.target.dataset.value);
+                    }
+                });
+                document.addEventListener('click', function (e) {
+                    if (!worldInput.contains(e.target) && !worldSuggestions.contains(e.target)) {
+                        worldSuggestions.style.display = 'none';
+                    }
+                    if (!userInput.contains(e.target) && !userSuggestions.contains(e.target)) {
+                        userSuggestions.style.display = 'none';
+                    }
+                });
+                console.log('[Debug] updateLoginUI completed');
+                userSuggestions.addEventListener('click', function (e) {
+                    if (e.target.dataset.value) {
+                        userInput.value = e.target.dataset.value;
+                        userSuggestions.style.display = 'none';
+                        console.log('[LoginUI] Selected user:', e.target.dataset.value);
+                    }
+                });
+                document.addEventListener('click', function (e) {
+                    if (!worldInput.contains(e.target) && !worldSuggestions.contains(e.target)) {
+                        worldSuggestions.style.display = 'none';
+                    }
+                    if (!userInput.contains(e.target) && !userSuggestions.contains(e.target)) {
+                        userSuggestions.style.display = 'none';
+                    }
+                });
+                console.log('[Debug] updateLoginUI completed');
+            } catch (error) {
+                console.error('[Debug] Error in updateLoginUI:', error);
+                addMessage('Failed to initialize login UI', 3000);
+            }
+        }
+        async function populateSpawnChunks() {
+            for (var entry of spawnChunks) {
+                var user = entry[0];
+                var data = entry[1];
+                var spawn = calculateSpawnPoint(user + '@' + data.world);
+                spawnChunks.set(user, { cx: Math.floor(spawn.x / CHUNK_SIZE), cz: Math.floor(spawn.z / CHUNK_SIZE), username: data.username, world: data.world, spawn: spawn });
+            }
+        }
+
+        //SUP!? PUBLIC STUN AND TURN SERVERS
+        async function getTurnCredentials() {
+            console.log('[WebRTC] Using static TURN credentials: supgalaxy');
+            return [
+                { urls: 'stun:supturn.com:3478' },
+                {
+                    urls: [
+                        'turn:supturn.com:3478?transport=udp',
+                        'turn:supturn.com:3478?transport=tcp',
+                        'turn:supturn.com:443?transport=tcp'
+                    ],
+                    username: 'supgalaxy',
+                    credential: 'supgalaxy',
+                    credentialType: 'password'
+                }
+            ];
+        }
+
+        async function connectToServer(hostUser, offer, iceCandidates) {
+            if (peers.size >= MAX_PEERS) {
+                addMessage('Cannot connect: too many peers.', 3000);
+                console.log('[WebRTC] Connection failed: max peers reached');
+                return;
+            }
+            var server = knownServers.find(function (s) { return s.hostUser === hostUser; });
+            if (!server) {
+                addMessage('No server found for ' + hostUser, 3000);
+                console.log('[WebRTC] No server found for:', hostUser);
+                return;
+            }
+            console.log('[WebRTC] Initiating connection to server:', hostUser);
+            connectionAttempts.set(hostUser, Date.now());
+            const iceServers = await getTurnCredentials();
+            var pc = new RTCPeerConnection({ iceServers });
+            pc.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${hostUser}: ${pc.iceConnectionState}`);
+
+            if (localAudioStream) {
+                localAudioStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localAudioStream);
+                });
+            }
+
+            pc.ontrack = (event) => {
+                const username = hostUser; // In a client-server model, the track is from the hostUser.
+                if (event.track.kind === 'audio') {
+                    if (!userAudioStreams.has(username)) {
+                        const audio = new Audio();
+                        audio.srcObject = event.streams[0];
+                        audio.autoplay = true;
+                        userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received audio stream from ${username}`);
+                    }
+                } else if (event.track.kind === 'video') {
+                    if (!userVideoStreams.has(username)) {
+                        const video = document.createElement('video');
+                        video.srcObject = event.streams[0];
+                        video.autoplay = true;
+                        video.playsInline = true;
+                        video.style.display = 'none'; // Initially hidden
+                        document.body.appendChild(video);
+                        userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                        console.log(`[WebRTC] Received video stream from ${username}`);
+                    }
+                }
+            };
+
+            var dc = pc.createDataChannel('game');
+            setupDataChannel(dc, hostUser);
+            try {
+                var offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                var offerIceCandidates = [];
+                pc.onicecandidate = function (e) {
+                    if (e.candidate) offerIceCandidates.push(e.candidate);
+                };
+                await new Promise(function (resolve) {
+                    pc.onicegatheringstatechange = function () {
+                        if (pc.iceGatheringState === 'complete') resolve();
+                    };
+                });
+                var offerData = {
+                    world: worldName,
+                    user: userName,
+                    offer: pc.localDescription,
+                    iceCandidates: offerIceCandidates
+                };
+                var blob = new Blob([JSON.stringify(offerData)], { type: 'application/json' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = `${worldName}_offer_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                var responseKeyword = 'MCConn@' + hostUser + '@' + worldName;
+                var responseAddr = await GetPublicAddressByKeyword(responseKeyword);
+                document.getElementById('joinScriptText').value = responseAddr ? responseAddr.trim().replace(/"|'/g, '') : responseKeyword;
+                document.getElementById('joinScriptModal').style.display = 'block';
+                document.getElementById('joinScriptModal').querySelector('h3').innerText = 'Connect to Server';
+                document.getElementById('joinScriptModal').querySelector('p').innerText = 'Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to ' + hostUser + '. After sending, wait for host confirmation.';
+                addMessage('Offer created for ' + hostUser + '. Send the JSON via Sup!? and wait for host to accept.', 10000);
+                peers.set(hostUser, { pc: pc, dc: dc, address: null });
+                var answerKeyword = 'MCAnswer@' + userName + '@' + worldName;
+                answerPollingIntervals.set(answerKeyword, setInterval(function () {
+                    worker.postMessage({
+                        type: 'poll',
+                        chunkKeys: [],
+                        masterKey: MASTER_WORLD_KEY,
+                        userAddress: userAddress,
+                        worldName: worldName,
+                        serverKeyword: 'MCServerJoin@' + worldName,
+                        offerKeyword: null,
+                        answerKeywords: [answerKeyword],
+                        userName: userName
+                    });
+                    if (Date.now() - connectionAttempts.get(hostUser) > 1800000) {
+                        console.log('[WebRTC] Answer polling timeout for:', hostUser);
+                        addMessage('Connection to ' + hostUser + ' timed out after 30 minutes.', 5000);
+                        clearInterval(answerPollingIntervals.get(answerKeyword));
+                        answerPollingIntervals.delete(answerKeyword);
+                        var peer = peers.get(hostUser);
+                        if (peer && peer.pc) peer.pc.close();
+                        peers.delete(hostUser);
+                        if (playerAvatars.has(hostUser)) {
+                            scene.remove(playerAvatars.get(hostUser));
+                            disposeObject(playerAvatars.get(hostUser));
+                            playerAvatars.delete(hostUser);
+                        }
+                        delete userPositions[hostUser];
+                        updateHudButtons();
+                    }
+                }, 30000));
+            } catch (e) {
+                console.error('[WebRTC] Failed to create offer for:', hostUser, 'error:', e);
+                addMessage('Failed to connect to ' + hostUser, 3000);
+                pc.close();
+                peers.delete(hostUser);
+                clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
+                answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
+            }
+        }
+        // Description: Handles file upload via double-click or drag-and-drop on the minimap.
+        // If the file is an offer JSON, it adds it to pendingOffers and opens the pending connections modal (server mode).
+        // If the file is an answer JSON, it processes it to establish a connection (client mode).
+        async function handleMinimapFile(file) {
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                // Handle new session file format
+                if (data.playerData && data.hash) {
+                    if (data.playerData.world !== worldName) {
+                        addMessage('Invalid file: wrong world', 3000);
+                        console.log('[MINIMAP] Invalid file: world mismatch, expected:', worldName, 'got:', data.playerData.world);
+                        return;
+                    }
+
+                    const playerData = data.playerData;
+                    if (playerData.deltas) {
+                        for (const delta of playerData.deltas) {
+                            const chunkKey = delta.chunk.replace(/^#/, '');
+                            chunkManager.applyDeltasToChunk(chunkKey, delta.changes);
+                        }
+                    }
+                    if (playerData.foreignBlockOrigins) {
+                        foreignBlockOrigins = new Map(playerData.foreignBlockOrigins);
+                    }
+                    addMessage('Loaded chunk data from session file.', 3000);
+                    return;
+                }
+
+                // Check if it's a save session file (old format)
+                if (data.deltas && data.profile) {
+                    console.log('[MINIMAP] Save session file detected, applying...');
+                    await applySaveFile(data, userAddress, new Date().toISOString());
+                    addMessage('Save session loaded successfully!', 3000);
+                    return;
+                }
+
+                if (!data.world || data.world !== worldName) {
+                    addMessage('Invalid file: wrong world', 3000);
+                    console.log('[MINIMAP] Invalid file: world mismatch, expected:', worldName, 'got:', data.world);
+                    return;
+                }
+
+                if (data.offer) {
+                    // Server mode: Process offer
+                    const clientUser = data.user || 'anonymous';
+                    if (clientUser === userName) {
+                        addMessage('Cannot process offer from self', 3000);
+                        console.log('[WEBRTC] Skipping offer from self:', clientUser);
+                        return;
+                    }
+                    const profile = await GetProfileByURN(clientUser);
+                    pendingOffers.push({
+                        clientUser: clientUser,
+                        offer: data.offer,
+                        iceCandidates: data.iceCandidates || [],
+                        transactionId: 'local_' + Date.now(),
+                        timestamp: Date.now(),
+                        profile: profile || { URN: clientUser, Creators: [null] }
+                    });
+                    console.log('[WEBRTC] Added local offer from:', clientUser);
+                    addMessage(`Connection request from ${clientUser} via file`, 5000);
+                    setupPendingModal();
+                    document.getElementById('pendingModal').style.display = 'block';
+                    isPromptOpen = true;
+                } else if (data.answer && !isHost) {
+                    // Client mode: Process answer
+                    const hostUser = data.user || 'anonymous';
+                    const peer = peers.get(hostUser);
+                    if (!peer || !peer.pc) {
+                        addMessage('No active connection for ' + hostUser, 3000);
+                        console.log('[WEBRTC] No peer connection for:', hostUser);
+                        return;
+                    }
+                    try {
+                        await peer.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        for (const candidate of data.iceCandidates || []) {
+                            try {
+                                await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                            } catch (e) {
+                                console.error('[WEBRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
+                            }
+                        }
+                        console.log('[WEBRTC] Successfully processed answer for:', hostUser);
+                        addMessage('Connected to ' + hostUser + ' via file', 5000);
+                        updateHudButtons();
+                        clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
+                        answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
+                    } catch (e) {
+                        console.error('[WEBRTC] Failed to process answer for:', hostUser, 'error:', e);
+                        addMessage('Failed to connect to ' + hostUser, 3000);
+                    }
+                } else if (data.batch && !isHost) {
+                    // Client mode: Process batch answer
+                    const hostUser = data.user || 'anonymous';
+                    const peer = peers.get(hostUser);
+                    if (!peer || !peer.pc) {
+                        addMessage('No active connection for ' + hostUser, 3000);
+                        console.log('[WEBRTC] No peer connection for:', hostUser);
+                        return;
+                    }
+                    const answerEntry = data.batch.find(entry => entry.user === userName);
+                    if (!answerEntry) {
+                        addMessage('No answer for you in batch from ' + hostUser, 3000);
+                        console.log('[WEBRTC] No answer for user:', userName, 'in batch from:', hostUser);
+                        return;
+                    }
+                    try {
+                        await peer.pc.setRemoteDescription(new RTCSessionDescription(answerEntry.answer));
+                        for (const candidate of answerEntry.iceCandidates || []) {
+                            try {
+                                await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                            } catch (e) {
+                                console.error('[WEBRTC] Failed to add ICE candidate for:', hostUser, 'error:', e);
+                            }
+                        }
+                        console.log('[WEBRTC] Successfully processed batch answer for:', hostUser);
+                        addMessage('Connected to ' + hostUser + ' via batch file', 5000);
+                        updateHudButtons();
+                        clearInterval(answerPollingIntervals.get('MCAnswer@' + userName + '@' + worldName));
+                        answerPollingIntervals.delete('MCAnswer@' + userName + '@' + worldName);
+                    } catch (e) {
+                        console.error('[WEBRTC] Failed to process batch answer for:', hostUser, 'error:', e);
+                        addMessage('Failed to connect to ' + hostUser, 3000);
+                    }
+                } else {
+                    addMessage('Invalid file format', 3000);
+                    console.log('[MINIMAP] Invalid file: no offer, answer, or batch');
+                }
+            } catch (e) {
+                console.error('[MINIMAP] Error processing file:', e);
+                addMessage('Failed to process file', 3000);
+            }
+        }
+
+        // ✅ COMPLETE FIXED setupDataChannel() - COPY-PASTE THIS
+        function setupDataChannel(dc, user) {
+            console.log(`[FIXED] Setting up data channel for: ${user}`);
+
+            dc.onopen = () => {
+                console.log(`[WEBRTC] Data channel open with: ${user}. State: ${dc.readyState}`);
+                addMessage(`Connection established with ${user}`, 3000);
+                // Send initial player position
+                dc.send(JSON.stringify({
+                    type: 'player_move',
+                    username: userName,
+                    x: player.x,
+                    y: player.y,
+                    z: player.z,
+                    yaw: player.yaw,
+                    pitch: player.pitch,
+                    isMoving: false,
+                    isAttacking: false,
+                    timestamp: Date.now()
+                }));
+                // If this is the host, send the current state of all mobs to the new client
+                if (isHost) {
+                    // Notify all other clients of the new player
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== user && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'new_player', username: user }));
+                        }
+                    }
+                    // Notify the new client of existing players
+                    for (const [peerUser, peerData] of peers.entries()) {
+                         if (peerUser !== user && peerData.dc && peerData.dc.readyState === 'open') {
+                            dc.send(JSON.stringify({ type: 'new_player', username: peerUser }));
+                        }
+                    }
+                    // also notify about host
+                    dc.send(JSON.stringify({ type: 'new_player', username: userName }));
+
+                    //compile and send all chunk deltas to the new player
+                    const chunkDeltasArray = Array.from(CHUNK_DELTAS.entries());
+                    const foreignBlockOriginsArray = Array.from(foreignBlockOrigins.entries());
+                    const worldSyncMessage = {
+                        type: 'world_sync',
+                        chunkDeltas: chunkDeltasArray,
+                        foreignBlockOrigins: foreignBlockOriginsArray
+                    };
+                    dc.send(JSON.stringify(worldSyncMessage));
+
+
+                    console.log(`[WEBRTC] Host sending initial mob state to ${user}`);
+                    for (const mob of mobs) {
+                        dc.send(JSON.stringify({
+                            type: 'mob_update',
+                            id: mob.id,
+                            x: mob.pos.x,
+                            y: mob.pos.y,
+                            z: mob.pos.z,
+                                    hp: mob.hp,
+                                    mobType: mob.type
+                        }));
+                    }
+                }
+                updateHudButtons();
+            };
+
+            dc.onmessage = e => {
+                console.log(`[WEBRTC] Message from ${user}`);
+                try {
+                    const data = JSON.parse(e.data);
+                    const sender = data.username || user;
+                    if (sender === userName) return;
+
+                    // Host is the source of truth. It processes inputs and broadcasts state.
+                    if (isHost) {
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(e.data);
+                            }
+                        }
+                    }
+
+                    // All peers process the message
+                    switch (data.type) {
+                        case 'new_player':
+                            const newPlayerUsername = data.username;
+                            if (newPlayerUsername !== userName && !peers.has(newPlayerUsername)) {
+                                addMessage(`${newPlayerUsername} has joined!`);
+                                if (!playerAvatars.has(newPlayerUsername)) {
+                                    createAndSetupAvatar(newPlayerUsername, false);
+                                }
+                                // Add a placeholder peer entry for player count and state management
+                                if (!peers.has(newPlayerUsername)) {
+                                    peers.set(newPlayerUsername, { pc: null, dc: null, address: null });
+                                }
+                                updateHudButtons();
+                            }
+                            break;
+                        case 'world_sync':
+                            if (!isHost) {
+                                console.log(`[WEBRTC] Received world_sync`);
+                                if (data.chunkDeltas) {
+                                    const deltas = new Map(data.chunkDeltas);
+                                    for (const [chunkKey, changes] of deltas.entries()) {
+                                        chunkManager.applyDeltasToChunk(chunkKey, changes);
+                                    }
+                                }
+                                if (data.foreignBlockOrigins) {
+                                    foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+                                }
+                            }
+                            break;
+                        case 'state_update':
+                            if (!isHost) {
+                                for (const playerData of data.players) {
+                                    const remoteUser = playerData.username;
+                                    if (remoteUser === userName) continue;
+
+                                    if (!userPositions[remoteUser]) {
+                                        userPositions[remoteUser] = {};
+                                        createAndSetupAvatar(remoteUser, false, playerData.yaw);
+                                    }
+                                    const userState = userPositions[remoteUser];
+                                    if (!data.timestamp || data.timestamp > (userState.lastTimestamp || 0)) {
+                                        userState.prevX = userState.targetX;
+                                        userState.prevY = userState.targetY;
+                                        userState.prevZ = userState.targetZ;
+                                        userState.prevYaw = userState.targetYaw;
+                                        userState.prevPitch = userState.targetPitch;
+                                        userState.targetX = playerData.x;
+                                        userState.targetY = playerData.y;
+                                        userState.targetZ = playerData.z;
+                                        userState.targetYaw = playerData.yaw;
+                                        userState.targetPitch = playerData.pitch;
+                                        userState.isMoving = playerData.isMoving;
+                                        userState.lastUpdate = performance.now();
+                                        userState.lastTimestamp = data.timestamp;
+                                        userState.isAttacking = playerData.isAttacking;
+                                        if (playerData.attackStartTime && playerData.attackStartTime !== userState.attackStartTime) {
+                                            userState.attackStartTime = playerData.attackStartTime;
+                                            userState.localAnimStartTime = performance.now();
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+
+                        case 'player_respawn':
+                            const respawnedUser = data.username;
+                            if (userPositions[respawnedUser]) {
+                                userPositions[respawnedUser].isDying = false;
+                            }
+                            const newAvatar = createAndSetupAvatar(respawnedUser, false);
+                            newAvatar.position.set(data.x, data.y, data.z);
+                            break;
+
+                        case 'player_move':
+                            if (!playerAvatars.has(sender)) {
+                                createAndSetupAvatar(sender, false, data.yaw);
+                            }
+                            if (!userPositions[sender]) {
+                                userPositions[sender] = {
+                                    lastTimestamp: 0,
+                                    prevX: data.x, prevY: data.y, prevZ: data.z,
+                                    prevYaw: data.yaw, prevPitch: data.pitch,
+                                    targetX: data.x, targetY: data.y, targetZ: data.z,
+                                    targetYaw: data.yaw, targetPitch: data.pitch
+                                };
+                            }
+                            const userState = userPositions[sender];
+                            if (data.timestamp > userState.lastTimestamp) {
+                                userState.prevX = userState.targetX;
+                                userState.prevY = userState.targetY;
+                                userState.prevZ = userState.targetZ;
+                                userState.prevYaw = userState.targetYaw;
+                                userState.prevPitch = userState.targetPitch;
+                                userState.targetX = data.x;
+                                userState.targetY = data.y;
+                                userState.targetZ = data.z;
+                                userState.targetYaw = data.yaw;
+                                userState.targetPitch = data.pitch;
+                                userState.isMoving = data.isMoving;
+                                userState.lastUpdate = performance.now();
+                                userState.lastTimestamp = data.timestamp;
+                            }
+                            break;
+
+                        case 'block_change':
+                            const dist = Math.hypot(player.x - data.wx, player.y - data.wy, player.z - data.wz);
+                            if (dist < maxAudioDistance) {
+                                // Play sound locally for remote player's actions
+                                if (data.bid !== 0) { // Placing a block
+                                    safePlayAudio(soundPlace);
+                                } else { // Breaking a block
+                                    safePlayAudio(soundBreak);
+                                }
+                            }
+
+                            if (isHost) {
+                                console.log(`[WEBRTC] Host relaying block change from ${sender}`);
+                                for (const [peerUser, peerData] of peers.entries()) {
+                                    if (peerUser !== sender && peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                                        peerData.dc.send(e.data);
+                                    }
+                                }
+                            }
+                            chunkManager.setBlockGlobal(data.wx, data.wy, data.wz, data.bid, false, data.originSeed);
+
+                            // If the block is from another world, record its origin.
+                            if (data.originSeed && data.originSeed !== worldSeed) {
+                                const coordKey = `${data.wx},${data.wy},${data.wz}`;
+                                foreignBlockOrigins.set(coordKey, data.originSeed);
+                            }
+                            if (data.prevBid && BLOCKS[data.prevBid] && BLOCKS[data.prevBid].light) {
+                                var lightKey = `${data.wx},${data.wy},${data.wz}`;
+                                if (torchLights.has(lightKey)) {
+                                    var light = torchLights.get(lightKey);
+                                    scene.remove(light);
+                                    light.dispose();
+                                    torchLights.delete(lightKey);
+                                }
+                                if (torchParticles.has(lightKey)) {
+                                    var particles = torchParticles.get(lightKey);
+                                    scene.remove(particles);
+                                    particles.geometry.dispose();
+                                    particles.material.dispose();
+                                    torchParticles.delete(lightKey);
+                                }
+                            }
+                            if (data.bid && BLOCKS[data.bid] && BLOCKS[data.bid].light) {
+                                var light = new THREE.PointLight(0xffaa33, 0.8, 16);
+                                light.position.set(data.wx, data.wy + 0.5, data.wz);
+                                scene.add(light);
+                                torchLights.set(`${data.wx},${data.wy},${data.wz}`, light);
+                                var particles = createFlameParticles(data.wx, data.wy + 0.5, data.wz);
+                                scene.add(particles);
+                                torchParticles.set(`${data.wx},${data.wy},${data.wz}`, particles);
+                            }
+                            break;
+
+                        case 'mob_spawn':
+                            if (!mobs.some(m => m.id === data.id)) {
+                                const newMob = new Mob(data.x, data.z, data.id, data.mobType);
+                                newMob.isAggressive = data.isAggressive;
+                                mobs.push(newMob);
+                            }
+                            break;
+                        case 'mob_state_batch':
+                            if (!isHost) {
+                                const receivedMobIds = new Set();
+                                for (const mobState of data.mobs) {
+                                    receivedMobIds.add(mobState.id);
+                                    let mob = mobs.find(m => m.id === mobState.id);
+                                    if (!mob) {
+                                        mob = new Mob(mobState.x, mobState.z, mobState.id, mobState.type);
+                                        mobs.push(mob);
+                                    }
+                                    mob.targetPos.set(mobState.x, mobState.y, mobState.z);
+                                    mob.hp = mobState.hp;
+                                    mob.isAggressive = mobState.isAggressive;
+                                     mob.isMoving = mobState.isMoving; // <<< Update isMoving
+                                     mob.aiState = mobState.aiState; // <<< Update aiState
+                                     if (mobState.quaternion) {
+                                         mob.targetQuaternion.fromArray(mobState.quaternion);
+                                         mob.lastQuaternionUpdate = performance.now();
+                                     }
+                                    mob.lastUpdateTime = performance.now();
+                                }
+                                mobs = mobs.filter(mob => {
+                                    if (!receivedMobIds.has(mob.id)) {
+                                        scene.remove(mob.mesh);
+                                        disposeObject(mob.mesh);
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                            }
+                            break;
+
+                        case 'mob_update':
+                            let mob = mobs.find(m => m.id === data.id);
+                            if (!mob) {
+                                mob = new Mob(data.x, data.z, data.id, data.mobType);
+                                mobs.push(mob);
+                                // For new mobs, set the initial position directly.
+                                // The `targetPos` will also be set below, ensuring no initial lerp.
+                                mob.pos.set(data.x, data.y, data.z);
+                            }
+                            // For all mobs (new and existing), update the target position.
+                            // The game loop will handle smoothly interpolating to this new target.
+                            mob.targetPos.set(data.x, data.y, data.z);
+                            mob.hp = data.hp;
+                            mob.lastUpdateTime = performance.now(); // Trigger the interpolation logic.
+                            if (data.flash) mob.flashEnd = Date.now() + 200;
+                            break;
+
+                        case 'mob_kill':
+                            const mobToKill = mobs.find(m => m.id === data.id);
+                            if (mobToKill) {
+                                try { scene.remove(mobToKill.mesh); disposeObject(mobToKill.mesh); } catch (e) { }
+                                mobs = mobs.filter(m => m.id !== mobToKill.id);
+                            }
+                            break;
+
+                        case 'mob_hit':
+                            if (isHost) {
+                                const mobToHit = mobs.find(m => m.id === data.id);
+                                if (mobToHit) mobToHit.hurt(data.damage || 4, data.username);
+                            }
+                            break;
+
+                        case 'player_hit':
+                            if (isHost) handlePlayerHit(data);
+                            break;
+
+                        case 'player_damage':
+                            if (Date.now() - lastDamageTime > 400) {
+                                player.health = Math.max(0, player.health - (data.damage || 1));
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                if (data.attacker === 'lava') {
+                                    addMessage('Burning in lava! HP: ' + player.health, 1000);
+                                } else {
+                                    addMessage('Hit by ' + data.attacker + '! HP: ' + player.health, 1000);
+                                }
+                                flashDamageEffect();
+                                safePlayAudio(soundHit);
+                                if (data.kx !== undefined && data.kz !== undefined) {
+                                    player.vx += data.kx;
+                                    player.vz += data.kz;
+                                }
+                                if (player.health <= 0) handlePlayerDeath();
+                            }
+                            break;
+
+                        case 'add_score':
+                            player.score += data.amount || 0;
+                            document.getElementById('score').innerText = player.score;
+                            addMessage(`+${data.amount} score`, 1500);
+                            break;
+
+                        case 'player_attack':
+                            if (isHost) {
+                                const attackerState = userPositions[sender];
+                                if (attackerState) {
+                                    attackerState.isAttacking = true;
+                                    const now = performance.now();
+                                    attackerState.attackStartTime = now;
+                                    attackerState.localAnimStartTime = now;
+                                }
+                            }
+                            break;
+
+                        case 'player_death':
+                            const deadPlayerUsername = data.username;
+                            if (userPositions[deadPlayerUsername]) {
+                                userPositions[deadPlayerUsername].isDying = true;
+                                userPositions[deadPlayerUsername].deathAnimationStart = performance.now();
+                                const deadPlayerAvatar = playerAvatars.get(deadPlayerUsername);
+                                if (deadPlayerAvatar) deadPlayerAvatar.visible = true;
+                            }
+                            break;
+                        case 'health_update':
+                            if (isHost) {
+                                if (userPositions[data.username]) {
+                                    userPositions[data.username].health = data.health;
+                                }
+                            }
+                            break;
+                        case 'laser_fired':
+                            laserQueue.push(data);
+                            break;
+                        case 'item_dropped':
+                            if (!droppedItems.some(item => item.id === data.dropId)) {
+                                createDroppedItemOrb(data.dropId, new THREE.Vector3(data.position.x, data.position.y, data.position.z), data.blockId, data.originSeed, data.dropper);
+                            }
+                            break;
+                        case 'item_picked_up':
+                            const itemIndex = droppedItems.findIndex(item => item.id === data.dropId);
+                            if (itemIndex !== -1) {
+                                const item = droppedItems[itemIndex];
+                                scene.remove(item.mesh);
+                                scene.remove(item.light);
+                                droppedItems.splice(itemIndex, 1);
+                            }
+                            break;
+                        case 'video_started':
+                            addMessage(`${data.username} started their video.`, 2000);
+                            break;
+                        case 'video_stopped':
+                            if (userVideoStreams.has(data.username)) {
+                                const videoData = userVideoStreams.get(data.username);
+                                if (videoData.video) {
+                                    videoData.video.srcObject = null;
+                                    videoData.video.remove();
+                                }
+                                userVideoStreams.delete(data.username);
+                                addMessage(`${data.username} stopped their video.`, 2000);
+                            }
+                            break;
+                        case 'renegotiation_offer':
+                            if (peers.has(user)) {
+                                const peer = peers.get(user);
+                                peer.pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+                                    .then(() => peer.pc.createAnswer())
+                                    .then(answer => peer.pc.setLocalDescription(answer))
+                                    .then(() => {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(JSON.stringify({ type: 'renegotiation_answer', answer: peer.pc.localDescription }));
+                                        }
+                                    })
+                                    .catch(e => console.error("Renegotiation error (offer):", e));
+                            }
+                            break;
+                        case 'renegotiation_answer':
+                            if (peers.has(user)) {
+                                peers.get(user).pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+                                    .catch(e => console.error("Renegotiation error (answer):", e));
+                            }
+                            break;
+                        case 'volcano_event':
+                            handleVolcanoEvent(data);
+                            break;
+                        case 'boulder_update':
+                            if (!isHost) {
+                                for (const boulderState of data.boulders) {
+                                    let boulder = eruptedBlocks.find(b => b.id === boulderState.id);
+                                    if (boulder) {
+                                        boulder.targetPosition = new THREE.Vector3().fromArray(boulderState.position);
+                                        boulder.targetQuaternion = new THREE.Quaternion().fromArray(boulderState.quaternion);
+                                        boulder.lastUpdate = performance.now();
+                                    }
+                                }
+                            }
+                            break;
+                    }
+                } catch (err) {
+                    console.error(`[WEBRTC] Failed to process message from ${user}:`, err);
+                }
+            };
+
+            dc.onclose = () => {
+                console.log(`[WebRTC] Data channel with ${user} closed.`);
+                cleanupPeer(user);
+            };
+
+            dc.onerror = e => {
+                console.error(`[WebRTC] Data channel error with ${user}:`, e);
+                cleanupPeer(user);
+            };
+        }
+
+        function updatePendingModal() {
+            var modal = document.getElementById('pendingModal');
+            var list = document.getElementById('pendingList');
+            list.innerHTML = '';
+            for (var offer of pendingOffers) {
+                var row = document.createElement('div');
+                row.className = 'row';
+                var info = document.createElement('div');
+                info.innerText = offer.clientUser + ' at ' + new Date(offer.timestamp).toLocaleString();
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'selectOffer';
+                checkbox.dataset.user = offer.clientUser;
+                row.appendChild(info);
+                row.appendChild(checkbox);
+                list.appendChild(row);
+            }
+            modal.style.display = isHost && pendingOffers.length > 0 ? 'block' : 'none';
+        }
+        function activateHost() {
+            if (!isHost) {
+                isHost = true;
+                console.log('[SYSTEM] Hosting activated.');
+                addMessage('Host mode activated!', 3000);
+                startOfferPolling();
+                const usersBtn = document.getElementById('usersBtn');
+                if (usersBtn) {
+                    usersBtn.classList.add('hosting');
+                }
+            }
+        }
+
+        async function acceptPendingOffers() {
+            activateHost();
+            const checkboxes = document.querySelectorAll('.selectOffer:checked');
+            if (checkboxes.length === 0) {
+                addMessage('No offers selected', 3000);
+                return;
+            }
+
+            const batch = [];
+            const users = [];
+
+            for (const checkbox of checkboxes) {
+                const clientUser = checkbox.dataset.user;
+                const offer = pendingOffers.find(o => o.clientUser === clientUser);
+                if (!offer || !offer.offer) continue;
+
+                let answer = { type: 'answer', sdp: '' };
+                let answerIceCandidates = [];
+                let pc = null;
+
+                try {
+                    const iceServers = await getTurnCredentials();
+                    pc = new RTCPeerConnection({ iceServers });
+
+                    if (localAudioStream) {
+                        localAudioStream.getTracks().forEach(track => {
+                            pc.addTrack(track, localAudioStream);
+                        });
+                    }
+
+                    pc.ontrack = (event) => {
+                        const username = clientUser; // The track is from the connecting client.
+                        if (event.track.kind === 'audio') {
+                            if (!userAudioStreams.has(username)) {
+                                const audio = new Audio();
+                                audio.srcObject = event.streams[0];
+                                audio.autoplay = true;
+                                userAudioStreams.set(username, { audio: audio, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received audio stream from ${username}`);
+                            }
+                        } else if (event.track.kind === 'video') {
+                            if (!userVideoStreams.has(username)) {
+                                const video = document.createElement('video');
+                                video.srcObject = event.streams[0];
+                                video.autoplay = true;
+                                video.playsInline = true;
+                                video.style.display = 'none'; // Initially hidden
+                                document.body.appendChild(video);
+                                userVideoStreams.set(username, { video: video, stream: event.streams[0] });
+                                console.log(`[WebRTC] Received video stream from ${username}`);
+                            }
+                        }
+                    };
+
+                    // CRITICAL: Store peer IMMEDIATELY
+                    peers.set(clientUser, { pc, dc: null, address: null });
+
+                    pc.ondatachannel = (e) => {
+                        const dc = e.channel;
+                        peers.get(clientUser).dc = dc;
+                        setupDataChannel(dc, clientUser);
+                    };
+
+                    // NO TIMEOUT - Process IMMEDIATELY
+                    await pc.setRemoteDescription(new RTCSessionDescription(offer.offer));
+                    for (const candidate of offer.iceCandidates || []) {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+                    }
+
+                    answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+
+                    pc.onicecandidate = e => {
+                        if (e.candidate) answerIceCandidates.push(e.candidate);
+                    };
+
+                    // COMPLETE ICE GATHERING - NO TIMEOUT
+                    await new Promise(resolve => {
+                        pc.onicegatheringstatechange = () => {
+                            if (pc.iceGatheringState === 'complete') resolve();
+                        };
+                        // FORCE COMPLETE AFTER 5s MAX
+                        setTimeout(resolve, 5000);
+                    });
+
+                    batch.push({
+                        user: clientUser,
+                        answer,
+                        iceCandidates: answerIceCandidates
+                    });
+                    users.push(clientUser);
+
+                    console.log(`[FIXED] Created answer for ${clientUser} - NO TIMEOUT`);
+
+                } catch (e) {
+                    console.error(`[ERROR] Failed ${clientUser}:`, e);
+                    if (pc) pc.close();
+                    continue;
+                }
+            }
+
+            if (batch.length > 0) {
+                const batchData = { world: worldName, user: userName, batch };
+                const blob = new Blob([JSON.stringify(batchData)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${worldName}_batch_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                // IMMEDIATE MODAL - NO DELAY
+                const modal = document.getElementById('joinScriptModal');
+                const batchKeyword = 'MCBatch@' + userName + '@' + worldName;
+                const addressText = (await GetPublicAddressByKeyword(batchKeyword))?.trim().replace(/"|'/g, '') || batchKeyword;
+
+                modal.querySelector('h3').innerText = '🚀 BATCH READY - SEND NOW';
+                modal.querySelector('p').innerText = `Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY`;
+                modal.querySelector('#joinScriptText').value = addressText;
+                modal.style.display = 'block';
+                isPromptOpen = true;
+
+                addMessage(`✅ Batch ready for ${users.length} players - SEND NOW!`, 10000);
+                pendingOffers = pendingOffers.filter(o => !users.includes(o.clientUser));
+                updatePendingModal();
+            }
+        }
+
+        function setupPendingModal() {
+            console.log('[MODAL] Setting up pendingModal');
+            const existingModal = document.getElementById('pendingModal');
+            if (existingModal) {
+                existingModal.remove();
+                console.log('[MODAL] Removed existing pendingModal');
+            }
+            const modal = document.createElement('div');
+            modal.id = 'pendingModal';
+            modal.style.position = 'fixed';
+            modal.style.right = '12px';
+            modal.style.bottom = '12px';
+            modal.style.zIndex = '220';
+            modal.style.background = 'var(--panel)';
+            modal.style.padding = '14px';
+            modal.style.borderRadius = '10px';
+            modal.style.minWidth = '300px';
+            modal.style.maxWidth = '400px';
+            modal.style.display = isHost && pendingOffers.length > 0 ? 'block' : 'none';
+            modal.innerHTML = `
+            <h3>Pending Connections</h3>
+            <div id="pendingList"></div>
+            <div class="actions">
+                <label><input type="checkbox" id="acceptAll"> Accept All</label>
+                <button id="acceptPending">Accept Selected</button>
+                <button id="closePending">Close</button>
+            </div>
+        `;
+            document.body.appendChild(modal);
+            console.log('[MODAL] pendingModal added to DOM');
+            const list = modal.querySelector('#pendingList');
+            list.style.maxHeight = 'calc(80vh - 100px)';
+            list.style.overflow = 'auto';
+            list.innerHTML = '';
+            let hasEntries = false;
+            const offerMap = new Map();
+            for (const offer of pendingOffers) {
+                if (offer.clientUser === userName) {
+                    console.log('[MODAL] Skipping offer from self:', offer.clientUser);
+                    continue;
+                }
+                if (!offerMap.has(offer.clientUser)) {
+                    offerMap.set(offer.clientUser, offer);
+                }
+            }
+            const latestOffers = Array.from(offerMap.values());
+            for (const offer of latestOffers) {
+                console.log('[MODAL] Rendering pending offer from:', offer.clientUser);
+                const row = document.createElement('div');
+                row.className = 'row';
+                row.style.maxHeight = '80px';
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.marginBottom = '8px';
+                const info = document.createElement('div');
+                info.innerText = `${offer.clientUser || 'Unknown'} at ${new Date(offer.timestamp).toLocaleString()}\nBio: ${offer.profile && offer.profile.Bio ? offer.profile.Bio : 'No bio'}`;
+                info.style.whiteSpace = 'pre-line';
+                info.style.maxWidth = '200px';
+                info.style.maxHeight = '60px';
+                info.style.overflow = 'hidden';
+                info.style.textOverflow = 'ellipsis';
+                info.style.flex = '1';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'selectOffer';
+                checkbox.dataset.user = offer.clientUser || '';
+                checkbox.dataset.transactionId = offer.transactionId;
+                checkbox.style.margin = '0 8px';
+                const acceptBtn = document.createElement('button');
+                acceptBtn.innerText = 'Accept';
+                acceptBtn.style.marginRight = '8px';
+                acceptBtn.onclick = () => {
+                    console.log('[WEBRTC] Accepting offer from:', offer.clientUser);
+                    checkbox.checked = true;
+                    acceptPendingOffers();
+                };
+                const rejectBtn = document.createElement('button');
+                rejectBtn.innerText = 'Reject';
+                rejectBtn.style.background = 'var(--danger)';
+                rejectBtn.style.color = '#111';
+                rejectBtn.onclick = () => {
+                    console.log('[WEBRTC] Rejecting offer from:', offer.clientUser);
+                    pendingOffers = pendingOffers.filter(o => o.clientUser !== offer.clientUser);
+                    addMessage(`Rejected connection from ${offer.clientUser || 'Unknown'}`, 3000);
+                    setupPendingModal();
+                };
+                row.appendChild(info);
+                row.appendChild(checkbox);
+                row.appendChild(acceptBtn);
+                row.appendChild(rejectBtn);
+                list.appendChild(row);
+                hasEntries = true;
+            }
+            if (!hasEntries) {
+                console.log('[MODAL] No pending offers to render');
+                const empty = document.createElement('div');
+                empty.style.marginTop = '8px';
+                empty.innerText = 'No pending connection requests';
+                list.appendChild(empty);
+            }
+            const acceptAll = modal.querySelector('#acceptAll');
+            if (acceptAll) {
+                acceptAll.addEventListener('change', e => {
+                    document.querySelectorAll('.selectOffer').forEach(ch => { ch.checked = e.target.checked; });
+                    console.log('[MODAL] Accept All checkbox changed');
+                });
+            }
+            const acceptPending = modal.querySelector('#acceptPending');
+            if (acceptPending) {
+                acceptPending.onclick = async () => {
+                    console.log('[MODAL] Accept Pending clicked');
+                    await acceptPendingOffers();
+                };
+            }
+            modal.querySelector('#closePending').onclick = () => {
+                console.log('[MODAL] Closing pendingModal');
+                modal.style.display = 'none';
+                isPromptOpen = false;
+            };
+        }
+        function startOfferPolling() {
+            if (!isHost) {
+                console.log('[SYSTEM] Not hosting, skipping offer polling');
+                return;
+            }
+            console.log('[SYSTEM] Starting offer polling for:', userName);
+            var offerKeyword = 'MCConn@' + userName + '@' + worldName;
+            var apiDelay = 350;
+            var interval = setInterval(async function () {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    console.log('[SYSTEM] Polling offers for:', offerKeyword);
+                    worker.postMessage({
+                        type: 'poll',
+                        chunkKeys: [],
+                        masterKey: MASTER_WORLD_KEY,
+                        userAddress: userAddress,
+                        worldName: worldName,
+                        serverKeyword: 'MCServerJoin@' + worldName,
+                        offerKeyword: offerKeyword,
+                        answerKeywords: [],
+                        userName: userName
+                    });
+                } catch (e) {
+                    console.error('[SYSTEM] Error in offer polling:', e);
+                }
+            }, 30000);
+            offerPollingIntervals.set(offerKeyword, interval);
+        }
+        function startAnswerPolling(hostUser) {
+            var keyword = 'MCAnswer@' + userName + '@' + worldName;
+            if (answerPollingIntervals.has(keyword)) return;
+            console.log('[SYSTEM] Starting answer polling for:', hostUser);
+            answerPollingIntervals.set(keyword, setInterval(function () {
+                worker.postMessage({
+                    type: 'poll',
+                    chunkKeys: [],
+                    masterKey: MASTER_WORLD_KEY,
+                    userAddress: userAddress,
+                    worldName: worldName,
+                    serverKeyword: 'MCServerJoin@' + worldName,
+                    offerKeyword: null,
+                    answerKeywords: [keyword],
+                    userName: userName
+                });
+                if (Date.now() - connectionAttempts.get(hostUser) > 1800000) {
+                    console.log('[SYSTEM] Answer polling timeout for:', hostUser);
+                    addMessage('Connection to ' + hostUser + ' timed out after 30 minutes.', 5000);
+                    clearInterval(answerPollingIntervals.get(keyword));
+                    answerPollingIntervals.delete(keyword);
+                    var peer = peers.get(hostUser);
+                    if (peer && peer.pc) peer.pc.close();
+                    peers.delete(hostUser);
+                    if (playerAvatars.has(hostUser)) {
+                        scene.remove(playerAvatars.get(hostUser));
+                        disposeObject(playerAvatars.get(hostUser));
+                        playerAvatars.delete(hostUser);
+                    }
+                    delete userPositions[hostUser];
+                    updateHudButtons();
+                }
+            }, 30000));
+        }
+        async function pollServers() {
+            if (isInitialLoad) {
+                console.log('[SYSTEM] Skipping poll, initial load not complete');
+                return;
+            }
+            console.log('[SYSTEM] Polling server announcements for:', 'MCServerJoin@' + worldName);
+            var serverKeyword = 'MCServerJoin@' + worldName;
+            var retries = 0;
+            var maxRetries = 3;
+            var retryDelay = 5000;
+            var apiDelay = 350;
+            async function tryFetchMessages() {
+                var serverAddr;
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    serverAddr = await GetPublicAddressByKeyword(serverKeyword);
+                } catch (e) {
+                    console.error('[SYSTEM] Failed to fetch server address:', e);
+                }
+                if (!serverAddr) {
+                    if (retries < maxRetries) {
+                        retries++;
+                        setTimeout(tryFetchMessages, retryDelay * Math.pow(2, retries));
+                    } else {
+                        addMessage('Failed to fetch server announcements', 3000);
+                        console.error('[SYSTEM] Max retries reached for server announcements');
+                    }
+                    return;
+                }
+                var messages = [];
+                var skip = 0;
+                var qty = 5000;
+                while (true) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, apiDelay));
+                        var response = await GetPublicMessagesByAddress(serverAddr, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    } catch (e) {
+                        console.error('[SYSTEM] Failed to fetch server messages, skip:', skip, 'error:', e);
+                        break;
+                    }
+                }
+                var newServers = [];
+                var transactionIds = [];
+                var messageMap = new Map();
+                for (var msg of messages) {
+                    if (!msg.TransactionId || processedMessages.has(msg.TransactionId)) {
+                        if (msg.TransactionId) {
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        continue;
+                    }
+                    transactionIds.push(msg.TransactionId);
+                    var fromAddress = msg.FromAddress;
+                    var timestamp = Date.parse(msg.BlockDate) || Date.now();
+                    var existing = messageMap.get(fromAddress);
+                    if (!existing || existing.timestamp < timestamp) {
+                        messageMap.set(fromAddress, { msg: msg, timestamp: timestamp });
+                    }
+                }
+                for (var entry of messageMap) {
+                    var msg = entry[1].msg;
+                    var timestamp = entry[1].timestamp;
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, apiDelay));
+                        var fromProfile = await GetProfileByAddress(msg.FromAddress);
+                        if (!fromProfile || !fromProfile.URN) {
+                            console.log('[USERS] Skipping server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
+                            continue;
+                        }
+                        var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
+                        await new Promise(resolve => setTimeout(resolve, apiDelay));
+                        var userProfile = await GetProfileByURN(hostUser);
+                        if (!userProfile) {
+                            console.log('[USERS] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
+                        } else if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                            console.log('[USERS] Skipping server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
+                            continue;
+                        }
+                        var spawn = calculateSpawnPoint(hostUser + '@' + worldName);
+                        var offer = null;
+                        var iceCandidates = [];
+                        var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                        if (match) {
+                            var hash = match[1];
+                            var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                            if (cidRegex.test(hash)) {
+                                try {
+                                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                                    var data = await fetchIPFS(hash);
+                                    if (data && data.offer && data.world === worldName) {
+                                        offer = data.offer;
+                                        iceCandidates = data.iceCandidates || [];
+                                    }
+                                } catch (e) {
+                                    console.error('[SYSTEM] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
+                                }
+                            }
+                        }
+                        if (!knownServers.some(s => s.hostUser === hostUser && s.transactionId === msg.TransactionId)) {
+                            newServers.push({
+                                hostUser: hostUser,
+                                spawn: spawn,
+                                offer: offer,
+                                iceCandidates: iceCandidates,
+                                transactionId: msg.TransactionId,
+                                timestamp: timestamp,
+                                connectionRequestCount: 0,
+                                latestRequestTime: null
+                            });
+                            processedMessages.add(msg.TransactionId);
+                        }
+                    } catch (e) {
+                        console.error('[SYSTEM] Error processing server message:', msg.TransactionId, e);
+                    }
+                }
+                console.log('[SYSTEM] New server announcements found:', newServers.length);
+                var serverMap = new Map();
+                for (var server of knownServers.concat(newServers)) {
+                    if (!serverMap.has(server.hostUser) || serverMap.get(server.hostUser).timestamp < server.timestamp) {
+                        serverMap.set(server.hostUser, server);
+                    }
+                }
+                knownServers = Array.from(serverMap.values()).sort(function (a, b) { return b.timestamp - a.timestamp; }).slice(0, 10);
+                if (newServers.length > 0) {
+                    addMessage('New player(s) available to connect!', 3000);
+                    updateHudButtons();
+                }
+            }
+            tryFetchMessages();
+        }
+        async function initServers() {
+            console.log('[SYSTEM] Initializing servers for:', worldName);
+            var serverKeyword = 'MCServerJoin@' + worldName;
+            var responseKeywords = [];
+            var serverAddr;
+            try {
+                serverAddr = await GetPublicAddressByKeyword(serverKeyword);
+            } catch (e) {
+                console.error('[SYSTEM] Failed to fetch initial server address:', e);
+            }
+            if (!serverAddr) {
+                console.error('[SYSTEM] No server address for:', serverKeyword);
+                return;
+            }
+            console.log('[SYSTEM] Fetching initial server announcements for:', serverKeyword);
+            var messages = [];
+            var skip = 0;
+            var qty = 5000;
+            var apiDelay = 350;
+            while (true) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    var response = await GetPublicMessagesByAddress(serverAddr, skip, qty);
+                    if (!response || response.length === 0) break;
+                    messages = messages.concat(response);
+                    if (response.length < qty) break;
+                    skip += qty;
+                } catch (e) {
+                    console.error('[SYSTEM] Failed to fetch initial server messages, skip:', skip, 'error:', e);
+                    break;
+                }
+            }
+            console.log('[SYSTEM] Initial poll: Found', messages.length, 'server announcements');
+            var messageMap = new Map();
+            for (var msg of messages) {
+                if (!msg.TransactionId || processedMessages.has(msg.TransactionId)) {
+                    if (msg.TransactionId) {
+                        console.log('[SYSTEM] Stopping server message processing at cached ID:', msg.TransactionId);
+                        break; // Stop processing as all remaining messages are older
+                    }
+                    continue;
+                }
+                processedMessages.add(msg.TransactionId);
+                var timestamp = Date.parse(msg.BlockDate) || Date.now();
+                var existing = messageMap.get(msg.FromAddress);
+                if (!existing || existing.timestamp < timestamp) {
+                    messageMap.set(msg.FromAddress, { msg: msg, timestamp: timestamp });
+                }
+            }
+            for (var entry of messageMap) {
+                var msg = entry[1].msg;
+                var timestamp = entry[1].timestamp;
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    var fromProfile = await GetProfileByAddress(msg.FromAddress);
+                    if (!fromProfile || !fromProfile.URN) {
+                        console.log('[USERS] Skipping initial server message, no URN for address:', msg.FromAddress, 'transactionId:', msg.TransactionId);
+                        continue;
+                    }
+                    var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    var userProfile = await GetProfileByURN(hostUser);
+                    if (!userProfile) {
+                        console.log('[USERS] No profile for user:', hostUser, 'transactionId:', msg.TransactionId);
+                    } else if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                        console.log('[USERS] Skipping initial server message, invalid creators for user:', hostUser, 'transactionId:', msg.TransactionId);
+                        continue;
+                    }
+                    var spawn = calculateSpawnPoint(hostUser + '@' + worldName);
+                    var offer = null;
+                    var iceCandidates = [];
+                    var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                    if (match) {
+                        var hash = match[1];
+                        var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                        if (cidRegex.test(hash)) {
+                            try {
+                                await new Promise(resolve => setTimeout(resolve, apiDelay));
+                                var data = await fetchIPFS(hash);
+                                if (data && data.offer && data.world === worldName) {
+                                    offer = data.offer;
+                                    iceCandidates = data.iceCandidates || [];
+                                }
+                            } catch (e) {
+                                console.error('[SYSTEM] Failed to fetch IPFS for hash:', hash, 'error:', e, 'transactionId:', msg.TransactionId);
+                            }
+                        }
+                    }
+                    if (!knownServers.some(s => s.hostUser === hostUser && s.transactionId === msg.TransactionId)) {
+                        knownServers.push({
+                            hostUser: hostUser,
+                            spawn: spawn,
+                            offer: offer,
+                            iceCandidates: iceCandidates,
+                            transactionId: msg.TransactionId,
+                            timestamp: timestamp,
+                            connectionRequestCount: 0,
+                            latestRequestTime: null
+                        });
+                    }
+                    responseKeywords.push('MCConn@' + hostUser + '@' + worldName);
+                } catch (e) {
+                    console.error('[SYSTEM] Error processing initial server message:', msg.TransactionId, e);
+                }
+            }
+            var serverMap = new Map();
+            for (var server of knownServers) {
+                if (!serverMap.has(server.hostUser) || serverMap.get(server.hostUser).timestamp < server.timestamp) {
+                    serverMap.set(server.hostUser, server);
+                }
+            }
+            knownServers = Array.from(serverMap.values()).sort(function (a, b) { return b.timestamp - a.timestamp; }).slice(0, 10);
+            if (isHost) {
+                responseKeywords.push('MCConn@' + userName + '@' + worldName);
+            }
+            for (var responseKeyword of responseKeywords) {
+                var responseAddr;
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    responseAddr = await GetPublicAddressByKeyword(responseKeyword);
+                } catch (e) {
+                    console.error('[SYSTEM] Failed to fetch initial response address for:', responseKeyword, e);
+                }
+                if (responseAddr) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        try {
+                            await new Promise(resolve => setTimeout(resolve, apiDelay));
+                            var response = await GetPublicMessagesByAddress(responseAddr, skip, qty);
+                            if (!response || response.length === 0) break;
+                            messages = messages.concat(response);
+                            if (response.length < qty) break;
+                            skip += qty;
+                        } catch (e) {
+                            console.error('[SYSTEM] Failed to fetch initial response messages for:', responseKeyword, 'skip:', skip, 'error:', e);
+                            break;
+                        }
+                    }
+                    console.log('[SYSTEM] Initial poll: Found', messages.length, 'existing responses for:', responseKeyword);
+                    for (var msg of messages) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[SYSTEM] Stopping response message processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (msg.TransactionId) {
+                            processedMessages.add(msg.TransactionId);
+                        }
+                    }
+                    var requestCount = messages.length;
+                    var latestRequest = messages.length > 0 ? Date.parse(messages[0].BlockDate) || Date.now() : null;
+                    var hostUser = responseKeyword.match(/MCConn@(.+)@[^@]+$/)[1];
+                    var server = knownServers.find(function (s) { return s.hostUser === hostUser; });
+                    if (server) {
+                        server.connectionRequestCount = requestCount;
+                        server.latestRequestTime = latestRequest;
+                    }
+                }
+            }
+            // Process offers only for host's keyword if isHost
+            if (isHost) {
+                var hostKeyword = 'MCConn@' + userName + '@' + worldName;
+                var responseAddr = await GetPublicAddressByKeyword(hostKeyword);
+                if (responseAddr) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        try {
+                            await new Promise(resolve => setTimeout(resolve, apiDelay));
+                            var response = await GetPublicMessagesByAddress(responseAddr, skip, qty);
+                            if (!response || response.length === 0) break;
+                            messages = messages.concat(response);
+                            if (response.length < qty) break;
+                            skip += qty;
+                        } catch (e) {
+                            console.error('[SYSTEM] Failed to fetch initial host offer messages for:', hostKeyword, 'skip:', skip, 'error:', e);
+                            break;
+                        }
+                    }
+                    var newOffers = [];
+                    for (var msg of messages) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[SYSTEM] Stopping host offer processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (!msg.TransactionId) continue;
+                        processedMessages.add(msg.TransactionId);
+                        try {
+                            var fromProfile = await GetProfileByAddress(msg.FromAddress);
+                            if (!fromProfile || !fromProfile.URN) {
+                                console.log('[USERS] Skipping initial offer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            var clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
+                            var userProfile = await GetProfileByURN(clientUser);
+                            if (!userProfile) {
+                                console.log('[USERS] No profile for user:', clientUser, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                                console.log('[USERS] Skipping initial offer message, invalid creators for user:', clientUser, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                            if (!match) {
+                                console.log('[SYSTEM] No IPFS hash in initial offer message:', msg.Message, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            var hash = match[1];
+                            var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
+                            if (!cidRegex.test(hash)) {
+                                console.log('[SYSTEM] Invalid CID in initial offer message:', hash, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+                            try {
+                                await new Promise(resolve => setTimeout(resolve, apiDelay));
+                                var data = await fetchIPFS(hash);
+                                if (!data || !data.world || data.world !== worldName) {
+                                    console.log('[SYSTEM] Invalid IPFS data for initial offer message:', hash, 'txId:', msg.TransactionId);
+                                    continue;
+                                }
+                                if (data.offer || data.answer) {
+                                    newOffers.push({
+                                        clientUser: data.user || clientUser,
+                                        offer: data.offer || data.answer,
+                                        iceCandidates: data.iceCandidates || [],
+                                        transactionId: msg.TransactionId,
+                                        timestamp: Date.parse(msg.BlockDate) || Date.now(),
+                                        profile: fromProfile
+                                    });
+                                }
+                            } catch (e) {
+                                console.error('[SYSTEM] Failed to fetch IPFS for initial offer hash:', hash, 'error:', e, 'txId:', msg.TransactionId);
+                            }
+                        } catch (e) {
+                            console.error('[SYSTEM] Error processing initial offer message:', msg.TransactionId, e);
+                        }
+                    }
+                    if (newOffers.length > 0) {
+                        pendingOffers.push(...newOffers);
+                        setupPendingModal();
+                    }
+                }
+            }
+            console.log('[SYSTEM] Initial load complete.');
+            worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
+            isInitialLoad = false;
+        }
+        function openUsersModal() {
+            console.log('[MODAL] Opening users modal');
+            var existingModal = document.getElementById('usersModal');
+            if (existingModal) {
+                existingModal.remove();
+                console.log('[MODAL] Removed existing usersModal');
+            }
+            var modal = document.createElement('div');
+            modal.id = 'usersModal';
+            modal.style.position = 'fixed';
+            modal.style.left = '50%';
+            modal.style.top = '50%';
+            modal.style.transform = 'translate(-50%,-50%)';
+            modal.style.zIndex = '220';
+            modal.style.background = 'var(--panel)';
+            modal.style.padding = '14px';
+            modal.style.borderRadius = '10px';
+            modal.style.minWidth = '360px';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+            <h3>Online Players</h3>
+            <div style="margin-bottom:10px;">
+                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>
+            </div>
+            <div id="usersList"></div>
+            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>
+            <div style="margin-top:10px;text-align:right;">
+                <button id="closeUsers">Close</button>
+            </div>
+        `;
+            document.body.appendChild(modal);
+            console.log('[MODAL] Modal added to DOM');
+            var list = modal.querySelector('#usersList');
+            list.innerHTML = '';
+            var hasEntries = false;
+
+            var connectedHeader = document.createElement('h4');
+            connectedHeader.innerText = 'Connected Players';
+            list.appendChild(connectedHeader);
+            for (var peer of peers) {
+                var peerUser = peer[0];
+                if (peerUser !== userName) {
+                    hasEntries = true;
+                    console.log('[MODAL] Rendering peer:', peerUser);
+                    var spawn = calculateSpawnPoint(peerUser + '@' + worldName);
+                    var row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.gap = '8px';
+                    row.style.alignItems = 'center';
+                    row.style.marginTop = '8px';
+                    var info = document.createElement('div');
+                    info.innerText = peerUser + ' (Connected) at (' + Math.floor(spawn.x) + ', ' + Math.floor(spawn.y) + ', ' + Math.floor(spawn.z) + ')';
+                    var btn = document.createElement('button');
+                    btn.innerText = 'Visit Spawn';
+                    btn.onclick = function () {
+                        console.log('[MODAL] Teleporting to spawn of:', peerUser);
+                        respawnPlayer(spawn.x, 100, spawn.z);
+                        modal.style.display = 'none';
+                        isPromptOpen = false;
+                    };
+                    row.appendChild(info);
+                    row.appendChild(btn);
+                    list.appendChild(row);
+                }
+            }
+
+            var activeServersHeader = document.createElement('h4');
+            activeServersHeader.innerText = 'Known Servers (Last 10)';
+            list.appendChild(activeServersHeader);
+            var serverMap = new Map();
+            for (var server of knownServers) {
+                if (!serverMap.has(server.hostUser) || serverMap.get(server.hostUser).timestamp < server.timestamp) {
+                    serverMap.set(server.hostUser, server);
+                }
+            }
+            var uniqueServers = Array.from(serverMap.values()).sort(function (a, b) { return b.timestamp - a.timestamp; }).slice(0, 10);
+            for (var server of uniqueServers) {
+                hasEntries = true;
+                console.log('[MODAL] Rendering server:', server.hostUser);
+                var row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.gap = '8px';
+                row.style.alignItems = 'center';
+                row.style.marginTop = '8px';
+                var info = document.createElement('div');
+                var attemptTime = connectionAttempts.get(server.hostUser);
+                info.innerText = server.hostUser + ' at (' + Math.floor(server.spawn.x) + ', ' + Math.floor(server.spawn.y) + ', ' + Math.floor(server.spawn.z) + ')\nServer started: ' + new Date(server.timestamp).toLocaleString() + '\nLast connect attempt: ' + (attemptTime ? new Date(attemptTime).toLocaleString() : 'Never') + '\nConnection requests: ' + (server.connectionRequestCount || 0) + '\nLatest request: ' + (server.latestRequestTime ? new Date(server.latestRequestTime).toLocaleString() : 'None');
+                info.style.whiteSpace = 'pre-line';
+                if (!peers.has(server.hostUser) && (!isHost || server.hostUser !== userName)) {
+                    var btn = document.createElement('button');
+                    btn.innerText = 'Try Connect';
+                    btn.onclick = async function () {
+                        console.log('[WEBRTC] Attempting to connect to server:', server.hostUser);
+                        addMessage("Finding a route to " + server.hostUser + "...", 5000);
+                        await connectToServer(server.hostUser, server.offer, server.iceCandidates);
+                        modal.style.display = 'none';
+                        isPromptOpen = false;
+                    };
+                    row.appendChild(btn);
+                }
+                row.appendChild(info);
+                list.appendChild(row);
+            }
+
+            if (isHost) {
+                var pendingHeader = document.createElement('h4');
+                pendingHeader.innerText = 'Pending Connections';
+                list.appendChild(pendingHeader);
+                for (var offer of pendingOffers) {
+                    var row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.gap = '8px';
+                    row.style.alignItems = 'center';
+                    row.style.marginTop = '8px';
+                    var info = document.createElement('div');
+                    info.innerText = offer.clientUser + ' at ' + new Date(offer.timestamp).toLocaleString() + '\nBio: ' + (offer.profile && offer.profile.Bio ? offer.profile.Bio : 'No bio');
+                    info.style.whiteSpace = 'pre-line';
+                    row.appendChild(info);
+                    list.appendChild(row);
+                    hasEntries = true;
+                }
+            }
+            if (!hasEntries) {
+                console.log('[MODAL] No servers or peers to render in modal');
+                var empty = document.createElement('div');
+                empty.style.marginTop = '8px';
+                empty.innerText = 'No players available';
+                list.appendChild(empty);
+            }
+            modal.querySelector('#closeUsers').onclick = function () {
+                console.log('[MODAL] Closing users modal');
+                modal.remove();
+                isPromptOpen = false;
+            };
+            modal.querySelector('#friendHandle').addEventListener('keydown', function (e) {
+                e.stopPropagation();
+            });
+            modal.querySelector('#connectFriend').onclick = function () {
+                isConnecting = true;
+                var handle = document.getElementById('friendHandle').value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+                if (!handle) {
+                    addMessage('Please enter a friend’s handle', 3000);
+                    return;
+                }
+                if (handle === userName) {
+                    addMessage('Cannot connect to yourself', 3000);
+                    return;
+                }
+                console.log('[WEBRTC] Attempting to connect to friend:', handle);
+                // Add friend to knownServers with a temporary entry
+                var spawn = calculateSpawnPoint(handle + '@' + worldName);
+                knownServers.push({
+                    hostUser: handle,
+                    spawn: spawn,
+                    offer: null,
+                    iceCandidates: [],
+                    transactionId: 'local_' + Date.now(),
+                    timestamp: Date.now(),
+                    connectionRequestCount: 0,
+                    latestRequestTime: null
+                });
+                connectToServer(handle, null, []);
+                modal.style.display = 'none';
+                isPromptOpen = false;
+            };
+        }
+        async function startGame() {
+            var startBtn = document.getElementById('startBtn');
+            if(startBtn) startBtn.blur();
+            console.log('[LOGIN] Start game triggered');
+            isPromptOpen = false;
+            var worldInput = document.getElementById('worldNameInput').value;
+            var userInput = document.getElementById('userInput').value;
+            if (worldInput.length > 8) {
+                addMessage('World name too long (max 8 chars)', 3000);
+                return;
+            }
+            if (userInput.length > 20) {
+                addMessage('Username too long (max 20 chars)', 3000);
+                return;
+            }
+            if (!worldInput || !userInput) {
+                addMessage('Please enter a world and username', 3000);
+                return;
+            }
+            worldName = worldInput.slice(0, 8);
+            userName = userInput.slice(0, 20);
+            worldSeed = worldName;
+
+            const colorRnd = makeSeededRandom(worldSeed + '_colors');
+            for (const blockId in BLOCKS) {
+                if (Object.hasOwnProperty.call(BLOCKS, blockId)) {
+                    const block = BLOCKS[blockId];
+                    const baseColor = new THREE.Color(block.color);
+                    const hsv = {};
+                    baseColor.getHSL(hsv);
+                    const newHue = (hsv.h + (colorRnd() - 0.5) * 0.05); // Less hue shift
+                    const newSat = Math.max(0.4, Math.min(0.9, hsv.s + (colorRnd() - 0.5) * 0.2)); // Saturate a bit
+                    const newLight = Math.max(0.1, Math.min(0.5, hsv.l + (colorRnd() - 0.5) * 0.2)); // Darker
+                    baseColor.setHSL(newHue, newSat, newLight);
+                    block.color = '#' + baseColor.getHexString();
+                }
+            }
+
+            var userWorldKey = userName + '@' + worldName;
+            var profile;
+            try {
+                profile = await GetProfileByURN(userName);
+            } catch (e) {
+                console.error("Failed to get profile by URN", e);
+                profile = null;
+            }
+            userAddress = profile && profile.Creators ? profile.Creators[0] : 'anonymous';
+            if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+            if (!knownWorlds.has(worldName)) {
+                knownWorlds.set(worldName, { discoverer: userName, users: new Set([userName]), toAddress: userAddress });
+            } else {
+                knownWorlds.get(worldName).users.add(userName);
+            }
+            keywordCache.set(userAddress, userWorldKey);
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            document.getElementById('hotbar').style.display = 'flex';
+            document.getElementById('rightPanel').style.display = 'flex';
+            document.getElementById('worldLabel').textContent = worldName;
+            document.getElementById('seedLabel').textContent = 'User ' + userName;
+            updateHudButtons();
+            console.log('[LOGIN] Initializing Three.js');
+            try {
+                await initAudio();
+            } catch (e) {
+                console.error("Failed to initialize audio:", e);
+                addMessage("Could not initialize audio, continuing without it.", 3000);
+            }
+            console.log('[LOGIN] Initializing Three.js after audio');
+            initThree();
+            initMusicPlayer();
+            initVideoPlayer();
+            INVENTORY[0] = { id: 120, count: 8 };
+            INVENTORY[1] = { id: 121, count: 1 };
+            selectedHotIndex = 0; // Auto-select torch
+            selectedBlockId = 120; // Explicitly set selected block
+            initHotbar();
+            updateHotbarUI(); // Explicitly update UI and selectedBlockId
+            console.log('[LOGIN] Creating ChunkManager');
+            chunkManager = new ChunkManager(worldSeed);
+            populateSpawnChunks();
+            console.log('[LOGIN] Calculating spawn point');
+            var spawn = calculateSpawnPoint(userWorldKey);
+            player.x = spawn.x;
+            player.y = chunkManager.getSurfaceY(spawn.x, spawn.z) + 1;
+            player.z = spawn.z;
+            spawnPoint = { x: player.x, y: player.y, z: player.z };
+            player.vy = 0;
+            player.onGround = true;
+            var chunksPerSide = Math.floor(MAP_SIZE / CHUNK_SIZE);
+            var spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
+            var spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
+            console.log('[LOGIN] Preloading initial chunks');
+            chunkManager.preloadChunks(spawnCx, spawnCz, INITIAL_LOAD_RADIUS);
+            setupMobile();
+            initMinimap();
+            updateHotbarUI();
+            cameraMode = 'first';
+            controls.enabled = false;
+            avatarGroup.visible = false;
+            camera.position.set(player.x, player.y + 1.62, player.z);
+            camera.rotation.set(0, 0, 0, 'YXZ');
+            if (!isMobile()) {
+                try {
+                    renderer.domElement.requestPointerLock();
+                    mouseLocked = true;
+                    document.getElementById('crosshair').style.display = 'block';
+                } catch (e) {
+                    addMessage('Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.', 3000);
+                }
+            }
+            player.yaw = 0;
+            player.pitch = 0;
+            lastFrame = performance.now();
+            lastRegenTime = lastFrame;
+            var unregisterKeyEvents = registerKeyEvents();
+            console.log('[LOGIN] Starting game loop');
+            requestAnimationFrame(gameLoop);
+            addMessage('Welcome — world wraps at edges. Toggle camera with T. Good luck!', 5000);
+            var healthElement = document.getElementById('health');
+            if (healthElement) healthElement.innerText = player.health;
+            var scoreElement = document.getElementById('score');
+            if (scoreElement) scoreElement.innerText = player.score;
+            initServers(); // Do not await, let it run in the background
+            worker.postMessage({ type: 'sync_processed', ids: Array.from(processedMessages) });
+            startWorker();
+            setInterval(pollServers, POLL_INTERVAL);
+            addMessage('Joined world ' + worldName + ' as ' + userName, 3000);
+
+            if (initialTeleportLocation) {
+                respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z);
+                initialTeleportLocation = null;
+            }
+        }
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const worldSeedParam = urlParams.get('world-seed');
+                const userNameParam = urlParams.get('user-name');
+                const locParam = urlParams.get('loc');
+
+                if (worldSeedParam) {
+                    document.getElementById('worldNameInput').value = worldSeedParam;
+                }
+                if (userNameParam) {
+                    document.getElementById('userInput').value = userNameParam;
+                }
+
+                if (locParam) {
+                    const locParts = locParam.split(',');
+                    if (locParts.length === 3) {
+                        const x = parseFloat(locParts[0]);
+                        const y = parseFloat(locParts[1]);
+                        const z = parseFloat(locParts[2]);
+                        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                            initialTeleportLocation = { x, y, z };
+                        }
+                    }
+                }
+
+                console.log('[SYSTEM] DOMContentLoaded fired, initializing login elements');
+                var startBtn = document.getElementById('startBtn');
+                if (worldSeedParam && userNameParam) {
+                    startGame();
+                }
+                var announceLoginBtn = document.getElementById('announceLoginBtn');
+                var newUserJoinScriptBtn = document.getElementById('newUserJoinScriptBtn');
+                var acceptAll = document.getElementById('acceptAll');
+                var pendingModal = document.getElementById('pendingModal');
+                var loginOverlay = document.getElementById('loginOverlay');
+                if (!startBtn || !announceLoginBtn || !newUserJoinScriptBtn || !loginOverlay) {
+                    console.error('[SYSTEM] Login buttons or overlay not found in DOM');
+                    addMessage('UI initialization failed: buttons or overlay missing', 3000);
+                    return;
+                }
+                if (acceptAll) {
+                    acceptAll.addEventListener('change', function (e) {
+                        document.querySelectorAll('.selectOffer').forEach(function (ch) { ch.checked = e.target.checked; });
+                        console.log('[MODAL] Accept All checkbox changed');
+                    });
+                } else {
+                    console.warn('[MODAL] acceptAll element not found');
+                }
+                if (pendingModal) {
+                    pendingModal.addEventListener('click', function (e) { e.stopPropagation(); });
+                    console.log('[MODAL] Pending modal click listener added');
+                } else {
+                    console.warn('[MODAL] pendingModal element not found');
+                }
+                startBtn.addEventListener('click', startGame);
+                announceLoginBtn.addEventListener('click', async function () {
+                    this.blur();
+                    console.log('[LOGIN] Announce Server button clicked');
+                    isPromptOpen = true;
+                    var worldInput = document.getElementById('worldNameInput').value;
+                    var userInput = document.getElementById('userInput').value;
+                    if (worldInput.length > 8) {
+                        addMessage('World name too long (max 8 chars)', 3000);
+                        return;
+                    }
+                    if (userInput.length > 20) {
+                        addMessage('Username too long (max 20 chars)', 3000);
+                        return;
+                    }
+                    if (!worldInput || !userInput) {
+                        addMessage('Please enter a world and username', 3000);
+                        return;
+                    }
+                    var cleanWorld = worldInput.slice(0, 8);
+                    var cleanUser = userInput.slice(0, 20);
+                    var serverKeyword = 'MCServerJoin@' + cleanWorld;
+                    var serverAddr = await GetPublicAddressByKeyword(serverKeyword);
+                    document.getElementById('joinScriptText').value = serverAddr ? serverAddr.trim().replace(/^"|"$/g, '') : serverKeyword;
+                    document.getElementById('joinScriptModal').style.display = 'block';
+                    document.getElementById('joinScriptModal').querySelector('h3').innerText = 'Announce Server';
+                    document.getElementById('joinScriptModal').querySelector('p').innerText = 'Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.';
+                    addMessage('Prepare to announce server after starting', 3000);
+                });
+                newUserJoinScriptBtn.addEventListener('click', async function () {
+                    this.blur();
+                    console.log('[LOGIN] Create Join Script button clicked');
+                    isPromptOpen = true;
+                    var worldInput = document.getElementById('worldNameInput').value;
+                    var userInput = document.getElementById('userInput').value;
+                    if (worldInput.length > 8) {
+                        addMessage('World name too long (max 8 chars)', 3000);
+                        return;
+                    }
+                    if (userInput.length > 20) {
+                        addMessage('Username too long (max 20 chars)', 3000);
+                        return;
+                    }
+                    if (!worldInput || !userInput) {
+                        addMessage('Please enter a world and username', 3000);
+                        return;
+                    }
+                    var cleanWorld = worldInput.slice(0, 8);
+                    var cleanUser = userInput.slice(0, 20);
+                    var userWorldKey = cleanUser + '@' + cleanWorld;
+                    var existingWorld = knownWorlds.get(cleanWorld);
+                    if (existingWorld && existingWorld.users.has(cleanUser)) {
+                        addMessage('User already in this world. Choose a different username.', 3000);
+                        return;
+                    }
+                    var userAddr = await GetPublicAddressByKeyword(userWorldKey);
+                    var masterAddr = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                    var addresses = [
+                        userAddr ? userAddr.trim() : userWorldKey,
+                        masterAddr ? masterAddr.trim() : MASTER_WORLD_KEY
+                    ].filter(function (a) { return a; });
+                    var joinScript = addresses.join(',').replace(/["']/g, '');
+                    document.getElementById('joinScriptText').value = joinScript;
+                    document.getElementById('joinScriptModal').style.display = 'block';
+                    document.getElementById('joinScriptModal').querySelector('h3').innerText = 'Join World';
+                    document.getElementById('joinScriptModal').querySelector('p').innerText = 'Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.';
+                    addMessage('Join script ready to share', 3000);
+                });
+                document.getElementById('homeIcon').addEventListener('click', function () {
+                    respawnPlayer();
+                    this.blur();
+                });
+                document.getElementById('camToggle').addEventListener('click', function() {
+                    toggleCameraMode();
+                    this.blur();
+                });
+                document.getElementById('openCraft').addEventListener('click', function() {
+                    openCrafting();
+                    this.blur();
+                });
+                document.getElementById('teleportBtn').addEventListener('click', function () {
+                    isPromptOpen = true;
+                    document.getElementById('teleportModal').style.display = 'block';
+                    document.getElementById('teleportX').value = Math.floor(player.x);
+                    document.getElementById('teleportY').value = Math.floor(player.y);
+                    document.getElementById('teleportZ').value = Math.floor(player.z);
+                    this.blur();
+                });
+
+                document.getElementById('shareWorldBtn').addEventListener('click', function () {
+                    var x = document.getElementById('teleportX').value;
+                    var y = document.getElementById('teleportY').value;
+                    var z = document.getElementById('teleportZ').value;
+                    var url = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${x},${y},${z}`;
+                    navigator.clipboard.writeText(url).then(function () {
+                        addMessage('Shareable URL copied to clipboard!', 3000);
+                    }, function (err) {
+                        addMessage('Failed to copy URL.', 3000);
+                    });
+                    this.blur();
+                });
+                document.getElementById('switchWorldBtn').addEventListener('click', function() {
+                    switchWorld();
+                    this.blur();
+                });
+                document.getElementById('saveChangesBtn').addEventListener('click', function() {
+                    downloadSession();
+                    this.blur();
+                });
+                document.getElementById('joinScriptBtn').addEventListener('click', async function () {
+                    this.blur();
+                    isPromptOpen = true;
+                    document.getElementById('teleportX').value = '';
+                    document.getElementById('teleportY').value = '';
+                    document.getElementById('teleportZ').value = '';
+                });
+                document.getElementById('saveChangesBtn').addEventListener('click', downloadSession);
+                document.getElementById('joinScriptBtn').addEventListener('click', async function () {
+                    isPromptOpen = true;
+                    var userAddr = await GetPublicAddressByKeyword(userName + '@' + worldName);
+                    var masterAddr = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                    var joinScript = [userAddr || (userName + '@' + worldName), masterAddr || MASTER_WORLD_KEY].filter(function (a) { return a; }).join(',').replace(/["']/g, '');
+                    document.getElementById('joinScriptText').value = joinScript;
+                    document.getElementById('joinScriptModal').style.display = 'block';
+                });
+                document.getElementById('usersBtn').addEventListener('click', function() {
+                    openUsersModal();
+                    this.blur();
+                });
+                document.getElementById('closeCraft').addEventListener('click', function () {
+                    isPromptOpen = false;
+                    document.getElementById('craftModal').style.display = 'none';
+                    this.blur();
+                });
+                document.getElementById('closeInventory').addEventListener('click', function () {
+                    toggleInventory();
+                    this.blur();
+                });
+                document.getElementById('closeJoinScript').addEventListener('click', function () {
+                    isPromptOpen = false;
+                    isConnecting = false;
+                    document.getElementById('joinScriptModal').style.display = 'none';
+                    this.blur();
+                });
+                document.getElementById('closeDownloadModal').addEventListener('click', function () {
+                    isPromptOpen = false;
+                    document.getElementById('downloadModal').style.display = 'none';
+                    this.blur();
+                });
+                document.getElementById('teleportCancel').addEventListener('click', function () {
+                    isPromptOpen = false;
+                    document.getElementById('teleportModal').style.display = 'none';
+                    this.blur();
+                });
+                document.getElementById('teleportOk').addEventListener('click', function () {
+                    var x = parseFloat(document.getElementById('teleportX').value);
+                    var y = parseFloat(document.getElementById('teleportY').value);
+                    var z = parseFloat(document.getElementById('teleportZ').value);
+                    if (isNaN(x) || isNaN(y) || isNaN(z)) {
+                        addMessage('Invalid coordinates', 3000);
+                        return;
+                    }
+                    respawnPlayer(x, y, z);
+                    document.getElementById('teleportModal').style.display = 'none';
+                    isPromptOpen = false;
+                    this.blur();
+                });
+                document.getElementById('respawnBtn').addEventListener('click', function () {
+                    respawnPlayer();
+                    this.blur();
+                });
+                document.getElementById('acceptPending').addEventListener('click', function() {
+                    acceptPendingOffers();
+                    this.blur();
+                });
+                document.getElementById('closePending').addEventListener('click', function () {
+                    document.getElementById('pendingModal').style.display = 'none';
+                    pendingOffers = [];
+                    updatePendingModal();
+                    this.blur();
+                });
+                async function initWorldsAndUsers() {
+                    console.log('[USERS] Initializing worlds and users');
+                    var masterAddr = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                    if (masterAddr) {
+                        var messages = await GetPublicMessagesByAddress(masterAddr);
+                        for (var msg of messages || []) {
+                            if (msg.TransactionId && !processedMessages.has(msg.TransactionId)) {
+                                console.log('[USERS] Processing message:', msg.TransactionId);
+                                var fromProfile = await GetProfileByAddress(msg.FromAddress);
+                                if (!fromProfile || !fromProfile.URN) {
+                                    console.log('[USERS] Skipping message: No valid URN for address:', msg.FromAddress);
+                                    continue;
+                                }
+                                var user = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, '');
+                                var userProfile = await GetProfileByURN(user);
+                                if (!userProfile || !userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                                    console.log('[USERS] Skipping message: Invalid profile for user:', user);
+                                    continue;
+                                }
+                                var toKeywordRaw = await GetKeywordByPublicAddress(msg.ToAddress);
+                                if (!toKeywordRaw) {
+                                    console.log('[USERS] Skipping message: No keyword for address:', msg.ToAddress);
+                                    continue;
+                                }
+                                var toKeyword = toKeywordRaw.replace(/^"|"$/g, '');
+                                if (!toKeyword.includes('MCUserJoin@')) {
+                                    console.log('[USERS] Skipping message: Invalid keyword:', toKeyword);
+                                    continue;
+                                }
+                                var world = toKeyword.split('@')[1].replace(/[^a-zA-Z0-9]/g, '');
+                                if (user && world) {
+                                    console.log('[USERS] Adding user:', user, 'to world:', world);
+                                    if (!knownWorlds.has(world)) {
+                                        knownWorlds.set(world, { discoverer: user, users: new Set([user]), toAddress: msg.ToAddress });
+                                    } else {
+                                        knownWorlds.get(world).users.add(user);
+                                    }
+                                    if (!knownUsers.has(user)) knownUsers.set(user, msg.FromAddress);
+                                    spawnChunks.set(user, { cx: null, cz: null, username: user, world: world });
+                                    processedMessages.add(msg.TransactionId);
+                                }
+                            } else if (msg.TransactionId) {
+                                console.log('[USERS] Skipping already processed message:', msg.TransactionId);
+                            }
+                        }
+                        console.log('[USERS] Discovered worlds:', knownWorlds.size, 'and users:', knownUsers.size);
+                    }
+                }
+                initWorldsAndUsers();
+                updateLoginUI();
+                setupEmojiPicker();
+
+                var dropZone = document.getElementById('dropZone');
+
+                dropZone.addEventListener('dragover', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                });
+
+                dropZone.addEventListener('dragleave', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = '';
+                });
+
+                dropZone.addEventListener('drop', function(event) {
+                    event.preventDefault();
+                    dropZone.style.backgroundColor = '';
+                    var file = event.dataTransfer.files[0];
+                    if (file) {
+                        var reader = new FileReader();
+                        reader.onload = function(e) {
+                            try {
+                                var sessionData = JSON.parse(e.target.result);
+                                applySaveFile(sessionData, 'local', new Date().toISOString());
+                            } catch (error) {
+                                console.error('Error parsing session file:', error);
+                                addMessage('Sorry, file malformed.', 3000);
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+
+                console.log('[SYSTEM] DOMContentLoaded completed, all listeners attached');
+            } catch (error) {
+                console.error('[SYSTEM] Error in DOMContentLoaded:', error);
+                addMessage('Failed to initialize login system', 3000);
+            }
+        });
+
+        function setupEmojiPicker() {
+            const emojiBtn = document.getElementById('emojiBtn');
+            const emojiBtnUser = document.getElementById('emojiBtnUser');
+            const emojiModal = document.getElementById('emojiModal');
+            const emojiGrid = document.getElementById('emojiGrid');
+            const worldNameInput = document.getElementById('worldNameInput');
+            const userInput = document.getElementById('userInput');
+            let activeInput = null;
+
+            const emojiCategories = {
+                'Faces': ['😀', '😂', '😍', '🤔', '😎', '😭', '😡', '😱', '😇', '😈', '👻', '👽', '🤖'],
+                'Objects': ['⭐', '💎', '🌳', '🏰', '⚔️', '🍕', '🎉', '🔥', '💧', '🌱', '🍄', '🍎', '🚬', '💣', '🔫', '🔑', '❤️'],
+                'Animals': ['🐶', '🐱', '🐭', '🦊', '🐻', '🐼', '🐨', '🐵', '🦁', '🐸', '🐢', '🐍', '🦄', '🦅', '🦋'],
+                'Travel': ['🌎', '🚀', '✈️', '🚗', '⛵️', '⛰️', '🏝️', '🏜️', '🏞️', '🏛️', '🏠', '⛺️']
+            };
+
+            emojiGrid.innerHTML = '';
+
+            for (const category in emojiCategories) {
+                const categoryHeader = document.createElement('div');
+                categoryHeader.innerText = category;
+                categoryHeader.style.gridColumn = '1 / -1';
+                categoryHeader.style.fontWeight = 'bold';
+                categoryHeader.style.marginTop = '10px';
+                emojiGrid.appendChild(categoryHeader);
+
+                emojiCategories[category].forEach(emoji => {
+                    const emojiElement = document.createElement('div');
+                    emojiElement.innerText = emoji;
+                    emojiElement.style.cursor = 'pointer';
+                    emojiElement.style.padding = '8px';
+                    emojiElement.style.borderRadius = '4px';
+                    emojiElement.style.textAlign = 'center';
+                    emojiElement.style.fontSize = '24px';
+                    emojiElement.onmouseover = () => emojiElement.style.background = '#1a2632';
+                    emojiElement.onmouseout = () => emojiElement.style.background = 'transparent';
+                    emojiElement.addEventListener('click', () => {
+                        if (activeInput) {
+                            activeInput.value += emoji;
+                        }
+                        emojiModal.style.display = 'none';
+                    });
+                    emojiGrid.appendChild(emojiElement);
+                });
+            }
+
+            function openModal(inputElement) {
+                activeInput = inputElement;
+                emojiModal.style.display = 'flex';
+            }
+
+            emojiBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                openModal(worldNameInput);
+            });
+
+            emojiBtnUser.addEventListener('click', (e) => {
+                e.preventDefault();
+                openModal(userInput);
+            });
+
+            emojiModal.addEventListener('click', (e) => {
+                if (e.target === emojiModal) {
+                    emojiModal.style.display = 'none';
+                }
+            });
+        }
+        function flashDamageEffect() {
+            const flash = document.getElementById('damageFlash');
+            flash.style.background = 'rgba(255, 0, 0, 0.5)';
+            setTimeout(() => {
+                flash.style.background = 'rgba(255, 0, 0, 0)';
+            }, 100);
+        }
+
+        function cleanupPeer(username) {
+            const peer = peers.get(username);
+            if (peer) {
+                if (peer.pc) peer.pc.close();
+                peers.delete(username);
+            }
+
+            if (playerAvatars.has(username)) {
+                const avatar = playerAvatars.get(username);
+                scene.remove(avatar);
+                disposeObject(avatar);
+                playerAvatars.delete(username);
+            }
+
+            if (userAudioStreams.has(username)) {
+                const audioStream = userAudioStreams.get(username);
+                audioStream.audio.srcObject = null;
+                audioStream.audio.remove();
+                userAudioStreams.delete(username);
+            }
+
+            if (userVideoStreams.has(username)) {
+                userVideoStreams.delete(username);
+            }
+
+            delete userPositions[username];
+
+            addMessage(`${username} has disconnected.`);
+            updateHudButtons();
+            console.log(`[WebRTC] Cleaned up peer: ${username}`);
+        }
+
+        async function toggleCamera() {
+            const cameraBtn = document.getElementById('cameraBtn');
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
+            if (localVideoStream) {
+                // Turn off camera and hide video feed
+                localVideoStream.getTracks().forEach(track => track.stop());
+                localVideoStream = null;
+
+                for (const [peerUser, peerData] of peers.entries()) {
+                    if (peerData.pc) {
+                        const senders = peerData.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+                        senders.forEach(sender => peerData.pc.removeTrack(sender));
+
+                        // Renegotiate
+                        const offer = await peerData.pc.createOffer();
+                        await peerData.pc.setLocalDescription(offer);
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                        }
+                    }
+                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                        peerData.dc.send(JSON.stringify({ type: 'video_stopped', username: userName }));
+                    }
+                }
+
+                cameraBtn.style.opacity = '0.5';
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                addMessage('Camera disabled', 2000);
+            } else {
+                // Turn on camera and show local video feed
+                try {
+                    localVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerData.pc) {
+                            localVideoStream.getTracks().forEach(track => peerData.pc.addTrack(track, localVideoStream));
+
+                            // Renegotiate
+                            const offer = await peerData.pc.createOffer();
+                            await peerData.pc.setLocalDescription(offer);
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify({ type: 'renegotiation_offer', offer: offer }));
+                            }
+                        }
+                        if (peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(JSON.stringify({ type: 'video_started', username: userName }));
+                        }
+                    }
+
+                    cameraBtn.style.opacity = '1';
+                    proximityVideoElement.srcObject = localVideoStream;
+                    proximityVideoLabel.innerText = userName;
+                    proximityVideoContainer.style.display = 'block';
+                    addMessage('Camera enabled', 2000);
+
+                    // Reset proximity video display to show local user first
+                    lastProximityVideoChangeTime = Date.now();
+                    proximityVideoUsers = [userName, ...proximityVideoUsers.filter(u => u !== userName)];
+                    currentProximityVideoIndex = 0;
+
+                } catch (err) {
+                    addMessage('Could not access camera', 3000);
+                    console.error('Error accessing camera:', err);
+                }
+            }
+        }
+
+        async function initAudio() {
+            try {
+                localAudioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                addMessage("Microphone access denied. Proximity chat will be disabled.", 5000);
+            }
+        }
+
+        function animateAttack() {
+            if (!isAttacking) {
+                isAttacking = true;
+                attackStartTime = performance.now();
+            }
+        }
+
+        function updateProximityVideo() {
+            const now = Date.now();
+            const proximityVideoContainer = document.getElementById('proximityVideo');
+            const proximityVideoElement = document.getElementById('proximityVideoElement');
+            const proximityVideoLabel = document.getElementById('proximityVideoLabel');
+
+            const localPlayerPos = new THREE.Vector3(player.x, player.y, player.z);
+
+            const remoteUsersInProximity = [];
+            for (const [username, videoStream] of userVideoStreams.entries()) {
+                if (username === userName) continue;
+                if (userPositions[username]) {
+                    const userPos = userPositions[username];
+                    const remotePlayerPos = new THREE.Vector3(userPos.targetX, userPos.targetY, userPos.targetZ);
+                    if (localPlayerPos.distanceTo(remotePlayerPos) <= 32) {
+                        remoteUsersInProximity.push(username);
+                    }
+                }
+            }
+
+            let usersToShow = [...remoteUsersInProximity];
+            if (localVideoStream) {
+                usersToShow.unshift(userName);
+            }
+
+            proximityVideoUsers = usersToShow;
+
+            if (proximityVideoUsers.length === 0) {
+                proximityVideoContainer.style.display = 'none';
+                if (proximityVideoElement.srcObject) {
+                    proximityVideoElement.srcObject = null;
+                }
+                currentProximityVideoIndex = 0;
+                return;
+            }
+
+            proximityVideoContainer.style.display = 'block';
+
+            if (currentProximityVideoIndex >= proximityVideoUsers.length) {
+                currentProximityVideoIndex = 0;
+            }
+
+            const thirtySeconds = 30 * 1000;
+            if (now - lastProximityVideoChangeTime > thirtySeconds) {
+                lastProximityVideoChangeTime = now;
+                currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length;
+            }
+
+            const currentUser = proximityVideoUsers[currentProximityVideoIndex];
+            const currentStream = (currentUser === userName) ? localVideoStream : userVideoStreams.get(currentUser)?.stream;
+
+            if (proximityVideoElement.srcObject !== currentStream) {
+                proximityVideoLabel.innerText = currentUser;
+                proximityVideoElement.srcObject = currentStream;
+            }
+        }
+
+        function switchWorld() {
+            worldArchetype = null;
+            const newWorldName = prompt("Enter the name of the world to switch to:");
+            if (!newWorldName || newWorldName.trim() === "") {
+                addMessage("World name cannot be empty.", 3000);
+                return;
+            }
+
+            // Reset game state
+            worldName = newWorldName.slice(0, 8);
+            worldSeed = worldName;
+            chunkManager.chunks.clear();
+            meshGroup.children.forEach(disposeObject);
+            meshGroup.children = [];
+            foreignBlockOrigins.clear();
+            CHUNK_DELTAS.clear();
+            mobs.forEach(m => scene.remove(m.mesh));
+            mobs = [];
+
+            // Clear old sky elements before re-initializing
+            if (skyProps) {
+                skyProps.suns.forEach(sun => scene.remove(sun.mesh));
+                skyProps.moons.forEach(moon => scene.remove(moon.mesh));
+            }
+            if (stars) scene.remove(stars);
+            if (clouds) scene.remove(clouds);
+
+
+            // Re-initialize world
+            document.getElementById('worldLabel').textContent = worldName;
+            const userWorldKey = userName + '@' + worldName;
+            const spawn = calculateSpawnPoint(userWorldKey);
+            player.x = spawn.x;
+            player.y = spawn.y;
+            player.z = spawn.z;
+            spawnPoint = { x: player.x, y: player.y, z: player.z };
+
+            // Re-create the chunk manager for the new world
+            chunkManager = new ChunkManager(worldSeed);
+
+            // Re-initialize the sky with the new world's seed
+            initSky();
+
+            // Initial chunk loading
+            const spawnCx = Math.floor(spawn.x / CHUNK_SIZE);
+            const spawnCz = Math.floor(spawn.z / CHUNK_SIZE);
+            chunkManager.preloadChunks(spawnCx, spawnCz, LOAD_RADIUS);
+
+            addMessage(`Switched to world: ${worldName}`, 4000);
+        }
+
+        function animateRemoteFall(avatar) {
+            const fallDuration = 1000; // 1 second
+            const startRotation = avatar.rotation.clone();
+            const endRotation = new THREE.Euler(Math.PI / 2, startRotation.y, startRotation.z);
+
+            let startTime = null;
+
+            function animateFall(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const progress = Math.min(1, (timestamp - startTime) / fallDuration);
+
+                avatar.rotation.x = startRotation.x + (endRotation.x - startRotation.x) * progress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateFall);
+                }
+            }
+            requestAnimationFrame(animateFall);
+        }
+
+        function updateAvatarAnimation(now, isMoving) {
+            if (!avatarGroup) return;
+
+            const walkSpeed = 0.005;
+            const walkAmplitude = 0.5;
+            const attackSpeed = 0.01;
+            const attackAmplitude = 1.5;
+            const attackDuration = 500;
+
+            if (isAttacking) {
+                const elapsedTime = now - attackStartTime;
+                if (elapsedTime < attackDuration) {
+                    const angle = Math.sin((elapsedTime / attackDuration) * Math.PI) * attackAmplitude;
+                    avatarGroup.children[4].rotation.x = angle; // left arm
+                    avatarGroup.children[5].rotation.x = angle; // right arm
+                } else {
+                    isAttacking = false;
+                    avatarGroup.children[4].rotation.x = 0;
+                    avatarGroup.children[5].rotation.x = 0;
+                }
+            } else if (isMoving) {
+                const angle = Math.sin(now * walkSpeed) * walkAmplitude;
+                avatarGroup.children[0].rotation.x = angle; // left leg
+                avatarGroup.children[1].rotation.x = -angle; // right leg
+                avatarGroup.children[4].rotation.x = -angle; // left arm
+                avatarGroup.children[5].rotation.x = angle; // right arm
+            } else {
+                avatarGroup.children[0].rotation.x = 0;
+                avatarGroup.children[1].rotation.x = 0;
+                avatarGroup.children[4].rotation.x = 0;
+                avatarGroup.children[5].rotation.x = 0;
+            }
+        }
+
+        function initMinimap() {
+            var canvas = document.getElementById('minimap');
+            minimapCtx = canvas.getContext('2d');
+            canvas.width = 120;
+            canvas.height = 120;
+            updateMinimap();
+            // Create hidden file input for double-click upload
+            var fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json';
+            fileInput.style.display = 'none';
+            document.body.appendChild(fileInput);
+            // Double-click handler to trigger file selection
+            canvas.addEventListener('dblclick', function () {
+                console.log('[MINIMAP] Double-click detected, triggering file upload');
+                fileInput.click();
+            });
+            // Drag-and-drop handlers
+            canvas.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                canvas.style.border = '2px dashed var(--accent)';
+            });
+            canvas.addEventListener('dragleave', function () {
+                canvas.style.border = '1px solid rgba(255,255,255,0.1)';
+            });
+            canvas.addEventListener('drop', async function (e) {
+                e.preventDefault();
+                canvas.style.border = '1px solid rgba(255,255,255,0.1)';
+                const files = e.dataTransfer.files;
+                for (const file of files) {
+                    if (file && file.type === 'application/json') {
+                        console.log('[MINIMAP] File dropped:', file.name);
+                        await handleMinimapFile(file);
+                    } else {
+                        addMessage('Skipped non-JSON file: ' + (file ? file.name : 'unknown'), 3000);
+                        console.log('[MINIMAP] Invalid file dropped:', file ? file.type : 'no file');
+                    }
+                }
+            });
+            // File input change handler
+            fileInput.addEventListener('change', async function () {
+                if (fileInput.files.length > 0) {
+                    for (const file of fileInput.files) {
+                        console.log('[MINIMAP] File selected via double-click:', file.name);
+                        await handleMinimapFile(file);
+                    }
+                    fileInput.value = ''; // Reset input
+                }
+            });
+            console.log('[MINIMAP] Events attached: double-click and drag-and-drop enabled');
+        }
+        function gameLoop(now) {
+            if (isDying) {
+                const fallDuration = 1500; // 1.5 seconds for a more dramatic fall
+                const sinkDuration = 1000; // 1 second to sink
+                const totalDuration = fallDuration + sinkDuration;
+                const elapsedTime = now - deathAnimationStart;
+                const progress = Math.min(1.0, elapsedTime / totalDuration);
+
+                // Animate Fall (first part of the animation)
+                if (elapsedTime < fallDuration) {
+                    const fallProgress = elapsedTime / fallDuration;
+                    avatarGroup.rotation.x = (Math.PI / 2) * fallProgress;
+                } else {
+                     avatarGroup.rotation.x = Math.PI / 2; // Ensure it's fully fallen
+                }
+
+                // Animate Sink (second part of the animation)
+                if (elapsedTime > fallDuration) {
+                    const sinkProgress = (elapsedTime - fallDuration) / sinkDuration;
+                    avatarGroup.position.y -= 0.05 * sinkProgress; // Sink into the ground
+                }
+
+
+                if (progress >= 1.0) {
+                    isDying = false;
+                    deathScreenShown = true;
+                    document.getElementById('deathScreen').style.display = 'flex';
+                }
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(gameLoop);
+                return; // Stop the rest of the game loop
+            }
+
+            var dt = Math.min(0.06, (now - lastFrame) / 1000);
+            lastFrame = now;
+            if (player.health <= 0 && !isDying) {
+                handlePlayerDeath();
+            }
+            if (deathScreenShown) {
+                mobs.forEach(function (m) { m.update(dt); });
+                updateSky(dt);
+                updateMinimap();
+                var scoreElement = document.getElementById('score');
+                if (scoreElement) scoreElement.innerText = player.score;
+                renderer.render(scene, camera);
+            } else {
+                var speed = isSprinting ? 4.3 * 3 : 4.3;
+                var mvx = 0, mvz = 0;
+                if (isMobile()) {
+                    if (joystick.up) mvz -= 1;
+                    if (joystick.down) mvz += 1;
+                    if (joystick.left) mvx -= 1;
+                    if (joystick.right) mvx += 1;
+                } else {
+                    if (keys['w']) mvz += 1;
+                    if (keys['s']) mvz -= 1;
+                    if (keys['a']) mvx -= 1;
+                    if (keys['d']) mvx += 1;
+
+                    if (mvz <= 0 && isSprinting) {
+                        isSprinting = false;
+                        addMessage('Sprinting disabled', 1500);
+                    }
+
+                    if (cameraMode === 'first') {
+                        // Arrow key camera controls for first person
+                        if (keys['arrowup']) player.pitch += 0.02;
+                        if (keys['arrowdown']) player.pitch -= 0.02;
+                        if (keys['arrowleft']) player.yaw += 0.02;
+                        if (keys['arrowright']) player.yaw -= 0.02;
+                        player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+                        camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+                    }
+                }
+                var forwardDir, rightDir;
+                if (cameraMode === 'first') {
+                    forwardDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, 'YXZ'));
+                } else { // third-person
+                    forwardDir = new THREE.Vector3();
+                    camera.getWorldDirection(forwardDir);
+                }
+                forwardDir.y = 0;
+                forwardDir.normalize();
+                rightDir = new THREE.Vector3().crossVectors(forwardDir, new THREE.Vector3(0, 1, 0));
+
+                var moveVec = new THREE.Vector3();
+                moveVec.addScaledVector(forwardDir, mvz);
+                moveVec.addScaledVector(rightDir, mvx);
+
+                const isMoving = moveVec.length() > 0.001;
+                if (isMoving) {
+                    moveVec.normalize();
+                    if (cameraMode === 'third') {
+                        player.yaw = Math.atan2(moveVec.x, moveVec.z);
+                    }
+                }
+                var dx = moveVec.x * speed * dt;
+                var dz = moveVec.z * speed * dt;
+
+                // Combine user input with knockback velocity
+                dx += player.vx * dt;
+                dz += player.vz * dt;
+
+                // Apply friction to knockback velocity
+                player.vx *= (1 - 2 * dt);
+                player.vz *= (1 - 2 * dt);
+
+                // Apply X-axis movement and check for collision
+                let potentialX = player.x + dx;
+                if (!checkCollision(potentialX, player.y, player.z)) {
+                    player.x = potentialX;
+                } else {
+                    player.vx = 0; // Stop velocity on collision
+                }
+
+                // Apply Z-axis movement and check for collision
+                let potentialZ = player.z + dz;
+                if (!checkCollision(player.x, player.y, potentialZ)) { // Use the (potentially updated) player.x
+                    player.z = potentialZ;
+                } else {
+                    player.vz = 0; // Stop velocity on collision
+                }
+
+                player.x = modWrap(player.x, MAP_SIZE);
+                player.z = modWrap(player.z, MAP_SIZE);
+
+                player.vy -= gravity * dt;
+                var dy = player.vy * dt;
+                var newY = player.y + dy;
+                if (!checkCollision(player.x, newY, player.z)) {
+                    player.y = newY;
+                    player.onGround = false;
+                } else {
+                    if (dy < 0) {
+                        player.y = Math.ceil(newY - 0.001);
+                        player.vy = 0;
+                        player.onGround = true;
+                    } else if (dy > 0) {
+                        player.y = Math.floor(newY + player.height) - player.height;
+                        player.vy = 0;
+                    }
+                }
+                if (checkCollision(player.x, player.y, player.z)) {
+                    if (!pushPlayerOut()) {
+                        player.y = chunkManager.getSurfaceY(player.x, player.z) + 1;
+                        player.vy = 0;
+                        player.onGround = true;
+                        addMessage('Stuck in block, respawned');
+                    }
+                }
+
+                    // Grub contact damage
+                    for (const mob of mobs) {
+                        if (mob.type === 'grub' && Date.now() - lastDamageTime > 1000) {
+                            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
+                                new THREE.Vector3(player.width, player.height, player.depth)
+                            );
+                            const grubBox = new THREE.Box3().setFromObject(mob.mesh);
+                            if (playerBox.intersectsBox(grubBox)) {
+                                player.health = Math.max(0, player.health - 2);
+                                lastDamageTime = Date.now();
+                                document.getElementById('health').innerText = player.health;
+                                updateHealthBar();
+                                addMessage('Hit by a Grub! HP: ' + player.health, 1000);
+                                flashDamageEffect();
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                            }
+                        }
+                    }
+                if (player.y < -10) {
+                    player.x = modWrap(player.x, MAP_SIZE);
+                    player.z = modWrap(player.z, MAP_SIZE);
+                    player.y = chunkManager.getSurfaceY(player.x, player.z) + 1;
+                    player.vy = 0;
+                    player.onGround = true;
+                    addMessage('Fell off world, respawned');
+                }
+
+                // Lava damage
+                if (isHost || peers.size === 0) {
+                    const playerBlockId = getBlockAt(player.x, player.y + 0.5, player.z); // Check at feet level
+                    if (playerBlockId === 16 && now - lastDamageTime > 500) { // Using lastDamageTime now
+                        player.health = Math.max(0, player.health - 1);
+                        lastDamageTime = now; // Use the general damage timer
+                        document.getElementById('health').innerText = player.health;
+                        updateHealthBar();
+                        addMessage('Burning in lava! HP: ' + player.health, 1000);
+                        flashDamageEffect();
+                        if (player.health <= 0) {
+                            handlePlayerDeath();
+                        }
+                    }
+                }
+
+                if (isHost) {
+                    for (const [username, peerData] of peers.entries()) {
+                        if (userPositions[username]) {
+                            const userPos = userPositions[username];
+                            const playerBlockId = getBlockAt(userPos.targetX, userPos.targetY + 0.5, userPos.targetZ);
+                            if (playerBlockId === 16) {
+                                if (!peerData.lastLavaDamageTime || now - peerData.lastLavaDamageTime > 500) {
+                                    peerData.lastLavaDamageTime = now;
+                                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                                        peerData.dc.send(JSON.stringify({ type: 'player_damage', damage: 1, attacker: 'lava' }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (Date.now() - lastDamageTime > 30000 && Date.now() - lastRegenTime > 10000 && player.health < 20) {
+                    player.health = Math.min(20, player.health + 1);
+                    lastRegenTime = Date.now();
+                    var healthElement = document.getElementById('health');
+                    if (healthElement) healthElement.innerText = player.health;
+                    updateHealthBar();
+                    addMessage('Health regenerated: ' + player.health, 1000);
+                }
+                var distFromSpawn = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
+                document.getElementById('homeIcon').style.display = distFromSpawn > 10 ? 'inline' : 'none';
+                avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2);
+                if (cameraMode === 'third') {
+                    avatarGroup.rotation.y = player.yaw;
+                } else { // first person
+                    camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+                }
+                updateAvatarAnimation(now, isMoving);
+                chunkManager.update(player.x, player.z, moveVec);
+                lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+                mobs.forEach(function (m) { m.update(dt); });
+                manageMobs();
+                manageVolcanoes();
+                updateSky(dt);
+
+                // Make skybox elements follow the camera
+                if (stars) stars.position.copy(camera.position);
+                if (clouds) clouds.position.copy(camera.position);
+
+                for (const [key, particleSystem] of torchParticles.entries()) {
+                    const positions = particleSystem.geometry.attributes.position.array;
+                    const velocities = particleSystem.geometry.velocities;
+
+                    for (let i = 0; i < velocities.length; i++) {
+                        positions[i * 3] += velocities[i].x;
+                        positions[i * 3 + 1] += velocities[i].y;
+                        positions[i * 3 + 2] += velocities[i].z;
+
+                        velocities[i].life -= dt;
+
+                        if (velocities[i].life <= 0) {
+                            positions[i * 3] = particleSystem.position.x;
+                            positions[i * 3 + 1] = particleSystem.position.y;
+                            positions[i * 3 + 2] = particleSystem.position.z;
+                            velocities[i].life = Math.random() * 1;
+                        }
+                    }
+                    particleSystem.geometry.attributes.position.needsUpdate = true;
+                }
+
+                for (const smokeSystem of smokeParticles) {
+                    const hasAlpha = smokeSystem.geometry.attributes.alpha;
+                    const hasPosition = smokeSystem.geometry.attributes.position;
+                    const hasColor = smokeSystem.geometry.attributes.color;
+
+                    if (!hasAlpha || !hasPosition) {
+                        console.warn('[Volcano] Smoke particle system is missing attributes, skipping animation.');
+                        continue;
+                    }
+
+                    const positions = hasPosition.array;
+                    const alphas = hasAlpha.array;
+                    const velocities = smokeSystem.geometry.velocities;
+                    const isEruptionSmoke = !!hasColor;
+
+                    for (let i = 0; i < velocities.length; i++) {
+                        velocities[i].life -= dt;
+
+                        if (velocities[i].life > 0) {
+                            positions[i * 3] += velocities[i].x * dt;
+                            positions[i * 3 + 1] += velocities[i].y * dt;
+                            positions[i * 3 + 2] += velocities[i].z * dt;
+                            const maxLife = isEruptionSmoke ? 10 : 7;
+                            const lifeRatio = velocities[i].life / maxLife;
+                            alphas[i] = Math.min(1, lifeRatio);
+                        } else {
+                            if (isEruptionSmoke) {
+                                // Eruption smoke particles fade and die
+                                alphas[i] = 0;
+                            } else {
+                                // Caldera smoke particles respawn at the bottom
+                                const volcano = volcanoes.find(v => v.chunkKey === smokeSystem.userData.chunkKey);
+                                if (volcano) {
+                                    positions[i * 3] = volcano.x + (Math.random() - 0.5) * 10;
+                                    positions[i * 3 + 1] = volcano.y + (Math.random() - 0.5) * 5;
+                                    positions[i * 3 + 2] = volcano.z + (Math.random() - 0.5) * 10;
+                                    velocities[i].life = 3 + Math.random() * 4;
+                                    alphas[i] = 1.0;
+                                } else {
+                                    // If volcano not found, just let it die
+                                    alphas[i] = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    hasPosition.needsUpdate = true;
+                    hasAlpha.needsUpdate = true;
+                    if (hasColor) {
+                        hasColor.needsUpdate = true;
+                    }
+                }
+
+                // Cleanup smoke particles
+                for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                    const smokeSystem = smokeParticles[i];
+                    if (smokeSystem.createdAt && Date.now() - smokeSystem.createdAt > 20000) { // 20-second lifespan for eruption smoke
+                        scene.remove(smokeSystem);
+                        disposeObject(smokeSystem);
+                        smokeParticles.splice(i, 1);
+                    }
+                }
+
+                updateMinimap();
+                var posLabel = document.getElementById('posLabel');
+                if (posLabel) posLabel.innerText = Math.floor(player.x) + ', ' + Math.floor(player.y) + ', ' + Math.floor(player.z);
+                if (cameraMode === 'third') {
+                    controls.target.set(player.x + player.width / 2, player.y + 0.6, player.z + player.depth / 2);
+                    controls.update();
+                } else {
+                    var headPos = new THREE.Vector3(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
+                    camera.position.copy(headPos);
+                }
+                const positionChanged = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > 0.1;
+                const rotationChanged = Math.abs(player.yaw - lastSentPosition.yaw) > 0.01 || Math.abs(player.pitch - lastSentPosition.pitch) > 0.01;
+
+                if (now - lastUpdateTime > 50 && (positionChanged || rotationChanged)) {
+                    if (isSprinting && !previousIsSprinting) {
+                        sprintStartPosition.set(player.x, player.y, player.z);
+                        currentLoadRadius = LOAD_RADIUS;
+                    } else if (!isSprinting && previousIsSprinting) {
+                        if (new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100) {
+                            currentLoadRadius = INITIAL_LOAD_RADIUS;
+                        }
+                    }
+                    previousIsSprinting = isSprinting;
+                    lastUpdateTime = now;
+                    lastMoveTime = now;
+                    lastSentPosition = { x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch };
+                    const message = {
+                        type: 'player_move',
+                        username: userName,
+                        x: player.x, y: player.y, z: player.z,
+                        yaw: player.yaw, pitch: player.pitch,
+                        isMoving: isMoving, isAttacking: isAttacking,
+                        timestamp: Date.now()
+                    };
+                    // Client sends its own movement to the host
+                    if (!isHost) {
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify(message));
+                            }
+                        }
+                    }
+                }
+
+                // Host broadcasts the authoritative state of all players
+                if (isHost && now - lastStateUpdateTime > 100) {
+                    lastStateUpdateTime = now;
+                    const playersData = [];
+                    // Add host's state
+                    playersData.push({
+                        username: userName,
+                        x: player.x, y: player.y, z: player.z,
+                        yaw: player.yaw, pitch: player.pitch,
+                        isMoving: isMoving, isAttacking: isAttacking,
+                        attackStartTime: attackStartTime,
+                        health: player.health
+                    });
+                    // Add clients' states
+                    for (const [username, positionData] of Object.entries(userPositions)) {
+                        if (peers.has(username)) { // Ensure the user is still connected
+                            // Host checks if the attack animation should end
+                            if (positionData.isAttacking && now - positionData.attackStartTime > 500) {
+                                positionData.isAttacking = false;
+                            }
+                            playersData.push({
+                                username: username,
+                                x: positionData.targetX, y: positionData.targetY, z: positionData.targetZ,
+                                yaw: positionData.targetYaw, pitch: positionData.targetPitch,
+                                isMoving: positionData.isMoving, isAttacking: positionData.isAttacking,
+                                attackStartTime: positionData.attackStartTime,
+                                health: positionData.health
+                            });
+                        }
+                    }
+
+                    const stateUpdateMessage = {
+                        type: 'state_update',
+                        timestamp: Date.now(),
+                        players: playersData
+                    };
+
+                    const messageString = JSON.stringify(stateUpdateMessage);
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(messageString);
+                        }
+                    }
+                }
+
+                if (isHost && now - lastMobBatchTime > 100) {
+                    lastMobBatchTime = now;
+                    const mobStates = mobs.map(mob => ({
+                        id: mob.id,
+                        x: mob.pos.x,
+                        y: mob.pos.y,
+                        z: mob.pos.z,
+                        hp: mob.hp,
+                        type: mob.type,
+                        isAggressive: mob.isAggressive,
+                        isMoving: mob.isMoving,
+                        aiState: mob.aiState,
+                        quaternion: mob.mesh.quaternion.toArray(),
+                    }));
+
+                    const batchMessage = JSON.stringify({
+                        type: 'mob_state_batch',
+                        mobs: mobStates
+                    });
+
+                    for (const [peerUser, peerData] of peers.entries()) {
+                        if (peerUser !== userName && peerData.dc && peerData.dc.readyState === 'open') {
+                            peerData.dc.send(batchMessage);
+                        }
+                    }
+                }
+
+                for (var entry of playerAvatars) {
+                    var username = entry[0];
+                    var avatar = entry[1];
+                    if (username !== userName && userPositions[username]) {
+                        const userState = userPositions[username];
+
+                        // Skip position updates if the player is in a death animation
+                        if (userState.isDying) {
+                            // The animation logic below will handle the position
+                        } else if (userState.prevX !== undefined) {
+                            const now = performance.now();
+                            const timeSinceUpdate = now - userState.lastUpdate;
+                            const interpolationDelay = 100; // ms
+                            const alpha = Math.min(1.0, timeSinceUpdate / interpolationDelay);
+
+                            const interpolatedPosition = new THREE.Vector3(
+                                userState.prevX + (userState.targetX - userState.prevX) * alpha,
+                                userState.prevY + (userState.targetY - userState.prevY) * alpha,
+                                userState.prevZ + (userState.targetZ - userState.prevZ) * alpha
+                            );
+                            avatar.position.copy(interpolatedPosition);
+
+                            // Interpolate rotation using quaternions for smooth slerp
+                            const prevQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, userState.prevYaw, 0, 'YXZ'));
+                            const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, userState.targetYaw, 0, 'YXZ'));
+                            avatar.quaternion.slerpQuaternions(prevQuaternion, targetQuaternion, alpha);
+
+                            // Interpolate pitch for head separately
+                            if (userState.prevPitch !== undefined) {
+                                const interpolatedPitch = userState.prevPitch + (userState.targetPitch - userState.prevPitch) * alpha;
+                                avatar.children[3].rotation.set(interpolatedPitch, 0, 0);
+                            } else {
+                                avatar.children[3].rotation.set(userState.targetPitch, 0, 0);
+                            }
+
+                        } else if (userState.targetX !== undefined) {
+                            // If no previous state, just jump to target
+                            avatar.position.set(userState.targetX, userState.targetY - 0.9, userState.targetZ);
+                            avatar.rotation.set(userState.targetPitch, userState.targetYaw, 0, 'YXZ');
+                        }
+
+
+                        const now = performance.now();
+                        // The isAttacking flag is now authoritatively set by the host.
+                        // The client just needs to play the animation if the flag is true.
+                        if (userState.isAttacking && userState.localAnimStartTime) {
+                            const elapsedTime = now - userState.localAnimStartTime;
+                            const attackDuration = 500; // Animation plays for 500ms
+                            if (elapsedTime < attackDuration) {
+                                const angle = Math.sin((elapsedTime / attackDuration) * Math.PI) * 1.5;
+                                avatar.children[4].rotation.x = angle; // left arm
+                                avatar.children[5].rotation.x = angle; // right arm
+                            } else {
+                                // Animation is over, but we let the host reset the isAttacking flag.
+                                // This prevents the animation from re-triggering until the next state_update.
+                                userState.localAnimStartTime = null;
+                            }
+                        } else if (userState.isMoving) {
+                            const angle = Math.sin(now * 0.005) * 0.5;
+                            avatar.children[0].rotation.x = angle; // left leg
+                            avatar.children[1].rotation.x = -angle; // right leg
+                            avatar.children[4].rotation.x = -angle; // left arm
+                            avatar.children[5].rotation.x = angle; // right arm
+                        } else {
+                            avatar.children[0].rotation.x = 0;
+                            avatar.children[1].rotation.x = 0;
+                            avatar.children[4].rotation.x = 0;
+                            avatar.children[5].rotation.x = 0;
+                        }
+
+                        // Handle remote player death animation
+                        if (userState.isDying) {
+                            const fallDuration = 1500;
+                            const sinkDuration = 1000;
+                            const totalDuration = fallDuration + sinkDuration;
+                            const elapsedTime = now - userState.deathAnimationStart;
+                            const progress = Math.min(1.0, elapsedTime / totalDuration);
+
+                            if (elapsedTime < fallDuration) {
+                                const fallProgress = elapsedTime / fallDuration;
+                                avatar.rotation.x = (Math.PI / 2) * fallProgress;
+                            } else {
+                                avatar.rotation.x = Math.PI / 2;
+                            }
+                            if (elapsedTime > fallDuration) {
+                                const sinkProgress = (elapsedTime - fallDuration) / sinkDuration;
+                                avatar.position.y -= 0.05 * sinkProgress;
+                            }
+                            if (progress >= 1.0) {
+                                userState.isDying = false; // Animation finished, body remains.
+                            }
+                        } else {
+                            avatar.visible = Math.hypot(player.x - avatar.position.x, player.z - avatar.position.z) < 32;
+                        }
+                    }
+                }
+
+                for (const [username, audioStream] of userAudioStreams.entries()) {
+                    if (userPositions[username]) {
+                        const userPos = userPositions[username];
+                        const dist = Math.hypot(player.x - userPos.targetX, player.y - userPos.targetY, player.z - userPos.targetZ);
+                        let volume = 0;
+                        if (dist < maxAudioDistance) {
+                            volume = Math.max(0, 1 - (dist / maxAudioDistance));
+                            volume = Math.pow(volume, rolloffFactor);
+                        }
+                        audioStream.audio.volume = volume;
+                    }
+                }
+
+                // Update eruption sound volumes
+                for (const eruption of activeEruptions) {
+                    const sound = document.getElementById(eruption.soundId);
+                    if (sound) { // Check if sound element exists
+                        const dist = Math.hypot(player.x - eruption.volcano.x, player.y - eruption.volcano.y, player.z - eruption.volcano.z);
+                        const maxDist = 192; // 64 * 3
+                        if (dist < maxDist) {
+                            sound.volume = Math.max(0, 1 - (dist / maxDist));
+                        } else {
+                            sound.volume = 0;
+                        }
+                    }
+                }
+
+                updateProximityVideo();
+
+                if (lastPollPosition.distanceTo(player) > CHUNK_SIZE) {
+                    hasMovedSubstantially = true;
+                }
+
+                if (isMoving) {
+                    lastMoveTime = now;
+                }
+
+                if (hasMovedSubstantially && now - lastMoveTime > 10000) {
+                    triggerPoll();
+                    lastPollPosition.copy(player);
+                    hasMovedSubstantially = false;
+                }
+
+                // Update erupted blocks
+                for (let i = eruptedBlocks.length - 1; i >= 0; i--) {
+                    const block = eruptedBlocks[i];
+
+                    if (isHost || peers.size === 0) {
+                        // Host calculates physics
+                        if (block.type === 'boulder') {
+                            block.velocity.y -= gravity * dt;
+                            block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
+
+                            const groundY = chunkManager.getSurfaceYForBoulders(block.mesh.position.x, block.mesh.position.z) + block.size / 2;
+                            if (block.mesh.position.y <= groundY) {
+                                block.mesh.position.y = groundY;
+                                if (block.mass === 2 && !block.isRolling) { // Medium boulder rolls
+                                    block.isRolling = true;
+                                    block.velocity.y = 0;
+                                    block.velocity.x *= 0.8;
+                                    block.velocity.z *= 0.8;
+                                } else {
+                                    block.velocity.set(0, 0, 0);
+                                }
+                            }
+
+                            if (block.isRolling) {
+                                block.mesh.rotation.x += block.velocity.z * dt * 2;
+                                block.mesh.rotation.z -= block.velocity.x * dt * 2;
+                                block.velocity.multiplyScalar(1 - (0.5 * dt));
+                                if (block.velocity.length() < 0.1) block.isRolling = false;
+                            }
+
+                             if (block.mass === 4) { // Large boulder damage
+                                const playerBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth));
+                                const boulderBox = new THREE.Box3().setFromObject(block.mesh);
+                                if (playerBox.intersectsBox(boulderBox) && now - lastDamageTime > 1000) {
+                                    player.health = Math.max(0, player.health - 10);
+                                    lastDamageTime = now;
+                                    document.getElementById('health').innerText = player.health;
+                                    updateHealthBar();
+                                    addMessage('Hit by a boulder! -10 HP', 2000);
+                                    flashDamageEffect();
+                                    if (player.health <= 0) handlePlayerDeath();
+                                }
+                            }
+
+                        } else { // Lava block physics
+                             block.velocity.y -= gravity * dt;
+                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
+                        }
+
+                    } else {
+                        // Client interpolates
+                        if (block.type === 'boulder' && block.lastUpdate > 0) {
+                            const timeSinceUpdate = now - block.lastUpdate;
+                            const alpha = Math.min(1.0, timeSinceUpdate / 100); // 100ms interpolation time
+                            block.mesh.position.lerp(block.targetPosition, alpha);
+                            block.mesh.quaternion.slerp(block.targetQuaternion, alpha);
+                        } else if (block.type !== 'boulder'){
+                             // Client-side prediction for non-boulder projectiles for smoother visuals
+                             block.velocity.y -= gravity * dt;
+                             block.mesh.position.add(block.velocity.clone().multiplyScalar(dt));
+                        }
+                    }
+
+                    // Cleanup logic for all clients
+                    if (block.mesh.position.y < -10 || Date.now() - block.createdAt > 15000) {
+                        scene.remove(block.mesh);
+                        disposeObject(block.mesh);
+                        eruptedBlocks.splice(i, 1);
+                    }
+                }
+
+                // Host broadcasts boulder states
+                if ((isHost || peers.size === 0) && now - (lastStateUpdateTime || 0) > 100) {
+                    const boulderStates = eruptedBlocks
+                        .filter(b => b.type === 'boulder')
+                        .map(b => ({
+                            id: b.id,
+                            position: b.mesh.position.toArray(),
+                            quaternion: b.mesh.quaternion.toArray()
+                        }));
+
+                    if (boulderStates.length > 0) {
+                        const boulderUpdateMessage = { type: 'boulder_update', boulders: boulderStates };
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(JSON.stringify(boulderUpdateMessage));
+                            }
+                        }
+                    }
+                }
+
+
+                // Update pebbles
+                for (let i = pebbles.length - 1; i >= 0; i--) {
+                    const pebble = pebbles[i];
+                    pebble.mesh.position.add(pebble.velocity.clone().multiplyScalar(dt));
+
+                    const groundY = chunkManager.getSurfaceY(pebble.mesh.position.x, pebble.mesh.position.z);
+                    if (pebble.mesh.position.y <= groundY) {
+                        if (pebble.isGlowing) {
+                            setTimeout(() => {
+                                scene.remove(pebble.mesh);
+                                disposeObject(pebble.mesh);
+                            }, 500); // Glowing pebbles disappear after 0.5s
+                        } else {
+                            scene.remove(pebble.mesh);
+                            disposeObject(pebble.mesh);
+                        }
+                        pebbles.splice(i, 1);
+                    }
+                }
+                // Dropped item physics and pickup
+                for (let i = droppedItems.length - 1; i >= 0; i--) {
+                    const item = droppedItems[i];
+
+                    // Simple gravity
+                    const groundY = chunkManager.getSurfaceY(item.mesh.position.x, item.mesh.position.z);
+                    if (item.mesh.position.y > groundY + 0.25) {
+                        item.mesh.position.y -= 4 * dt;
+                    } else {
+                        item.mesh.position.y = groundY + 0.25;
+                    }
+                    item.light.position.copy(item.mesh.position);
+
+                    // Despawn after 5 minutes
+                    if (Date.now() - item.createdAt > 300000) {
+                        scene.remove(item.mesh);
+                        scene.remove(item.light);
+                        droppedItems.splice(i, 1);
+                        continue;
+                    }
+
+                    // Pickup logic
+                    const distToPlayer = item.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + 0.9, player.z));
+                    if (distToPlayer < 1.5) {
+                        // If the item was dropped by the current player, check for a 2-second cooldown
+                        if (item.dropper === userName && Date.now() - item.createdAt < 2000) {
+                            continue; // Skip pickup for this item
+                        }
+
+                        addToInventory(item.blockId, 1, item.originSeed);
+
+                        scene.remove(item.mesh);
+                        scene.remove(item.light);
+                        droppedItems.splice(i, 1);
+
+                        // Broadcast pickup
+                        const message = JSON.stringify({
+                            type: 'item_picked_up',
+                            dropId: item.id
+                        });
+                        for (const [peerUser, peerData] of peers.entries()) {
+                            if (peerData.dc && peerData.dc.readyState === 'open') {
+                                peerData.dc.send(message);
+                            }
+                        }
+                    }
+                }
+
+                // Process laser queue
+                if (laserQueue.length > 0) {
+                    const data = laserQueue.shift();
+                    if (data.user !== userName) {
+                        createProjectile(data.id, data.user, new THREE.Vector3(data.position.x, data.position.y, data.position.z), new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z), data.color);
+                    }
+                }
+                // Update projectiles
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.mesh.position.x += p.velocity.x * dt;
+                    p.mesh.position.y += p.velocity.y * dt;
+                    p.mesh.position.z += p.velocity.z * dt;
+                    p.light.position.copy(p.mesh.position);
+
+                    const wx = Math.floor(p.mesh.position.x);
+                    const wy = Math.floor(p.mesh.position.y);
+                    const wz = Math.floor(p.mesh.position.z);
+
+                    if (isSolid(getBlockAt(wx, wy, wz))) {
+                        removeBlockAt(wx, wy, wz); // Laser breaks blocks
+                        scene.remove(p.mesh);
+                        scene.remove(p.light);
+                        projectiles.splice(i, 1);
+                        continue;
+                    }
+
+                    let hitMob = false;
+                    for (const mob of mobs) {
+                        if (p.mesh.position.distanceTo(mob.pos) < 1) {
+                            const damage = p.isGreen ? 10 : 5;
+                            if (isHost || peers.size === 0) {
+                                mob.hurt(damage, p.user);
+                            } else {
+                                // Client sends hit notification to host
+                                for (const [peerUser, peerData] of peers.entries()) {
+                                    if (peerData.dc && peerData.dc.readyState === 'open') {
+                                        peerData.dc.send(JSON.stringify({
+                                            type: 'mob_hit',
+                                            id: mob.id,
+                                            damage: damage,
+                                            username: p.user
+                                        }));
+                                    }
+                                }
+                            }
+                            scene.remove(p.mesh);
+                            scene.remove(p.light);
+                            projectiles.splice(i, 1);
+                            hitMob = true;
+                            break;
+                        }
+                    }
+                    if (hitMob) continue;
+
+                    // Player hit detection
+                    if (p.user !== userName) { // projectile is from another player
+                        const myPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
+                        if (p.mesh.position.distanceTo(myPlayerPos) < 1.5) {
+                            // I've been hit!
+                            const damage = p.isGreen ? 10 : 5;
+                            player.health -= damage;
+
+                            // Update UI
+                            document.getElementById('health').innerText = player.health;
+                            updateHealthBar();
+                            addMessage('Hit by ' + p.user + '! HP: ' + player.health, 1000);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+
+                            // report to host
+                            const message = JSON.stringify({ type: 'health_update', username: userName, health: player.health });
+                            for (const [, peerData] of peers.entries()) {
+                                if (peerData.dc && peerData.dc.readyState === 'open') peerData.dc.send(message);
+                            }
+
+                            if (player.health <= 0) {
+                                handlePlayerDeath();
+                            }
+
+                            // remove projectile
+                            scene.remove(p.mesh);
+                            scene.remove(p.light);
+                            projectiles.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+
+                    if (Date.now() - p.createdAt > 5000) { // 5-second lifespan
+                        scene.remove(p.mesh);
+                        scene.remove(p.light);
+                        projectiles.splice(i, 1);
+                    }
+                }
+
+                renderer.render(scene, camera);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        console.log('[SYSTEM] Script loaded');
