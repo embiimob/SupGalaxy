@@ -34,7 +34,7 @@
         var LOAD_RADIUS = 3;
         var currentLoadRadius = INITIAL_LOAD_RADIUS;
         var CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE);
-        var VERSION = 'SupGalaxy v0.4.20-beta';
+        var VERSION = 'SupGalaxy v0.4.21-beta';
         var POLL_INTERVAL = 30000;
         var MAX_PEERS = 10;
         var BLOCKS = {
