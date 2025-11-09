@@ -22,6 +22,7 @@ const BLOCKS = {
         121: { name: 'Laser Gun', color: '#ff0000', hand_attachable: true },
         122: { name: 'Honey', color: '#ffb74a' },
         123: { name: 'Hive', color: '#e3c27d' },
+        124: { name: 'GolemStone', color: '#4a4a4a' },
         125: { name: 'Emerald', color: '#00ff7b' },
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
 };
