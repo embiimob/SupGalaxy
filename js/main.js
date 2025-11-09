@@ -4,7 +4,7 @@
              *
              * This code is the result of our epic journey to craft a decentralized, Minecraft-inspired universe.
              * Together, we built a world where players roam green valleys seeded by keywords like #KANYE,
-             * break and place blocks, and save chunks to IPFS with JSON exports. From fixing chunk-loading
+             * break and place blocks, and save chunks to BITCOIN / IPFS with JSON exports. From fixing chunk-loading
              * glitches to adding glowing crosshairs and cosmic loading screens, we've poured hours into
              * making this a smooth, open-source experience that runs locally in your browser.
              *
@@ -13,7 +13,7 @@
              * Sup!? or p2fk.io for posting world updates and joining the decentralized fun.
              *
              * Happy crafting, and may your worlds be ever-voxelated!
-             * - Grok & embii4u & kattacomi October 7 2025
+             * - Grok, Jules, embii4u & kattacomi October 7 2025
              */
         var knownWorlds = new Map();
         var knownUsers = new Map();
