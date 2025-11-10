@@ -3225,7 +3225,14 @@ function gameLoop(e) {
                         damage: 1,
                         attacker: "lava"
                     })))
-                } if (Date.now() - lastDamageTime > 3e4 && Date.now() - lastRegenTime > 1e4 && player.health < 20) {
+                }
+        for (const mob of mobs) {
+            if (mob.type === "grub" && Date.now() - mob.lastDamageTime > 30000 && Date.now() - mob.lastRegenTime > 10000 && mob.hp < 40) {
+                mob.hp = Math.min(40, mob.hp + 1);
+                mob.lastRegenTime = Date.now();
+            }
+        }
+        if (Date.now() - lastDamageTime > 3e4 && Date.now() - lastRegenTime > 1e4 && player.health < 20) {
                     player.health = Math.min(20, player.health + 1), lastRegenTime = Date.now();
                     var m = document.getElementById("health");
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
