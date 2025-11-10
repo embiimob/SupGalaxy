@@ -44,7 +44,7 @@ const ARCHETYPES = {
     },
     'Massive': {
         name: 'Massive',
-        gravity: 32.0,
+        gravity: 30.0,
         skyType: 'earth',
         mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
         terrainGenerator: 'generateStandardTerrain',
