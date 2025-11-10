@@ -1,4 +1,5 @@
 function Mob(t, e, s, i = "crawley") {
+    this.lastDamageTime = 0, this.lastRegenTime = 0;
     if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.targetPos = (new THREE.Vector3).copy(this.pos), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
@@ -53,7 +54,7 @@ function Mob(t, e, s, i = "crawley") {
         }
         this.originalColor = new THREE.Color(4868682)
     } else if ("grub" === this.type) {
-        this.hp = 20, this.speed = (.01 + .005 * Math.random()) / 2, this.aiState = "IDLE", this.animationTime = Math.random() * Math.PI * 2, this.cactusEaten = 0, this.isAggressive = !1;
+        this.hp = 40, this.speed = (.01 + .005 * Math.random()) / 2, this.aiState = "IDLE", this.animationTime = Math.random() * Math.PI * 2, this.cactusEaten = 0, this.isAggressive = !1;
         const t = 3,
             e = createMobTexture(worldSeed, "grub_body"),
             s = createMobTexture(worldSeed, "grub_body", !0),
@@ -504,7 +505,7 @@ Mob.prototype.update = function (t) {
     })))
 }, Mob.prototype.hurt = function (t, e) {
     if (!isHost && peers.size > 0) return;
-    this.hp -= t, this.flashEnd = Date.now() + 200, safePlayAudio(soundHit);
+    this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
     const s = e === userName ? player : userPositions[e];
     if (s) {
         const t = e === userName ? s.x : s.targetX,
