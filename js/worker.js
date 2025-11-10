@@ -49,7 +49,7 @@ const ARCHETYPES = {
         mobSpawnRules: { day: ['bee', 'crawley'], night: ['bee', 'crawley'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: { largeBiomes: true },
-        flora: ['trees', 'flowers', 'hives', 'cactus']
+        flora: ['trees', 'flowers', 'hives']
     }
 };
 
