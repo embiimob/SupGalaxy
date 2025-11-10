@@ -221,7 +221,13 @@ function setupDataChannel(e, t) {
                 mobType: t.type
             }))
         }
-        updateHudButtons()
+        const s = setInterval((() => {
+            "open" === e.readyState && e.send(JSON.stringify({
+                type: "i_am_alive"
+            }))
+        }), 1e4);
+        const n = peers.get(t);
+        n && (n.keepaliveInterval = s), updateHudButtons()
     }, e.onmessage = e => {
         console.log(`[WEBRTC] Message from ${t}`);
         try {
@@ -229,6 +235,12 @@ function setupDataChannel(e, t) {
                 n = s.username || t;
             if (n === userName) return;
             switch (s.type) {
+                case "i_am_alive":
+                    if (isHost) {
+                        const e = peers.get(n);
+                        e && (e.lastSeen = performance.now())
+                    }
+                    break;
                 case "new_player":
                     const i = s.username;
                     i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
@@ -460,6 +472,9 @@ function setupDataChannel(e, t) {
                             let t = eruptedBlocks.find((t => t.id === e.id));
                             t && (t.targetPosition = (new THREE.Vector3).fromArray(e.position), t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion), t.lastUpdate = performance.now())
                         }
+                    break;
+                case "remove_peer":
+                    s.username && cleanupPeer(s.username)
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)
@@ -489,7 +504,20 @@ function activateHost() {
     if (!isHost) {
         isHost = !0, console.log("[SYSTEM] Hosting activated."), addMessage("Host mode activated!", 3e3), startOfferPolling();
         const e = document.getElementById("usersBtn");
-        e && e.classList.add("hosting")
+        e && e.classList.add("hosting"), setInterval((() => {
+            if (!isHost) return;
+            const t = performance.now(),
+                o = [];
+            for (const [e, a] of peers.entries()) a.lastSeen && t - a.lastSeen > 3e4 && o.push(e);
+            for (const t of o) {
+                console.log(`[WebRTC] Peer ${t} timed out.`), cleanupPeer(t);
+                const o = JSON.stringify({
+                    type: "remove_peer",
+                    username: t
+                });
+                for (const [t, a] of peers.entries()) a.dc && "open" === a.dc.readyState && a.dc.send(o)
+            }
+        }), 1e4)
     }
 }
 async function acceptPendingOffers() {
@@ -1024,7 +1052,7 @@ function openUsersModal() {
 
 function cleanupPeer(e) {
     const t = peers.get(e);
-    if (t && (t.pc && t.pc.close(), peers.delete(e)), playerAvatars.has(e)) {
+    if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
         const t = playerAvatars.get(e);
         scene.remove(t), disposeObject(t), playerAvatars.delete(e)
     }
