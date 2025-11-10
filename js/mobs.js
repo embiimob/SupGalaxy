@@ -111,7 +111,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     }
-    this.mesh.userData.mobId = this.id, this.mesh.position.copy(this.pos), scene.add(this.mesh)
+    this.mesh.userData.mobId = this.id, this.mesh.position.copy(this.pos), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
 }
 
 function manageMobs() {
@@ -136,7 +136,7 @@ function manageMobs() {
         if (!i || !o) {
             scene.remove(s.mesh), disposeObject(s.mesh);
             const t = JSON.stringify({
-                type: "mob_kill",
+                type: "mob_despawn",
                 id: s.id
             });
             for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
@@ -462,7 +462,24 @@ Mob.prototype.update = function (t) {
                 e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05)
         }
-        this.mesh.position.copy(this.pos)
+        this.mesh.position.copy(this.pos);
+        const a = this.pos.distanceTo(this.lastSentPos) > .1,
+            n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
+        if (a || n) {
+            const t = {
+                type: "mob_update",
+                id: this.id,
+                x: this.pos.x,
+                y: this.pos.y,
+                z: this.pos.z,
+                quaternion: this.mesh.quaternion.toArray(),
+                isMoving: h,
+                aiState: this.aiState,
+                mobType: this.type
+            };
+            for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(JSON.stringify(t));
+            this.lastSentPos.copy(this.pos), this.lastSentQuaternion.copy(this.mesh.quaternion)
+        }
     }
     if ("grub" === this.type) {
         const e = "EATING_CACTUS" === this.aiState,

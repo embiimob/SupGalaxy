@@ -228,8 +228,6 @@ function setupDataChannel(e, t) {
             const s = JSON.parse(e.data),
                 n = s.username || t;
             if (n === userName) return;
-            if (isHost)
-                for (const [t, o] of peers.entries()) t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(e.data);
             switch (s.type) {
                 case "new_player":
                     const i = s.username;
@@ -264,6 +262,8 @@ function setupDataChannel(e, t) {
                     createAndSetupAvatar(c, !1).position.set(s.x, s.y, s.z);
                     break;
                 case "player_move":
+                    if (isHost)
+                        for (const [t, o] of peers.entries()) t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(e.data);
                     playerAvatars.has(n) || createAndSetupAvatar(n, !1, s.yaw), userPositions[n] || (userPositions[n] = {
                         lastTimestamp: 0,
                         prevX: s.x,
@@ -325,8 +325,9 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
-                    d || (d = new Mob(s.x, s.z, s.id, s.mobType), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.flash && (d.flashEnd = Date.now() + 200);
+                    d || (d = new Mob(s.x, s.z, s.id, s.mobType), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
                     break;
+                case "mob_despawn":
                 case "mob_kill":
                     const p = mobs.find((e => e.id === s.id));
                     if (p) {
@@ -372,6 +373,7 @@ function setupDataChannel(e, t) {
                 case "health_update":
                     isHost && userPositions[s.username] && (userPositions[s.username].health = s.health);
                     break;
+                case "laser_fired_batch":
                 case "laser_fired":
                     laserQueue.push(s);
                     break;
@@ -379,20 +381,14 @@ function setupDataChannel(e, t) {
                     droppedItems.some((e => e.id === s.dropId)) || createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
                     break;
                 case "item_picked_up":
-                    const f = droppedItems.findIndex((e => e.id === s.dropId));
-                    if (-1 !== f) {
-                        const e = droppedItems[f];
-                        scene.remove(e.mesh), scene.remove(e.light), droppedItems.splice(f, 1)
-                    }
+                    const f = droppedItems.findIndex((e => e.id === s.dropId)); -
+                    1 !== f && (scene.remove(droppedItems[f].mesh), scene.remove(droppedItems[f].light), droppedItems.splice(f, 1));
                     break;
                 case "video_started":
                     addMessage(`${s.username} started their video.`, 2e3);
                     break;
                 case "video_stopped":
-                    if (userVideoStreams.has(s.username)) {
-                        const e = userVideoStreams.get(s.username);
-                        e.video && (e.video.srcObject = null, e.video.remove()), userVideoStreams.delete(s.username), addMessage(`${s.username} stopped their video.`, 2e3)
-                    }
+                    userVideoStreams.has(s.username) && (userVideoStreams.get(s.username).video.srcObject = null, userVideoStreams.get(s.username).video.remove(), userVideoStreams.delete(s.username), addMessage(`${s.username} stopped their video.`, 2e3));
                     break;
                 case "renegotiation_offer":
                     if (peers.has(t)) {
