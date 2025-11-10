@@ -3461,23 +3461,69 @@ function gameLoop(e) {
                     scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1), s = !0;
                     break
                 } if (!s) {
-                    if (o.user !== userName) {
-                        const t = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
-                        if (o.mesh.position.distanceTo(t) < 1.5) {
-                            const t = o.isGreen ? 10 : 5;
-                            player.health -= t, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudio(soundHit);
-                            const a = JSON.stringify({
-                                type: "health_update",
-                                username: userName,
-                                health: player.health
-                            });
-                            for (const [, e] of peers.entries()) e.dc && "open" === e.dc.readyState && e.dc.send(a);
-                            player.health <= 0 && handlePlayerDeath(), scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1);
-                            continue
+            // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
+            if (isHost) {
+                let hitPlayer = false;
+
+                // First, check for collision with the host player itself
+                if (o.user !== userName) { // Can't be hit by your own projectile
+                    const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
+                    if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
+                        const damage = o.isGreen ? 10 : 5;
+                        player.health -= damage;
+                        document.getElementById("health").innerText = player.health;
+                        updateHealthBar();
+                        addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
+                        flashDamageEffect();
+                        safePlayAudio(soundHit);
+                        player.health <= 0 && handlePlayerDeath();
+
+                        hitPlayer = true;
+                    }
+                }
+
+                // If no hit on host, check remote players
+                if (!hitPlayer) {
+                    for (const [username, avatar] of playerAvatars.entries()) {
+                        // This check is redundant if projectile owner is not in playerAvatars, but good for safety
+                        if (o.user === username) continue;
+
+                        const remotePlayerPos = new THREE.Vector3();
+                        avatar.getWorldPosition(remotePlayerPos);
+                        remotePlayerPos.y += player.height / 2; // Adjust to player center
+
+                        if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
+                            const damage = o.isGreen ? 10 : 5;
+                            const peer = peers.get(username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'player_damage',
+                                    damage: damage,
+                                    attacker: o.user
+                                }));
+                            }
+                            hitPlayer = true;
+                            break;
                         }
                     }
-                    Date.now() - o.createdAt > 5e3 && (scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1))
                 }
+
+                // If any player was hit, destroy the projectile and move to the next one
+                if (hitPlayer) {
+                    scene.remove(o.mesh);
+                    scene.remove(o.light);
+                    projectiles.splice(e, 1);
+                    continue;
+                }
+            }
+
+            // Age out projectile if it didn't hit anything
+            if (Date.now() - o.createdAt > 5e3) {
+                scene.remove(o.mesh);
+                scene.remove(o.light);
+                projectiles.splice(e, 1);
+            }
+        }
         }
         renderer.render(scene, camera)
     }
