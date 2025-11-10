@@ -917,9 +917,12 @@ function openUsersModal() {
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
             var i = calculateSpawnPoint(n + "@" + worldName);
-            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn", m.onclick = function () {
-                console.log("[MODAL] Teleporting to spawn of:", n), respawnPlayer(i.x, 100, i.z), t.style.display = "none", isPromptOpen = !1
-            }, h.appendChild(f), h.appendChild(m), o.appendChild(h)
+            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
+                function (e, o) {
+                    m.onclick = function () {
+                        console.log("[MODAL] Teleporting to spawn of:", e), respawnPlayer(o.x, 100, o.z), t.style.display = "none", isPromptOpen = !1
+                    }
+                }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
         }
     }
     var c = document.createElement("h4");
