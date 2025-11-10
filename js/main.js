@@ -576,6 +576,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     gravity = 16,
     projectiles = [],
     laserQueue = [],
+laserFireQueue = [],
+lastLaserBatchTime = 0,
     droppedItems = [],
     eruptedBlocks = [],
     pebbles = [],
@@ -2057,9 +2059,7 @@ function onPointerDown(e) {
         const t = `${userName}-${Date.now()}`,
             o = new THREE.Vector3;
         let a;
-        camera.getWorldDirection(o), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (a = new THREE.Vector3, avatarGroup.gun.getWorldPosition(a)) : a = new THREE.Vector3(player.x, player.y + 1.5, player.z), createProjectile(t, userName, a, o.clone(), "red");
-        const n = JSON.stringify({
-            type: "laser_fired",
+        camera.getWorldDirection(o), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (a = new THREE.Vector3, avatarGroup.gun.getWorldPosition(a)) : a = new THREE.Vector3(player.x, player.y + 1.5, player.z), createProjectile(t, userName, a, o.clone(), "red"), laserFireQueue.push({
             id: t,
             user: userName,
             position: {
@@ -2074,7 +2074,6 @@ function onPointerDown(e) {
             },
             color: "red"
         });
-        for (const [e, t] of peers.entries()) t.dc && "open" === t.dc.readyState && t.dc.send(n);
         return
     }
     if (t && 126 === t.id) {
@@ -2097,9 +2096,7 @@ function onPointerDown(e) {
         createProjectile(r, userName, s, o.clone(), "green");
         const i = `${userName}-${Date.now()}-2`,
             l = n.clone().add(a.clone().multiplyScalar(-.2));
-        createProjectile(i, userName, l, o.clone(), "green");
-        const d = JSON.stringify({
-            type: "laser_fired",
+        createProjectile(i, userName, l, o.clone(), "green"), laserFireQueue.push({
             id: r,
             user: userName,
             position: {
@@ -2113,24 +2110,21 @@ function onPointerDown(e) {
                 z: o.z
             },
             color: "green"
-        }),
-            c = JSON.stringify({
-                type: "laser_fired",
-                id: i,
-                user: userName,
-                position: {
-                    x: l.x,
-                    y: l.y,
-                    z: l.z
-                },
-                direction: {
-                    x: o.x,
-                    y: o.y,
-                    z: o.z
-                },
-                color: "green"
-            });
-        for (const [e, t] of peers.entries()) t.dc && "open" === t.dc.readyState && (t.dc.send(d), t.dc.send(c));
+        }), laserFireQueue.push({
+            id: i,
+            user: userName,
+            position: {
+                x: l.x,
+                y: l.y,
+                z: l.z
+            },
+            direction: {
+                x: o.x,
+                y: o.y,
+                z: o.z
+            },
+            color: "green"
+        });
         return
     }
     raycaster.setFromCamera(pointer, camera), raycaster.far = 5;
@@ -3304,63 +3298,7 @@ function gameLoop(e) {
                 isAttacking: isAttacking,
                 timestamp: Date.now()
             };
-            if (!isHost)
-                for (const [e, o] of peers.entries()) o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
-        }
-        if (isHost && e - lastStateUpdateTime > 100) {
-            lastStateUpdateTime = e;
-            const t = [];
-            t.push({
-                username: userName,
-                x: player.x,
-                y: player.y,
-                z: player.z,
-                yaw: player.yaw,
-                pitch: player.pitch,
-                isMoving: o,
-                isAttacking: isAttacking,
-                attackStartTime: attackStartTime,
-                health: player.health
-            });
-            for (const [o, a] of Object.entries(userPositions)) peers.has(o) && (a.isAttacking && e - a.attackStartTime > 500 && (a.isAttacking = !1), t.push({
-                username: o,
-                x: a.targetX,
-                y: a.targetY,
-                z: a.targetZ,
-                yaw: a.targetYaw,
-                pitch: a.targetPitch,
-                isMoving: a.isMoving,
-                isAttacking: a.isAttacking,
-                attackStartTime: a.attackStartTime,
-                health: a.health
-            }));
-            const a = {
-                type: "state_update",
-                timestamp: Date.now(),
-                players: t
-            },
-                n = JSON.stringify(a);
-            for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && t.dc.send(n)
-        }
-        if (isHost && e - lastMobBatchTime > 100) {
-            lastMobBatchTime = e;
-            const t = mobs.map((e => ({
-                id: e.id,
-                x: e.pos.x,
-                y: e.pos.y,
-                z: e.pos.z,
-                hp: e.hp,
-                type: e.type,
-                isAggressive: e.isAggressive,
-                isMoving: e.isMoving,
-                aiState: e.aiState,
-                quaternion: e.mesh.quaternion.toArray()
-            }))),
-                o = JSON.stringify({
-                    type: "mob_state_batch",
-                    mobs: t
-                });
-            for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && t.dc.send(o)
+            for (const [e, o] of peers.entries()) e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
         }
         for (var g of playerAvatars) {
             var E = g[0],
@@ -3484,9 +3422,19 @@ function gameLoop(e) {
                 for (const [e, o] of peers.entries()) o.dc && "open" === o.dc.readyState && o.dc.send(t)
             }
         }
+        if (e - lastLaserBatchTime > 100 && laserFireQueue.length > 0) {
+            const t = JSON.stringify({
+                type: "laser_fired_batch",
+                projectiles: laserFireQueue
+            });
+            for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
+            laserFireQueue = [], lastLaserBatchTime = e
+        }
         if (laserQueue.length > 0) {
             const e = laserQueue.shift();
-            e.user !== userName && createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color)
+            if ("laser_fired_batch" === e.type)
+                for (const t of e.projectiles) t.user !== userName && createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+            else e.user !== userName && createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color)
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
