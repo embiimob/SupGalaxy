@@ -1,4 +1,4 @@
-        var worker = new Worker(URL.createObjectURL(new Blob([`
+F        var worker = new Worker(URL.createObjectURL(new Blob([`
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
@@ -44,7 +44,7 @@ const ARCHETYPES = {
     },
     'Massive': {
         name: 'Massive',
-        gravity: 32.0,
+        gravity: 30.0,
         skyType: 'earth',
         mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
         terrainGenerator: 'generateStandardTerrain',
