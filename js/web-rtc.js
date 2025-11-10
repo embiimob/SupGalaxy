@@ -347,7 +347,7 @@ function setupDataChannel(e, t) {
                     isHost && handlePlayerHit(s);
                     break;
                 case "player_damage":
-                    Date.now() - lastDamageTime > 400 && (player.health = Math.max(0, player.health - (s.damage || 1)), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), "lava" === s.attacker ? addMessage("Burning in lava! HP: " + player.health, 1e3) : addMessage("Hit by " + s.attacker + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudio(soundHit), void 0 !== s.kx && void 0 !== s.kz && (player.vx += s.kx, player.vz += s.kz), player.health <= 0 && handlePlayerDeath());
+                    (player.health = Math.max(0, player.health - (s.damage || 1)), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), "lava" === s.attacker ? addMessage("Burning in lava! HP: " + player.health, 1e3) : addMessage("Hit by " + s.attacker + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudio(soundHit), void 0 !== s.kx && void 0 !== s.kz && (player.vx += s.kx, player.vz += s.kz), player.health <= 0 && handlePlayerDeath());
                     break;
                 case "add_score":
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
