@@ -409,11 +409,27 @@ function setupDataChannel(e, t) {
                     laserQueue.push(s);
                     break;
                 case "item_dropped":
-                    droppedItems.some((e => e.id === s.dropId)) || createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    if (!droppedItems.some((item => item.id === s.dropId))) {
+                        createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
+                    }
                     break;
                 case "item_picked_up":
-                    const f = droppedItems.findIndex((e => e.id === s.dropId)); -
-                    1 !== f && (scene.remove(droppedItems[f].mesh), scene.remove(droppedItems[f].light), droppedItems.splice(f, 1));
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    const f = droppedItems.findIndex((e => e.id === s.dropId));
+                    -1 !== f && (scene.remove(droppedItems[f].mesh), scene.remove(droppedItems[f].light), droppedItems.splice(f, 1));
                     break;
                 case "video_started":
                     addMessage(`${s.username} started their video.`, 2e3);
