@@ -1004,11 +1004,28 @@ function createBlockTexture(e, t) {
 }
 
 function createCrackTexture(e) {
-    const t = 16,
+    const t = 32,
         o = document.createElement("canvas");
     o.width = t, o.height = t;
     const a = o.getContext("2d");
-    return a.strokeStyle = "rgba(0, 0, 0, 0.5)", a.lineWidth = 1, a.beginPath(), a.moveTo(0, .25 * t), a.lineTo(t, .75 * t), a.moveTo(0, .75 * t), a.lineTo(t, .25 * t), e > 1 && (a.moveTo(.25 * t, 0), a.lineTo(.75 * t, t)), e > 2 && (a.moveTo(.75 * t, 0), a.lineTo(.25 * t, t)), e > 3 && (a.moveTo(0, 0), a.lineTo(t, t)), e > 4 && (a.moveTo(t, 0), a.lineTo(0, t)), a.stroke(), new THREE.CanvasTexture(o)
+    a.strokeStyle = "rgba(0, 0, 0, 0.6)", a.lineWidth = 1.5, a.beginPath();
+    const n = t / 2,
+        r = t / 2;
+    for (let o = 0; o < e * 2; o++) {
+        const e = 2 * Math.PI * Math.random(),
+            s = .4 * t * Math.random() + .1 * t;
+        a.moveTo(n, r);
+        const i = n + s * Math.cos(e),
+            c = r + s * Math.sin(e);
+        a.lineTo(i, c);
+        for (let o = 0; o < Math.random() * 3; o++) {
+            a.moveTo(i, c);
+            const o = e + (Math.random() - .5) * (Math.PI / 2),
+                l = s * (.3 * Math.random() + .3);
+            a.lineTo(i + l * Math.cos(o), c + l * Math.sin(o))
+        }
+    }
+    return a.stroke(), new THREE.CanvasTexture(o)
 }
 
 function createCloudTexture(e) {
@@ -1137,7 +1154,7 @@ function updateSky(e) {
     }
     for (let o = blockParticles.length - 1; o >= 0; o--) {
         const a = blockParticles[o];
-        a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t)), (a.mesh.position.y < -10 || Date.now() - a.createdAt > 1e3) && (scene.remove(a.mesh), disposeObject(a.mesh), blockParticles.splice(o, 1))
+        a.velocity.y -= gravity * e, a.mesh.position.add(a.velocity.clone().multiplyScalar(e)), (a.mesh.position.y < -10 || Date.now() - a.createdAt > 1e3) && (scene.remove(a.mesh), disposeObject(a.mesh), blockParticles.splice(o, 1))
     }
 }
 
