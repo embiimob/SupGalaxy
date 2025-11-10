@@ -46,10 +46,10 @@ const ARCHETYPES = {
         name: 'Massive',
         gravity: 30.0,
         skyType: 'earth',
-        mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
+        mobSpawnRules: { day: ['bee', 'crawley'], night: ['bee', 'crawley'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: { largeBiomes: true },
-        flora: ['trees', 'flowers', 'hives']
+        flora: ['trees', 'flowers', 'hives', 'cactus']
     }
 };
 
