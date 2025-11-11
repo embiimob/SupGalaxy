@@ -538,8 +538,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             count: 1
         },
         requires: {
-            110: 4,
-            125: 1
+            5: 4
         }
     }],
     raycaster = new THREE.Raycaster,
@@ -731,7 +730,8 @@ async function applySaveFile(e, t, o) {
                 }
             }
         }
-        setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
+        setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
+        if (!isMobile()) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
             addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
@@ -2189,8 +2189,12 @@ function createMagicianStoneScreen(stoneData) {
         }
         texture = new THREE.VideoTexture(video);
         stoneData.videoElement = video;
-    } else {
-        // For audio or unsupported types, create a visualizer
+    } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+        const audio = document.createElement('audio');
+        audio.src = url;
+        audio.loop = loop;
+        stoneData.audioElement = audio;
+
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 128;
@@ -2202,16 +2206,35 @@ function createMagicianStoneScreen(stoneData) {
         context.textAlign = 'center';
         context.fillText('Audio: ' + url.split('/').pop(), 128, 64);
         texture = new THREE.CanvasTexture(canvas);
+    } else {
+        // For unsupported types, create a visualizer
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#111';
+        context.fillRect(0, 0, 256, 128);
+        context.fillStyle = '#fff';
+        context.font = '16px Arial';
+        context.textAlign = 'center';
+        context.fillText('Preview Unavailable', 128, 64);
+        texture = new THREE.CanvasTexture(canvas);
     }
 
     const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
     const screenMesh = new THREE.Mesh(planeGeometry, material);
 
     // Orientation and Position
-    const playerDirection = new THREE.Vector3();
-    camera.getWorldDirection(playerDirection);
-    playerDirection.y = 0;
-    playerDirection.normalize();
+    let playerDirection;
+    if (stoneData.direction) {
+        playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
+    } else {
+        // Fallback for old stones saved without direction
+        playerDirection = new THREE.Vector3();
+        camera.getWorldDirection(playerDirection);
+        playerDirection.y = 0;
+        playerDirection.normalize();
+    }
 
     const forward = playerDirection;
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
@@ -3939,16 +3962,20 @@ function gameLoop(e) {
         for (const key in magicianStones) {
             if (Object.hasOwnProperty.call(magicianStones, key)) {
                 const stone = magicianStones[key];
-                if (stone.autoplay && stone.videoElement) {
+                if (stone.autoplay) {
                     const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
                     const distance = playerPosition.distanceTo(stonePosition);
-                    if (distance <= stone.distance) {
-                        if (stone.videoElement.paused) {
-                            stone.videoElement.play().catch(e => console.error("Autoplay failed:", e));
-                        }
-                    } else {
-                        if (!stone.videoElement.paused) {
-                            stone.videoElement.pause();
+                    const mediaElement = stone.videoElement || stone.audioElement;
+
+                    if (mediaElement) {
+                        if (distance <= stone.distance) {
+                            if (mediaElement.paused) {
+                                mediaElement.play().catch(e => console.error("Autoplay failed:", e));
+                            }
+                        } else {
+                            if (!mediaElement.paused) {
+                                mediaElement.pause();
+                            }
                         }
                     }
                 }
@@ -4193,6 +4220,11 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         return;
     }
 
+    const playerDirection = new THREE.Vector3();
+    camera.getWorldDirection(playerDirection);
+    playerDirection.y = 0;
+    playerDirection.normalize();
+
     const stoneData = {
         x: magicianStonePlacement.x,
         y: magicianStonePlacement.y,
@@ -4205,7 +4237,8 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         offsetZ: parseFloat(document.getElementById('magicianStoneOffsetZ').value),
         loop: document.getElementById('magicianStoneLoop').checked,
         autoplay: document.getElementById('magicianStoneAutoplay').checked,
-        distance: parseFloat(document.getElementById('magicianStoneDistance').value)
+        distance: parseFloat(document.getElementById('magicianStoneDistance').value),
+        direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
     };
 
     createMagicianStoneScreen(stoneData);
@@ -4213,7 +4246,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     const n = INVENTORY[selectedHotIndex];
     if (magicianStonePlacement && n && n.id === 127) {
         chunkManager.setBlockGlobal(magicianStonePlacement.x, magicianStonePlacement.y, magicianStonePlacement.z, 127, true, n.originSeed);
-        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace));
+        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace))
 
         // Send magician stone data to other peers
         const message = JSON.stringify({
