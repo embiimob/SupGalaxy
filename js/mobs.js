@@ -1,6 +1,6 @@
 function Mob(t, e, s, i = "crawley") {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.targetPos = (new THREE.Vector3).copy(this.pos), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
     } else {
@@ -189,12 +189,13 @@ Mob.prototype.update = function (t) {
     if (peers.size > 0 && !isHost && this.mesh.position.copy(this.pos), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isHost && peers.size > 0) {
         if (this.lastUpdateTime > 0) {
             const t = performance.now(),
-                e = t - this.lastUpdateTime,
-                s = Math.min(1, e / 100);
-            if (this.pos.lerp(this.targetPos, s), this.mesh.position.copy(this.pos), this.lastQuaternionUpdate > 0) {
-                const e = t - this.lastQuaternionUpdate,
-                    s = Math.min(1, e / 100);
-                this.mesh.quaternion.slerp(this.targetQuaternion, s)
+                e = t - this.lastUpdateTime;
+            let s = Math.min(1, e / 300);
+            s = isNaN(s) ? 1 : s;
+            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.copy(this.pos), this.lastQuaternionUpdate > 0) {
+                const e = t - this.lastQuaternionUpdate;
+                let s = Math.min(1, e / 300);
+                s = isNaN(s) ? 1 : s, this.mesh.quaternion.copy(this.prevQuaternion).slerp(this.targetQuaternion, s)
             }
         } else this.pos.copy(this.targetPos), this.mesh.position.copy(this.pos);
         Date.now() < this.flashEnd ? "grub" === this.type ? this.segments.forEach((t => {
