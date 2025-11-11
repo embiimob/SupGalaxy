@@ -269,7 +269,7 @@ Mob.prototype.update = function (t) {
                     }
                 } else this.aiState = "IDLE"
             }
-            if ("MOVING_TO_CACTUS" === this.aiState && this.targetBlock) i = new THREE.Vector3(this.targetBlock.x + .5, this.targetBlock.y + .5, this.targetBlock.z + .5), o = this.pos.distanceTo(i), o < 1.8 && (this.aiState = "EATING_CACTUS", this.lingerTime = Date.now());
+            if ("MOVING_TO_CACTUS" === this.aiState && this.targetBlock) i = new THREE.Vector3(this.targetBlock.x + .5, this.targetBlock.y + .5, this.targetBlock.z + .5), o = Math.hypot(this.pos.x - i.x, this.pos.z - i.z), o < 1.8 && (this.aiState = "EATING_CACTUS", this.lingerTime = Date.now());
             else if ("EATING_CACTUS" === this.aiState && this.targetBlock && Date.now() - this.lingerTime > 2500) {
                 if (9 === getBlockAt(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z) && (chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0), this.cactusEaten++, this.cactusEaten >= 5)) {
                     this.cactusEaten = 0;
