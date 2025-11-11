@@ -474,7 +474,18 @@ function setupDataChannel(e, t) {
                         }
                     break;
                 case "remove_peer":
-                    s.username && cleanupPeer(s.username)
+                    s.username && cleanupPeer(s.username);
+                    break;
+                case "block_hit":
+                    if (isHost) {
+                        removeBlockAt(s.x, s.y, s.z);
+                    }
+                    break;
+                case "block_damaged":
+                    if (!isHost) {
+                        updateBlockDamageVisuals(s.x, s.y, s.z, s.hits);
+                    }
+                    break;
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)

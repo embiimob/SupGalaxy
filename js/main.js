@@ -1715,6 +1715,18 @@ Chunk.prototype.idx = function (e, t, o) {
         var m = p.get(c, t, u);
         if (m !== a) {
             p.set(c, t, u, a);
+
+            // If a block is removed, ensure its crack mesh is also removed.
+            if (a === BLOCK_AIR) {
+                const key = `${e},${t},${o}`;
+                const damagedBlock = damagedBlocks.get(key);
+                if (damagedBlock && damagedBlock.mesh) {
+                    crackMeshes.remove(damagedBlock.mesh);
+                    disposeObject(damagedBlock.mesh);
+                    damagedBlocks.delete(key);
+                }
+            }
+
             var y = p.key;
             if (CHUNK_DELTAS.has(y) || CHUNK_DELTAS.set(y, []), CHUNK_DELTAS.get(y).push({
                 x: c,
@@ -2275,10 +2287,92 @@ function onPointerDown(e) {
         l = s.face.normal;
     if (0 === e.button) {
         animateAttack();
-        removeBlockAt(Math.floor(i.x - .5 * l.x), Math.floor(i.y - .5 * l.y), Math.floor(i.z - .5 * l.z))
+        const x = Math.floor(i.x - .5 * l.x);
+        const y = Math.floor(i.y - .5 * l.y);
+        const z = Math.floor(i.z - .5 * l.z);
+
+        if (isHost || peers.size === 0) {
+            removeBlockAt(x, y, z);
+        } else {
+            const blockHitMsg = JSON.stringify({
+                type: 'block_hit',
+                x: x,
+                y: y,
+                z: z,
+                username: userName
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(blockHitMsg);
+                }
+            }
+        }
     } else if (2 === e.button) {
         placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
     }
+}
+
+function updateBlockDamageVisuals(x, y, z, hits) {
+    const key = `${x},${y},${z}`;
+    const blockId = getBlockAt(x, y, z);
+
+    // If block is gone, ensure crack mesh is also gone.
+    if (!blockId || blockId === BLOCK_AIR) {
+        const damagedBlock = damagedBlocks.get(key);
+        if (damagedBlock && damagedBlock.mesh) {
+            crackMeshes.remove(damagedBlock.mesh);
+            disposeObject(damagedBlock.mesh);
+            damagedBlocks.delete(key);
+        }
+        return;
+    }
+
+    let damageData = damagedBlocks.get(key) || { hits: 0, mesh: null, canvas: null };
+
+    // Don't process old messages.
+    if (hits <= damageData.hits) {
+        return;
+    }
+
+    const hitsToAdd = hits - damageData.hits;
+    damageData.hits = hits;
+    damagedBlocks.set(key, damageData);
+
+    if (damageData.mesh) {
+        crackMeshes.remove(damageData.mesh);
+        disposeObject(damageData.mesh);
+    }
+
+    let canvas = damageData.canvas;
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 16;
+        damageData.canvas = canvas;
+    }
+
+    // Add cracks for any hits we missed to catch up state
+    for(let i=0; i < hitsToAdd; i++) {
+        drawCracksOnCanvas(canvas);
+    }
+
+    const newCrackTexture = new THREE.CanvasTexture(canvas);
+    newCrackTexture.magFilter = THREE.NearestFilter;
+    newCrackTexture.minFilter = THREE.NearestFilter;
+    newCrackTexture.needsUpdate = true;
+    const material = new THREE.MeshBasicMaterial({
+        map: newCrackTexture,
+        transparent: true,
+        opacity: 1
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), material);
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    damageData.mesh = mesh;
+    crackMeshes.add(mesh);
+
+    const soundName = `pick${Math.floor(Math.random() * 3)}`;
+    const soundElement = document.getElementById(soundName);
+    safePlayAudio(soundElement);
 }
 
 function handlePlayerHit(e) {
@@ -2379,6 +2473,21 @@ function removeBlockAt(e, t, o) {
         const c = `pick${Math.floor(Math.random() * 3)}`;
         const u = document.getElementById(c);
         safePlayAudio(u);
+
+        if (isHost) {
+            const blockDamagedMsg = JSON.stringify({
+                type: 'block_damaged',
+                x: e,
+                y: t,
+                z: o,
+                hits: s.hits
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(blockDamagedMsg);
+                }
+            }
+        }
     } else {
         damagedBlocks.delete(r);
         if (s.mesh) {
