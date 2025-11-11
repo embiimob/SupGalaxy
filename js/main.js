@@ -23,197 +23,241 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     BLOCKS = {
         1: {
             name: "Bedrock",
-            color: "#0b0b0b"
+            color: "#0b0b0b",
+            strength: 5
         },
         2: {
             name: "Grass",
-            color: "#3fb34f"
+            color: "#3fb34f",
+            strength: 1
         },
         3: {
             name: "Dirt",
-            color: "#7a4f29"
+            color: "#7a4f29",
+            strength: 1
         },
         4: {
             name: "Stone",
-            color: "#9aa0a6"
+            color: "#9aa0a6",
+            strength: 2
         },
         5: {
             name: "Sand",
-            color: "#e7d08d"
+            color: "#e7d08d",
+            strength: 1
         },
         6: {
             name: "Water",
             color: "#2b9cff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         7: {
             name: "Wood",
-            color: "#8b5a33"
+            color: "#8b5a33",
+            strength: 2
         },
         8: {
             name: "Leaves",
-            color: "#2f8f46"
+            color: "#2f8f46",
+            strength: 1
         },
         9: {
             name: "Cactus",
-            color: "#4aa24a"
+            color: "#4aa24a",
+            strength: 1
         },
         10: {
             name: "Snow",
-            color: "#ffffff"
+            color: "#ffffff",
+            strength: 1
         },
         11: {
             name: "Coal",
-            color: "#1f1f1f"
+            color: "#1f1f1f",
+            strength: 2
         },
         12: {
             name: "Flower",
-            color: "#ff6bcb"
+            color: "#ff6bcb",
+            strength: 1
         },
         13: {
             name: "Clay",
-            color: "#a9b6c0"
+            color: "#a9b6c0",
+            strength: 1
         },
         14: {
             name: "Moss",
-            color: "#507d43"
+            color: "#507d43",
+            strength: 1
         },
         15: {
             name: "Gravel",
-            color: "#b2b2b2"
+            color: "#b2b2b2",
+            strength: 1
         },
         16: {
             name: "Lava",
             color: "#ff6a00",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         17: {
             name: "Ice",
             color: "#a8e6ff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         100: {
             name: "Glass",
             color: "#b3e6ff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         101: {
             name: "Stained Glass - Red",
             color: "#ff4b4b",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         102: {
             name: "Stained Glass - Blue",
             color: "#4b6bff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         103: {
             name: "Stained Glass - Green",
             color: "#57c84d",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         104: {
             name: "Stained Glass - Yellow",
             color: "#fff95b",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         105: {
             name: "Brick",
-            color: "#a84f3c"
+            color: "#a84f3c",
+            strength: 2
         },
         106: {
             name: "Smooth Stone",
-            color: "#c1c1c1"
+            color: "#c1c1c1",
+            strength: 2
         },
         107: {
             name: "Concrete",
-            color: "#888888"
+            color: "#888888",
+            strength: 3
         },
         108: {
             name: "Polished Wood",
-            color: "#a87443"
+            color: "#a87443",
+            strength: 2
         },
         109: {
             name: "Marble",
-            color: "#f0f0f0"
+            color: "#f0f0f0",
+            strength: 2
         },
         110: {
             name: "Obsidian",
-            color: "#2d004d"
+            color: "#2d004d",
+            strength: 5
         },
         111: {
             name: "Crystal - Blue",
             color: "#6de0ff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         112: {
             name: "Crystal - Purple",
             color: "#b26eff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         113: {
             name: "Crystal - Green",
             color: "#6fff91",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         114: {
             name: "Light Block",
             color: "#fffacd",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         115: {
             name: "Glow Brick",
-            color: "#f7cc5b"
+            color: "#f7cc5b",
+            strength: 1
         },
         116: {
             name: "Dark Glass",
             color: "#3a3a3a",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         117: {
             name: "Glass Tile",
             color: "#aeeaff",
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         118: {
             name: "Sandstone",
-            color: "#e3c27d"
+            color: "#e3c27d",
+            strength: 1
         },
         119: {
             name: "Cobblestone",
-            color: "#7d7d7d"
+            color: "#7d7d7d",
+            strength: 2
         },
         120: {
             name: "Torch",
             color: "#ff9900",
             light: !0,
-            transparent: !0
+            transparent: !0,
+            strength: 1
         },
         121: {
             name: "Laser Gun",
             color: "#ff0000",
-            hand_attachable: !0
+            hand_attachable: !0,
+            strength: 1
         },
         122: {
             name: "Honey",
-            color: "#ffb74a"
+            color: "#ffb74a",
+            strength: 1
         },
         123: {
             name: "Hive",
-            color: "#e3c27d"
+            color: "#e3c27d",
+            strength: 2
         },
         124: {
             name: "Iron Ore",
-            color: "#a8a8a8"
+            color: "#a8a8a8",
+            strength: 3
         },
         125: {
             name: "Emerald",
-            color: "#00ff7b"
+            color: "#00ff7b",
+            strength: 4
         },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",
-            hand_attachable: !0
+            hand_attachable: !0,
+            strength: 1
         }
     },
     BIOMES = [{
@@ -585,6 +629,9 @@ lastLaserBatchTime = 0,
     activeEruptions = [],
     hiveLocations = [],
     flowerLocations = [];
+var crackTexture, damagedBlocks = new Map,
+    crackMeshes = new THREE.Group,
+    blockParticles = [];
 const maxAudioDistance = 32,
     rolloffFactor = 2;
 var volcanoes = [],
@@ -956,6 +1003,37 @@ function createBlockTexture(e, t) {
     return u.magFilter = THREE.NearestFilter, u.minFilter = THREE.NearestFilter, textureCache.set(o, u), u
 }
 
+function drawCracksOnCanvas(canvas) {
+    const size = canvas.width;
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)"; // More opaque
+    ctx.lineWidth = 1; // Thinner
+    ctx.beginPath();
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+
+    // Draw 2 new major cracks each time this is called
+    for (let i = 0; i < 2; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const length = (Math.random() * 0.4 + 0.1) * size;
+
+        ctx.moveTo(centerX, centerY);
+        const endX = centerX + length * Math.cos(angle);
+        const endY = centerY + length * Math.sin(angle);
+        ctx.lineTo(endX, endY);
+
+        // Add smaller splinters
+        for (let j = 0; j < Math.random() * 2; j++) {
+            ctx.moveTo(endX, endY);
+            const splinterAngle = angle + (Math.random() - 0.5) * (Math.PI / 2);
+            const splinterLength = length * (Math.random() * 0.3 + 0.3);
+            ctx.lineTo(endX + splinterLength * Math.cos(splinterAngle), endY + splinterLength * Math.sin(splinterAngle));
+        }
+    }
+    ctx.stroke();
+}
+
 function createCloudTexture(e) {
     const t = 256,
         o = document.createElement("canvas");
@@ -1079,6 +1157,28 @@ function updateSky(e) {
         const e = .6,
             t = .02;
         d.intensity = t + (e - t) * s
+    }
+    for (let o = blockParticles.length - 1; o >= 0; o--) {
+        const a = blockParticles[o];
+        a.velocity.y -= gravity * e, a.mesh.position.add(a.velocity.clone().multiplyScalar(e)), (a.mesh.position.y < -10 || Date.now() - a.createdAt > 1e3) && (scene.remove(a.mesh), disposeObject(a.mesh), blockParticles.splice(o, 1))
+    }
+}
+
+function createBlockParticles(e, t, o, a) {
+    const n = BLOCKS[a];
+    if (!n) return;
+    const r = createBlockTexture(worldSeed, a);
+    for (let s = 0; s < 10; s++) {
+        const a = new THREE.Mesh(new THREE.BoxGeometry(.1, .1, .1), new THREE.MeshBasicMaterial({
+            map: r
+        }));
+        a.position.set(e + .5, t + .5, o + .5);
+        const i = new THREE.Vector3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize().multiplyScalar(2);
+        blockParticles.push({
+            mesh: a,
+            velocity: i,
+            createdAt: Date.now()
+        }), scene.add(a)
     }
 }
 
@@ -1263,7 +1363,7 @@ function initThree() {
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
+    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
         onPointerDown(e)
     })), renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
@@ -2236,23 +2336,82 @@ function checkAndDeactivateHive(e, t, o) {
 }
 
 function removeBlockAt(e, t, o) {
-    var a = getBlockAt(e, t, o);
-    if (!a || a === BLOCK_AIR || 1 === a || 6 === a) return void addMessage("Cannot break that block");
-    var n = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
-        r = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
-        s = makeChunkKey(worldName, n, r);
-    if (!checkChunkOwnership(s, userName)) return void addMessage("Cannot break block in chunk " + s + ": owned by another user");
-    const i = `${e},${t},${o}`,
-        l = foreignBlockOrigins.get(i);
-    if (chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName), l && foreignBlockOrigins.delete(i), addToInventory(a, 1, l), addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : "")), safePlayAudio(soundBreak), BLOCKS[a] && BLOCKS[a].light) {
-        var d = `${e},${t},${o}`;
-        if (torchRegistry.delete(d), torchParticles.has(d)) {
-            var c = torchParticles.get(d);
-            scene.remove(c), c.geometry.dispose(), c.material.dispose(), torchParticles.delete(d)
+    const a = getBlockAt(e, t, o);
+    if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
+
+    const n = BLOCKS[a];
+    if (!n || n.strength > 5) return void addMessage("Cannot break that block");
+
+    const r = `${e},${t},${o}`;
+    let s = damagedBlocks.get(r) || {
+        hits: 0,
+        mesh: null
+    };
+    s.hits++;
+
+    if (s.hits < n.strength) {
+        damagedBlocks.set(r, s);
+        if (s.mesh) {
+            crackMeshes.remove(s.mesh);
+            disposeObject(s.mesh);
         }
-        lightManager.update(new THREE.Vector3(player.x, player.y, player.z))
+        let canvas = s.canvas;
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            s.canvas = canvas;
+        }
+        drawCracksOnCanvas(canvas);
+        const newCrackTexture = new THREE.CanvasTexture(canvas);
+        newCrackTexture.magFilter = THREE.NearestFilter;
+        newCrackTexture.minFilter = THREE.NearestFilter;
+        newCrackTexture.needsUpdate = true;
+        const l = new THREE.MeshBasicMaterial({
+            map: newCrackTexture,
+            transparent: true,
+            opacity: 1
+        });
+        const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
+        d.position.set(e + 0.5, t + 0.5, o + 0.5);
+        s.mesh = d;
+        crackMeshes.add(d);
+        const c = `pick${Math.floor(Math.random() * 3)}`;
+        const u = document.getElementById(c);
+        safePlayAudio(u);
+    } else {
+        damagedBlocks.delete(r);
+        if (s.mesh) {
+            crackMeshes.remove(s.mesh);
+            disposeObject(s.mesh);
+        }
+
+        var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
+        var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
+        var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+        if (!checkChunkOwnership(chunkKey, userName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+
+        const l = foreignBlockOrigins.get(r);
+        chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
+        if (l) foreignBlockOrigins.delete(r);
+
+        addToInventory(a, 1, l);
+        addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+        safePlayAudio(soundBreak);
+        createBlockParticles(e, t, o, a);
+
+        if (BLOCKS[a] && BLOCKS[a].light) {
+            var d = `${e},${t},${o}`;
+            if (torchRegistry.delete(d), torchParticles.has(d)) {
+                var c = torchParticles.get(d);
+                scene.remove(c), c.geometry.dispose(), c.material.dispose(), torchParticles.delete(d);
+            }
+            lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+        }
+        if (a === 123 || a === 122) {
+            setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
+        }
     }
-    123 !== a && 122 !== a || setTimeout((() => checkAndDeactivateHive(e, t, o)), 100)
 }
 
 function placeBlockAt(e, t, o, a) {
