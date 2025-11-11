@@ -2185,7 +2185,17 @@ async function createMagicianStoneScreen(stoneData) {
     let texture;
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+    if (fileExtension === 'gif') {
+        const img = document.createElement('img');
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        texture = new THREE.Texture(img);
+        img.onload = () => {
+            texture.needsUpdate = true;
+        };
+        stoneData.isGif = true;
+        stoneData.gifTexture = texture;
+    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -4003,6 +4013,9 @@ function gameLoop(e) {
         // Magician stone media playback logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
         for (const key in magicianStones) {
+            if (magicianStones[key].isGif && magicianStones[key].gifTexture) {
+                magicianStones[key].gifTexture.needsUpdate = true;
+            }
             if (Object.hasOwnProperty.call(magicianStones, key)) {
                 const stone = magicianStones[key];
                 if (stone.autoplay) {

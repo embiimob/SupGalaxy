@@ -15,7 +15,8 @@ let proximityVideoUsers = [],
     currentProximityVideoIndex = 0,
     lastProximityVideoChangeTime = 0;
 var userPositions = {},
-    playerAvatars = new Map;
+    playerAvatars = new Map,
+    pendingChunkDeltas = new Map;
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -270,11 +271,19 @@ function setupDataChannel(e, t) {
                     break;
                 case "world_sync":
                     if (!isHost) {
-                        if (console.log("[WEBRTC] Received world_sync"), s.chunkDeltas) {
-                            const e = new Map(s.chunkDeltas);
-                            for (const [t, o] of e.entries()) chunkManager.applyDeltasToChunk(t, o)
+                        console.log("[WEBRTC] Received world_sync");
+                        if (s.chunkDeltas) {
+                            const deltas = new Map(s.chunkDeltas);
+                            for (const [chunkKey, changes] of deltas.entries()) {
+                                if (!pendingChunkDeltas.has(chunkKey)) {
+                                    pendingChunkDeltas.set(chunkKey, []);
+                                }
+                                pendingChunkDeltas.get(chunkKey).push(...changes);
+                            }
                         }
-                        s.foreignBlockOrigins && (foreignBlockOrigins = new Map(s.foreignBlockOrigins))
+                        if (s.foreignBlockOrigins) {
+                            foreignBlockOrigins = new Map(s.foreignBlockOrigins);
+                        }
                     }
                     break;
                 case "state_update":
