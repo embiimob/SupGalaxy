@@ -355,49 +355,161 @@ Mob.prototype.update = function (t) {
                 }
             } else this.lingerTime = 0
         }
-        if ("bee" === this.type)
+        if ("bee" === this.type) {
+            const avoidanceVector = new THREE.Vector3();
+            const avoidanceRadius = 2;
+            for (let x = -avoidanceRadius; x <= avoidanceRadius; x++) {
+                for (let y = -avoidanceRadius; y <= avoidanceRadius; y++) {
+                    for (let z = -avoidanceRadius; z <= avoidanceRadius; z++) {
+                        const blockId = getBlockAt(Math.floor(this.pos.x + x), Math.floor(this.pos.y + y), Math.floor(this.pos.z + z));
+                        if (blockId === 3 || blockId === 4) { // Dirt or Stone
+                            const vec = new THREE.Vector3(x, y, z);
+                            const dist = vec.length();
+                            if (dist > 0) {
+                                avoidanceVector.add(vec.normalize().multiplyScalar(-1 / dist));
+                            }
+                        }
+                    }
+                }
+            }
+            if (avoidanceVector.length() > 0) {
+                avoidanceVector.normalize();
+                this.pos.add(avoidanceVector.multiplyScalar(this.speed * t * 60 * 0.5));
+            }
             if ("SEARCHING_FOR_FLOWER" === this.aiState) {
                 if (flowerLocations.length > 0) {
-                    let t = null,
-                        e = 1 / 0;
-                    for (const s of flowerLocations) {
-                        const i = Math.hypot(s.x - this.pos.x, s.z - this.pos.z);
-                        i < e && (e = i, t = s)
+                    let closestFlower = null;
+                    let minDistance = Infinity;
+                    for (const flower of flowerLocations) {
+                        const distance = Math.hypot(flower.x - this.pos.x, flower.z - this.pos.z);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestFlower = flower;
+                        }
                     }
-                    i = t, o = e, i && (this.pos.y += .1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y)), o < 1.5 && (this.hasPollen = !0, this.aiState = "FLYING_TO_HIVE")
+
+                    i = closestFlower; // i is the target position
+                    o = minDistance; // o is the distance to target
+
+                    if (i) {
+                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y);
+
+                        if (o < 1.5) {
+                            this.hasPollen = true;
+                            this.aiState = "FLYING_TO_HIVE";
+
+                            // Consume the flower
+                            chunkManager.setBlockGlobal(i.x, i.y, i.z, BLOCK_AIR);
+
+                            // Remove from flowerLocations array on host
+                            const flowerIndex = flowerLocations.findIndex(f => f.x === i.x && f.y === i.y && f.z === i.z);
+                            if (flowerIndex > -1) {
+                                flowerLocations.splice(flowerIndex, 1);
+                            }
+
+                            // Send message to clients to remove flower from their arrays
+                            const flowerConsumedMsg = JSON.stringify({
+                                type: 'flower_consumed',
+                                location: i
+                            });
+                            for (const [username, peer] of peers.entries()) {
+                                if (username !== userName && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(flowerConsumedMsg);
+                                }
+                            }
+                        }
+                    }
                 }
             } else if ("FLYING_TO_HIVE" === this.aiState) {
                 if (hiveLocations.length > 0) {
-                    let t = null,
-                        e = 1 / 0;
-                    for (const s of hiveLocations) {
-                        const i = Math.hypot(s.x - this.pos.x, s.z - this.pos.z);
-                        i < e && (e = i, t = s)
+                    let closestHive = null;
+                    let minDistance = Infinity;
+                    for (const hive of hiveLocations) {
+                        const distance = Math.hypot(hive.x - this.pos.x, hive.z - this.pos.z);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestHive = hive;
+                        }
                     }
-                    i = t, o = e, i && (this.pos.y += .1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y)), o < 2 && (this.aiState = "DEPOSITING_HONEY")
+                    i = closestHive;
+                    o = minDistance;
+
+                    if (i) {
+                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y);
+                    }
+                    if (o < 2) {
+                        this.aiState = "DEPOSITING_HONEY";
+                    }
+                } else {
+                    // No hives, so go back to wandering/searching
+                    this.aiState = "SEARCHING_FOR_FLOWER";
                 }
             } else if ("DEPOSITING_HONEY" === this.aiState) {
-                const t = hiveLocations.find((t => Math.hypot(t.x - this.pos.x, t.z - this.pos.z) < 3));
-                let e = !1;
-                if (t)
-                    for (let s = 0; s < 3; s++) {
-                        for (let i = -1; i <= 1; i++) {
-                            for (let o = -1; o <= 1; o++) {
-                                if (0 === i && 0 === s && 0 === o) continue;
-                                const h = t.x + i,
-                                    a = t.y + s,
-                                    n = t.z + o;
-                                if (0 === getBlockAt(h, a, n) && isSolid(getBlockAt(h, a - 1, n))) {
-                                    chunkManager.setBlockGlobal(h, a, n, 122), this.hasPollen = !1, this.aiState = "SEARCHING_FOR_FLOWER", e = !0;
-                                    break
+                const closestHive = hiveLocations.find(h => Math.hypot(h.x - this.pos.x, h.z - this.pos.z) < 10);
+                let honeyPlaced = false;
+
+                if (closestHive) {
+                    // Prioritize placing honey next to hive blocks
+                    for (let yOffset = 0; yOffset < 3; yOffset++) {
+                        for (let xOffset = -1; xOffset <= 1; xOffset++) {
+                            for (let zOffset = -1; zOffset <= 1; zOffset++) {
+                                if (xOffset === 0 && yOffset === 0 && zOffset === 0) continue;
+                                const checkX = closestHive.x + xOffset;
+                                const checkY = closestHive.y + yOffset;
+                                const checkZ = closestHive.z + zOffset;
+
+                                // Check if adjacent block is a hive block
+                                let isAdjacentToHive = false;
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    for (let dy = -1; dy <= 1; dy++) {
+                                        for (let dz = -1; dz <= 1; dz++) {
+                                            if (dx === 0 && dy === 0 && dz === 0) continue;
+                                            if (getBlockAt(checkX + dx, checkY + dy, checkZ + dz) === 123) {
+                                                isAdjacentToHive = true;
+                                                break;
+                                            }
+                                        }
+                                        if(isAdjacentToHive) break;
+                                    }
+                                    if(isAdjacentToHive) break;
+                                }
+
+                                if (isAdjacentToHive && getBlockAt(checkX, checkY, checkZ) === BLOCK_AIR && isSolid(getBlockAt(checkX, checkY - 1, checkZ))) {
+                                    chunkManager.setBlockGlobal(checkX, checkY, checkZ, 122); // Place Honey
+                                    honeyPlaced = true;
+                                    break;
                                 }
                             }
-                            if (e) break
+                            if (honeyPlaced) break;
                         }
-                        if (e) break
+                        if (honeyPlaced) break;
                     }
-                this.aiState = "SEARCHING_FOR_FLOWER"
+
+                    // If no spot next to hive, try stacking on honey
+                    if (!honeyPlaced) {
+                         for (let yOffset = 0; yOffset < 5; yOffset++) {
+                            for (let xOffset = -3; xOffset <= 3; xOffset++) {
+                                for (let zOffset = -3; zOffset <= 3; zOffset++) {
+                                     const checkX = closestHive.x + xOffset;
+                                     const checkY = closestHive.y + yOffset;
+                                     const checkZ = closestHive.z + zOffset;
+                                    if (getBlockAt(checkX, checkY, checkZ) === 122 && getBlockAt(checkX, checkY + 1, checkZ) === BLOCK_AIR) {
+                                        chunkManager.setBlockGlobal(checkX, checkY + 1, checkZ, 122);
+                                        honeyPlaced = true;
+                                        break;
+                                    }
+                                }
+                                if(honeyPlaced) break;
+                            }
+                            if(honeyPlaced) break;
+                         }
+                    }
+                }
+
+                this.hasPollen = false;
+                this.aiState = "SEARCHING_FOR_FLOWER";
             }
+        }
         if (this.isAggressive || !i) {
             let t = null,
                 e = 1 / 0,

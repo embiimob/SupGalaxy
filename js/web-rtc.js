@@ -486,6 +486,12 @@ function setupDataChannel(e, t) {
                         updateBlockDamageVisuals(s.x, s.y, s.z, s.hits);
                     }
                     break;
+                case "flower_consumed":
+                    const flowerIndex = flowerLocations.findIndex(f => f.x === s.location.x && f.y === s.location.y && f.z === s.location.z);
+                    if (flowerIndex > -1) {
+                        flowerLocations.splice(flowerIndex, 1);
+                    }
+                    break;
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)
