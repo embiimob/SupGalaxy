@@ -4246,7 +4246,13 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     const n = INVENTORY[selectedHotIndex];
     if (magicianStonePlacement && n && n.id === 127) {
         chunkManager.setBlockGlobal(magicianStonePlacement.x, magicianStonePlacement.y, magicianStonePlacement.z, 127, true, n.originSeed);
-        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace))
+
+        n.count -= 1;
+        if (n.count <= 0) {
+            INVENTORY[selectedHotIndex] = null;
+        }
+        updateHotbarUI();
+        safePlayAudio(soundPlace);
 
         // Send magician stone data to other peers
         const message = JSON.stringify({
