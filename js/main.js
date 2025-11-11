@@ -258,6 +258,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#00ff00",
             hand_attachable: !0,
             strength: 1
+        },
+        127: {
+            name: "Magician's Stone",
+            color: "#8A2BE2",
+            strength: 3
         }
     },
     BIOMES = [{
@@ -526,6 +531,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             113: 1,
             16: 1
         }
+    }, {
+        id: "magicians_stone",
+        out: {
+            id: 127,
+            count: 1
+        },
+        requires: {
+            110: 4,
+            125: 1
+        }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
@@ -635,7 +650,9 @@ var crackTexture, damagedBlocks = new Map,
 const maxAudioDistance = 32,
     rolloffFactor = 2;
 var volcanoes = [],
-    initialTeleportLocation = null;
+    initialTeleportLocation = null,
+    magicianStonePlacement = null,
+    magicianStones = {};
 const lightManager = {
     lights: [],
     poolSize: 8,
@@ -705,7 +722,16 @@ async function applySaveFile(e, t, o) {
         Math.floor(MAP_SIZE / CHUNK_SIZE);
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
-        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
+        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
+            console.log("[LOGIN] Loading magician stones from session");
+            magicianStones = {}; // Clear existing stones
+            for (const key in t.magicianStones) {
+                if (Object.hasOwnProperty.call(t.magicianStones, key)) {
+                    createMagicianStoneScreen(t.magicianStones[key]);
+                }
+            }
+        }
+        setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
             addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
@@ -2136,6 +2162,73 @@ function createDroppedItemOrb(e, t, o, a, n) {
     droppedItems.push(c), scene.add(l)
 }
 
+function createMagicianStoneScreen(stoneData) {
+    const { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
+    const key = `${x},${y},${z}`;
+
+    // Remove existing screen if it exists
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        scene.remove(magicianStones[key].mesh);
+        disposeObject(magicianStones[key].mesh);
+    }
+
+    const planeGeometry = new THREE.PlaneGeometry(width, height);
+    let texture;
+    const fileExtension = url.split('.').pop().toLowerCase();
+
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+        texture = new THREE.TextureLoader().load(url);
+    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+        const video = document.createElement('video');
+        video.src = url;
+        video.loop = loop;
+        video.muted = true; // Muted by default, will be unmuted based on proximity
+        video.playsInline = true;
+        if (autoplay) {
+            // Video will be played in the game loop based on distance
+        }
+        texture = new THREE.VideoTexture(video);
+        stoneData.videoElement = video;
+    } else {
+        // For audio or unsupported types, create a visualizer
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#111';
+        context.fillRect(0, 0, 256, 128);
+        context.fillStyle = '#fff';
+        context.font = '16px Arial';
+        context.textAlign = 'center';
+        context.fillText('Audio: ' + url.split('/').pop(), 128, 64);
+        texture = new THREE.CanvasTexture(canvas);
+    }
+
+    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+    const screenMesh = new THREE.Mesh(planeGeometry, material);
+
+    // Orientation and Position
+    const playerDirection = new THREE.Vector3();
+    camera.getWorldDirection(playerDirection);
+    playerDirection.y = 0;
+    playerDirection.normalize();
+
+    const forward = playerDirection;
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)
+        .add(right.multiplyScalar(offsetX))
+        .add(up.multiplyScalar(offsetY))
+        .add(forward.multiplyScalar(offsetZ));
+
+    screenMesh.position.copy(position);
+    screenMesh.lookAt(position.clone().add(playerDirection));
+
+    magicianStones[key] = { ...stoneData, mesh: screenMesh };
+    scene.add(screenMesh);
+}
+
 function dropSelectedItem() {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
@@ -2550,19 +2643,25 @@ function placeBlockAt(e, t, o, a) {
                         l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
                         d = makeChunkKey(worldName, i, l);
                     if (checkChunkOwnership(d, userName)) {
-                        if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
-                            const r = `${e},${t},${o}`;
-                            foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
-                        } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
-                        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
-                            const a = `${e},${t},${o}`;
-                            torchRegistry.set(a, {
-                                x: e,
-                                y: t,
-                                z: o
-                            });
-                            var c = createFlameParticles(e, t + .5, o);
-                            scene.add(c), torchParticles.set(a, c)
+                        if (a === 127) { // Magician's Stone
+                            magicianStonePlacement = { x: e, y: t, z: o };
+                            document.getElementById('magicianStoneModal').style.display = 'flex';
+                            isPromptOpen = true;
+                        } else {
+                           if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
+                                const r = `${e},${t},${o}`;
+                                foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
+                            } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
+                            if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
+                                const a = `${e},${t},${o}`;
+                                torchRegistry.set(a, {
+                                    x: e,
+                                    y: t,
+                                    z: o
+                                });
+                                var c = createFlameParticles(e, t + .5, o);
+                                scene.add(c), torchParticles.set(a, c)
+                            }
                         }
                     } else addMessage("Cannot place block in chunk " + d + ": owned by another user")
                 }
@@ -3005,6 +3104,28 @@ function performAttack() {
     }
 }
 async function downloadSession() {
+    // Create a serializable version of magicianStones
+    const serializableMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            serializableMagicianStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                loop: stone.loop,
+                autoplay: stone.autoplay,
+                distance: stone.distance
+            };
+        }
+    }
+
     var e = {
         world: worldName,
         seed: worldSeed,
@@ -3012,6 +3133,7 @@ async function downloadSession() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(foreignBlockOrigins.entries()),
+        magicianStones: serializableMagicianStones, // Add magician stones to the save data
         profile: {
             x: player.x,
             y: player.y,
@@ -3811,6 +3933,28 @@ function gameLoop(e) {
             }
         }
         }
+
+        // Magician stone media playback logic
+        const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
+        for (const key in magicianStones) {
+            if (Object.hasOwnProperty.call(magicianStones, key)) {
+                const stone = magicianStones[key];
+                if (stone.autoplay && stone.videoElement) {
+                    const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
+                    const distance = playerPosition.distanceTo(stonePosition);
+                    if (distance <= stone.distance) {
+                        if (stone.videoElement.paused) {
+                            stone.videoElement.play().catch(e => console.error("Autoplay failed:", e));
+                        }
+                    } else {
+                        if (!stone.videoElement.paused) {
+                            stone.videoElement.pause();
+                        }
+                    }
+                }
+            }
+        }
+
         renderer.render(scene, camera)
     }
     requestAnimationFrame(gameLoop)
@@ -4004,3 +4148,86 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
     }
 })), console.log("[SYSTEM] Script loaded");
+
+document.getElementById('magicianStoneCancel').addEventListener('click', function() {
+    document.getElementById('magicianStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    magicianStonePlacement = null;
+});
+
+document.getElementById('magicianStoneUrl').addEventListener('input', function() {
+    const url = this.value;
+    const previewContainer = document.getElementById('magicianStonePreview');
+    previewContainer.innerHTML = ''; // Clear previous preview
+
+    const fileExtension = url.split('.').pop().toLowerCase();
+
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '150px';
+        previewContainer.appendChild(img);
+    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+        const video = document.createElement('video');
+        video.src = url;
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '150px';
+        video.controls = true;
+        video.muted = true;
+        previewContainer.appendChild(video);
+    } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+        const audio = document.createElement('audio');
+        audio.src = url;
+        audio.controls = true;
+        previewContainer.appendChild(audio);
+    } else {
+        previewContainer.innerHTML = '<span>URL Preview</span>';
+    }
+});
+
+document.getElementById('magicianStoneSave').addEventListener('click', function() {
+    const url = document.getElementById('magicianStoneUrl').value;
+    if (!url) {
+        addMessage("URL is required.", 3000);
+        return;
+    }
+
+    const stoneData = {
+        x: magicianStonePlacement.x,
+        y: magicianStonePlacement.y,
+        z: magicianStonePlacement.z,
+        url: url,
+        width: parseFloat(document.getElementById('magicianStoneWidth').value),
+        height: parseFloat(document.getElementById('magicianStoneHeight').value),
+        offsetX: parseFloat(document.getElementById('magicianStoneOffsetX').value),
+        offsetY: parseFloat(document.getElementById('magicianStoneOffsetY').value),
+        offsetZ: parseFloat(document.getElementById('magicianStoneOffsetZ').value),
+        loop: document.getElementById('magicianStoneLoop').checked,
+        autoplay: document.getElementById('magicianStoneAutoplay').checked,
+        distance: parseFloat(document.getElementById('magicianStoneDistance').value)
+    };
+
+    createMagicianStoneScreen(stoneData);
+
+    const n = INVENTORY[selectedHotIndex];
+    if (magicianStonePlacement && n && n.id === 127) {
+        chunkManager.setBlockGlobal(magicianStonePlacement.x, magicianStonePlacement.y, magicianStonePlacement.z, 127, true, n.originSeed);
+        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace));
+
+        // Send magician stone data to other peers
+        const message = JSON.stringify({
+            type: 'magician_stone_placed',
+            stoneData: stoneData
+        });
+        for (const [username, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(message);
+            }
+        }
+    }
+
+    document.getElementById('magicianStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    magicianStonePlacement = null;
+});

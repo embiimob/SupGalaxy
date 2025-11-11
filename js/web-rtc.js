@@ -210,7 +210,26 @@ function setupDataChannel(e, t) {
                 chunkDeltas: Array.from(CHUNK_DELTAS.entries()),
                 foreignBlockOrigins: Array.from(foreignBlockOrigins.entries())
             };
-            e.send(JSON.stringify(o)), console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
+            e.send(JSON.stringify(o));
+            // Sync magician stones to new player
+            if (Object.keys(magicianStones).length > 0) {
+                const magicianStonesSync = {
+                    type: "magician_stones_sync",
+                    stones: {}
+                };
+                for (const key in magicianStones) {
+                    const stone = magicianStones[key];
+                    magicianStonesSync.stones[key] = {
+                         x: stone.x, y: stone.y, z: stone.z, url: stone.url,
+                        width: stone.width, height: stone.height, offsetX: stone.offsetX,
+                        offsetY: stone.offsetY, offsetZ: stone.offsetZ, loop: stone.loop,
+                        autoplay: stone.autoplay, distance: stone.distance
+                    };
+                }
+                e.send(JSON.stringify(magicianStonesSync));
+            }
+
+            console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
             for (const t of mobs) e.send(JSON.stringify({
                 type: "mob_update",
                 id: t.id,
@@ -493,6 +512,20 @@ function setupDataChannel(e, t) {
                     const flowerIndex = flowerLocations.findIndex(f => f.x === s.location.x && f.y === s.location.y && f.z === s.location.z);
                     if (flowerIndex > -1) {
                         flowerLocations.splice(flowerIndex, 1);
+                    }
+                    break;
+                case "magician_stone_placed":
+                    if (!isHost) {
+                        createMagicianStoneScreen(s.stoneData);
+                    }
+                    break;
+                case "magician_stones_sync":
+                    if (!isHost) {
+                        for (const key in s.stones) {
+                            if (Object.hasOwnProperty.call(s.stones, key)) {
+                                createMagicianStoneScreen(s.stones[key]);
+                            }
+                        }
                     }
                     break;
             }

@@ -92,6 +92,7 @@ const BLOCKS = {
         123: { name: 'Hive', color: '#e3c27d' },
         125: { name: 'Emerald', color: '#00ff7b' },
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+        127: { name: "Magician's Stone", color: "#8A2BE2" },
 };
 
 const BIOMES = [
