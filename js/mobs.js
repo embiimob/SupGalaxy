@@ -8,10 +8,6 @@ function Mob(t, e, s, i = "crawley") {
         this.isAggressive = t > .5
     }
     if ("bee" === this.type) {
-        this.lastPositionCheckTime = 0;
-        this.lastPosition = new THREE.Vector3().copy(this.pos);
-        this.stuckTime = 0;
-        this.currentTarget = null;
         this.mesh = new THREE.Group;
         const t = new THREE.MeshLambertMaterial({
             color: 16776960
@@ -360,24 +356,25 @@ Mob.prototype.update = function (t) {
             } else this.lingerTime = 0
         }
         if ("bee" === this.type) {
-            const now = Date.now();
-            if (now - this.lastPositionCheckTime > 1000) {
-                if (this.pos.distanceTo(this.lastPosition) < 0.1) {
-                    this.stuckTime += 1000;
-                } else {
-                    this.stuckTime = 0;
+            const avoidanceVector = new THREE.Vector3();
+            const avoidanceRadius = 2;
+            for (let x = -avoidanceRadius; x <= avoidanceRadius; x++) {
+                for (let y = -avoidanceRadius; y <= avoidanceRadius; y++) {
+                    for (let z = -avoidanceRadius; z <= avoidanceRadius; z++) {
+                        const blockId = getBlockAt(Math.floor(this.pos.x + x), Math.floor(this.pos.y + y), Math.floor(this.pos.z + z));
+                        if (blockId === 3 || blockId === 4) { // Dirt or Stone
+                            const vec = new THREE.Vector3(x, y, z);
+                            const dist = vec.length();
+                            if (dist > 0) {
+                                avoidanceVector.add(vec.normalize().multiplyScalar(-1 / dist));
+                            }
+                        }
+                    }
                 }
-                this.lastPosition.copy(this.pos);
-                this.lastPositionCheckTime = now;
             }
-
-            if (this.stuckTime > 2000) {
-                if (this.currentTarget) {
-                    const knockbackDirection = new THREE.Vector3().subVectors(this.pos, this.currentTarget).normalize();
-                    this.pos.add(knockbackDirection.multiplyScalar(0.5)); // Knock back
-                }
-                this.pos.y += 1; // Pop up
-                this.stuckTime = 0;
+            if (avoidanceVector.length() > 0) {
+                avoidanceVector.normalize();
+                this.pos.add(avoidanceVector.multiplyScalar(this.speed * t * 60 * 0.5));
             }
             if ("SEARCHING_FOR_FLOWER" === this.aiState) {
                 if (flowerLocations.length > 0) {
@@ -392,7 +389,6 @@ Mob.prototype.update = function (t) {
                     }
 
                     i = closestFlower; // i is the target position
-                    this.currentTarget = i ? new THREE.Vector3(i.x, i.y, i.z) : null;
                     o = minDistance; // o is the distance to target
 
                     if (i) {
@@ -436,7 +432,6 @@ Mob.prototype.update = function (t) {
                         }
                     }
                     i = closestHive;
-                    this.currentTarget = i ? new THREE.Vector3(i.x, i.y, i.z) : null;
                     o = minDistance;
 
                     if (i) {
