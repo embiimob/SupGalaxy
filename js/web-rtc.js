@@ -528,6 +528,26 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "magician_stone_removed":
+                    if (!isHost) {
+                        const key = s.key;
+                        if (magicianStones[key]) {
+                            if (magicianStones[key].mesh) {
+                                scene.remove(magicianStones[key].mesh);
+                                disposeObject(magicianStones[key].mesh);
+                            }
+                            if (magicianStones[key].videoElement) {
+                                magicianStones[key].videoElement.pause();
+                                magicianStones[key].videoElement.src = '';
+                            }
+                            if (magicianStones[key].audioElement) {
+                                magicianStones[key].audioElement.pause();
+                                magicianStones[key].audioElement.src = '';
+                            }
+                            delete magicianStones[key];
+                        }
+                    }
+                    break;
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)

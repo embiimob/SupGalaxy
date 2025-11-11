@@ -2162,8 +2162,8 @@ function createDroppedItemOrb(e, t, o, a, n) {
     droppedItems.push(c), scene.add(l)
 }
 
-function createMagicianStoneScreen(stoneData) {
-    const { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
+async function createMagicianStoneScreen(stoneData) {
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
     const key = `${x},${y},${z}`;
 
     // Remove existing screen if it exists
@@ -2172,9 +2172,18 @@ function createMagicianStoneScreen(stoneData) {
         disposeObject(magicianStones[key].mesh);
     }
 
+    if (url.startsWith('IPFS:')) {
+        try {
+            url = await resolveIPFS(url);
+        } catch (error) {
+            console.error('Error resolving IPFS URL for in-world screen:', error);
+            return; // Don't create a screen if the URL is invalid
+        }
+    }
+
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
-    const fileExtension = url.split('.').pop().toLowerCase();
+    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
@@ -2221,7 +2230,13 @@ function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+    const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
+
+    if (texture) {
+        material.map = texture;
+        material.needsUpdate = true;
+    }
+
     const screenMesh = new THREE.Mesh(planeGeometry, material);
 
     // Orientation and Position
@@ -2643,6 +2658,34 @@ function removeBlockAt(e, t, o, breaker) {
                 scene.remove(c), c.geometry.dispose(), c.material.dispose(), torchParticles.delete(d);
             }
             lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+        }
+        if (a === 127) {
+            const key = `${e},${t},${o}`;
+            if (magicianStones[key]) {
+                if (magicianStones[key].mesh) {
+                    scene.remove(magicianStones[key].mesh);
+                    disposeObject(magicianStones[key].mesh);
+                }
+                if (magicianStones[key].videoElement) {
+                    magicianStones[key].videoElement.pause();
+                    magicianStones[key].videoElement.src = '';
+                }
+                 if (magicianStones[key].audioElement) {
+                    magicianStones[key].audioElement.pause();
+                    magicianStones[key].audioElement.src = '';
+                }
+                delete magicianStones[key];
+
+                const message = JSON.stringify({
+                    type: 'magician_stone_removed',
+                    key: key
+                });
+                for (const [username, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(message);
+                    }
+                }
+            }
         }
         if (a === 123 || a === 122) {
             setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
@@ -4182,12 +4225,23 @@ document.getElementById('magicianStoneCancel').addEventListener('click', functio
     magicianStonePlacement = null;
 });
 
-document.getElementById('magicianStoneUrl').addEventListener('input', function() {
-    const url = this.value;
+document.getElementById('magicianStoneUrl').addEventListener('input', async function() {
+    let url = this.value;
     const previewContainer = document.getElementById('magicianStonePreview');
     previewContainer.innerHTML = ''; // Clear previous preview
 
-    const fileExtension = url.split('.').pop().toLowerCase();
+    if (url.startsWith('IPFS:')) {
+        previewContainer.innerHTML = '<span>Resolving IPFS link...</span>';
+        try {
+            url = await resolveIPFS(url);
+        } catch (error) {
+            console.error('Error resolving IPFS URL:', error);
+            previewContainer.innerHTML = '<span>Failed to resolve IPFS URL.</span>';
+            return;
+        }
+    }
+
+    const fileExtension = this.value.split('.').pop().toLowerCase();
 
     if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
         const img = document.createElement('img');
