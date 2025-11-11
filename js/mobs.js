@@ -147,8 +147,8 @@ function manageMobs() {
     }));
     for (const s of e) {
         let e;
-        if ("crawley" === s) e = 20;
-        else if ("bee" === s) e = 10;
+        if ("crawley" === s) e = 10;
+        else if ("bee" === s) e = 8;
         else {
             if ("grub" !== s) continue;
             e = 2
@@ -662,4 +662,5 @@ Mob.prototype.update = function (t) {
         id: this.id
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)
+
 };
