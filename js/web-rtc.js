@@ -478,8 +478,11 @@ function setupDataChannel(e, t) {
                     break;
                 case "block_hit":
                     if (isHost) {
-                        removeBlockAt(s.x, s.y, s.z);
+                        removeBlockAt(s.x, s.y, s.z, s.username);
                     }
+                    break;
+                case "add_to_inventory":
+                    addToInventory(s.blockId, s.count, s.originSeed);
                     break;
                 case "block_damaged":
                     if (!isHost) {

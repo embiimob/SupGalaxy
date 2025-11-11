@@ -2292,7 +2292,7 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
 
         if (isHost || peers.size === 0) {
-            removeBlockAt(x, y, z);
+            removeBlockAt(x, y, z, userName);
         } else {
             const blockHitMsg = JSON.stringify({
                 type: 'block_hit',
@@ -2429,7 +2429,7 @@ function checkAndDeactivateHive(e, t, o) {
     0 === r && (console.log(`[HIVE] All blocks for hive at ${a.x},${a.y},${a.z} are gone. Deactivating.`), hiveLocations = hiveLocations.filter((e => e.x !== a.x || e.y !== a.y || e.z !== a.z)), addMessage("A bee hive has been destroyed!", 3e3))
 }
 
-function removeBlockAt(e, t, o) {
+function removeBlockAt(e, t, o, breaker) {
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
 
@@ -2503,9 +2503,20 @@ function removeBlockAt(e, t, o) {
         const l = foreignBlockOrigins.get(r);
         chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
         if (l) foreignBlockOrigins.delete(r);
-
-        addToInventory(a, 1, l);
-        addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+        if (breaker === userName) {
+            addToInventory(a, 1, l);
+            addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+        } else if (isHost) {
+            const peer = peers.get(breaker);
+            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(JSON.stringify({
+                    type: 'add_to_inventory',
+                    blockId: a,
+                    count: 1,
+                    originSeed: l
+                }));
+            }
+        }
         safePlayAudio(soundBreak);
         createBlockParticles(e, t, o, a);
 
@@ -3718,7 +3729,7 @@ function gameLoop(e) {
                 n = Math.floor(o.mesh.position.y),
                 r = Math.floor(o.mesh.position.z);
             if (isSolid(getBlockAt(a, n, r))) {
-                removeBlockAt(a, n, r), scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1);
+            removeBlockAt(a, n, r, o.user), scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1);
                 continue
             }
             let s = !1;
