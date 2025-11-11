@@ -8,6 +8,9 @@ function Mob(t, e, s, i = "crawley") {
         this.isAggressive = t > .5
     }
     if ("bee" === this.type) {
+        this.lastPositionCheckTime = 0;
+        this.lastPosition = new THREE.Vector3().copy(this.pos);
+        this.stuckTime = 0;
         this.mesh = new THREE.Group;
         const t = new THREE.MeshLambertMaterial({
             color: 16776960
@@ -356,6 +359,21 @@ Mob.prototype.update = function (t) {
             } else this.lingerTime = 0
         }
         if ("bee" === this.type) {
+            const now = Date.now();
+            if (now - this.lastPositionCheckTime > 1000) {
+                if (this.pos.distanceTo(this.lastPosition) < 0.1) {
+                    this.stuckTime += 1000;
+                } else {
+                    this.stuckTime = 0;
+                }
+                this.lastPosition.copy(this.pos);
+                this.lastPositionCheckTime = now;
+            }
+
+            if (this.stuckTime > 2000) {
+                this.pos.y += 1;
+                this.stuckTime = 0;
+            }
             if ("SEARCHING_FOR_FLOWER" === this.aiState) {
                 if (flowerLocations.length > 0) {
                     let closestFlower = null;
