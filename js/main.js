@@ -1003,29 +1003,35 @@ function createBlockTexture(e, t) {
     return u.magFilter = THREE.NearestFilter, u.minFilter = THREE.NearestFilter, textureCache.set(o, u), u
 }
 
-function createCrackTexture(e) {
-    const t = 32,
-        o = document.createElement("canvas");
-    o.width = t, o.height = t;
-    const a = o.getContext("2d");
-    a.strokeStyle = "rgba(0, 0, 0, 0.6)", a.lineWidth = 1.5, a.beginPath();
-    const n = t / 2,
-        r = t / 2;
-    for (let o = 0; o < e * 2; o++) {
-        const e = 2 * Math.PI * Math.random(),
-            s = .4 * t * Math.random() + .1 * t;
-        a.moveTo(n, r);
-        const i = n + s * Math.cos(e),
-            c = r + s * Math.sin(e);
-        a.lineTo(i, c);
-        for (let o = 0; o < Math.random() * 3; o++) {
-            a.moveTo(i, c);
-            const o = e + (Math.random() - .5) * (Math.PI / 2),
-                l = s * (.3 * Math.random() + .3);
-            a.lineTo(i + l * Math.cos(o), c + l * Math.sin(o))
+function drawCracksOnCanvas(canvas) {
+    const size = canvas.width;
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)"; // More opaque
+    ctx.lineWidth = 1; // Thinner
+    ctx.beginPath();
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+
+    // Draw 2 new major cracks each time this is called
+    for (let i = 0; i < 2; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const length = (Math.random() * 0.4 + 0.1) * size;
+
+        ctx.moveTo(centerX, centerY);
+        const endX = centerX + length * Math.cos(angle);
+        const endY = centerY + length * Math.sin(angle);
+        ctx.lineTo(endX, endY);
+
+        // Add smaller splinters
+        for (let j = 0; j < Math.random() * 2; j++) {
+            ctx.moveTo(endX, endY);
+            const splinterAngle = angle + (Math.random() - 0.5) * (Math.PI / 2);
+            const splinterLength = length * (Math.random() * 0.3 + 0.3);
+            ctx.lineTo(endX + splinterLength * Math.cos(splinterAngle), endY + splinterLength * Math.sin(splinterAngle));
         }
     }
-    return a.stroke(), new THREE.CanvasTexture(o)
+    ctx.stroke();
 }
 
 function createCloudTexture(e) {
@@ -2349,22 +2355,30 @@ function removeBlockAt(e, t, o) {
             crackMeshes.remove(s.mesh);
             disposeObject(s.mesh);
         }
-
-        const i = createCrackTexture(s.hits);
+        let canvas = s.canvas;
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            s.canvas = canvas;
+        }
+        drawCracksOnCanvas(canvas);
+        const newCrackTexture = new THREE.CanvasTexture(canvas);
+        newCrackTexture.magFilter = THREE.NearestFilter;
+        newCrackTexture.minFilter = THREE.NearestFilter;
+        newCrackTexture.needsUpdate = true;
         const l = new THREE.MeshBasicMaterial({
-            map: i,
-            transparent: !0,
-            opacity: 0.7
+            map: newCrackTexture,
+            transparent: true,
+            opacity: 1
         });
         const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
         d.position.set(e + 0.5, t + 0.5, o + 0.5);
         s.mesh = d;
         crackMeshes.add(d);
-
         const c = `pick${Math.floor(Math.random() * 3)}`;
         const u = document.getElementById(c);
         safePlayAudio(u);
-
     } else {
         damagedBlocks.delete(r);
         if (s.mesh) {
