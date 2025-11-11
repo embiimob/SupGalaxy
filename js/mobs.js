@@ -11,6 +11,7 @@ function Mob(t, e, s, i = "crawley") {
         this.lastPositionCheckTime = 0;
         this.lastPosition = new THREE.Vector3().copy(this.pos);
         this.stuckTime = 0;
+        this.currentTarget = null;
         this.mesh = new THREE.Group;
         const t = new THREE.MeshLambertMaterial({
             color: 16776960
@@ -371,7 +372,11 @@ Mob.prototype.update = function (t) {
             }
 
             if (this.stuckTime > 2000) {
-                this.pos.y += 1;
+                if (this.currentTarget) {
+                    const knockbackDirection = new THREE.Vector3().subVectors(this.pos, this.currentTarget).normalize();
+                    this.pos.add(knockbackDirection.multiplyScalar(0.5)); // Knock back
+                }
+                this.pos.y += 1; // Pop up
                 this.stuckTime = 0;
             }
             if ("SEARCHING_FOR_FLOWER" === this.aiState) {
@@ -387,6 +392,7 @@ Mob.prototype.update = function (t) {
                     }
 
                     i = closestFlower; // i is the target position
+                    this.currentTarget = i ? new THREE.Vector3(i.x, i.y, i.z) : null;
                     o = minDistance; // o is the distance to target
 
                     if (i) {
@@ -430,6 +436,7 @@ Mob.prototype.update = function (t) {
                         }
                     }
                     i = closestHive;
+                    this.currentTarget = i ? new THREE.Vector3(i.x, i.y, i.z) : null;
                     o = minDistance;
 
                     if (i) {
