@@ -1160,12 +1160,12 @@ self.onmessage = async function(e) {
                     chunk.generated = true;
                     chunk.generating = false;
                     // Apply any pending deltas for this chunk
-                    if (pendingChunkDeltas.has(chunk.key)) {
-                        const deltas = pendingChunkDeltas.get(chunk.key);
+                    if (chunkManager.pendingDeltas.has(chunk.key)) {
+                        const deltas = chunkManager.pendingDeltas.get(chunk.key);
                         for (const delta of deltas) {
                             chunk.set(delta.x, delta.y, delta.z, delta.b);
                         }
-                        pendingChunkDeltas.delete(chunk.key);
+                        chunkManager.pendingDeltas.delete(chunk.key);
                     }
                     chunk.needsRebuild = true;
                 }

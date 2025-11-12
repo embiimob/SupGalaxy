@@ -726,7 +726,9 @@ async function applySaveFile(e, t, o) {
             magicianStones = {}; // Clear existing stones
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
-                    createMagicianStoneScreen(t.magicianStones[key]);
+                    const stoneData = t.magicianStones[key];
+                    createMagicianStoneScreen(stoneData);
+                    chunkManager.setBlockGlobal(stoneData.x, stoneData.y, stoneData.z, 127, false);
                 }
             }
         }
@@ -1265,7 +1267,7 @@ function Chunk(e, t) {
 }
 
 function ChunkManager(e) {
-    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
+    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
 }
 
 function buildGreedyMesh(e, t, o) {
@@ -1559,6 +1561,11 @@ Chunk.prototype.idx = function (e, t, o) {
     return e < 0 || e >= CHUNK_SIZE || o < 0 || o >= CHUNK_SIZE || t < 0 || t >= MAX_HEIGHT ? BLOCK_AIR : this.data[this.idx(e, t, o)]
 }, Chunk.prototype.set = function (e, t, o, a) {
     e < 0 || e >= CHUNK_SIZE || o < 0 || o >= CHUNK_SIZE || t < 0 || t >= MAX_HEIGHT || (this.data[this.idx(e, t, o)] = a, this.needsRebuild = !0)
+}, ChunkManager.prototype.addPendingDeltas = function(chunkKey, deltas) {
+    if (!this.pendingDeltas.has(chunkKey)) {
+        this.pendingDeltas.set(chunkKey, []);
+    }
+    this.pendingDeltas.get(chunkKey).push(...deltas);
 }, ChunkManager.prototype.getChunk = function (e, t) {
     var o = Math.floor(MAP_SIZE / CHUNK_SIZE),
         a = modWrap(e, o),
@@ -2185,17 +2192,7 @@ async function createMagicianStoneScreen(stoneData) {
     let texture;
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
-    if (fileExtension === 'gif') {
-        const img = document.createElement('img');
-        img.crossOrigin = "anonymous";
-        img.src = url;
-        texture = new THREE.Texture(img);
-        img.onload = () => {
-            texture.needsUpdate = true;
-        };
-        stoneData.isGif = true;
-        stoneData.gifTexture = texture;
-    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -4013,25 +4010,25 @@ function gameLoop(e) {
         // Magician stone media playback logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
         for (const key in magicianStones) {
-            if (magicianStones[key].isGif && magicianStones[key].gifTexture) {
-                magicianStones[key].gifTexture.needsUpdate = true;
-            }
             if (Object.hasOwnProperty.call(magicianStones, key)) {
                 const stone = magicianStones[key];
-                if (stone.autoplay) {
-                    const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
-                    const distance = playerPosition.distanceTo(stonePosition);
-                    const mediaElement = stone.videoElement || stone.audioElement;
+                const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
+                const distance = playerPosition.distanceTo(stonePosition);
+                const mediaElement = stone.videoElement || stone.audioElement;
 
-                    if (mediaElement) {
-                        if (distance <= stone.distance) {
-                            if (mediaElement.paused) {
-                                mediaElement.play().catch(e => console.error("Autoplay failed:", e));
-                            }
-                        } else {
-                            if (!mediaElement.paused) {
-                                mediaElement.pause();
-                            }
+                if (mediaElement && stone.autoplay) {
+                    if (distance <= stone.distance) {
+                        if (mediaElement.paused) {
+                            mediaElement.play().catch(e => console.error("Autoplay failed:", e));
+                        }
+                        // Proximity-based volume for audio
+                        if (stone.audioElement) {
+                            const volume = Math.max(0, 1 - (distance / stone.distance));
+                            stone.audioElement.volume = volume;
+                        }
+                    } else {
+                        if (!mediaElement.paused) {
+                            mediaElement.pause();
                         }
                     }
                 }

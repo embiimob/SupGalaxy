@@ -15,8 +15,8 @@ let proximityVideoUsers = [],
     currentProximityVideoIndex = 0,
     lastProximityVideoChangeTime = 0;
 var userPositions = {},
-    playerAvatars = new Map,
-    pendingChunkDeltas = new Map;
+    playerAvatars = new Map;
+
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -275,10 +275,7 @@ function setupDataChannel(e, t) {
                         if (s.chunkDeltas) {
                             const deltas = new Map(s.chunkDeltas);
                             for (const [chunkKey, changes] of deltas.entries()) {
-                                if (!pendingChunkDeltas.has(chunkKey)) {
-                                    pendingChunkDeltas.set(chunkKey, []);
-                                }
-                                pendingChunkDeltas.get(chunkKey).push(...changes);
+                                chunkManager.addPendingDeltas(chunkKey, changes);
                             }
                         }
                         if (s.foreignBlockOrigins) {
