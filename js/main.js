@@ -2296,17 +2296,21 @@ async function createMagicianStoneScreen(stoneData) {
         playerDirection.normalize();
     }
 
-    const forward = playerDirection;
+    const forward = playerDirection.clone();
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
     const up = new THREE.Vector3(0, 1, 0);
 
-    const position = new THREE.Vector3(x + 0.5, y + 2, z + 0.5)
+    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
         .add(right.multiplyScalar(offsetX))
         .add(up.multiplyScalar(offsetY))
         .add(forward.multiplyScalar(offsetZ));
 
     screenMesh.position.copy(position);
-    screenMesh.lookAt(position.clone().add(playerDirection));
+
+    // The direction vector is the normal of the plane we want to create.
+    // The lookAt target should be a point along that normal vector, starting from the plane's own position.
+    const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+    screenMesh.lookAt(lookAtTarget);
 
     magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
     scene.add(screenMesh);
@@ -2787,7 +2791,14 @@ function placeBlockAt(e, t, o, a) {
                         d = makeChunkKey(worldName, i, l);
                     if (checkChunkOwnership(d, userName)) {
                         if (a === 127) { // Magician's Stone
-                            magicianStonePlacement = { x: e, y: t, z: o };
+                            const playerDirection = new THREE.Vector3();
+                            camera.getWorldDirection(playerDirection);
+                            playerDirection.y = 0;
+                            playerDirection.normalize();
+                            magicianStonePlacement = {
+                                x: e, y: t, z: o,
+                                direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+                            };
                             document.getElementById('magicianStoneModal').style.display = 'flex';
                             isPromptOpen = true;
                         } else {
@@ -4304,7 +4315,21 @@ document.addEventListener("DOMContentLoaded", (async function () {
     }
 })), console.log("[SYSTEM] Script loaded");
 
+function resetMagicianStoneDialog() {
+    document.getElementById('magicianStoneUrl').value = '';
+    document.getElementById('magicianStoneWidth').value = '2';
+    document.getElementById('magicianStoneHeight').value = '1.5';
+    document.getElementById('magicianStoneOffsetX').value = '0';
+    document.getElementById('magicianStoneOffsetY').value = '0';
+    document.getElementById('magicianStoneOffsetZ').value = '0';
+    document.getElementById('magicianStoneLoop').checked = false;
+    document.getElementById('magicianStoneAutoplay').checked = false;
+    document.getElementById('magicianStoneDistance').value = '10';
+    document.getElementById('magicianStonePreview').innerHTML = '<span>URL Preview</span>';
+}
+
 document.getElementById('magicianStoneCancel').addEventListener('click', function() {
+    resetMagicianStoneDialog();
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
@@ -4359,11 +4384,6 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         return;
     }
 
-    const playerDirection = new THREE.Vector3();
-    camera.getWorldDirection(playerDirection);
-    playerDirection.y = 0;
-    playerDirection.normalize();
-
     const stoneData = {
         x: magicianStonePlacement.x,
         y: magicianStonePlacement.y,
@@ -4377,7 +4397,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         loop: document.getElementById('magicianStoneLoop').checked,
         autoplay: document.getElementById('magicianStoneAutoplay').checked,
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
-        direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+        direction: magicianStonePlacement.direction // Use the direction saved on placement
     };
 
     createMagicianStoneScreen(stoneData);
@@ -4405,6 +4425,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         }
     }
 
+    resetMagicianStoneDialog();
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
