@@ -2180,6 +2180,29 @@ function createDroppedItemOrb(e, t, o, a, n) {
     droppedItems.push(c), scene.add(l)
 }
 
+function createMusicSymbolMesh() {
+    const symbolGroup = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: 0x8A2BE2 }); // Purple color
+
+    // Eighth note shape
+    const noteStem = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+    const stemMesh = new THREE.Mesh(noteStem, material);
+    stemMesh.position.y = 0.3;
+    symbolGroup.add(stemMesh);
+
+    const noteHead = new THREE.SphereGeometry(0.15, 16, 16);
+    const headMesh = new THREE.Mesh(noteHead, material);
+    headMesh.position.y = 0.0;
+    symbolGroup.add(headMesh);
+
+    const noteFlag = new THREE.BoxGeometry(0.3, 0.1, 0.1);
+    const flagMesh = new THREE.Mesh(noteFlag, material);
+    flagMesh.position.set(0.1, 0.55, 0);
+    symbolGroup.add(flagMesh);
+
+    return symbolGroup;
+}
+
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
     const key = `${x},${y},${z}`;
@@ -2248,14 +2271,18 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
+    let screenMesh;
 
-    if (texture) {
-        material.map = texture;
-        material.needsUpdate = true;
+    if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+        screenMesh = createMusicSymbolMesh();
+    } else {
+        const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
+        if (texture) {
+            material.map = texture;
+            material.needsUpdate = true;
+        }
+        screenMesh = new THREE.Mesh(planeGeometry, material);
     }
-
-    const screenMesh = new THREE.Mesh(planeGeometry, material);
 
     // Orientation and Position
     let playerDirection;
@@ -2273,7 +2300,7 @@ async function createMagicianStoneScreen(stoneData) {
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
     const up = new THREE.Vector3(0, 1, 0);
 
-    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)
+    const position = new THREE.Vector3(x + 0.5, y + 2, z + 0.5)
         .add(right.multiplyScalar(offsetX))
         .add(up.multiplyScalar(offsetY))
         .add(forward.multiplyScalar(offsetZ));
@@ -2281,7 +2308,7 @@ async function createMagicianStoneScreen(stoneData) {
     screenMesh.position.copy(position);
     screenMesh.lookAt(position.clone().add(playerDirection));
 
-    magicianStones[key] = { ...stoneData, mesh: screenMesh };
+    magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
     scene.add(screenMesh);
 }
 
@@ -2429,6 +2456,38 @@ function onPointerDown(e) {
         return
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    const magicianStoneMeshes = Object.values(magicianStones).map(s => s.mesh);
+    const magicianStoneIntersects = raycaster.intersectObjects(magicianStoneMeshes, true);
+
+    if (magicianStoneIntersects.length > 0) {
+        let intersectedObject = magicianStoneIntersects[0].object;
+        let parentMesh = intersectedObject.parent instanceof THREE.Group ? intersectedObject.parent : intersectedObject;
+        const intersectedStone = Object.values(magicianStones).find(s => s.mesh === parentMesh);
+
+        if (intersectedStone) {
+            const key = `${intersectedStone.x},${intersectedStone.y},${intersectedStone.z}`;
+            const stone = magicianStones[key];
+            if (stone && (stone.audioElement || stone.videoElement)) {
+                stone.isMuted = !stone.isMuted;
+                const mediaElement = stone.audioElement || stone.videoElement;
+                mediaElement.muted = stone.isMuted;
+
+                const message = JSON.stringify({
+                    type: 'magician_stone_mute',
+                    key: key,
+                    isMuted: stone.isMuted
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(message);
+                    }
+                }
+                addMessage(stone.isMuted ? "Muted stone" : "Unmuted stone", 1500);
+            }
+        }
+        return;
+    }
+
     const r = raycaster.intersectObject(meshGroup, !0);
     if (0 === r.length) return;
     const s = r[0],
@@ -4036,7 +4095,11 @@ function gameLoop(e) {
                         // Proximity-based volume for audio
                         if (stone.audioElement) {
                             const volume = Math.max(0, 1 - (distance / stone.distance));
-                            stone.audioElement.volume = volume;
+                            stone.audioElement.volume = stone.isMuted ? 0 : volume;
+                        }
+                        if (stone.videoElement) {
+                            const volume = Math.max(0, 1 - (distance / stone.distance));
+                            stone.videoElement.volume = stone.isMuted ? 0 : volume;
                         }
                     } else {
                         if (!mediaElement.paused) {

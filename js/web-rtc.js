@@ -542,6 +542,18 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "magician_stone_mute":
+                    if (s.key && magicianStones[s.key]) {
+                        const stone = magicianStones[s.key];
+                        stone.isMuted = s.isMuted;
+                        if (stone.audioElement) {
+                            stone.audioElement.muted = s.isMuted;
+                        }
+                        if (stone.videoElement) {
+                            stone.videoElement.muted = s.isMuted;
+                        }
+                    }
+                    break;
                 case "magician_stone_removed":
                     if (!isHost) {
                         const key = s.key;
