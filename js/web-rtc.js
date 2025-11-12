@@ -16,6 +16,7 @@ let proximityVideoUsers = [],
     lastProximityVideoChangeTime = 0;
 var userPositions = {},
     playerAvatars = new Map;
+
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -210,7 +211,27 @@ function setupDataChannel(e, t) {
                 chunkDeltas: Array.from(CHUNK_DELTAS.entries()),
                 foreignBlockOrigins: Array.from(foreignBlockOrigins.entries())
             };
-            e.send(JSON.stringify(o)), console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
+            e.send(JSON.stringify(o));
+            // Sync magician stones to new player
+            if (Object.keys(magicianStones).length > 0) {
+                const magicianStonesSync = {
+                    type: "magician_stones_sync",
+                    stones: {}
+                };
+                for (const key in magicianStones) {
+                    const stone = magicianStones[key];
+                    magicianStonesSync.stones[key] = {
+                         x: stone.x, y: stone.y, z: stone.z, url: stone.url,
+                        width: stone.width, height: stone.height, offsetX: stone.offsetX,
+                        offsetY: stone.offsetY, offsetZ: stone.offsetZ, loop: stone.loop,
+                            autoplay: stone.autoplay, distance: stone.distance,
+                            direction: stone.direction
+                    };
+                }
+                e.send(JSON.stringify(magicianStonesSync));
+            }
+
+            console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
             for (const t of mobs) e.send(JSON.stringify({
                 type: "mob_update",
                 id: t.id,
@@ -251,11 +272,16 @@ function setupDataChannel(e, t) {
                     break;
                 case "world_sync":
                     if (!isHost) {
-                        if (console.log("[WEBRTC] Received world_sync"), s.chunkDeltas) {
-                            const e = new Map(s.chunkDeltas);
-                            for (const [t, o] of e.entries()) chunkManager.applyDeltasToChunk(t, o)
+                        console.log("[WEBRTC] Received world_sync");
+                        if (s.chunkDeltas) {
+                            const deltas = new Map(s.chunkDeltas);
+                            for (const [chunkKey, changes] of deltas.entries()) {
+                                chunkManager.addPendingDeltas(chunkKey, changes);
+                            }
                         }
-                        s.foreignBlockOrigins && (foreignBlockOrigins = new Map(s.foreignBlockOrigins))
+                        if (s.foreignBlockOrigins) {
+                            foreignBlockOrigins = new Map(s.foreignBlockOrigins);
+                        }
                     }
                     break;
                 case "state_update":
@@ -493,6 +519,47 @@ function setupDataChannel(e, t) {
                     const flowerIndex = flowerLocations.findIndex(f => f.x === s.location.x && f.y === s.location.y && f.z === s.location.z);
                     if (flowerIndex > -1) {
                         flowerLocations.splice(flowerIndex, 1);
+                    }
+                    break;
+                case "magician_stone_placed":
+                    // When the host receives this message from a client, it needs to both
+                    // create the screen locally AND relay the message to all other clients.
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    createMagicianStoneScreen(s.stoneData);
+                    break;
+                case "magician_stones_sync":
+                    if (!isHost) {
+                        for (const key in s.stones) {
+                            if (Object.hasOwnProperty.call(s.stones, key)) {
+                                createMagicianStoneScreen(s.stones[key]);
+                            }
+                        }
+                    }
+                    break;
+                case "magician_stone_removed":
+                    if (!isHost) {
+                        const key = s.key;
+                        if (magicianStones[key]) {
+                            if (magicianStones[key].mesh) {
+                                scene.remove(magicianStones[key].mesh);
+                                disposeObject(magicianStones[key].mesh);
+                            }
+                            if (magicianStones[key].videoElement) {
+                                magicianStones[key].videoElement.pause();
+                                magicianStones[key].videoElement.src = '';
+                            }
+                            if (magicianStones[key].audioElement) {
+                                magicianStones[key].audioElement.pause();
+                                magicianStones[key].audioElement.src = '';
+                            }
+                            delete magicianStones[key];
+                        }
                     }
                     break;
             }

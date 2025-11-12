@@ -270,6 +270,61 @@
     <audio id="pick2" preload="auto">
         <source src="sounds/pick2.ogg" type="audio/ogg">
     </audio>
+    <div id="magicianStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
+        <div style="background: var(--panel); padding: 20px; border-radius: 10px; min-width: 500px; color: #fff; display: flex; flex-direction: column; gap: 15px;">
+            <h3>Magician's Stone Configuration</h3>
+            <div>
+                <label for="magicianStoneUrl">Sup URL (IPFS/HTTP)</label>
+                <input type="text" id="magicianStoneUrl" placeholder="Enter a valid Sup URL" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+            </div>
+            <div id="magicianStonePreview" style="min-height: 150px; background: #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 10px;">
+                <!-- Preview will be generated here -->
+                <span>URL Preview</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label>Playback Options</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <label><input type="checkbox" id="magicianStoneLoop"> Loop</label>
+                        <label><input type="checkbox" id="magicianStoneAutoplay" checked> Autoplay</label>
+                    </div>
+                </div>
+                <div>
+                    <label for="magicianStoneDistance">Autoplay Distance (blocks)</label>
+                    <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                </div>
+            </div>
+            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
+                <legend>Projection Settings</legend>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <div>
+                        <label for="magicianStoneOffsetX">Offset X (Left/Right)</label>
+                        <input type="number" id="magicianStoneOffsetX" value="0" min="-16" max="16" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label for="magicianStoneOffsetY">Offset Y (Up/Down)</label>
+                        <input type="number" id="magicianStoneOffsetY" value="2" min="-16" max="16" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label for="magicianStoneOffsetZ">Offset Z (Back/Up)</label>
+                        <input type="number" id="magicianStoneOffsetZ" value="0" min="-16" max="16" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label for="magicianStoneWidth">Width (blocks)</label>
+                        <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label for="magicianStoneHeight">Height (blocks)</label>
+                        <input type="number" id="magicianStoneHeight" value="2" min="1" max="16" style="width: 100%;">
+                    </div>
+                </div>
+            </fieldset>
+            <div style="text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="magicianStoneCancel">Cancel</button>
+                <button id="magicianStoneSave" style="background: var(--accent); color: #111;">Save</button>
+            </div>
+        </div>
+    </div>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
     <script src="js/video-player.js"></script>

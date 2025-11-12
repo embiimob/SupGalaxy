@@ -92,6 +92,7 @@ const BLOCKS = {
         123: { name: 'Hive', color: '#e3c27d' },
         125: { name: 'Emerald', color: '#00ff7b' },
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
+        127: { name: "Magician's Stone", color: "#8A2BE2" },
 };
 
 const BIOMES = [
@@ -1158,6 +1159,14 @@ self.onmessage = async function(e) {
                     chunk.data = data.data;
                     chunk.generated = true;
                     chunk.generating = false;
+                    // Apply any pending deltas for this chunk
+                    if (chunkManager.pendingDeltas.has(chunk.key)) {
+                        const deltas = chunkManager.pendingDeltas.get(chunk.key);
+                        for (const delta of deltas) {
+                            chunk.set(delta.x, delta.y, delta.z, delta.b);
+                        }
+                        chunkManager.pendingDeltas.delete(chunk.key);
+                    }
                     chunk.needsRebuild = true;
                 }
             } else if (data.type === 'hive_location') {
