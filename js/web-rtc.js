@@ -224,7 +224,8 @@ function setupDataChannel(e, t) {
                          x: stone.x, y: stone.y, z: stone.z, url: stone.url,
                         width: stone.width, height: stone.height, offsetX: stone.offsetX,
                         offsetY: stone.offsetY, offsetZ: stone.offsetZ, loop: stone.loop,
-                        autoplay: stone.autoplay, distance: stone.distance
+                            autoplay: stone.autoplay, distance: stone.distance,
+                            direction: stone.direction
                     };
                 }
                 e.send(JSON.stringify(magicianStonesSync));
@@ -521,9 +522,16 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "magician_stone_placed":
-                    if (!isHost) {
-                        createMagicianStoneScreen(s.stoneData);
+                    // When the host receives this message from a client, it needs to both
+                    // create the screen locally AND relay the message to all other clients.
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
                     }
+                    createMagicianStoneScreen(s.stoneData);
                     break;
                 case "magician_stones_sync":
                     if (!isHost) {

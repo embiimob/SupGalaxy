@@ -728,7 +728,18 @@ async function applySaveFile(e, t, o) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = t.magicianStones[key];
                     createMagicianStoneScreen(stoneData);
-                    chunkManager.setBlockGlobal(stoneData.x, stoneData.y, stoneData.z, 127, false);
+
+                    // Defer block placement until the chunk is loaded
+                    const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(stoneData.z, MAP_SIZE) / CHUNK_SIZE);
+                    const chunkKey = makeChunkKey(worldName, cx, cz);
+                    const delta = {
+                        x: modWrap(stoneData.x, CHUNK_SIZE),
+                        y: stoneData.y,
+                        z: modWrap(stoneData.z, CHUNK_SIZE),
+                        b: 127
+                    };
+                    chunkManager.addPendingDeltas(chunkKey, [delta]);
                 }
             }
         }
@@ -3194,7 +3205,8 @@ async function downloadSession() {
                 offsetZ: stone.offsetZ,
                 loop: stone.loop,
                 autoplay: stone.autoplay,
-                distance: stone.distance
+                distance: stone.distance,
+                direction: stone.direction
             };
         }
     }
