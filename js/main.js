@@ -690,6 +690,14 @@ function simpleHash(e) {
     return Math.abs(t)
 }
 async function applySaveFile(e, t, o) {
+    if (e.isHostSession) {
+        WORLD_STATES = new Map(e.worldStates.map(([worldName, data]) => [worldName, {
+            chunkDeltas: new Map(data.chunkDeltas),
+            foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+        }]));
+        processedMessages = new Set(e.processedMessages);
+        addMessage("Host session loaded. Restoring all world states.", 3e3);
+    }
     if (e.playerData && e.hash) {
         const t = e.playerData,
             o = e.hash;
@@ -842,7 +850,51 @@ function applyChunkUpdates(e, t, o, a) {
         for (var n of e) {
             var r = n.chunk,
                 s = n.changes;
-            chunkManager ? (chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)) : console.error("[ChunkManager] chunkManager not defined")
+            if (chunkManager) {
+                const worldNameFromChunk = parseChunkKey(r)?.world;
+                if (worldNameFromChunk) {
+                    if (!WORLD_STATES.has(worldNameFromChunk)) {
+                        WORLD_STATES.set(worldNameFromChunk, {
+                            chunkDeltas: new Map(),
+                            foreignBlockOrigins: new Map()
+                        });
+                    }
+                    const worldState = WORLD_STATES.get(worldNameFromChunk);
+                    if (!worldState.chunkDeltas.has(r)) {
+                        worldState.chunkDeltas.set(r, []);
+                    }
+                    worldState.chunkDeltas.get(r).push(...s);
+                }
+                chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
+            } else console.error("[ChunkManager] chunkManager not defined")
+        }
+        if (isHost) {
+            const message = JSON.stringify({
+                type: 'ipfs_chunk_update',
+                updates: e,
+                fromAddress: t,
+                timestamp: o,
+                transactionId: a
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(message);
+                }
+            }
+        } else {
+            // Client sends the update to the host
+            for (const [, peer] of peers.entries()) { // Should only be one host
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    const message = JSON.stringify({
+                        type: 'ipfs_chunk_from_client',
+                        updates: e,
+                        fromAddress: t,
+                        timestamp: o,
+                        transactionId: a
+                    });
+                    peer.dc.send(message);
+                }
+            }
         }
         worker.postMessage({
             type: "update_processed",
@@ -3278,6 +3330,60 @@ function performAttack() {
     }
 }
 async function downloadSession() {
+    if (isHost) {
+        if (confirm("Save the entire multiplayer session? (Host only)")) {
+            downloadHostSession();
+        } else {
+            downloadSinglePlayerSession();
+        }
+    } else {
+        downloadSinglePlayerSession();
+    }
+}
+
+async function downloadHostSession() {
+    const serializableWorldStates = Array.from(WORLD_STATES.entries()).map(([worldName, data]) => {
+        return [worldName, {
+            chunkDeltas: Array.from(data.chunkDeltas.entries()),
+            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries())
+        }];
+    });
+
+    const hostSessionData = {
+        isHostSession: true,
+        worldStates: serializableWorldStates,
+        processedMessages: Array.from(processedMessages),
+        playerData: {
+            world: worldName,
+            seed: worldSeed,
+            user: userName,
+            savedAt: new Date().toISOString(),
+            profile: {
+                x: player.x,
+                y: player.y,
+                z: player.z,
+                health: player.health,
+                score: player.score,
+                inventory: INVENTORY
+            },
+        }
+    };
+
+    hostSessionData.hash = simpleHash(JSON.stringify(hostSessionData.playerData));
+
+    const blob = new Blob([JSON.stringify(hostSessionData)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${worldName}_host_session_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    addMessage("Host session downloaded");
+}
+
+async function downloadSinglePlayerSession() {
     const worldState = getCurrentWorldState();
     const serializableMagicianStones = {};
     for (const key in magicianStones) {
@@ -3308,7 +3414,7 @@ async function downloadSession() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
-        magicianStones: serializableMagicianStones, // Add magician stones to the save data
+        magicianStones: serializableMagicianStones,
         profile: {
             x: player.x,
             y: player.y,

@@ -306,7 +306,6 @@ function setupDataChannel(e, t) {
                     progressCircle.style.setProperty('--p', '0');
                     progressCircle.dataset.progress = '0';
                     worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
-                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
                     break;
                 case 'world_sync_chunk':
                     const progress = Math.round((s.index + 1) / s.total * 100);
@@ -319,7 +318,6 @@ function setupDataChannel(e, t) {
                             label.textContent = `${progress}%`;
                         }
                     }
-                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
 
                     if (s.deltas) {
                         for (const [chunkKey, changes] of s.deltas) {
@@ -572,6 +570,17 @@ function setupDataChannel(e, t) {
                             let t = eruptedBlocks.find((t => t.id === e.id));
                             t && (t.targetPosition = (new THREE.Vector3).fromArray(e.position), t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion), t.lastUpdate = performance.now())
                         }
+                    break;
+                case "ipfs_chunk_update":
+                    if (!isHost) {
+                        applyChunkUpdates(s.updates, s.fromAddress, s.timestamp, s.transactionId);
+                    }
+                    break;
+                case "ipfs_chunk_from_client":
+                    if (isHost) {
+                        // Host receives update from a client, applies it, and relays to all other clients
+                        applyChunkUpdates(s.updates, s.fromAddress, s.timestamp, s.transactionId);
+                    }
                     break;
                 case "remove_peer":
                     s.username && cleanupPeer(s.username);
