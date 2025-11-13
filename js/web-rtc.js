@@ -118,69 +118,59 @@ async function sendWorldStateAsync(peer, worldState, username) {
         return;
     }
 
-    const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
-    const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
-    const processedIds = Array.from(processedMessages);
+    const dataToSend = {
+        chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
+        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
+        processedIds: Array.from(processedMessages)
+    };
 
-    const deltaChunkSize = 10;
-    const originChunkSize = 10;
-    const processedIdChunkSize = 100;
-
-    const deltaChunks = [];
-    for (let i = 0; i < chunkDeltas.length; i += deltaChunkSize) {
-        deltaChunks.push(chunkDeltas.slice(i, i + deltaChunkSize));
+    const dataString = JSON.stringify(dataToSend);
+    const chunkSize = 16384; // 16KB chunks
+    const chunks = [];
+    for (let i = 0; i < dataString.length; i += chunkSize) {
+        chunks.push(dataString.slice(i, i + chunkSize));
     }
 
-    const originChunks = [];
-    for (let i = 0; i < foreignBlockOrigins.length; i += originChunkSize) {
-        originChunks.push(foreignBlockOrigins.slice(i, i + originChunkSize));
-    }
-
-    const processedIdChunks = [];
-    for (let i = 0; i < processedIds.length; i += processedIdChunkSize) {
-        processedIdChunks.push(processedIds.slice(i, i + processedIdChunkSize));
-    }
-
-    const totalChunks = deltaChunks.length + originChunks.length + processedIdChunks.length;
-    let sentChunks = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
+    const transactionId = `world_sync_${username}_${Date.now()}`;
 
     peer.dc.send(JSON.stringify({
         type: 'world_sync_start',
-        totalChunks: totalChunks
+        total: chunks.length,
+        transactionId: transactionId
     }));
 
-    function sendNext() {
-        if (!peer || !peer.dc || peer.dc.readyState !== 'open') return;
+    let i = 0;
+    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
+
+    function sendChunk() {
+        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
+            if (i >= chunks.length) {
+                console.log(`[WebRTC] Finished sending world state to ${username}.`);
+            }
+            return;
+        }
 
         if (peer.dc.bufferedAmount > highWaterMark) {
             peer.dc.onbufferedamountlow = () => {
                 peer.dc.onbufferedamountlow = null;
-                setTimeout(sendNext, 0);
+                setTimeout(sendChunk, 0);
             };
             return;
         }
 
-        let payload;
-        if (deltaChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', deltas: deltaChunks.shift() };
-        } else if (originChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', origins: originChunks.shift() };
-        } else if (processedIdChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', processedIds: processedIdChunks.shift() };
-        } else {
-            console.log(`[WebRTC] Finished sending world state to ${username}.`);
-            return; // All chunks sent
-        }
+        peer.dc.send(JSON.stringify({
+            type: 'world_sync_chunk',
+            transactionId: transactionId,
+            index: i,
+            chunk: chunks[i],
+            total: chunks.length
+        }));
+        i++;
 
-        payload.index = sentChunks++;
-        payload.total = totalChunks;
-        peer.dc.send(JSON.stringify(payload));
-
-        setTimeout(sendNext, 0); // Yield to the event loop
+        setTimeout(sendChunk, 0);
     }
 
-    sendNext(); // Start the sending process
+    sendChunk();
 }
 async function handleMinimapFile(e) {
     try {
@@ -357,44 +347,63 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_sync_start':
-                    const worldSyncProgress = document.getElementById('worldSyncProgress');
-                    worldSyncProgress.style.display = 'flex';
-                    const progressCircle = worldSyncProgress.querySelector('.progress-circle');
-                    progressCircle.style.setProperty('--p', '0');
-                    progressCircle.dataset.progress = '0';
-                    worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                    if (!isHost) {
+                        partialIPFSUpdates.set(s.transactionId, {
+                            chunks: new Array(s.total),
+                            total: s.total,
+                            received: 0
+                        });
+                        const worldSyncProgress = document.getElementById('worldSyncProgress');
+                        worldSyncProgress.style.display = 'flex';
+                        const progressCircle = worldSyncProgress.querySelector('.progress-circle');
+                        progressCircle.style.setProperty('--p', '0');
+                        progressCircle.dataset.progress = '0';
+                        worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                    }
                     break;
                 case 'world_sync_chunk':
-                    const progress = Math.round((s.index + 1) / s.total * 100);
-                    const circle = document.querySelector('.progress-circle');
-                    if (circle) {
-                        circle.style.setProperty('--p', progress);
-                        circle.dataset.progress = progress;
-                        const label = document.querySelector('.progress-circle-label');
-                        if (label) {
-                            label.textContent = `${progress}%`;
-                        }
-                    }
+                    if (!isHost) {
+                        const update = partialIPFSUpdates.get(s.transactionId);
+                        if (update && !update.chunks[s.index]) {
+                            update.chunks[s.index] = s.chunk;
+                            update.received++;
 
-                    if (s.deltas) {
-                        for (const [chunkKey, changes] of s.deltas) {
-                            chunkManager.addPendingDeltas(chunkKey, changes);
+                            const progress = Math.round(update.received / update.total * 100);
+                            const circle = document.querySelector('.progress-circle');
+                            if (circle) {
+                                circle.style.setProperty('--p', progress);
+                                circle.dataset.progress = progress;
+                                const label = document.querySelector('.progress-circle-label');
+                                if (label) {
+                                    label.textContent = `${progress}%`;
+                                }
+                            }
+
+                            if (update.received === update.total) {
+                                const fullDataString = update.chunks.join('');
+                                const fullData = JSON.parse(fullDataString);
+
+                                if (fullData.chunkDeltas) {
+                                    for (const [chunkKey, changes] of fullData.chunkDeltas) {
+                                        chunkManager.addPendingDeltas(chunkKey, changes);
+                                    }
+                                }
+                                if (fullData.foreignBlockOrigins) {
+                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
+                                }
+                                if (fullData.processedIds) {
+                                    for (const id of fullData.processedIds) {
+                                        processedMessages.add(id);
+                                    }
+                                }
+
+                                partialIPFSUpdates.delete(s.transactionId);
+
+                                setTimeout(() => {
+                                    document.getElementById('worldSyncProgress').style.display = 'none';
+                                }, 2000);
+                            }
                         }
-                    }
-                    if (s.origins) {
-                        for (const [key, origin] of s.origins) {
-                            getCurrentWorldState().foreignBlockOrigins.set(key, origin);
-                        }
-                    }
-                    if (s.processedIds) {
-                        for (const id of s.processedIds) {
-                            processedMessages.add(id);
-                        }
-                    }
-                    if (s.index + 1 === s.total) {
-                        setTimeout(() => {
-                            document.getElementById('worldSyncProgress').style.display = 'none';
-                        }, 2000);
                     }
                     break;
                 case "state_update":
