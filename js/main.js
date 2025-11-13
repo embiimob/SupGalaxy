@@ -543,7 +543,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
-    CHUNK_DELTAS = new Map,
+    WORLD_STATES = new Map,
     worldSeed = "KANYE",
     worldName = "KANYE",
     userName = "player",
@@ -626,7 +626,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     torchRegistry = new Map,
     torchLights = new Map,
     torchParticles = new Map,
-    foreignBlockOrigins = new Map,
     INVENTORY = new Array(36).fill(null),
     isPromptOpen = !1,
     craftingState = null,
@@ -643,6 +642,17 @@ lastLaserBatchTime = 0,
     activeEruptions = [],
     hiveLocations = [],
     flowerLocations = [];
+
+function getCurrentWorldState() {
+    if (!WORLD_STATES.has(worldName)) {
+        WORLD_STATES.set(worldName, {
+            chunkDeltas: new Map,
+            foreignBlockOrigins: new Map
+        });
+    }
+    return WORLD_STATES.get(worldName);
+}
+
 var crackTexture, damagedBlocks = new Map,
     crackMeshes = new THREE.Group,
     blockParticles = [];
@@ -756,7 +766,7 @@ async function applySaveFile(e, t, o) {
             ids: Array.from(processedMessages)
         }), startWorker(), void setInterval(pollServers, POLL_INTERVAL)
     }
-    if (e && (e.foreignBlockOrigins && addMessage(`Loaded ${(foreignBlockOrigins = new Map(e.foreignBlockOrigins)).size} foreign blocks.`, 2e3), e.deltas)) {
+    if (e && (e.foreignBlockOrigins && (getCurrentWorldState().foreignBlockOrigins = new Map(e.foreignBlockOrigins)), addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3), e.deltas)) {
         var c = await GetProfileByAddress(t),
             u = c && c.URN ? c.URN.replace(/[^a-zA-Z0-9]/g, "") : "anonymous",
             p = Date.now();
@@ -1619,6 +1629,13 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.placeCactus = function (e, t, o, a, n) {
     for (var r = 1 + Math.floor(3 * n()), s = 0; s < r; s++) o + s < MAX_HEIGHT && e.set(t, o + s, a, 9)
 }, ChunkManager.prototype.buildChunkMesh = function (e) {
+    const worldState = getCurrentWorldState();
+    if (worldState.chunkDeltas.has(e.key)) {
+        const deltas = worldState.chunkDeltas.get(e.key);
+        for (const delta of deltas) {
+            e.set(delta.x, delta.y, delta.z, delta.b);
+        }
+    }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
     const t = volcanoes.find((t => t.chunkKey === e.key));
     if (t && Math.random() < .3) {
@@ -1627,7 +1644,7 @@ Chunk.prototype.idx = function (e, t, o) {
         a.userData.chunkKey = e.key, smokeParticles.push(a), scene.add(a)
     }
     if (useGreedyMesher) {
-        const t = buildGreedyMesh(e, foreignBlockOrigins, worldSeed),
+        const t = buildGreedyMesh(e, getCurrentWorldState().foreignBlockOrigins, worldSeed),
             o = Math.floor(modWrap(player.x, MAP_SIZE) / CHUNK_SIZE),
             a = Math.floor(modWrap(player.z, MAP_SIZE) / CHUNK_SIZE);
         let n = e.cx * CHUNK_SIZE,
@@ -1680,7 +1697,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 }
                 if (!E) continue;
                 const t = `${p},${u},${m}`,
-                    a = foreignBlockOrigins.get(t) || worldSeed,
+                    a = getCurrentWorldState().foreignBlockOrigins.get(t) || worldSeed,
                     n = `${w}-${a}`;
                 o[n] || (o[n] = {
                     positions: [],
@@ -1772,7 +1789,8 @@ Chunk.prototype.idx = function (e, t, o) {
             }
 
             var y = p.key;
-            if (CHUNK_DELTAS.has(y) || CHUNK_DELTAS.set(y, []), CHUNK_DELTAS.get(y).push({
+            const worldState = getCurrentWorldState();
+            if (worldState.chunkDeltas.has(y) || worldState.chunkDeltas.set(y, []), worldState.chunkDeltas.get(y).push({
                 x: c,
                 y: t,
                 z: u,
@@ -1780,6 +1798,7 @@ Chunk.prototype.idx = function (e, t, o) {
             }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
                 const n = JSON.stringify({
                     type: "block_change",
+                    world: worldName,
                     wx: e,
                     wy: t,
                     wz: o,
@@ -2712,9 +2731,10 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
         if (!checkChunkOwnership(chunkKey, userName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
 
-        const l = foreignBlockOrigins.get(r);
+        const worldState = getCurrentWorldState();
+        const l = worldState.foreignBlockOrigins.get(r);
         chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
-        if (l) foreignBlockOrigins.delete(r);
+        if (l) worldState.foreignBlockOrigins.delete(r);
         if (breaker === userName) {
             addToInventory(a, 1, l);
             addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
@@ -2804,7 +2824,7 @@ function placeBlockAt(e, t, o, a) {
                         } else {
                            if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
                                 const r = `${e},${t},${o}`;
-                                foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
+                                getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
                             } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
                             if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
                                 const a = `${e},${t},${o}`;
@@ -3196,7 +3216,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && CHUNK_DELTAS.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && (playerJump(), safePlayAudio(soundJump)), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && (playerJump(), safePlayAudio(soundJump)), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -3258,7 +3278,7 @@ function performAttack() {
     }
 }
 async function downloadSession() {
-    // Create a serializable version of magicianStones
+    const worldState = getCurrentWorldState();
     const serializableMagicianStones = {};
     for (const key in magicianStones) {
         if (Object.hasOwnProperty.call(magicianStones, key)) {
@@ -3287,7 +3307,7 @@ async function downloadSession() {
         user: userName,
         savedAt: (new Date).toISOString(),
         deltas: [],
-        foreignBlockOrigins: Array.from(foreignBlockOrigins.entries()),
+        foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones, // Add magician stones to the save data
         profile: {
             x: player.x,
@@ -3300,7 +3320,7 @@ async function downloadSession() {
         musicPlaylist: musicPlaylist,
         videoPlaylist: videoPlaylist
     };
-    for (var t of CHUNK_DELTAS) {
+    for (var t of worldState.chunkDeltas) {
         var o = t[0],
             a = t[1];
         parseChunkKey(o) && e.deltas.push({
@@ -3318,7 +3338,7 @@ async function downloadSession() {
         s = URL.createObjectURL(r),
         i = document.createElement("a");
     i.href = s, i.download = worldName + "_session_" + Date.now() + ".json", document.body.appendChild(i), i.click(), i.remove(), URL.revokeObjectURL(s), addMessage("Session downloaded");
-    var l = Array.from(CHUNK_DELTAS.keys()),
+    var l = Array.from(worldState.chunkDeltas.keys()),
         d = await Promise.all(l.map((async function (e) {
             var t = await GetPublicAddressByKeyword(e);
             return t ? t.trim().replace(/^"|"$/g, "") : e
@@ -3348,7 +3368,8 @@ function updateHealthBar() {
 }
 
 function updateSaveChangesButton() {
-    document.getElementById("saveChangesBtn").style.display = CHUNK_DELTAS.size > 0 ? "inline-block" : "none"
+    const worldState = getCurrentWorldState();
+    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none"
 }
 
 function updateHudButtons() {
@@ -3673,7 +3694,33 @@ function switchWorld() {
     worldArchetype = null;
     const e = prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], foreignBlockOrigins.clear(), CHUNK_DELTAS.clear(), mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+
+    // Clear mobs and their meshes
+    mobs.forEach(mob => {
+        if (mob.mesh) scene.remove(mob.mesh);
+        if (mob.particles) scene.remove(mob.particles);
+    });
+    mobs = [];
+
+    // Clear volcanoes and related particles
+    volcanoes = [];
+    activeEruptions = [];
+    eruptedBlocks.forEach(block => scene.remove(block.mesh));
+    eruptedBlocks = [];
+    pebbles.forEach(pebble => scene.remove(pebble.mesh));
+    pebbles = [];
+    smokeParticles.forEach(particle => scene.remove(particle));
+    smokeParticles = [];
+
+    // Clear other world-specific data
+    hiveLocations = [];
+    flowerLocations = [];
+    torchRegistry.clear();
+    torchLights.clear();
+    torchParticles.forEach(p => scene.remove(p));
+    torchParticles.clear();
+
+    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     const t = calculateSpawnPoint(userName + "@" + worldName);
     player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
         x: player.x,
@@ -3683,6 +3730,16 @@ function switchWorld() {
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
     chunkManager.preloadChunks(o, a, LOAD_RADIUS), addMessage(`Switched to world: ${worldName}`, 4e3)
+
+    for (const [peerUsername, peer] of peers.entries()) {
+        if (peer.dc && peer.dc.readyState === 'open') {
+            peer.dc.send(JSON.stringify({
+                type: 'world_switch',
+                world: worldName,
+                username: userName
+            }));
+        }
+    }
 }
 
 function updateAvatarAnimation(e, t) {

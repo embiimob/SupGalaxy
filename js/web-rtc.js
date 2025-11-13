@@ -206,12 +206,27 @@ function setupDataChannel(e, t) {
                 type: "new_player",
                 username: userName
             }));
-            const o = {
-                type: "world_sync",
-                chunkDeltas: Array.from(CHUNK_DELTAS.entries()),
-                foreignBlockOrigins: Array.from(foreignBlockOrigins.entries())
-            };
-            e.send(JSON.stringify(o));
+
+            const worldState = getCurrentWorldState();
+            const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
+            const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
+
+            const chunkSize = 10;
+            const totalChunks = Math.ceil(chunkDeltas.length / chunkSize) + Math.ceil(foreignBlockOrigins.length / chunkSize);
+            let sentChunks = 0;
+
+            e.send(JSON.stringify({ type: 'world_sync_start', totalChunks: totalChunks }));
+
+            for (let i = 0; i < chunkDeltas.length; i += chunkSize) {
+                const chunk = chunkDeltas.slice(i, i + chunkSize);
+                e.send(JSON.stringify({ type: 'world_sync_chunk', deltas: chunk, index: sentChunks++, total: totalChunks }));
+            }
+
+            for (let i = 0; i < foreignBlockOrigins.length; i += chunkSize) {
+                const chunk = foreignBlockOrigins.slice(i, i + chunkSize);
+                e.send(JSON.stringify({ type: 'world_sync_chunk', origins: chunk, index: sentChunks++, total: totalChunks }));
+            }
+
             // Sync magician stones to new player
             if (Object.keys(magicianStones).length > 0) {
                 const magicianStonesSync = {
@@ -280,8 +295,46 @@ function setupDataChannel(e, t) {
                             }
                         }
                         if (s.foreignBlockOrigins) {
-                            foreignBlockOrigins = new Map(s.foreignBlockOrigins);
+                            getCurrentWorldState().foreignBlockOrigins = new Map(s.foreignBlockOrigins);
                         }
+                    }
+                    break;
+                case 'world_sync_start':
+                    const worldSyncProgress = document.getElementById('worldSyncProgress');
+                    worldSyncProgress.style.display = 'flex';
+                    const progressCircle = worldSyncProgress.querySelector('.progress-circle');
+                    progressCircle.style.setProperty('--p', '0');
+                    progressCircle.dataset.progress = '0';
+                    worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
+                    break;
+                case 'world_sync_chunk':
+                    const progress = Math.round((s.index + 1) / s.total * 100);
+                    const circle = document.querySelector('.progress-circle');
+                    if (circle) {
+                        circle.style.setProperty('--p', progress);
+                        circle.dataset.progress = progress;
+                        const label = document.querySelector('.progress-circle-label');
+                        if (label) {
+                            label.textContent = `${progress}%`;
+                        }
+                    }
+                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
+
+                    if (s.deltas) {
+                        for (const [chunkKey, changes] of s.deltas) {
+                            chunkManager.addPendingDeltas(chunkKey, changes);
+                        }
+                    }
+                    if (s.origins) {
+                        for (const [key, origin] of s.origins) {
+                            getCurrentWorldState().foreignBlockOrigins.set(key, origin);
+                        }
+                    }
+                    if (s.index + 1 === s.total) {
+                        setTimeout(() => {
+                            document.getElementById('worldSyncProgress').style.display = 'none';
+                        }, 2000);
                     }
                     break;
                 case "state_update":
@@ -319,13 +372,34 @@ function setupDataChannel(e, t) {
                     s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp);
                     break;
                 case "block_change":
-                    if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), isHost) {
-                        console.log(`[WEBRTC] Host relaying block change from ${n}`);
+                    if (isHost) {
+                        console.log(`[WEBRTC] Host processing block change from ${n} for world ${s.world}`);
+
+                        if (!WORLD_STATES.has(s.world)) {
+                            WORLD_STATES.set(s.world, {
+                                chunkDeltas: new Map(),
+                                foreignBlockOrigins: new Map()
+                            });
+                        }
+                        const worldState = WORLD_STATES.get(s.world);
+                        const chunkKey = makeChunkKey(s.world, Math.floor(modWrap(s.wx, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(s.wz, MAP_SIZE) / CHUNK_SIZE));
+                        if (!worldState.chunkDeltas.has(chunkKey)) {
+                            worldState.chunkDeltas.set(chunkKey, []);
+                        }
+                        worldState.chunkDeltas.get(chunkKey).push({ x: modWrap(s.wx, CHUNK_SIZE), y: s.wy, z: modWrap(s.wz, CHUNK_SIZE), b: s.bid });
+
+                        if (s.originSeed && s.originSeed !== s.world) {
+                            const blockKey = `${s.wx},${s.wy},${s.wz}`;
+                            worldState.foreignBlockOrigins.set(blockKey, s.originSeed);
+                        }
+
                         for (const [t, o] of peers.entries()) t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(e.data)
                     }
-                    if (chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed), s.originSeed && s.originSeed !== worldSeed) {
-                        const e = `${s.wx},${s.wy},${s.wz}`;
-                        foreignBlockOrigins.set(e, s.originSeed)
+                    if (s.world === worldName) {
+                         if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed), s.originSeed && s.originSeed !== worldSeed) {
+                            const e = `${s.wx},${s.wy},${s.wz}`;
+                            getCurrentWorldState().foreignBlockOrigins.set(e, s.originSeed)
+                        }
                     }
                     if (s.prevBid && BLOCKS[s.prevBid] && BLOCKS[s.prevBid].light) {
                         var o = `${s.wx},${s.wy},${s.wz}`;
@@ -571,6 +645,33 @@ function setupDataChannel(e, t) {
                                 magicianStones[key].audioElement.src = '';
                             }
                             delete magicianStones[key];
+                        }
+                    }
+                    break;
+                case 'world_switch':
+                    if (isHost) {
+                        const worldState = WORLD_STATES.get(s.world);
+                        if (worldState) {
+                            const peer = peers.get(s.username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
+                                const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
+                                const chunkSize = 10;
+                                const totalChunks = Math.ceil(chunkDeltas.length / chunkSize) + Math.ceil(foreignBlockOrigins.length / chunkSize);
+                                let sentChunks = 0;
+
+                                peer.dc.send(JSON.stringify({ type: 'world_sync_start', totalChunks: totalChunks }));
+
+                                for (let i = 0; i < chunkDeltas.length; i += chunkSize) {
+                                    const chunk = chunkDeltas.slice(i, i + chunkSize);
+                                    peer.dc.send(JSON.stringify({ type: 'world_sync_chunk', deltas: chunk, index: sentChunks++, total: totalChunks }));
+                                }
+
+                                for (let i = 0; i < foreignBlockOrigins.length; i += chunkSize) {
+                                    const chunk = foreignBlockOrigins.slice(i, i + chunkSize);
+                                    peer.dc.send(JSON.stringify({ type: 'world_sync_chunk', origins: chunk, index: sentChunks++, total: totalChunks }));
+                                }
+                            }
                         }
                     }
                     break;
