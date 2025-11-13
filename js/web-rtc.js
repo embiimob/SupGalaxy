@@ -15,7 +15,8 @@ let proximityVideoUsers = [],
     currentProximityVideoIndex = 0,
     lastProximityVideoChangeTime = 0;
 var userPositions = {},
-    playerAvatars = new Map;
+    playerAvatars = new Map,
+    partialIPFSUpdates = new Map;
 
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
@@ -110,6 +111,76 @@ async function connectToServer(e, t, o) {
     } catch (t) {
         console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
     }
+}
+async function sendWorldStateAsync(peer, worldState, username) {
+    if (!peer || !peer.dc || peer.dc.readyState !== 'open') {
+        console.log(`[WebRTC] Cannot send world state to ${username}, data channel not open.`);
+        return;
+    }
+
+    const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
+    const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
+    const processedIds = Array.from(processedMessages);
+
+    const deltaChunkSize = 10;
+    const originChunkSize = 10;
+    const processedIdChunkSize = 100;
+
+    const deltaChunks = [];
+    for (let i = 0; i < chunkDeltas.length; i += deltaChunkSize) {
+        deltaChunks.push(chunkDeltas.slice(i, i + deltaChunkSize));
+    }
+
+    const originChunks = [];
+    for (let i = 0; i < foreignBlockOrigins.length; i += originChunkSize) {
+        originChunks.push(foreignBlockOrigins.slice(i, i + originChunkSize));
+    }
+
+    const processedIdChunks = [];
+    for (let i = 0; i < processedIds.length; i += processedIdChunkSize) {
+        processedIdChunks.push(processedIds.slice(i, i + processedIdChunkSize));
+    }
+
+    const totalChunks = deltaChunks.length + originChunks.length + processedIdChunks.length;
+    let sentChunks = 0;
+    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
+
+    peer.dc.send(JSON.stringify({
+        type: 'world_sync_start',
+        totalChunks: totalChunks
+    }));
+
+    function sendNext() {
+        if (!peer || !peer.dc || peer.dc.readyState !== 'open') return;
+
+        if (peer.dc.bufferedAmount > highWaterMark) {
+            peer.dc.onbufferedamountlow = () => {
+                peer.dc.onbufferedamountlow = null;
+                setTimeout(sendNext, 0);
+            };
+            return;
+        }
+
+        let payload;
+        if (deltaChunks.length > 0) {
+            payload = { type: 'world_sync_chunk', deltas: deltaChunks.shift() };
+        } else if (originChunks.length > 0) {
+            payload = { type: 'world_sync_chunk', origins: originChunks.shift() };
+        } else if (processedIdChunks.length > 0) {
+            payload = { type: 'world_sync_chunk', processedIds: processedIdChunks.shift() };
+        } else {
+            console.log(`[WebRTC] Finished sending world state to ${username}.`);
+            return; // All chunks sent
+        }
+
+        payload.index = sentChunks++;
+        payload.total = totalChunks;
+        peer.dc.send(JSON.stringify(payload));
+
+        setTimeout(sendNext, 0); // Yield to the event loop
+    }
+
+    sendNext(); // Start the sending process
 }
 async function handleMinimapFile(e) {
     try {
@@ -208,23 +279,9 @@ function setupDataChannel(e, t) {
             }));
 
             const worldState = getCurrentWorldState();
-            const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
-            const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
-
-            const chunkSize = 10;
-            const totalChunks = Math.ceil(chunkDeltas.length / chunkSize) + Math.ceil(foreignBlockOrigins.length / chunkSize);
-            let sentChunks = 0;
-
-            e.send(JSON.stringify({ type: 'world_sync_start', totalChunks: totalChunks }));
-
-            for (let i = 0; i < chunkDeltas.length; i += chunkSize) {
-                const chunk = chunkDeltas.slice(i, i + chunkSize);
-                e.send(JSON.stringify({ type: 'world_sync_chunk', deltas: chunk, index: sentChunks++, total: totalChunks }));
-            }
-
-            for (let i = 0; i < foreignBlockOrigins.length; i += chunkSize) {
-                const chunk = foreignBlockOrigins.slice(i, i + chunkSize);
-                e.send(JSON.stringify({ type: 'world_sync_chunk', origins: chunk, index: sentChunks++, total: totalChunks }));
+            const peer = peers.get(t);
+            if (peer) {
+                sendWorldStateAsync(peer, worldState, t);
             }
 
             // Sync magician stones to new player
@@ -306,7 +363,6 @@ function setupDataChannel(e, t) {
                     progressCircle.style.setProperty('--p', '0');
                     progressCircle.dataset.progress = '0';
                     worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
-                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
                     break;
                 case 'world_sync_chunk':
                     const progress = Math.round((s.index + 1) / s.total * 100);
@@ -319,7 +375,6 @@ function setupDataChannel(e, t) {
                             label.textContent = `${progress}%`;
                         }
                     }
-                    document.getElementById('worldSyncProgressLabel').textContent = `Loading ${worldName}...`;
 
                     if (s.deltas) {
                         for (const [chunkKey, changes] of s.deltas) {
@@ -329,6 +384,11 @@ function setupDataChannel(e, t) {
                     if (s.origins) {
                         for (const [key, origin] of s.origins) {
                             getCurrentWorldState().foreignBlockOrigins.set(key, origin);
+                        }
+                    }
+                    if (s.processedIds) {
+                        for (const id of s.processedIds) {
+                            processedMessages.add(id);
                         }
                     }
                     if (s.index + 1 === s.total) {
@@ -573,12 +633,114 @@ function setupDataChannel(e, t) {
                             t && (t.targetPosition = (new THREE.Vector3).fromArray(e.position), t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion), t.lastUpdate = performance.now())
                         }
                     break;
+                case "ipfs_chunk_update_start":
+                    if (!isHost) {
+                        partialIPFSUpdates.set(s.transactionId, {
+                            chunks: new Array(s.total), // Pre-allocate array
+                            total: s.total,
+                            received: 0,
+                            fromAddress: s.fromAddress,
+                            timestamp: s.timestamp,
+                            sourceUsername: n
+                        });
+                    }
+                    break;
+                case "ipfs_chunk_update_chunk":
+                    if (!isHost) {
+                        const update = partialIPFSUpdates.get(s.transactionId);
+                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
+                            update.chunks[s.index] = s.chunk;
+                            update.received++;
+                            if (update.received === s.total) {
+                                const fullData = JSON.parse(update.chunks.join(''));
+                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
+                                partialIPFSUpdates.delete(s.transactionId);
+                            }
+                        }
+                    }
+                    break;
+                case "processed_transaction_id":
+                    if (isHost) {
+                        const transactionId = s.transactionId;
+                        if (!processedMessages.has(transactionId)) {
+                            processedMessages.add(transactionId);
+                            const syncMessage = JSON.stringify({
+                                type: "sync_processed_transaction",
+                                transactionId: transactionId
+                            });
+                            for (const [peerUsername, peer] of peers.entries()) {
+                                if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(syncMessage);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case "sync_processed_transaction":
+                    if (!isHost) {
+                        const transactionId = s.transactionId;
+                        if (!processedMessages.has(transactionId)) {
+                            processedMessages.add(transactionId);
+                        }
+                    }
+                    break;
+                case "ipfs_chunk_from_client_start":
+                    if (isHost) {
+                        partialIPFSUpdates.set(s.transactionId, {
+                            chunks: new Array(s.total), // Pre-allocate array
+                            total: s.total,
+                            received: 0,
+                            fromAddress: s.fromAddress,
+                            timestamp: s.timestamp,
+                            sourceUsername: n
+                        });
+                    }
+                    break;
+                case "ipfs_chunk_from_client_chunk":
+                    if (isHost) {
+                        const update = partialIPFSUpdates.get(s.transactionId);
+                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
+                            update.chunks[s.index] = s.chunk;
+                            update.received++;
+                            if (update.received === s.total) {
+                                const fullData = JSON.parse(update.chunks.join(''));
+                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
+                                partialIPFSUpdates.delete(s.transactionId);
+                            }
+                        }
+                    }
+                    break;
                 case "remove_peer":
                     s.username && cleanupPeer(s.username);
                     break;
                 case "block_hit":
                     if (isHost) {
-                        removeBlockAt(s.x, s.y, s.z, s.username);
+                        const originalWorldName = worldName;
+                        const originalWorldSeed = worldSeed;
+
+                        // Use the world from the message, or default to the host's current world
+                        let blockWorld = s.world || originalWorldName;
+
+                        try {
+                            // Temporarily switch world context if the hit is in a different world
+                            if (blockWorld !== originalWorldName) {
+                                console.log(`[WebRTC] Host switching context to world "${blockWorld}" to process block hit from ${s.username}`);
+                                worldName = blockWorld;
+                                worldSeed = blockWorld;
+                            }
+
+                            removeBlockAt(s.x, s.y, s.z, s.username);
+
+                        } catch (error) {
+                            console.error(`[WebRTC] Error processing block_hit in world ${blockWorld}:`, error);
+                        } finally {
+                            // Switch back to the original world context
+                            if (worldName !== originalWorldName) {
+                                console.log(`[WebRTC] Host switching context back to world "${originalWorldName}"`);
+                                worldName = originalWorldName;
+                                worldSeed = originalWorldSeed;
+                            }
+                        }
                     }
                     break;
                 case "add_to_inventory":
@@ -653,24 +815,8 @@ function setupDataChannel(e, t) {
                         const worldState = WORLD_STATES.get(s.world);
                         if (worldState) {
                             const peer = peers.get(s.username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
-                                const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
-                                const chunkSize = 10;
-                                const totalChunks = Math.ceil(chunkDeltas.length / chunkSize) + Math.ceil(foreignBlockOrigins.length / chunkSize);
-                                let sentChunks = 0;
-
-                                peer.dc.send(JSON.stringify({ type: 'world_sync_start', totalChunks: totalChunks }));
-
-                                for (let i = 0; i < chunkDeltas.length; i += chunkSize) {
-                                    const chunk = chunkDeltas.slice(i, i + chunkSize);
-                                    peer.dc.send(JSON.stringify({ type: 'world_sync_chunk', deltas: chunk, index: sentChunks++, total: totalChunks }));
-                                }
-
-                                for (let i = 0; i < foreignBlockOrigins.length; i += chunkSize) {
-                                    const chunk = foreignBlockOrigins.slice(i, i + chunkSize);
-                                    peer.dc.send(JSON.stringify({ type: 'world_sync_chunk', origins: chunk, index: sentChunks++, total: totalChunks }));
-                                }
+                            if (peer) {
+                                sendWorldStateAsync(peer, worldState, s.username);
                             }
                         }
                     }

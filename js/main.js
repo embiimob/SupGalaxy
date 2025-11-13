@@ -690,6 +690,14 @@ function simpleHash(e) {
     return Math.abs(t)
 }
 async function applySaveFile(e, t, o) {
+    if (e.isHostSession) {
+        WORLD_STATES = new Map(e.worldStates.map(([worldName, data]) => [worldName, {
+            chunkDeltas: new Map(data.chunkDeltas),
+            foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+        }]));
+        processedMessages = new Set(e.processedMessages);
+        addMessage("Host session loaded. Restoring all world states.", 3e3);
+    }
     if (e.playerData && e.hash) {
         const t = e.playerData,
             o = e.hash;
@@ -837,17 +845,116 @@ function updateTorchRegistry(e) {
             }
 }
 
-function applyChunkUpdates(e, t, o, a) {
+function applyChunkUpdates(e, t, o, a, sourceUsername) {
     try {
         for (var n of e) {
             var r = n.chunk,
                 s = n.changes;
-            chunkManager ? (chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)) : console.error("[ChunkManager] chunkManager not defined")
+            if (chunkManager) {
+                const worldNameFromChunk = parseChunkKey(r)?.world;
+                if (worldNameFromChunk) {
+                    if (!WORLD_STATES.has(worldNameFromChunk)) {
+                        WORLD_STATES.set(worldNameFromChunk, {
+                            chunkDeltas: new Map(),
+                            foreignBlockOrigins: new Map()
+                        });
+                    }
+                    const worldState = WORLD_STATES.get(worldNameFromChunk);
+                    if (!worldState.chunkDeltas.has(r)) {
+                        worldState.chunkDeltas.set(r, []);
+                    }
+                    worldState.chunkDeltas.get(r).push(...s);
+                }
+                chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
+            } else console.error("[ChunkManager] chunkManager not defined")
         }
+
+        const dataString = JSON.stringify(e);
+        const chunkSize = 16384; // 16KB chunks
+        const chunks = [];
+        for (let i = 0; i < dataString.length; i += chunkSize) {
+            chunks.push(dataString.slice(i, i + chunkSize));
+        }
+
+        function sendChunksAsync(peer, messageType, chunks, transactionId) {
+            let i = 0;
+            const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
+
+            function sendChunk() {
+                if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) return;
+
+                // Check if buffer is full and wait if necessary
+                if (peer.dc.bufferedAmount > highWaterMark) {
+                    peer.dc.onbufferedamountlow = () => {
+                        peer.dc.onbufferedamountlow = null;
+                        setTimeout(sendChunk, 0); // Yield before sending next chunk
+                    };
+                    return;
+                }
+
+                // Send one chunk
+                peer.dc.send(JSON.stringify({
+                    type: messageType,
+                    transactionId: transactionId,
+                    index: i,
+                    chunk: chunks[i],
+                    total: chunks.length
+                }));
+                i++;
+
+                // Yield to the event loop before sending the next chunk
+                setTimeout(sendChunk, 0);
+            }
+
+            sendChunk(); // Start the sending process
+        }
+
+        if (isHost) {
+            const startMessage = JSON.stringify({
+                type: 'ipfs_chunk_update_start',
+                total: chunks.length,
+                fromAddress: t,
+                timestamp: o,
+                transactionId: a
+            });
+            for (const [peerUsername, peer] of peers.entries()) {
+                if (peerUsername !== sourceUsername && peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(startMessage);
+                    sendChunksAsync(peer, 'ipfs_chunk_update_chunk', chunks, a);
+                }
+            }
+        } else if (sourceUsername === undefined) {
+             const startMessage = JSON.stringify({
+                type: 'ipfs_chunk_from_client_start',
+                total: chunks.length,
+                fromAddress: t,
+                timestamp: o,
+                transactionId: a
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(startMessage);
+                    sendChunksAsync(peer, 'ipfs_chunk_from_client_chunk', chunks, a);
+                }
+            }
+        }
+
         worker.postMessage({
             type: "update_processed",
             transactionIds: [a]
-        })
+        });
+
+        if (!isHost && peers.size > 0) {
+            const message = JSON.stringify({
+                type: 'processed_transaction_id',
+                transactionId: a
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(message);
+                }
+            }
+        }
     } catch (e) {
         console.error("[ChunkManager] Failed to apply chunk updates:", e)
     }
@@ -2525,16 +2632,21 @@ function onPointerDown(e) {
         if (isHost || peers.size === 0) {
             removeBlockAt(x, y, z, userName);
         } else {
-            const blockHitMsg = JSON.stringify({
-                type: 'block_hit',
-                x: x,
-                y: y,
-                z: z,
-                username: userName
-            });
-            for (const [, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(blockHitMsg);
+            const blockId = getBlockAt(x, y, z);
+            if (blockId > 0) { // Don't send for air
+                const blockHitMsg = JSON.stringify({
+                    type: 'block_hit',
+                    x: x,
+                    y: y,
+                    z: z,
+                    username: userName,
+                    world: worldName,
+                    blockId: blockId
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(blockHitMsg);
+                    }
                 }
             }
         }
@@ -3278,6 +3390,60 @@ function performAttack() {
     }
 }
 async function downloadSession() {
+    if (isHost) {
+        if (confirm("Save the entire multiplayer session? (Host only)")) {
+            downloadHostSession();
+        } else {
+            downloadSinglePlayerSession();
+        }
+    } else {
+        downloadSinglePlayerSession();
+    }
+}
+
+async function downloadHostSession() {
+    const serializableWorldStates = Array.from(WORLD_STATES.entries()).map(([worldName, data]) => {
+        return [worldName, {
+            chunkDeltas: Array.from(data.chunkDeltas.entries()),
+            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries())
+        }];
+    });
+
+    const hostSessionData = {
+        isHostSession: true,
+        worldStates: serializableWorldStates,
+        processedMessages: Array.from(processedMessages),
+        playerData: {
+            world: worldName,
+            seed: worldSeed,
+            user: userName,
+            savedAt: new Date().toISOString(),
+            profile: {
+                x: player.x,
+                y: player.y,
+                z: player.z,
+                health: player.health,
+                score: player.score,
+                inventory: INVENTORY
+            },
+        }
+    };
+
+    hostSessionData.hash = simpleHash(JSON.stringify(hostSessionData.playerData));
+
+    const blob = new Blob([JSON.stringify(hostSessionData)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${worldName}_host_session_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    addMessage("Host session downloaded");
+}
+
+async function downloadSinglePlayerSession() {
     const worldState = getCurrentWorldState();
     const serializableMagicianStones = {};
     for (const key in magicianStones) {
@@ -3308,7 +3474,7 @@ async function downloadSession() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
-        magicianStones: serializableMagicianStones, // Add magician stones to the save data
+        magicianStones: serializableMagicianStones,
         profile: {
             x: player.x,
             y: player.y,
@@ -4063,8 +4229,31 @@ function gameLoop(e) {
                 n = Math.floor(o.mesh.position.y),
                 r = Math.floor(o.mesh.position.z);
             if (isSolid(getBlockAt(a, n, r))) {
-            removeBlockAt(a, n, r, o.user), scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1);
-                continue
+                if (isHost || peers.size === 0) {
+                    removeBlockAt(a, n, r, o.user);
+                } else {
+                    const blockId = getBlockAt(a, n, r);
+                    if (blockId > 0) {
+                        const blockHitMsg = JSON.stringify({
+                            type: 'block_hit',
+                            x: a,
+                            y: n,
+                            z: r,
+                            username: o.user,
+                            world: worldName,
+                            blockId: blockId
+                        });
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(blockHitMsg);
+                            }
+                        }
+                    }
+                }
+                scene.remove(o.mesh);
+                scene.remove(o.light);
+                projectiles.splice(e, 1);
+                continue;
             }
             let s = !1;
             for (const t of mobs)
