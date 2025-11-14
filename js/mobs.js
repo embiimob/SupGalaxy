@@ -591,7 +591,10 @@ Mob.prototype.update = function (t) {
                 aiState: this.aiState,
                 mobType: this.type
             };
-            for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(JSON.stringify(t));
+            for (const [e, s] of peers.entries()) {
+                const i = userPositions[e] ? userPositions[e].world : worldName;
+                e !== userName && s.dc && "open" === s.dc.readyState && i === worldName && s.dc.send(JSON.stringify(t))
+            }
             this.lastSentPos.copy(this.pos), this.lastSentQuaternion.copy(this.mesh.quaternion)
         }
     }

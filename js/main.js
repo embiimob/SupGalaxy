@@ -796,6 +796,9 @@ async function applySaveFile(e, t, o) {
 }
 
 function checkChunkOwnership(e, t) {
+    if (peers.size > 0 && !isHost) {
+        return true;
+    }
     const o = e.replace(/^#/, "");
     if (spawnChunks.size > 0)
         for (const [e, a] of spawnChunks) {
@@ -2453,6 +2456,7 @@ function dropSelectedItem() {
     const n = JSON.stringify({
         type: "item_dropped",
         dropId: t,
+        world: worldName,
         blockId: e.id,
         originSeed: e.originSeed,
         position: {
@@ -2480,6 +2484,7 @@ function onPointerDown(e) {
         camera.getWorldDirection(o), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (a = new THREE.Vector3, avatarGroup.gun.getWorldPosition(a)) : a = new THREE.Vector3(player.x, player.y + 1.5, player.z), createProjectile(t, userName, a, o.clone(), "red"), laserFireQueue.push({
             id: t,
             user: userName,
+            world: worldName,
             position: {
                 x: a.x,
                 y: a.y,
@@ -2517,6 +2522,7 @@ function onPointerDown(e) {
         createProjectile(i, userName, l, o.clone(), "green"), laserFireQueue.push({
             id: r,
             user: userName,
+            world: worldName,
             position: {
                 x: s.x,
                 y: s.y,
@@ -2531,6 +2537,7 @@ function onPointerDown(e) {
         }), laserFireQueue.push({
             id: i,
             user: userName,
+            world: worldName,
             position: {
                 x: l.x,
                 y: l.y,
@@ -4075,6 +4082,7 @@ function gameLoop(e) {
             const t = {
                 type: "player_move",
                 username: userName,
+                world: worldName,
                 x: player.x,
                 y: player.y,
                 z: player.z,
@@ -4203,7 +4211,8 @@ function gameLoop(e) {
                 addToInventory(o.blockId, 1, o.originSeed), scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
                 const t = JSON.stringify({
                     type: "item_picked_up",
-                    dropId: o.id
+                    dropId: o.id,
+                    world: worldName
                 });
                 for (const [e, o] of peers.entries()) o.dc && "open" === o.dc.readyState && o.dc.send(t)
             }

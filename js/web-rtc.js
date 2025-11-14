@@ -16,7 +16,8 @@ let proximityVideoUsers = [],
     lastProximityVideoChangeTime = 0;
 var userPositions = {},
     playerAvatars = new Map,
-    partialIPFSUpdates = new Map;
+    partialIPFSUpdates = new Map,
+    syncedWorlds = new Set;
 
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
@@ -118,69 +119,59 @@ async function sendWorldStateAsync(peer, worldState, username) {
         return;
     }
 
-    const chunkDeltas = Array.from(worldState.chunkDeltas.entries());
-    const foreignBlockOrigins = Array.from(worldState.foreignBlockOrigins.entries());
-    const processedIds = Array.from(processedMessages);
+    const dataToSend = {
+        chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
+        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
+        processedIds: Array.from(processedMessages)
+    };
 
-    const deltaChunkSize = 10;
-    const originChunkSize = 10;
-    const processedIdChunkSize = 100;
-
-    const deltaChunks = [];
-    for (let i = 0; i < chunkDeltas.length; i += deltaChunkSize) {
-        deltaChunks.push(chunkDeltas.slice(i, i + deltaChunkSize));
+    const dataString = JSON.stringify(dataToSend);
+    const chunkSize = 16384; // 16KB chunks
+    const chunks = [];
+    for (let i = 0; i < dataString.length; i += chunkSize) {
+        chunks.push(dataString.slice(i, i + chunkSize));
     }
 
-    const originChunks = [];
-    for (let i = 0; i < foreignBlockOrigins.length; i += originChunkSize) {
-        originChunks.push(foreignBlockOrigins.slice(i, i + originChunkSize));
-    }
-
-    const processedIdChunks = [];
-    for (let i = 0; i < processedIds.length; i += processedIdChunkSize) {
-        processedIdChunks.push(processedIds.slice(i, i + processedIdChunkSize));
-    }
-
-    const totalChunks = deltaChunks.length + originChunks.length + processedIdChunks.length;
-    let sentChunks = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
+    const transactionId = `world_sync_${username}_${Date.now()}`;
 
     peer.dc.send(JSON.stringify({
         type: 'world_sync_start',
-        totalChunks: totalChunks
+        total: chunks.length,
+        transactionId: transactionId
     }));
 
-    function sendNext() {
-        if (!peer || !peer.dc || peer.dc.readyState !== 'open') return;
+    let i = 0;
+    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
 
+    function sendChunk() {
+        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
+            if (i >= chunks.length) {
+                console.log(`[WebRTC] Finished sending world state to ${username}.`);
+            }
+            return;
+        }
+
+        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
         if (peer.dc.bufferedAmount > highWaterMark) {
             peer.dc.onbufferedamountlow = () => {
                 peer.dc.onbufferedamountlow = null;
-                setTimeout(sendNext, 0);
+                setTimeout(sendChunk, 0);
             };
             return;
         }
 
-        let payload;
-        if (deltaChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', deltas: deltaChunks.shift() };
-        } else if (originChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', origins: originChunks.shift() };
-        } else if (processedIdChunks.length > 0) {
-            payload = { type: 'world_sync_chunk', processedIds: processedIdChunks.shift() };
-        } else {
-            console.log(`[WebRTC] Finished sending world state to ${username}.`);
-            return; // All chunks sent
-        }
-
-        payload.index = sentChunks++;
-        payload.total = totalChunks;
-        peer.dc.send(JSON.stringify(payload));
-
-        setTimeout(sendNext, 0); // Yield to the event loop
+        peer.dc.send(JSON.stringify({
+            type: 'world_sync_chunk',
+            transactionId: transactionId,
+            index: i,
+            chunk: chunks[i],
+            total: chunks.length
+        }));
+        i++;
+        setTimeout(sendChunk, 0);
     }
 
-    sendNext(); // Start the sending process
+    sendChunk();
 }
 async function handleMinimapFile(e) {
     try {
@@ -256,6 +247,7 @@ function setupDataChannel(e, t) {
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
+            world: worldName,
             x: player.x,
             y: player.y,
             z: player.z,
@@ -278,10 +270,13 @@ function setupDataChannel(e, t) {
                 username: userName
             }));
 
-            const worldState = getCurrentWorldState();
-            const peer = peers.get(t);
-            if (peer) {
-                sendWorldStateAsync(peer, worldState, t);
+            if (!syncedWorlds.has(worldName)) {
+                e.send(JSON.stringify({
+                    type: "request_world_sync",
+                    world: worldName,
+                    username: userName
+                }));
+                syncedWorlds.add(worldName);
             }
 
             // Sync magician stones to new player
@@ -357,44 +352,63 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_sync_start':
-                    const worldSyncProgress = document.getElementById('worldSyncProgress');
-                    worldSyncProgress.style.display = 'flex';
-                    const progressCircle = worldSyncProgress.querySelector('.progress-circle');
-                    progressCircle.style.setProperty('--p', '0');
-                    progressCircle.dataset.progress = '0';
-                    worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                    if (!isHost) {
+                        partialIPFSUpdates.set(s.transactionId, {
+                            chunks: new Array(s.total),
+                            total: s.total,
+                            received: 0
+                        });
+                        const worldSyncProgress = document.getElementById('worldSyncProgress');
+                        worldSyncProgress.style.display = 'flex';
+                        const progressCircle = worldSyncProgress.querySelector('.progress-circle');
+                        progressCircle.style.setProperty('--p', '0');
+                        progressCircle.dataset.progress = '0';
+                        worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                    }
                     break;
                 case 'world_sync_chunk':
-                    const progress = Math.round((s.index + 1) / s.total * 100);
-                    const circle = document.querySelector('.progress-circle');
-                    if (circle) {
-                        circle.style.setProperty('--p', progress);
-                        circle.dataset.progress = progress;
-                        const label = document.querySelector('.progress-circle-label');
-                        if (label) {
-                            label.textContent = `${progress}%`;
-                        }
-                    }
+                    if (!isHost) {
+                        const update = partialIPFSUpdates.get(s.transactionId);
+                        if (update && !update.chunks[s.index]) {
+                            update.chunks[s.index] = s.chunk;
+                            update.received++;
 
-                    if (s.deltas) {
-                        for (const [chunkKey, changes] of s.deltas) {
-                            chunkManager.addPendingDeltas(chunkKey, changes);
+                            const progress = Math.round(update.received / update.total * 100);
+                            const circle = document.querySelector('.progress-circle');
+                            if (circle) {
+                                circle.style.setProperty('--p', progress);
+                                circle.dataset.progress = progress;
+                                const label = document.querySelector('.progress-circle-label');
+                                if (label) {
+                                    label.textContent = `${progress}%`;
+                                }
+                            }
+
+                            if (update.received === update.total) {
+                                const fullDataString = update.chunks.join('');
+                                const fullData = JSON.parse(fullDataString);
+
+                                if (fullData.chunkDeltas) {
+                                    for (const [chunkKey, changes] of fullData.chunkDeltas) {
+                                        chunkManager.addPendingDeltas(chunkKey, changes);
+                                    }
+                                }
+                                if (fullData.foreignBlockOrigins) {
+                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
+                                }
+                                if (fullData.processedIds) {
+                                    for (const id of fullData.processedIds) {
+                                        processedMessages.add(id);
+                                    }
+                                }
+
+                                partialIPFSUpdates.delete(s.transactionId);
+
+                                setTimeout(() => {
+                                    document.getElementById('worldSyncProgress').style.display = 'none';
+                                }, 2000);
+                            }
                         }
-                    }
-                    if (s.origins) {
-                        for (const [key, origin] of s.origins) {
-                            getCurrentWorldState().foreignBlockOrigins.set(key, origin);
-                        }
-                    }
-                    if (s.processedIds) {
-                        for (const id of s.processedIds) {
-                            processedMessages.add(id);
-                        }
-                    }
-                    if (s.index + 1 === s.total) {
-                        setTimeout(() => {
-                            document.getElementById('worldSyncProgress').style.display = 'none';
-                        }, 2000);
                     }
                     break;
                 case "state_update":
@@ -413,9 +427,19 @@ function setupDataChannel(e, t) {
                     createAndSetupAvatar(c, !1).position.set(s.x, s.y, s.z);
                     break;
                 case "player_move":
-                    if (isHost)
-                        for (const [t, o] of peers.entries()) t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(e.data);
+                    if (isHost) {
+                        if (userPositions[n]) {
+                            userPositions[n].world = s.world;
+                        }
+                        for (const [t, o] of peers.entries()) {
+                            const peerWorld = userPositions[t] ? userPositions[t].world : null;
+                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
+                                o.dc.send(e.data);
+                            }
+                        }
+                    }
                     playerAvatars.has(n) || createAndSetupAvatar(n, !1, s.yaw), userPositions[n] || (userPositions[n] = {
+                        world: s.world,
                         lastTimestamp: 0,
                         prevX: s.x,
                         prevY: s.y,
@@ -453,7 +477,11 @@ function setupDataChannel(e, t) {
                             worldState.foreignBlockOrigins.set(blockKey, s.originSeed);
                         }
 
-                        for (const [t, o] of peers.entries()) t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(e.data)
+                        for (const [t, o] of peers.entries()) {
+                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.syncedWorlds && o.syncedWorlds.has(s.world)) {
+                                o.dc.send(e.data);
+                            }
+                        }
                     }
                     if (s.world === worldName) {
                          if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed), s.originSeed && s.originSeed !== worldSeed) {
@@ -570,38 +598,30 @@ function setupDataChannel(e, t) {
                     break;
                 case "laser_fired_batch":
                 case "laser_fired":
-                    // Forward the message to all other clients if the current user is the host
-                    if (isHost) {
-                        for (const [peerUsername, peer] of peers.entries()) {
-                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(e.data);
-                            }
-                        }
-                    }
-                    laserQueue.push(s);
-                    break;
                 case "item_dropped":
-                    if (isHost) {
-                        for (const [peerUsername, peer] of peers.entries()) {
-                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(e.data);
-                            }
-                        }
-                    }
-                    if (!droppedItems.some((item => item.id === s.dropId))) {
-                        createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
-                    }
-                    break;
                 case "item_picked_up":
                     if (isHost) {
-                        for (const [peerUsername, peer] of peers.entries()) {
-                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(e.data);
+                        for (const [t, o] of peers.entries()) {
+                            const peerWorld = userPositions[t] ? userPositions[t].world : null;
+                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
+                                o.dc.send(e.data);
                             }
                         }
                     }
-                    const f = droppedItems.findIndex((e => e.id === s.dropId));
-                    -1 !== f && (scene.remove(droppedItems[f].mesh), scene.remove(droppedItems[f].light), droppedItems.splice(f, 1));
+                    if (s.type === "laser_fired" || s.type === "laser_fired_batch") {
+                        laserQueue.push(s);
+                    } else if (s.type === "item_dropped") {
+                        if (!droppedItems.some((item => item.id === s.dropId))) {
+                            createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
+                        }
+                    } else if (s.type === "item_picked_up") {
+                        const f = droppedItems.findIndex((e => e.id === s.dropId));
+                        if (-1 !== f) {
+                            scene.remove(droppedItems[f].mesh);
+                            scene.remove(droppedItems[f].light);
+                            droppedItems.splice(f, 1);
+                        }
+                    }
                     break;
                 case "video_started":
                     addMessage(`${s.username} started their video.`, 2e3);
@@ -810,13 +830,34 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
-                case 'world_switch':
+                case "request_world_sync":
                     if (isHost) {
                         const worldState = WORLD_STATES.get(s.world);
                         if (worldState) {
                             const peer = peers.get(s.username);
                             if (peer) {
                                 sendWorldStateAsync(peer, worldState, s.username);
+                            }
+                        }
+                    }
+                    break;
+                case 'world_switch':
+                    if (isHost) {
+                        const peer = peers.get(s.username);
+                        if (peer) {
+                            const clientWorld = s.world;
+                            if (!peer.syncedWorlds) {
+                                peer.syncedWorlds = new Set();
+                            }
+                            if (!peer.syncedWorlds.has(clientWorld)) {
+                                const worldState = WORLD_STATES.get(clientWorld);
+                                if (worldState) {
+                                    sendWorldStateAsync(peer, worldState, s.username);
+                                }
+                                peer.syncedWorlds.add(clientWorld);
+                            }
+                            if (userPositions[s.username]) {
+                                userPositions[s.username].world = clientWorld;
                             }
                         }
                     }
