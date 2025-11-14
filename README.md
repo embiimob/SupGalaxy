@@ -1,7 +1,12 @@
-# 🌌 SupGalaxy v0.4.21-beta
+# 🌌 SupGalaxy v0.5.0-beta
 [Infinite Voxel World Adventure]
 
-Welcome to **SupGalaxy v0.4.21-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+Welcome to **SupGalaxy v0.5.0-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+
+### What's New in v0.5.0-beta?
+- **Multiworld Sync & Persistence**: Your creations are no longer confined to a single world. With our new multiworld synchronization, all your modifications are saved and restored across different worlds, ensuring a truly persistent and interconnected universe.
+- **The Magician's Stone**: Unleash your creativity with the Magician's Stone, a powerful new block that allows you to stream video and audio directly into the game world. Create in-world media screens, share your favorite content, and bring your worlds to life like never before.
+- **Streaming Proximity Video and Audio**: Immerse yourself in a more connected multiplayer experience. With streaming proximity video and audio, you can see and hear other players as you explore the cosmos together, making teamwork and social interaction more seamless and engaging.
 
 > **Public Domain (CC0)**: Free to use, modify, and share. No attribution required, but we’d love a nod to embii4u, Grok, kattacomi, Jules, and ChatGPT for sparking this cosmic creation. *May your worlds be infinite and your adventures legendary!*
 
