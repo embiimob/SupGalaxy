@@ -1,3 +1,10 @@
+// SupGalaxy v0.5.0-beta by embii4u, Grok, Jules, kattacomi, and ChatGPT
+// This is the world's first truly decentralized, infinite procedural world generator.
+// It is open-source and free to use, modify, and share.
+// Jules' contributions include:
+// - Multiworld sync and persistence
+// - The Magician's Stone
+// - Bug fixes and performance improvements
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,
@@ -17,7 +24,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.4.21-beta",
+    VERSION = "SupGalaxy v0.5.0-beta",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -3414,24 +3421,52 @@ async function downloadHostSession() {
         }];
     });
 
+    const currentWorldState = getCurrentWorldState();
+    const serializableMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            serializableMagicianStones[key] = {
+                x: stone.x, y: stone.y, z: stone.z, url: stone.url,
+                width: stone.width, height: stone.height,
+                offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                loop: stone.loop, autoplay: stone.autoplay, distance: stone.distance,
+                direction: stone.direction
+            };
+        }
+    }
+
+    const playerData = {
+        world: worldName,
+        seed: worldSeed,
+        user: userName,
+        savedAt: new Date().toISOString(),
+        deltas: [],
+        foreignBlockOrigins: Array.from(currentWorldState.foreignBlockOrigins.entries()),
+        magicianStones: serializableMagicianStones,
+        profile: {
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            health: player.health,
+            score: player.score,
+            inventory: INVENTORY
+        },
+        musicPlaylist: musicPlaylist,
+        videoPlaylist: videoPlaylist
+    };
+
+    for (const [chunkKey, changes] of currentWorldState.chunkDeltas) {
+        if (parseChunkKey(chunkKey)) {
+            playerData.deltas.push({ chunk: chunkKey, changes: changes });
+        }
+    }
+
     const hostSessionData = {
         isHostSession: true,
         worldStates: serializableWorldStates,
         processedMessages: Array.from(processedMessages),
-        playerData: {
-            world: worldName,
-            seed: worldSeed,
-            user: userName,
-            savedAt: new Date().toISOString(),
-            profile: {
-                x: player.x,
-                y: player.y,
-                z: player.z,
-                health: player.health,
-                score: player.score,
-                inventory: INVENTORY
-            },
-        }
+        playerData: playerData
     };
 
     hostSessionData.hash = simpleHash(JSON.stringify(hostSessionData.playerData));
