@@ -702,9 +702,6 @@ function setupDataChannel(e, t) {
                     } else {
                         // if a client happens to get this, just add it.
                         processedMessages.add(s.transactionId);
-                    } else {
-                        // if a client happens to get this, just add it.
-                        processedMessages.add(s.transactionId);
                     }
                     break;
                 case "sync_processed_transaction":
