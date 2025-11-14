@@ -947,15 +947,13 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
             transactionIds: [a]
         });
 
-        if (!isHost && peers.size > 0) {
-            const message = JSON.stringify({
-                type: 'processed_transaction_id',
-                transactionId: a
-            });
-            for (const [, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(message);
-                }
+        const message = JSON.stringify({
+            type: 'processed_transaction_id',
+            transactionId: a
+        });
+        for (const [, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(message);
             }
         }
     } catch (e) {
