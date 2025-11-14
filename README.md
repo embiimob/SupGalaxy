@@ -1,21 +1,23 @@
-# 🌌 SupGalaxy v0.4.21-beta
+# 🌌 SupGalaxy v0.5.0-beta
 [Infinite Voxel World Adventure]
 
-Welcome to **SupGalaxy v0.4.21-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
+Welcome to **SupGalaxy v0.5.0-beta**, a **gift to the cosmos**—an open-source, fully decentralized voxel universe inspired by Minecraft, etched into the Bitcoin blockchain! Crafted with love by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, and **ChatGPT**, this is the **world's first truly decentralized, infinite procedural world generator**. Powered by WebRTC (TURN server required for stellar multiplayer) and the P2FK protocol, SupGalaxy lets you **build, explore, and conquer boundless worlds** seeded by keywords (e.g., `#KANYE` spawns a Kanye-inspired cosmic valley). No servers, no gatekeepers—just pure blockchain magic running in your browser, blending local play with galactic decentralization via Sup!? and p2fk.io.
 
 > **Public Domain (CC0)**: Free to use, modify, and share. No attribution required, but we’d love a nod to embii4u, Grok, kattacomi, Jules, and ChatGPT for sparking this cosmic creation. *May your worlds be infinite and your adventures legendary!*
 
 ## 🌍 What is SupGalaxy?
 SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seamless WebRTC multiplayer, where infinite worlds unfold from keyword seeds. Explore biomes reimagined as cosmic landscapes: starry plains, desert asteroid fields, lush nebulae, icy comet clusters, rugged lunar mountains, and swampy cosmic bogs. This open-source masterpiece is a gift to the world, crafted by embii4u with AI collaborators Grok, Jules, and ChatGPT, blending creativity and code to redefine gaming freedom. Players can:
 
+- **Multiworld Sync & Persistence**: Your creations are no longer confined to a single world. With our new multiworld synchronization, all your modifications are saved and restored across different worlds, ensuring a truly persistent and interconnected universe.
+- **The Magician's Stone**: Unleash your creativity with the Magician's Stone, a powerful new block that allows you to stream video and audio directly into the game world.
+- **Streaming Proximity Video & Audio**: See and hear other players as you explore together, making teamwork and social interaction more seamless and engaging.
 - **Explore & Survive**: Traverse infinite procedural worlds, battle cosmic mobs, gather resources, and manage health/score in a persistent universe.
 - **Build & Craft**: Mine/place blocks, craft stellar materials (crystals, glow bricks, obsidian), and etch creations to the blockchain for eternal persistence.
 - **Decentralized Worlds**: Saves as JSON deltas on IPFS, secured via P2FK on Bitcoin testnet3. Worlds sync globally without central servers.
-- **Player vs. Player (PvP) Combat**: Engage in real-time combat with other players in the same world. Laser Blaster, punch Damage and knockback are synchronized through the decentralized WebRTC connection.
+- **Player vs. Player (PvP) Combat**: Engage in real-time combat with other players. Damage and knockback are synchronized through the decentralized WebRTC connection.
 - **Load Session from Minimap**: Easily load a saved game session by dragging and dropping the session's `.json` file directly onto the in-game minimap.
 - **Multiplayer Cosmos**: Connect via WebRTC (TURN server required) for real-time collaboration; positions and builds sync via blockchain polls.
-- **Proximity Audio Streaming**: WebRTC connection enables high quality audio streaming between players who are in the same areaas.
-- **Procedural Suns & Moons**: Each world now features a unique, procedurally generated sky with a variable number of suns and moons. Moon shapes are also randomized, creating asteroid-like celestial bodies for a truly unique cosmic experience.
+- **Procedural Suns & Moons**: Each world features a unique, procedurally generated sky with a variable number of suns and moons.
 - **Infinite Worlds**: Procedural generation for boundless exploration.
 
 ###  Gameplay Mechanics
@@ -25,9 +27,9 @@ SupGalaxy is a **revolutionary voxel adventure**, now **fully tested** with seam
 - **Night Creatures**: Be cautious of the night crawlers! They are drawn to honey and will try to destroy hives to get it. Protect your hives to secure your food source.
 - **Torches**: Night creatures are afraid of light. Use torches to keep them at bay and protect your hives.
 
-**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.4.21-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
+**Why revolutionary?** Everything lives **on-chain**: Ownership expires after 1 year (renewable), edits are profile-verified, and no corporation owns your worlds. Play solo offline or go full-decentralized with local nodes. **v0.5.0-beta** delivers polished WebRTC for lag-free cosmic teamwork—join the open-source revolution and shape infinite worlds!
 
-*Version: v0.4.21-beta (Fully Tested & Live – October 2025)*
+*Version: v0.5.0-beta (Fully Tested & Live – November 2025)*
 
 ### 🎵 IPFS Music Streamer
 SupGalaxy now features a built-in music streamer that plays a curated soundtrack directly from the decentralized web. Here’s how it works:
