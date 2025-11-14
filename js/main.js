@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.4.21-beta",
+    VERSION = "SupGalaxy v0.5.0-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -691,10 +691,13 @@ function simpleHash(e) {
 }
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
-        WORLD_STATES = new Map(e.worldStates.map(([worldName, data]) => [worldName, {
-            chunkDeltas: new Map(data.chunkDeltas),
-            foreignBlockOrigins: new Map(data.foreignBlockOrigins)
-        }]));
+        WORLD_STATES.clear();
+        for (const [worldName, data] of e.worldStates) {
+            WORLD_STATES.set(worldName, {
+                chunkDeltas: new Map(data.chunkDeltas),
+                foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+            });
+        }
         processedMessages = new Set(e.processedMessages);
         addMessage("Host session loaded. Restoring all world states.", 3e3);
     }
