@@ -400,6 +400,11 @@ function setupDataChannel(e, t) {
                                     for (const id of fullData.processedIds) {
                                         processedMessages.add(id);
                                     }
+                                    // Sync with worker
+                                    worker.postMessage({
+                                        type: "sync_processed",
+                                        ids: Array.from(processedMessages)
+                                    });
                                 }
 
                                 partialIPFSUpdates.delete(s.transactionId);
@@ -694,6 +699,12 @@ function setupDataChannel(e, t) {
                                 }
                             }
                         }
+                    } else {
+                        // if a client happens to get this, just add it.
+                        processedMessages.add(s.transactionId);
+                    } else {
+                        // if a client happens to get this, just add it.
+                        processedMessages.add(s.transactionId);
                     }
                     break;
                 case "sync_processed_transaction":
@@ -701,6 +712,11 @@ function setupDataChannel(e, t) {
                         const transactionId = s.transactionId;
                         if (!processedMessages.has(transactionId)) {
                             processedMessages.add(transactionId);
+                            // Also sync with the worker to prevent it from re-processing
+                            worker.postMessage({
+                                type: "sync_processed",
+                                ids: [transactionId]
+                            });
                         }
                     }
                     break;
