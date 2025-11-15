@@ -17,9 +17,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.0-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.1-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
+    WEBRTC_CHUNK_SIZE_KB = 64,
     BLOCKS = {
         1: {
             name: "Bedrock",
@@ -876,7 +877,7 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
         }
 
         const dataString = JSON.stringify(e);
-        const chunkSize = 16384; // 16KB chunks
+        const chunkSize = WEBRTC_CHUNK_SIZE_KB * 1024;
         const chunks = [];
         for (let i = 0; i < dataString.length; i += chunkSize) {
             chunks.push(dataString.slice(i, i + chunkSize));
