@@ -488,9 +488,9 @@ async function fetchWithRetry(url, options = {}, retries = 3, backoff = 500) {
             if (response.ok) {
                 return response;
             }
-            console.error(`[Worker] Attempt ${i + 1} failed with status: ${response.status} for ${url}`);
+            console.error('[Worker] Attempt ' + (i + 1) + ' failed with status: ' + response.status + ' for ' + url);
         } catch (error) {
-            console.error(`[Worker] Attempt ${i + 1} failed with error for ${url}:`, error);
+            console.error('[Worker] Attempt ' + (i + 1) + ' failed with error for ' + url + ':', error);
         }
         await new Promise(resolve => setTimeout(resolve, backoff * Math.pow(2, i)));
     }
