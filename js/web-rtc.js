@@ -1,3 +1,5 @@
+// a larger chunk size for IPFS and world-sync WebRTC messages
+const MAX_WEBRTC_CHUNK_SIZE = 131072; // 128KB
 var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
@@ -126,7 +128,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
     };
 
     const dataString = JSON.stringify(dataToSend);
-    const chunkSize = 16384; // 16KB chunks
+    const chunkSize = MAX_WEBRTC_CHUNK_SIZE;
     const chunks = [];
     for (let i = 0; i < dataString.length; i += chunkSize) {
         chunks.push(dataString.slice(i, i + chunkSize));

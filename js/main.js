@@ -876,7 +876,7 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
         }
 
         const dataString = JSON.stringify(e);
-        const chunkSize = 16384; // 16KB chunks
+        const chunkSize = MAX_WEBRTC_CHUNK_SIZE;
         const chunks = [];
         for (let i = 0; i < dataString.length; i += chunkSize) {
             chunks.push(dataString.slice(i, i + chunkSize));
