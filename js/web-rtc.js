@@ -90,7 +90,9 @@ async function connectToServer(e, t, o) {
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
-            address: null
+            address: null,
+            sendQueue: [],
+            isSending: false
         });
         var f = "MCAnswer@" + userName + "@" + worldName;
         answerPollingIntervals.set(f, setInterval((function () {
@@ -115,11 +117,13 @@ async function connectToServer(e, t, o) {
     }
 }
 
-async function sendDataInChunks(peer, dataType, dataPayload, username, metadata = {}) {
-    if (!peer || !peer.dc || peer.dc.readyState !== 'open') {
-        console.log(`[WebRTC] Cannot send ${dataType} to ${username}, data channel not open.`);
+function processSendQueue(peer, username) {
+    if (!peer || peer.isSending || peer.sendQueue.length === 0) {
         return;
     }
+
+    peer.isSending = true;
+    const { dataType, dataPayload, metadata } = peer.sendQueue.shift();
 
     const dataString = JSON.stringify(dataPayload);
     const chunkSize = MAX_CHUNK_SIZE_KB * 1024;
@@ -146,6 +150,8 @@ async function sendDataInChunks(peer, dataType, dataPayload, username, metadata 
             if (i >= chunks.length) {
                 console.log(`[WebRTC] Finished sending ${dataType} to ${username}.`);
             }
+            peer.isSending = false;
+            processSendQueue(peer, username);
             return;
         }
 
@@ -169,6 +175,15 @@ async function sendDataInChunks(peer, dataType, dataPayload, username, metadata 
     }
 
     sendChunk();
+}
+
+async function sendDataInChunks(peer, dataType, dataPayload, username, metadata = {}) {
+    if (!peer) {
+        console.log(`[WebRTC] Peer not found for ${username}.`);
+        return;
+    }
+    peer.sendQueue.push({ dataType, dataPayload, username, metadata });
+    processSendQueue(peer, username);
 }
 
 async function sendWorldStateAsync(peer, worldState, username) {
@@ -947,7 +962,9 @@ async function acceptPendingOffers() {
             }, peers.set(e, {
                 pc: i,
                 dc: null,
-                address: null
+                address: null,
+                sendQueue: [],
+                isSending: false
             }), i.ondatachannel = t => {
                 const o = t.channel;
                 peers.get(e).dc = o, setupDataChannel(o, e)
