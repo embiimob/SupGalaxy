@@ -916,31 +916,25 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
         }
 
         if (isHost) {
-            const startMessage = JSON.stringify({
-                type: 'ipfs_chunk_update_start',
-                total: chunks.length,
+            const metadata = {
                 fromAddress: t,
                 timestamp: o,
                 transactionId: a
-            });
+            };
             for (const [peerUsername, peer] of peers.entries()) {
                 if (peerUsername !== sourceUsername && peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(startMessage);
-                    sendChunksAsync(peer, 'ipfs_chunk_update_chunk', chunks, a);
+                    sendDataInChunks(peer, 'ipfs_chunk_update', e, peerUsername, metadata);
                 }
             }
         } else if (sourceUsername === undefined) {
-             const startMessage = JSON.stringify({
-                type: 'ipfs_chunk_from_client_start',
-                total: chunks.length,
+            const metadata = {
                 fromAddress: t,
                 timestamp: o,
                 transactionId: a
-            });
-            for (const [, peer] of peers.entries()) {
+            };
+            for (const [peerUsername, peer] of peers.entries()) {
                 if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(startMessage);
-                    sendChunksAsync(peer, 'ipfs_chunk_from_client_chunk', chunks, a);
+                    sendDataInChunks(peer, 'ipfs_chunk_from_client', e, peerUsername, metadata);
                 }
             }
         }

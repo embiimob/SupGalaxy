@@ -1,3 +1,4 @@
+const MAX_CHUNK_SIZE_KB = 128;
 var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
@@ -89,7 +90,9 @@ async function connectToServer(e, t, o) {
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
-            address: null
+            address: null,
+            sendQueue: [],
+            isSending: false
         });
         var f = "MCAnswer@" + userName + "@" + worldName;
         answerPollingIntervals.set(f, setInterval((function () {
@@ -113,32 +116,31 @@ async function connectToServer(e, t, o) {
         console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
     }
 }
-async function sendWorldStateAsync(peer, worldState, username) {
-    if (!peer || !peer.dc || peer.dc.readyState !== 'open') {
-        console.log(`[WebRTC] Cannot send world state to ${username}, data channel not open.`);
+
+function processSendQueue(peer, username) {
+    if (!peer || peer.isSending || peer.sendQueue.length === 0) {
         return;
     }
 
-    const dataToSend = {
-        chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
-        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
-        processedIds: Array.from(processedMessages)
-    };
+    peer.isSending = true;
+    const { dataType, dataPayload, metadata } = peer.sendQueue.shift();
 
-    const dataString = JSON.stringify(dataToSend);
-    const chunkSize = 16384; // 16KB chunks
+    const dataString = JSON.stringify(dataPayload);
+    const chunkSize = MAX_CHUNK_SIZE_KB * 1024;
     const chunks = [];
     for (let i = 0; i < dataString.length; i += chunkSize) {
         chunks.push(dataString.slice(i, i + chunkSize));
     }
 
-    const transactionId = `world_sync_${username}_${Date.now()}`;
+    const transactionId = metadata.transactionId || `${dataType}_${username}_${Date.now()}`;
 
-    peer.dc.send(JSON.stringify({
-        type: 'world_sync_start',
+    const startMessage = {
+        type: `${dataType}_start`,
         total: chunks.length,
-        transactionId: transactionId
-    }));
+        transactionId: transactionId,
+        ...metadata
+    };
+    peer.dc.send(JSON.stringify(startMessage));
 
     let i = 0;
     const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
@@ -146,12 +148,13 @@ async function sendWorldStateAsync(peer, worldState, username) {
     function sendChunk() {
         if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
             if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
+                console.log(`[WebRTC] Finished sending ${dataType} to ${username}.`);
             }
+            peer.isSending = false;
+            processSendQueue(peer, username);
             return;
         }
 
-        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
         if (peer.dc.bufferedAmount > highWaterMark) {
             peer.dc.onbufferedamountlow = () => {
                 peer.dc.onbufferedamountlow = null;
@@ -161,7 +164,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
         }
 
         peer.dc.send(JSON.stringify({
-            type: 'world_sync_chunk',
+            type: `${dataType}_chunk`,
             transactionId: transactionId,
             index: i,
             chunk: chunks[i],
@@ -172,6 +175,24 @@ async function sendWorldStateAsync(peer, worldState, username) {
     }
 
     sendChunk();
+}
+
+async function sendDataInChunks(peer, dataType, dataPayload, username, metadata = {}) {
+    if (!peer) {
+        console.log(`[WebRTC] Peer not found for ${username}.`);
+        return;
+    }
+    peer.sendQueue.push({ dataType, dataPayload, username, metadata });
+    processSendQueue(peer, username);
+}
+
+async function sendWorldStateAsync(peer, worldState, username) {
+    const dataToSend = {
+        chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
+        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
+        processedIds: Array.from(processedMessages)
+    };
+    sendDataInChunks(peer, 'world_sync', dataToSend, username);
 }
 async function handleMinimapFile(e) {
     try {
@@ -364,56 +385,6 @@ function setupDataChannel(e, t) {
                         progressCircle.style.setProperty('--p', '0');
                         progressCircle.dataset.progress = '0';
                         worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
-                    }
-                    break;
-                case 'world_sync_chunk':
-                    if (!isHost) {
-                        const update = partialIPFSUpdates.get(s.transactionId);
-                        if (update && !update.chunks[s.index]) {
-                            update.chunks[s.index] = s.chunk;
-                            update.received++;
-
-                            const progress = Math.round(update.received / update.total * 100);
-                            const circle = document.querySelector('.progress-circle');
-                            if (circle) {
-                                circle.style.setProperty('--p', progress);
-                                circle.dataset.progress = progress;
-                                const label = document.querySelector('.progress-circle-label');
-                                if (label) {
-                                    label.textContent = `${progress}%`;
-                                }
-                            }
-
-                            if (update.received === update.total) {
-                                const fullDataString = update.chunks.join('');
-                                const fullData = JSON.parse(fullDataString);
-
-                                if (fullData.chunkDeltas) {
-                                    for (const [chunkKey, changes] of fullData.chunkDeltas) {
-                                        chunkManager.addPendingDeltas(chunkKey, changes);
-                                    }
-                                }
-                                if (fullData.foreignBlockOrigins) {
-                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
-                                }
-                                if (fullData.processedIds) {
-                                    for (const id of fullData.processedIds) {
-                                        processedMessages.add(id);
-                                    }
-                                    // Sync with worker
-                                    worker.postMessage({
-                                        type: "sync_processed",
-                                        ids: Array.from(processedMessages)
-                                    });
-                                }
-
-                                partialIPFSUpdates.delete(s.transactionId);
-
-                                setTimeout(() => {
-                                    document.getElementById('worldSyncProgress').style.display = 'none';
-                                }, 2000);
-                            }
-                        }
                     }
                     break;
                 case "state_update":
@@ -658,29 +629,84 @@ function setupDataChannel(e, t) {
                             t && (t.targetPosition = (new THREE.Vector3).fromArray(e.position), t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion), t.lastUpdate = performance.now())
                         }
                     break;
+                case "world_sync_start":
                 case "ipfs_chunk_update_start":
-                    if (!isHost) {
-                        partialIPFSUpdates.set(s.transactionId, {
-                            chunks: new Array(s.total), // Pre-allocate array
+                case "ipfs_chunk_from_client_start":
+                    const { type, transactionId, ...metadata } = s;
+                    const isClientReceiving = (type === 'ipfs_chunk_update_start' && !isHost);
+                    const isHostReceiving = (type === 'ipfs_chunk_from_client_start' && isHost);
+                    const isWorldSync = (type === 'world_sync_start' && !isHost);
+
+                    if (isClientReceiving || isHostReceiving || isWorldSync) {
+                        partialIPFSUpdates.set(transactionId, {
+                            chunks: new Array(s.total),
                             total: s.total,
                             received: 0,
-                            fromAddress: s.fromAddress,
-                            timestamp: s.timestamp,
-                            sourceUsername: n
+                            ...metadata,
+                            sourceUsername: n // For client, this is the host. For host, this is the client.
                         });
+
+                        if (isWorldSync) {
+                            const worldSyncProgress = document.getElementById('worldSyncProgress');
+                            worldSyncProgress.style.display = 'flex';
+                            const progressCircle = worldSyncProgress.querySelector('.progress-circle');
+                            progressCircle.style.setProperty('--p', '0');
+                            progressCircle.dataset.progress = '0';
+                            worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                        }
                     }
                     break;
                 case "ipfs_chunk_update_chunk":
-                    if (!isHost) {
-                        const update = partialIPFSUpdates.get(s.transactionId);
-                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
-                            update.chunks[s.index] = s.chunk;
-                            update.received++;
-                            if (update.received === s.total) {
-                                const fullData = JSON.parse(update.chunks.join(''));
-                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
-                                partialIPFSUpdates.delete(s.transactionId);
+                case "ipfs_chunk_from_client_chunk":
+                case "world_sync_chunk":
+                    const update = partialIPFSUpdates.get(s.transactionId);
+                    if (update && !update.chunks[s.index]) {
+                        update.chunks[s.index] = s.chunk;
+                        update.received++;
+
+                        if (s.type === 'world_sync_chunk' && !isHost) {
+                            const progress = Math.round(update.received / update.total * 100);
+                            const circle = document.querySelector('.progress-circle');
+                            if (circle) {
+                                circle.style.setProperty('--p', progress);
+                                circle.dataset.progress = progress;
+                                const label = document.querySelector('.progress-circle-label');
+                                if (label) {
+                                    label.textContent = `${progress}%`;
+                                }
                             }
+                        }
+
+                        if (update.received === update.total) {
+                            const fullDataString = update.chunks.join('');
+                            const fullData = JSON.parse(fullDataString);
+
+                            if (s.type === 'world_sync_chunk') {
+                                if (fullData.chunkDeltas) {
+                                    for (const [chunkKey, changes] of fullData.chunkDeltas) {
+                                        chunkManager.addPendingDeltas(chunkKey, changes);
+                                    }
+                                }
+                                if (fullData.foreignBlockOrigins) {
+                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
+                                }
+                                if (fullData.processedIds) {
+                                    for (const id of fullData.processedIds) {
+                                        processedMessages.add(id);
+                                    }
+                                    worker.postMessage({
+                                        type: "sync_processed",
+                                        ids: Array.from(processedMessages)
+                                    });
+                                }
+                                setTimeout(() => {
+                                    document.getElementById('worldSyncProgress').style.display = 'none';
+                                }, 2000);
+                            } else {
+                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
+                            }
+
+                            partialIPFSUpdates.delete(s.transactionId);
                         }
                     }
                     break;
@@ -714,32 +740,6 @@ function setupDataChannel(e, t) {
                                 type: "sync_processed",
                                 ids: [transactionId]
                             });
-                        }
-                    }
-                    break;
-                case "ipfs_chunk_from_client_start":
-                    if (isHost) {
-                        partialIPFSUpdates.set(s.transactionId, {
-                            chunks: new Array(s.total), // Pre-allocate array
-                            total: s.total,
-                            received: 0,
-                            fromAddress: s.fromAddress,
-                            timestamp: s.timestamp,
-                            sourceUsername: n
-                        });
-                    }
-                    break;
-                case "ipfs_chunk_from_client_chunk":
-                    if (isHost) {
-                        const update = partialIPFSUpdates.get(s.transactionId);
-                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
-                            update.chunks[s.index] = s.chunk;
-                            update.received++;
-                            if (update.received === s.total) {
-                                const fullData = JSON.parse(update.chunks.join(''));
-                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
-                                partialIPFSUpdates.delete(s.transactionId);
-                            }
                         }
                     }
                     break;
@@ -962,7 +962,9 @@ async function acceptPendingOffers() {
             }, peers.set(e, {
                 pc: i,
                 dc: null,
-                address: null
+                address: null,
+                sendQueue: [],
+                isSending: false
             }), i.ondatachannel = t => {
                 const o = t.channel;
                 peers.get(e).dc = o, setupDataChannel(o, e)
