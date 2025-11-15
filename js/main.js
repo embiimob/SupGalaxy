@@ -807,7 +807,7 @@ function checkChunkOwnership(e, t) {
         for (const [e, a] of spawnChunks) {
             const n = parseChunkKey(o);
             if (!n) return !1;
-            if (a.cx === n.cx && a.cz === n.cz && e !== t) return !1
+            if (a.cx === n.cx && a.cz === n.cz && a.username !== t) return !1
         }
     const a = chunkOwners.get(o);
     if (!a) return !0;
@@ -849,6 +849,26 @@ function updateTorchRegistry(e) {
                     })
                 }
             }
+async function populateAllSpawnChunksForWorld(targetWorldName) {
+    console.log(`[SpawnChunks] Populating all known user spawn chunks for world: ${targetWorldName}`);
+    spawnChunks.clear();
+
+    for (const [username, userAddress] of knownUsers.entries()) {
+        const spawnSeed = `${username}@${targetWorldName}`;
+        const spawnPoint = calculateSpawnPoint(spawnSeed);
+        const scx = Math.floor(spawnPoint.x / CHUNK_SIZE);
+        const scz = Math.floor(spawnPoint.z / CHUNK_SIZE);
+
+        spawnChunks.set(username, {
+            cx: scx,
+            cz: scz,
+            username: username,
+            world: targetWorldName,
+            spawn: spawnPoint
+        });
+    }
+    console.log(`[SpawnChunks] Finished populating for ${targetWorldName}. Total spawn chunks: ${spawnChunks.size}`);
+}
 }
 
 function applyChunkUpdates(e, t, o, a, sourceUsername) {
@@ -916,31 +936,25 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
         }
 
         if (isHost) {
-            const startMessage = JSON.stringify({
-                type: 'ipfs_chunk_update_start',
-                total: chunks.length,
+            const metadata = {
                 fromAddress: t,
                 timestamp: o,
                 transactionId: a
-            });
+            };
             for (const [peerUsername, peer] of peers.entries()) {
                 if (peerUsername !== sourceUsername && peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(startMessage);
-                    sendChunksAsync(peer, 'ipfs_chunk_update_chunk', chunks, a);
+                    sendDataInChunks(peer, 'ipfs_chunk_update', e, peerUsername, metadata);
                 }
             }
         } else if (sourceUsername === undefined) {
-             const startMessage = JSON.stringify({
-                type: 'ipfs_chunk_from_client_start',
-                total: chunks.length,
+            const metadata = {
                 fromAddress: t,
                 timestamp: o,
                 transactionId: a
-            });
-            for (const [, peer] of peers.entries()) {
+            };
+            for (const [peerUsername, peer] of peers.entries()) {
                 if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(startMessage);
-                    sendChunksAsync(peer, 'ipfs_chunk_from_client_chunk', chunks, a);
+                    sendDataInChunks(peer, 'ipfs_chunk_from_client', e, peerUsername, metadata);
                 }
             }
         }
@@ -3664,6 +3678,7 @@ async function startGame() {
     if (o.length > 20) return void addMessage("Username too long (max 20 chars)", 3e3);
     if (!t || !o) return void addMessage("Please enter a world and username", 3e3);
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
+    populateAllSpawnChunksForWorld(worldName);
     const a = makeSeededRandom((worldSeed = worldName) + "_colors");
     for (const e in BLOCKS)
         if (Object.hasOwnProperty.call(BLOCKS, e)) {
@@ -3894,7 +3909,7 @@ function switchWorld() {
     torchParticles.forEach(p => scene.remove(p));
     torchParticles.clear();
 
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    worldName = e.slice(0, 8), worldSeed = worldName, populateAllSpawnChunksForWorld(worldName), chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     const t = calculateSpawnPoint(userName + "@" + worldName);
     player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
         x: player.x,
