@@ -99,7 +99,6 @@ Spawn, explore, build, fight, survive.
 | Craft | `R` | — |
 | Teleport | `P` | — |
 | Save | `X` | — |
-| Join World | `J` | — |
 
 **Tips:**  
 - 2 sand → 4 glass  
