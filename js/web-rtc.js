@@ -126,7 +126,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
     };
 
     const dataString = JSON.stringify(dataToSend);
-    const chunkSize = 16384; // 16KB chunks
+    const chunkSize = WEBRTC_CHUNK_SIZE_KB * 1024;
     const chunks = [];
     for (let i = 0; i < dataString.length; i += chunkSize) {
         chunks.push(dataString.slice(i, i + chunkSize));
@@ -140,26 +140,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
         transactionId: transactionId
     }));
 
-    let i = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-
-    function sendChunk() {
-        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
-            if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
-            }
-            return;
-        }
-
-        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-        if (peer.dc.bufferedAmount > highWaterMark) {
-            peer.dc.onbufferedamountlow = () => {
-                peer.dc.onbufferedamountlow = null;
-                setTimeout(sendChunk, 0);
-            };
-            return;
-        }
-
+    for (let i = 0; i < chunks.length; i++) {
         peer.dc.send(JSON.stringify({
             type: 'world_sync_chunk',
             transactionId: transactionId,
@@ -167,11 +148,8 @@ async function sendWorldStateAsync(peer, worldState, username) {
             chunk: chunks[i],
             total: chunks.length
         }));
-        i++;
-        setTimeout(sendChunk, 0);
     }
-
-    sendChunk();
+    console.log(`[WebRTC] Finished sending world state to ${username}.`);
 }
 async function handleMinimapFile(e) {
     try {
