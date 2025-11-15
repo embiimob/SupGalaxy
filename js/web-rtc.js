@@ -20,7 +20,7 @@ var userPositions = {},
     syncedWorlds = new Set;
 
 async function getTurnCredentials() {
-    return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
+    return [{
         urls: "stun:supturn.com:3478"
     }, {
         urls: ["turn:supturn.com:3478?transport=udp", "turn:supturn.com:3478?transport=tcp", "turn:supturn.com:443?transport=tcp"],
@@ -34,12 +34,12 @@ async function connectToServer(e, t, o) {
     if (!knownServers.find((function (t) {
         return t.hostUser === e
     }))) return addMessage("No server found for " + e, 3e3), void console.log("[WebRTC] No server found for:", e);
-    console.log("[WebRTC] Initiating connection to server:", e), connectionAttempts.set(e, Date.now());
+    connectionAttempts.set(e, Date.now());
     const a = await getTurnCredentials();
     var r = new RTCPeerConnection({
         iceServers: a
     });
-    r.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${e}: ${r.iceConnectionState}`), localAudioStream && localAudioStream.getTracks().forEach((e => {
+    r.oniceconnectionstatechange = () => { /* ICE state change silenced */ }, localAudioStream && localAudioStream.getTracks().forEach((e => {
         r.addTrack(e, localAudioStream)
     })), r.ontrack = t => {
         const o = e;
@@ -215,7 +215,7 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -232,7 +232,7 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -317,7 +317,6 @@ function setupDataChannel(e, t) {
         const n = peers.get(t);
         n && (n.keepaliveInterval = s), updateHudButtons()
     }, e.onmessage = e => {
-        console.log(`[WEBRTC] Message from ${t}`);
         try {
             const s = JSON.parse(e.data),
                 n = s.username || t;

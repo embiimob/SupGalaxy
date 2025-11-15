@@ -1399,7 +1399,7 @@ function Chunk(e, t) {
 }
 
 function ChunkManager(e) {
-    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
+    this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map
 }
 
 function buildGreedyMesh(e, t, o) {
@@ -1517,13 +1517,13 @@ function buildGreedyMesh(e, t, o) {
 }
 
 function initThree() {
-    console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
+    (scene = new THREE.Scene).background = new THREE.Color(8900331), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), (renderer = new THREE.WebGLRenderer({
         antialias: !0
-    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1;
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
+    scene.add(t), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), scene.add(crackMeshes), lightManager.init(), initSky(), renderer.domElement.addEventListener("pointerdown", (function (e) {
         onPointerDown(e)
     })), renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
@@ -3604,7 +3604,6 @@ function setupMobile() {
 
 function updateLoginUI() {
     try {
-        console.log("[Debug] updateLoginUI started, knownWorlds:", knownWorlds.size, "knownUsers:", knownUsers.size);
         var e = document.getElementById("worldNameInput"),
             t = document.getElementById("userInput"),
             o = document.getElementById("worldSuggestions"),
@@ -3657,7 +3656,7 @@ async function populateSpawnChunks() {
 }
 async function startGame() {
     var e = document.getElementById("startBtn");
-    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
+    e && e.blur(), isPromptOpen = !1;
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
     if (t.length > 8) return void addMessage("World name too long (max 8 chars)", 3e3);
@@ -3685,19 +3684,19 @@ async function startGame() {
         discoverer: userName,
         users: new Set([userName]),
         toAddress: userAddress
-    }), keywordCache.set(userAddress, r), document.getElementById("loginOverlay").style.display = "none", document.getElementById("hud").style.display = "block", document.getElementById("hotbar").style.display = "flex", document.getElementById("rightPanel").style.display = "flex", document.getElementById("worldLabel").textContent = worldName, document.getElementById("seedLabel").textContent = "User " + userName, updateHudButtons(), console.log("[LOGIN] Initializing Three.js");
+    }), keywordCache.set(userAddress, r), document.getElementById("loginOverlay").style.display = "none", document.getElementById("hud").style.display = "block", document.getElementById("hotbar").style.display = "flex", document.getElementById("rightPanel").style.display = "flex", document.getElementById("worldLabel").textContent = worldName, document.getElementById("seedLabel").textContent = "User " + userName, updateHudButtons();
     try {
         await initAudio()
     } catch (e) {
         console.error("Failed to initialize audio:", e), addMessage("Could not initialize audio, continuing without it.", 3e3)
     }
-    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
+    initThree(), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks();
     var s = calculateSpawnPoint(r);
     player.x = s.x, player.y = chunkManager.getSurfaceY(s.x, s.z) + 1, player.z = s.z, spawnPoint = {
         x: player.x,
@@ -3707,14 +3706,14 @@ async function startGame() {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
-    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
+    if (chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
         addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
     }
     player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
     registerKeyEvents();
-    console.log("[LOGIN] Starting game loop"), requestAnimationFrame(gameLoop), addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
+    requestAnimationFrame(gameLoop), addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
     var d = document.getElementById("health");
     d && (d.innerText = player.health);
     var c = document.getElementById("score");
