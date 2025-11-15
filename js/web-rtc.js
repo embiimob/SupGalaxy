@@ -119,59 +119,49 @@ async function sendWorldStateAsync(peer, worldState, username) {
         return;
     }
 
-    const dataToSend = {
-        chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
-        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
-        processedIds: Array.from(processedMessages)
-    };
-
-    const dataString = JSON.stringify(dataToSend);
-    const chunkSize = 16384; // 16KB chunks
-    const chunks = [];
-    for (let i = 0; i < dataString.length; i += chunkSize) {
-        chunks.push(dataString.slice(i, i + chunkSize));
+    // First, send all foreign block origins in one compressed message
+    if (worldState.foreignBlockOrigins.size > 0) {
+        const originsPayload = {
+            type: 'compressed_foreign_origins',
+            origins: Array.from(worldState.foreignBlockOrigins.entries())
+        };
+        const compressedOrigins = pako.deflate(JSON.stringify(originsPayload), { to: 'string' });
+        peer.dc.send(compressedOrigins);
+        console.log(`[WebRTC] Sent ${worldState.foreignBlockOrigins.size} foreign origins to ${username}.`);
     }
 
-    const transactionId = `world_sync_${username}_${Date.now()}`;
+    // Then, send each chunk delta as a separate compressed message
+    for (const [chunkKey, deltas] of worldState.chunkDeltas.entries()) {
+        const chunkPayload = {
+            type: 'compressed_world_chunk',
+            key: chunkKey,
+            deltas: deltas.map(d => [d.x, d.y, d.z, d.b]) // Compress delta format
+        };
 
-    peer.dc.send(JSON.stringify({
-        type: 'world_sync_start',
-        total: chunks.length,
-        transactionId: transactionId
-    }));
-
-    let i = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-
-    function sendChunk() {
-        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
-            if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
+        try {
+            const compressedChunk = pako.deflate(JSON.stringify(chunkPayload), { to: 'string' });
+            if (peer.dc.readyState === 'open') {
+                peer.dc.send(compressedChunk);
+            } else {
+                console.log(`[WebRTC] Data channel closed before sending chunk ${chunkKey} to ${username}.`);
+                break;
             }
-            return;
+        } catch (error) {
+            console.error(`[WebRTC] Error compressing or sending chunk ${chunkKey}:`, error);
         }
-
-        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-        if (peer.dc.bufferedAmount > highWaterMark) {
-            peer.dc.onbufferedamountlow = () => {
-                peer.dc.onbufferedamountlow = null;
-                setTimeout(sendChunk, 0);
-            };
-            return;
-        }
-
-        peer.dc.send(JSON.stringify({
-            type: 'world_sync_chunk',
-            transactionId: transactionId,
-            index: i,
-            chunk: chunks[i],
-            total: chunks.length
-        }));
-        i++;
-        setTimeout(sendChunk, 0);
     }
 
-    sendChunk();
+    // Finally, send processed message IDs
+    if (processedMessages.size > 0) {
+        const processedIdsPayload = {
+            type: 'processed_ids_sync',
+            ids: Array.from(processedMessages)
+        };
+        const compressedIds = pako.deflate(JSON.stringify(processedIdsPayload), { to: 'string' });
+        peer.dc.send(compressedIds);
+    }
+
+    console.log(`[WebRTC] Finished sending world state to ${username}.`);
 }
 async function handleMinimapFile(e) {
     try {
@@ -319,10 +309,39 @@ function setupDataChannel(e, t) {
     }, e.onmessage = e => {
         console.log(`[WEBRTC] Message from ${t}`);
         try {
-            const s = JSON.parse(e.data),
-                n = s.username || t;
+            let s;
+            if (typeof e.data === 'string' && e.data.startsWith('{')) {
+                s = JSON.parse(e.data);
+            } else {
+                // Decompress and parse the message
+                const decompressed = pako.inflate(e.data, { to: 'string' });
+                s = JSON.parse(decompressed);
+            }
+
+            const n = s.username || t;
             if (n === userName) return;
+
             switch (s.type) {
+                case "compressed_foreign_origins":
+                    if (!isHost) {
+                        getCurrentWorldState().foreignBlockOrigins = new Map(s.origins);
+                        console.log(`[WebRTC] Received and applied ${s.origins.length} foreign origins.`);
+                    }
+                    break;
+                case "compressed_world_chunk":
+                    if (!isHost) {
+                        const decompressedDeltas = s.deltas.map(d => ({ x: d[0], y: d[1], z: d[2], b: d[3] }));
+                        chunkManager.addPendingDeltas(s.key, decompressedDeltas);
+                    }
+                    break;
+                case "processed_ids_sync":
+                    if (!isHost) {
+                        for (const id of s.ids) {
+                            processedMessages.add(id);
+                        }
+                        worker.postMessage({ type: "sync_processed", ids: s.ids });
+                    }
+                    break;
                 case "i_am_alive":
                     if (isHost) {
                         const e = peers.get(n);
@@ -336,85 +355,6 @@ function setupDataChannel(e, t) {
                         dc: null,
                         address: null
                     }), updateHudButtons());
-                    break;
-                case "world_sync":
-                    if (!isHost) {
-                        console.log("[WEBRTC] Received world_sync");
-                        if (s.chunkDeltas) {
-                            const deltas = new Map(s.chunkDeltas);
-                            for (const [chunkKey, changes] of deltas.entries()) {
-                                chunkManager.addPendingDeltas(chunkKey, changes);
-                            }
-                        }
-                        if (s.foreignBlockOrigins) {
-                            getCurrentWorldState().foreignBlockOrigins = new Map(s.foreignBlockOrigins);
-                        }
-                    }
-                    break;
-                case 'world_sync_start':
-                    if (!isHost) {
-                        partialIPFSUpdates.set(s.transactionId, {
-                            chunks: new Array(s.total),
-                            total: s.total,
-                            received: 0
-                        });
-                        const worldSyncProgress = document.getElementById('worldSyncProgress');
-                        worldSyncProgress.style.display = 'flex';
-                        const progressCircle = worldSyncProgress.querySelector('.progress-circle');
-                        progressCircle.style.setProperty('--p', '0');
-                        progressCircle.dataset.progress = '0';
-                        worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
-                    }
-                    break;
-                case 'world_sync_chunk':
-                    if (!isHost) {
-                        const update = partialIPFSUpdates.get(s.transactionId);
-                        if (update && !update.chunks[s.index]) {
-                            update.chunks[s.index] = s.chunk;
-                            update.received++;
-
-                            const progress = Math.round(update.received / update.total * 100);
-                            const circle = document.querySelector('.progress-circle');
-                            if (circle) {
-                                circle.style.setProperty('--p', progress);
-                                circle.dataset.progress = progress;
-                                const label = document.querySelector('.progress-circle-label');
-                                if (label) {
-                                    label.textContent = `${progress}%`;
-                                }
-                            }
-
-                            if (update.received === update.total) {
-                                const fullDataString = update.chunks.join('');
-                                const fullData = JSON.parse(fullDataString);
-
-                                if (fullData.chunkDeltas) {
-                                    for (const [chunkKey, changes] of fullData.chunkDeltas) {
-                                        chunkManager.addPendingDeltas(chunkKey, changes);
-                                    }
-                                }
-                                if (fullData.foreignBlockOrigins) {
-                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
-                                }
-                                if (fullData.processedIds) {
-                                    for (const id of fullData.processedIds) {
-                                        processedMessages.add(id);
-                                    }
-                                    // Sync with worker
-                                    worker.postMessage({
-                                        type: "sync_processed",
-                                        ids: Array.from(processedMessages)
-                                    });
-                                }
-
-                                partialIPFSUpdates.delete(s.transactionId);
-
-                                setTimeout(() => {
-                                    document.getElementById('worldSyncProgress').style.display = 'none';
-                                }, 2000);
-                            }
-                        }
-                    }
                     break;
                 case "state_update":
                     if (!isHost)
