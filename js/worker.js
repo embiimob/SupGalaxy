@@ -479,33 +479,29 @@ var addressByKeywordCache = new Map();
 var processedMessages = new Set();
 var API_CALLS_PER_SECOND = 3;
 var apiDelay = 350;
-async function fetchData(url) {
+
+async function fetchWithRetry(url, options = {}, retries = 3, backoff = 500) {
+    for (let i = 0; i < retries; i++) {
         try {
             await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch(url);
-            return response.ok ? await response.json() : null;
-        } catch (e) {
-            console.error('[Worker] Fetch error:', url, e);
-            return null;
+            const response = await fetch(url, options);
+            if (response.ok) {
+                return response;
+            }
+            console.error(`[Worker] Attempt ${i + 1} failed with status: ${response.status} for ${url}`);
+        } catch (error) {
+            console.error(`[Worker] Attempt ${i + 1} failed with error for ${url}:`, error);
         }
-}
-async function fetchText(url) {
-        try {
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch(url);
-            return response.ok ? await response.text() : null;
-        } catch (e) {
-            console.error('[Worker] Fetch text error:', url, e);
-            return null;
-        }
+        await new Promise(resolve => setTimeout(resolve, backoff * Math.pow(2, i)));
+    }
+    return null; // Return null after all retries have failed
 }
 async function getPublicAddressByKeyword(keyword) {
         try {
             if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetPublicAddressByKeyword/" + keyword + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch address for keyword:', keyword, 'status:', response.status);
+            const response = await fetchWithRetry("https://p2fk.io/GetPublicAddressByKeyword/" + keyword + "?mainnet=false");
+            if (!response) {
+                console.error('[Worker] Failed to fetch address for keyword:', keyword);
                 return null;
             }
             var address = await response.text();
@@ -520,10 +516,9 @@ async function getPublicAddressByKeyword(keyword) {
 async function getPublicMessagesByAddress(address, skip, qty) {
         try {
             var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch messages for address:', cleanAddress, 'status:', response.status);
+            const response = await fetchWithRetry("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
+            if (!response) {
+                console.error('[Worker] Failed to fetch messages for address:', cleanAddress);
                 return [];
             }
             var messages = await response.json();
@@ -538,10 +533,9 @@ async function getProfileByURN(urn) {
         try {
             if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
             var cleanUrn = encodeURIComponent(urn.trim().replace(/[^a-zA-Z0-9]/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetProfileByURN/" + cleanUrn + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch profile for URN:', cleanUrn, 'status:', response.status);
+            const response = await fetchWithRetry("https://p2fk.io/GetProfileByURN/" + cleanUrn + "?mainnet=false");
+            if (!response) {
+                console.error('[Worker] Failed to fetch profile for URN:', cleanUrn);
                 return null;
             }
             var profile = await response.json();
@@ -556,10 +550,9 @@ async function getProfileByAddress(address) {
         try {
             if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
             var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetProfileByAddress/" + cleanAddress + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch profile for address:', cleanAddress, 'status:', response.status);
+            const response = await fetchWithRetry("https://p2fk.io/GetProfileByAddress/" + cleanAddress + "?mainnet=false");
+            if (!response) {
+                console.error('[Worker] Failed to fetch profile for address:', cleanAddress);
                 return null;
             }
             var profile = await response.json();
@@ -574,10 +567,9 @@ async function getKeywordByPublicAddress(address) {
         try {
             if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
             var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch keyword for address:', cleanAddress, 'status:', response.status);
+            const response = await fetchWithRetry("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
+            if (!response) {
+                console.error('[Worker] Failed to fetch keyword for address:', cleanAddress);
                 return null;
             }
             var keyword = await response.text();
@@ -590,21 +582,17 @@ async function getKeywordByPublicAddress(address) {
         }
 }
 async function fetchIPFS(hash) {
-        let attempts = 0;
-        while (attempts < 3) {
-            try {
-                await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
-                var response = await fetch("https://ipfs.io/ipfs/" + hash);
-                if (response.ok) {
-                    return await response.json();
-                }
-                console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
-            } catch (e) {
-                console.error('[Worker] Error fetching IPFS for hash:', hash, e);
-            }
-            attempts++;
-        }
+    const response = await fetchWithRetry("https://ipfs.io/ipfs/" + hash);
+    if (!response) {
+        console.error('[Worker] Failed to fetch IPFS for hash:', hash);
         return null;
+    }
+    try {
+        return await response.json();
+    } catch (e) {
+        console.error('[Worker] Error parsing IPFS response for hash:', hash, e);
+        return null;
+    }
 }
 self.onmessage = async function(e) {
         var data = e.data;
