@@ -4383,6 +4383,16 @@ function gameLoop(e) {
 }
 document.addEventListener("DOMContentLoaded", (async function () {
     try {
+        const params = new URLSearchParams(window.location.search);
+        const isServer = params.get('server') === 'true';
+
+        if (isServer) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('server-management-ui').style.display = 'block';
+            startServer(params);
+            return;
+        }
+
         const i = new URLSearchParams(window.location.search),
             l = i.get("world-seed"),
             d = i.get("user-name"),
@@ -4570,6 +4580,144 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
     }
 })), console.log("[SYSTEM] Script loaded");
+
+function startServer(params) {
+    const worldNameInput = params.get('world') || 'server_world';
+    const userNameInput = params.get('user') || 'server_host';
+    const port = params.get('port') || '8080';
+
+    worldName = worldNameInput.slice(0, 8);
+    userName = userNameInput.slice(0, 20);
+    worldSeed = worldName;
+
+    document.getElementById('serverInfo').innerText = `World: ${worldName} | Host: ${userName} | Port: ${port}`;
+
+    chunkManager = new ChunkManager(worldSeed);
+    activateHost();
+
+    // Simplified game loop for the server
+    setInterval(() => {
+        manageMobs();
+        manageVolcanoes();
+    }, 1000);
+
+    // Update the player list every 5 seconds
+    setInterval(updatePlayerList, 5000);
+
+    document.getElementById('saveServerSessionBtn').addEventListener('click', () => {
+        downloadHostSession();
+        logServerEvent('Host session saved.');
+    });
+
+    // Auto-save every 15 minutes
+    setInterval(() => {
+        downloadHostSession();
+        logServerEvent('Host session auto-saved.');
+    }, 900000);
+
+    logServerEvent('Server started successfully.');
+    setupWebSocketSignaling(port);
+}
+
+function setupWebSocketSignaling(port) {
+    const topic = `${worldName}-${userName}:${port}`;
+    const signalingSocket = new WebSocket('wss://socketsbay.com/wss/v2/1/demo/');
+    const clientConnections = new Map(); // Keep track of RTCPeerConnection for each client
+
+    signalingSocket.onopen = () => {
+        logServerEvent(`Signaling server connected. Listening on topic: ${topic}`);
+    };
+
+    signalingSocket.onmessage = async (event) => {
+        const message = JSON.parse(event.data);
+        if (message.topic !== topic || message.to !== userName) return;
+
+        const from = message.from;
+
+        if (message.type === 'offer') {
+            logServerEvent(`Offer received from ${from}`);
+
+            const peer = new RTCPeerConnection({ iceServers: await getTurnCredentials() });
+            clientConnections.set(from, peer);
+
+            peer.onicecandidate = event => {
+                if (event.candidate) {
+                    const candidateMessage = {
+                        type: 'candidate',
+                        candidate: event.candidate,
+                        topic: topic,
+                        from: userName,
+                        to: from
+                    };
+                    signalingSocket.send(JSON.stringify(candidateMessage));
+                }
+            };
+
+            peer.ondatachannel = event => {
+                const dataChannel = event.channel;
+                peers.set(from, { pc: peer, dc: dataChannel, address: null });
+                setupDataChannel(dataChannel, from);
+                logServerEvent(`Data channel with ${from} established.`);
+                updatePlayerList();
+            };
+
+            await peer.setRemoteDescription(new RTCSessionDescription(message.offer));
+            const answer = await peer.createAnswer();
+            await peer.setLocalDescription(answer);
+
+            const answerMessage = {
+                type: 'answer',
+                answer: answer,
+                topic: topic,
+                from: userName,
+                to: from
+            };
+            signalingSocket.send(JSON.stringify(answerMessage));
+        } else if (message.type === 'candidate') {
+            const peer = clientConnections.get(from);
+            if (peer) {
+                await peer.addIceCandidate(new RTCIceCandidate(message.candidate));
+            }
+        }
+    };
+
+    signalingSocket.onerror = (error) => {
+        logServerEvent('Signaling server error.');
+        console.error('[Signaling] WebSocket error:', error);
+    };
+
+    signalingSocket.onclose = () => {
+        logServerEvent('Signaling server disconnected. Attempting to reconnect...');
+        setTimeout(() => setupWebSocketSignaling(port), 5000);
+    };
+}
+
+function updatePlayerList() {
+    const playerList = document.getElementById('serverPlayerList');
+    playerList.innerHTML = '';
+    for (const [username] of peers) {
+        if (username !== userName) {
+            const playerEntry = document.createElement('div');
+            playerEntry.innerText = username;
+            const kickButton = document.createElement('button');
+            kickButton.innerText = 'Kick';
+            kickButton.onclick = () => {
+                kickUser(username);
+                logServerEvent(`Kicked ${username}`);
+            };
+            playerEntry.appendChild(kickButton);
+            playerList.appendChild(playerEntry);
+        }
+    }
+}
+
+function logServerEvent(message) {
+    const log = document.getElementById('serverLog');
+    const entry = document.createElement('div');
+    entry.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
 
 function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneUrl').value = '';

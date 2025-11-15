@@ -875,6 +875,10 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case 'kick':
+                    alert("You have been kicked from the server.");
+                    window.location.reload();
+                    break;
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)
@@ -1378,7 +1382,22 @@ function openUsersModal() {
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
-    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = '\n            <h3>Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = `
+            <h3>Online Players</h3>
+            <div style="margin-bottom:10px;">
+                <input id="directConnectInput" placeholder="Enter world/host:port" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                <button id="connectHostBtn" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Host</button>
+            </div>
+            <div style="margin-bottom:10px;">
+                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>
+            </div>
+            <div id="usersList"></div>
+            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>
+            <div style="margin-top:10px;text-align:right;">
+                <button id="closeUsers">Close</button>
+            </div>
+        `, document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     var a = !1,
@@ -1426,7 +1445,14 @@ function openUsersModal() {
     }
     t.querySelector("#closeUsers").onclick = function () {
         console.log("[MODAL] Closing users modal"), t.remove(), isPromptOpen = !1
-    }, t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
+    };
+    t.querySelector("#connectHostBtn").onclick = function () {
+        const address = document.getElementById("directConnectInput").value;
+        connectToHost(address);
+        t.style.display = "none";
+        isPromptOpen = false;
+    };
+    t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
         e.stopPropagation()
     })), t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
@@ -1461,6 +1487,104 @@ function cleanupPeer(e) {
         t.audio.srcObject = null, t.audio.remove(), userAudioStreams.delete(e)
     }
     userVideoStreams.has(e) && userVideoStreams.delete(e), delete userPositions[e], addMessage(`${e} has disconnected.`), updateHudButtons(), console.log(`[WebRTC] Cleaned up peer: ${e}`)
+}
+
+function kickUser(username) {
+    if (!isHost) return;
+    const peer = peers.get(username);
+    if (peer) {
+        if (peer.dc) {
+            peer.dc.send(JSON.stringify({ type: 'kick' }));
+        }
+        cleanupPeer(username);
+    }
+}
+
+async function connectToHost(address) {
+    const addressParts = address.split('/');
+    if (addressParts.length !== 2 || !addressParts[1].includes(':')) {
+        addMessage("Invalid address format. Use world/host:port", 3e3);
+        return;
+    }
+
+    const world = addressParts[0];
+    const hostAddress = addressParts[1];
+    const hostUsername = hostAddress.split(':')[0];
+    const topic = `${world}-${hostAddress}`;
+
+    console.log(`[WebRTC] Direct connection to ${address} via topic ${topic}`);
+    addMessage(`Connecting to ${address}...`, 5000);
+
+    const signalingSocket = new WebSocket('wss://socketsbay.com/wss/v2/1/demo/');
+
+    let peer; // Declare peer here to be accessible in all scopes
+
+    signalingSocket.onopen = async () => {
+        console.log('[Signaling] WebSocket connected.');
+
+        peer = new RTCPeerConnection({
+            iceServers: await getTurnCredentials()
+        });
+
+        peer.onicecandidate = event => {
+            if (event.candidate) {
+                const message = {
+                    type: 'candidate',
+                    candidate: event.candidate,
+                    topic: topic,
+                    from: userName,
+                    to: hostUsername
+                };
+                signalingSocket.send(JSON.stringify(message));
+            }
+        };
+
+        const dataChannel = peer.createDataChannel("game");
+        setupDataChannel(dataChannel, hostUsername);
+
+        peer.oniceconnectionstatechange = () => {
+            console.log(`[WebRTC] ICE state change for ${hostUsername}: ${peer.iceConnectionState}`);
+            if (peer.iceConnectionState === 'connected') {
+                addMessage(`Connected to ${hostUsername}`, 3e3);
+                peers.set(hostUsername, { pc: peer, dc: dataChannel, address: null });
+                updateHudButtons();
+            } else if (peer.iceConnectionState === 'failed' || peer.iceConnectionState === 'disconnected') {
+                addMessage(`Connection to ${hostUsername} failed.`, 3e3);
+                cleanupPeer(hostUsername);
+            }
+        };
+
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        const offerMessage = {
+            type: 'offer',
+            offer: offer,
+            topic: topic,
+            from: userName,
+            to: hostUsername
+        };
+        signalingSocket.send(JSON.stringify(offerMessage));
+    };
+
+    signalingSocket.onmessage = async (event) => {
+        const message = JSON.parse(event.data);
+        if (message.topic !== topic || message.to !== userName) return;
+
+        if (message.type === 'answer') {
+            if (peer && peer.signalingState !== 'stable') {
+                await peer.setRemoteDescription(new RTCSessionDescription(message.answer));
+            }
+        } else if (message.type === 'candidate') {
+            if (peer) {
+                await peer.addIceCandidate(new RTCIceCandidate(message.candidate));
+            }
+        }
+    };
+
+    signalingSocket.onerror = (error) => {
+        console.error('[Signaling] WebSocket error:', error);
+        addMessage(`Failed to connect to signaling server`, 3e3);
+    };
 }
 async function toggleCamera() {
     const e = document.getElementById("cameraBtn"),
