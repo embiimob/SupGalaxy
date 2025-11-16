@@ -1549,7 +1549,7 @@ function initThree() {
             }
             t = t.parentElement
         }
-        n || "first" === cameraMode && e.touches.length > 0 && (o = e.touches[0].clientX, a = e.touches[0].clientY, e.preventDefault())
+            n || "first" === cameraMode && e.touches.length > 0 && (o = e.touches[0].clientX, a = e.touches[0].clientY, e.preventDefault(), performAttack())
     }), {
         passive: !1
     }), renderer.domElement.addEventListener("touchmove", (e => {
@@ -3594,8 +3594,9 @@ function setupMobile() {
             joystick.right = !1, e.preventDefault()
         })), document.getElementById("mJump").addEventListener("touchstart", (function (e) {
             playerJump(), safePlayAudio(soundJump), e.preventDefault()
-        })), document.getElementById("mAttack").addEventListener("touchstart", (function (e) {
-            performAttack(), e.preventDefault()
+        })), document.getElementById("mHud").addEventListener("touchstart", (function (e) {
+            var t = document.getElementById("hud");
+            "block" === t.style.display ? t.style.display = "none" : t.style.display = "block", e.preventDefault()
         })), document.getElementById("mCam").addEventListener("touchstart", (function (e) {
             toggleCameraMode(), e.preventDefault()
         }))
@@ -3980,7 +3981,7 @@ function gameLoop(e) {
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
             i = 0;
-        isMobile() ? (joystick.up && (i -= 1), joystick.down && (i += 1), joystick.left && (s -= 1), joystick.right && (s += 1)) : (keys.w && (i += 1), keys.s && (i -= 1), keys.a && (s -= 1), keys.d && (s += 1), i <= 0 && isSprinting && (isSprinting = !1, addMessage("Sprinting disabled", 1500)), "first" === cameraMode && (keys.arrowup && (player.pitch += .02), keys.arrowdown && (player.pitch -= .02), keys.arrowleft && (player.yaw += .02), keys.arrowright && (player.yaw -= .02), player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"))), "first" === cameraMode ? a = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, "YXZ")) : (a = new THREE.Vector3, camera.getWorldDirection(a)), a.y = 0, a.normalize(), n = (new THREE.Vector3).crossVectors(a, new THREE.Vector3(0, 1, 0));
+        isMobile() ? (joystick.up && (i += 1), joystick.down && (i -= 1), joystick.left && (s -= 1), joystick.right && (s += 1)) : (keys.w && (i += 1), keys.s && (i -= 1), keys.a && (s -= 1), keys.d && (s += 1), i <= 0 && isSprinting && (isSprinting = !1, addMessage("Sprinting disabled", 1500)), "first" === cameraMode && (keys.arrowup && (player.pitch += .02), keys.arrowdown && (player.pitch -= .02), keys.arrowleft && (player.yaw += .02), keys.arrowright && (player.yaw -= .02), player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"))), "first" === cameraMode ? a = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, "YXZ")) : (a = new THREE.Vector3, camera.getWorldDirection(a)), a.y = 0, a.normalize(), n = (new THREE.Vector3).crossVectors(a, new THREE.Vector3(0, 1, 0));
         var l = new THREE.Vector3;
         l.addScaledVector(a, i), l.addScaledVector(n, s);
         const o = l.length() > .001;

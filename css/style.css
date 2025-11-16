@@ -405,18 +405,27 @@
         #mobileControls {
             position: fixed;
             left: 12px;
-            bottom: 12px;
+            bottom: 80px;
             z-index: 195;
             display: none;
-            gap: 8px;
+            grid-template-columns: repeat(3, 48px);
+            grid-template-rows: repeat(2, 48px);
+            grid-gap: 8px;
+            grid-template-areas: "left up right" ". down .";
+        }
+
+        #mobileJump {
+            position: fixed;
+            left: 12px;
+            bottom: 210px;
         }
 
         .m-btn {
-            width: 56px;
-            height: 56px;
+            width: 48px;
+            height: 48px;
             border-radius: 12px;
-            background: rgba(0,0,0,0.45);
-            border: 1px solid rgba(255,255,255,0.04);
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.04);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -424,17 +433,33 @@
             color: #fff;
         }
 
+        #mUp {
+            grid-area: up;
+        }
+
+        #mDown {
+            grid-area: down;
+        }
+
+        #mLeft {
+            grid-area: left;
+        }
+
+        #mRight {
+            grid-area: right;
+        }
+
         #mobileRight {
             position: fixed;
             right: 12px;
-            bottom: 12px;
+            bottom: 80px;
             z-index: 195;
             display: none;
             gap: 8px;
             flex-direction: column;
         }
 
-        @media (max-width:700px) {
+        @media (max-width: 700px) {
             #emojiGrid {
                 grid-template-columns: repeat(4, 1fr);
                 max-height: 80vh;
@@ -443,11 +468,11 @@
         }
 
         .m-action {
-            width: 56px;
-            height: 56px;
+            width: 48px;
+            height: 48px;
             border-radius: 12px;
-            background: rgba(0,0,0,0.45);
-            border: 1px solid rgba(255,255,255,0.04);
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.04);
             display: flex;
             align-items: center;
             justify-content: center;
