@@ -608,6 +608,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     deathScreenShown = !1,
     isDying = !1,
     isNight = !1,
+    mobileModeActive = !1,
     deathAnimationStart = 0,
     lastPollPosition = new THREE.Vector3,
     pauseTimer = 0,
@@ -2092,7 +2093,7 @@ function attemptCraft(e) {
         }
     }
     let i = null;
-    s.length > 0 && (i = s.join("")), addToInventory(e.out.id, e.out.count, i), addMessage("Crafted " + BLOCKS[e.out.id].name), updateHotbarUI(), "block" === document.getElementById("inventoryModal").style.display && updateInventoryUI(), document.getElementById("craftModal").style.display = "none", isPromptOpen = !1
+    s.length > 0 && (i = s.join("")), addToInventory(e.out.id, e.out.count, i), addMessage("Crafted " + BLOCKS[e.out.id].name), updateHotbarUI(), "block" === document.getElementById("inventoryModal").style.display && updateInventoryUI()
 }
 
 function completeCraft(e, t) {
@@ -2171,27 +2172,100 @@ function initiateCraft(e) {
 }
 
 function openCrafting() {
-    isPromptOpen = !0, document.getElementById("craftModal").style.display = "block";
-    var e = document.getElementById("recipeList");
-    for (var t of (e.innerHTML = "", RECIPES)) {
-        var o = document.createElement("div");
-        o.style.display = "flex", o.style.gap = "8px", o.style.alignItems = "center", o.style.marginTop = "8px";
-        var a = document.createElement("div");
-        a.innerText = BLOCKS[t.out.id].name + " x" + t.out.count;
-        var n = document.createElement("div");
-        n.style.opacity = .85;
-        var r = [];
-        for (const e in t.requires) {
-            let o = `${BLOCKS[e].name || e} x${t.requires[e]}`;
-            t.requiresOffWorld && t.requiresOffWorld[e] && (o += ` (${t.requiresOffWorld[e]} must be Off-World)`), r.push(o)
-        }
-        n.innerText = "Requires: " + r.join(", ");
-        var s = document.createElement("button");
-        s.innerText = "Craft", s.onclick = function (e) {
-            return function () {
-                initiateCraft(e)
+    isPromptOpen = true;
+    const craftModal = document.getElementById("craftModal");
+    craftModal.style.display = "flex"; // Use flex as per new CSS
+    const recipeList = document.getElementById("recipeList");
+    recipeList.innerHTML = "";
+
+    // Tally current inventory
+    const inventoryCounts = {};
+    const offWorldInventoryCounts = {};
+    for (const item of INVENTORY) {
+        if (item) {
+            if (item.originSeed && item.originSeed !== worldSeed) {
+                offWorldInventoryCounts[item.id] = (offWorldInventoryCounts[item.id] || 0) + item.count;
+            } else {
+                inventoryCounts[item.id] = (inventoryCounts[item.id] || 0) + item.count;
             }
-        }(t), o.appendChild(a), o.appendChild(n), o.appendChild(s), e.appendChild(o)
+        }
+    }
+     const totalInventoryCounts = {};
+      for (const item of INVENTORY) {
+        if (item) {
+            totalInventoryCounts[item.id] = (totalInventoryCounts[item.id] || 0) + item.count;
+        }
+    }
+
+
+    for (const recipe of RECIPES) {
+        let canCraft = true;
+        const ingredients = [];
+
+        for (const reqId in recipe.requires) {
+            const requiredAmount = recipe.requires[reqId];
+            const hasAmount = totalInventoryCounts[reqId] || 0;
+            if (hasAmount < requiredAmount) {
+                canCraft = false;
+            }
+            ingredients.push(`${BLOCKS[reqId].name} x${requiredAmount} (Have: ${hasAmount})`);
+        }
+
+        if (recipe.requiresOffWorld) {
+            for (const reqId in recipe.requiresOffWorld) {
+                const requiredAmount = recipe.requiresOffWorld[reqId];
+                const hasAmount = offWorldInventoryCounts[reqId] || 0;
+                if (hasAmount < requiredAmount) {
+                    canCraft = false;
+                }
+            }
+        }
+
+        const recipeItem = document.createElement("div");
+        recipeItem.className = "recipe-item";
+
+        const preview = document.createElement("div");
+        preview.className = "recipe-preview";
+        preview.style.backgroundColor = BLOCKS[recipe.out.id].color;
+
+        const info = document.createElement("div");
+        info.className = "recipe-info";
+
+        const name = document.createElement("div");
+        name.className = "recipe-name";
+        name.innerText = `${BLOCKS[recipe.out.id].name} x${recipe.out.count}`;
+
+        const ingredientsDiv = document.createElement("div");
+        ingredientsDiv.className = "recipe-ingredients";
+        ingredientsDiv.innerText = "Requires: " + ingredients.join(", ");
+
+        const statusDiv = document.createElement("div");
+        statusDiv.className = "recipe-status";
+
+        const statusText = document.createElement("div");
+        statusText.className = "status-text";
+        statusText.innerText = canCraft ? "Craftable" : "Not Craftable";
+        statusText.classList.add(canCraft ? "status-craftable" : "status-not-craftable");
+
+        info.appendChild(name);
+        info.appendChild(ingredientsDiv);
+        statusDiv.appendChild(statusText);
+
+        if (canCraft) {
+            const craftButton = document.createElement("button");
+            craftButton.innerText = "Craft";
+            craftButton.onclick = () => {
+                initiateCraft(recipe);
+                // Refresh the crafting menu after attempting a craft
+                openCrafting();
+            };
+            statusDiv.appendChild(craftButton);
+        }
+
+        recipeItem.appendChild(preview);
+        recipeItem.appendChild(info);
+        recipeItem.appendChild(statusDiv);
+        recipeList.appendChild(recipeItem);
     }
 }
 
@@ -3520,6 +3594,9 @@ async function downloadSinglePlayerSession() {
     document.getElementById("downloadAddressList").value = d.join(","), document.getElementById("downloadModal").style.display = "block"
 }
 
+// Add this call to the end of startGame
+handleResizeAndOrientation();
+
 function disposeObject(e) {
     e.traverse((function (e) {
         e.geometry && e.geometry.dispose(), e.material && (Array.isArray(e.material) ? e.material.forEach((function (e) {
@@ -3594,8 +3671,8 @@ function setupMobile() {
             joystick.right = !1, e.preventDefault()
         })), document.getElementById("mJump").addEventListener("touchstart", (function (e) {
             playerJump(), safePlayAudio(soundJump), e.preventDefault()
-        })), document.getElementById("mAttack").addEventListener("touchstart", (function (e) {
-            performAttack(), e.preventDefault()
+        })), document.getElementById("mInventory").addEventListener("touchstart", (function (e) {
+            toggleInventory(), e.preventDefault()
         })), document.getElementById("mCam").addEventListener("touchstart", (function (e) {
             toggleCameraMode(), e.preventDefault()
         }))
@@ -4565,7 +4642,35 @@ document.addEventListener("DOMContentLoaded", (async function () {
                     }
                 }, o.readAsText(t)
             }
-        })), console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
+        }));
+
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        s.addEventListener('dblclick', function() {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', function(event) {
+            var file = event.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        applySaveFile(JSON.parse(e.target.result), "local", new Date().toISOString());
+                    } catch (err) {
+                        console.error("Error parsing session file:", err);
+                        addMessage("Sorry, file malformed.", 3000);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
     } catch (e) {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
     }
@@ -4590,6 +4695,59 @@ document.getElementById('magicianStoneCancel').addEventListener('click', functio
     isPromptOpen = false;
     magicianStonePlacement = null;
 });
+
+function handleResizeAndOrientation() {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isSmallScreen = window.innerWidth < 700;
+
+    const hud = document.getElementById('hud');
+    const mobileControls = document.getElementById('mobileControls');
+    const mobileRight = document.getElementById('mobileRight');
+    const hotbar = document.getElementById('hotbar');
+    const rightPanel = document.getElementById('rightPanel');
+    const mobileModeToggle = document.getElementById('mobileModeToggle');
+
+    if (isSmallScreen && isPortrait) {
+        hud.style.display = 'none';
+        mobileControls.style.display = 'flex';
+        mobileRight.style.display = 'flex';
+        hotbar.classList.add('mobile-hotbar');
+        updateHotbarSlots(5);
+        mobileModeToggle.style.display = 'none';
+    } else {
+        mobileModeToggle.style.display = 'block';
+        if (mobileModeActive) {
+            hud.style.display = 'none';
+            mobileControls.style.display = 'flex';
+            mobileRight.style.display = 'flex';
+            rightPanel.classList.add('minimap-small');
+        } else {
+            hud.style.display = 'block';
+            mobileControls.style.display = 'none';
+            mobileRight.style.display = 'none';
+            rightPanel.classList.remove('minimap-small');
+        }
+        hotbar.classList.remove('mobile-hotbar');
+        updateHotbarSlots(9);
+    }
+}
+
+function updateHotbarSlots(numSlots) {
+    const hotbar = document.getElementById('hotbar');
+    const slots = hotbar.children;
+    for (let i = 0; i < slots.length; i++) {
+        slots[i].style.display = i < numSlots ? 'flex' : 'none';
+    }
+}
+
+document.getElementById('mobileModeToggle').addEventListener('click', function() {
+    mobileModeActive = !mobileModeActive;
+    this.style.opacity = mobileModeActive ? '1' : '0.5';
+    handleResizeAndOrientation();
+});
+
+window.addEventListener('resize', handleResizeAndOrientation);
+window.addEventListener('orientationchange', handleResizeAndOrientation);
 
 document.getElementById('magicianStoneUrl').addEventListener('input', async function() {
     let url = this.value;

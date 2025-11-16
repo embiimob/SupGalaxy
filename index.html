@@ -121,10 +121,10 @@
             <button id="musicMenuBtn" style="width: 100%;">Music Menu</button>
         </div>
     </div>
-    <div id="craftModal">
+    <div id="craftModal" style="display:none;">
         <h3>Crafting</h3>
         <div id="recipeList"></div>
-        <div style="margin-top:10px;text-align:right;">
+        <div style="margin-top:10px;text-align:right; flex-shrink: 0;">
             <button id="closeCraft">Close</button>
         </div>
     </div>
@@ -185,7 +185,7 @@
     </div>
     <div id="mobileRight">
         <div class="m-action" id="mJump">J</div>
-        <div class="m-action" id="mAttack">⚔</div>
+        <div class="m-action" id="mInventory">I</div>
         <div class="m-action" id="mCam">T</div>
     </div>
     <div id="crosshair">+</div>
@@ -199,6 +199,7 @@
             <button id="closePending">Close</button>
         </div>
     </div>
+    <div id="mobileModeToggle" style="position: fixed; bottom: 12px; right: 84px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📱</div>
     <div id="tvIcon" style="position: fixed; bottom: 12px; right: 48px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="cameraBtn" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📷</div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
