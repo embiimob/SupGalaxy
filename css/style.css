@@ -315,12 +315,84 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
         }
 
-            #craftModal h3 {
-                margin: 0 0 8px 0;
-            }
+        #craftModal h3 {
+            margin: 0 0 8px 0;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        #recipeList {
+            overflow-y: auto;
+            flex-grow: 1;
+            padding-right: 5px; /* for scrollbar */
+        }
+
+        .recipe-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: 6px;
+            background: #0d1620;
+            margin-bottom: 8px;
+        }
+
+        .recipe-preview {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .recipe-info {
+            flex-grow: 1;
+        }
+
+        .recipe-name {
+            font-weight: bold;
+        }
+
+        .recipe-ingredients {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        .recipe-status {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .recipe-status .status-text {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-craftable {
+            color: #66ff66;
+        }
+
+        .status-not-craftable {
+            color: #ff6b6b;
+        }
+
+        .recipe-status button {
+             padding: 6px 10px;
+             border-radius: 4px;
+             background: var(--accent);
+             color: #111;
+             border: 0;
+             cursor: pointer;
+        }
 
         #inventoryModal {
             position: fixed;
@@ -404,8 +476,8 @@
 
         #mobileControls {
             position: fixed;
-            left: 12px;
-            bottom: 12px;
+            left: 20px;
+            bottom: 80px;
             z-index: 195;
             display: none;
             gap: 8px;
@@ -426,8 +498,8 @@
 
         #mobileRight {
             position: fixed;
-            right: 12px;
-            bottom: 12px;
+            right: 20px;
+            bottom: 80px;
             z-index: 195;
             display: none;
             gap: 8px;
@@ -700,13 +772,35 @@
             gap: 8px;
         }
 
-        @media (max-width:700px) {
+        .mobile-hotbar .hot-slot {
+            width: 18% !important; /* Use important to override default inline styles if necessary */
+            padding-bottom: 18% !important;
+            max-width: 48px; /* Ensure slots don't get too big on wider screens in this mode */
+            max-height: 48px;
+        }
+
+        .minimap-small {
+            width: 80px !important;
+            height: 100px !important;
+        }
+
+        .minimap-small #minimap {
+            height: 80px !important;
+        }
+
+        @media (max-width: 700px) and (orientation: portrait) {
             #mobileControls, #mobileRight {
                 display: flex;
             }
 
             #hud {
-                display: none;
+                display: none !important;
+            }
+
+            #hotbar {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                max-width: 280px; /* 5 slots * (48px width + 4px gap) */
             }
 
             #rightPanel {
