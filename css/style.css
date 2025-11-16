@@ -404,8 +404,8 @@
 
         #mobileControls {
             position: fixed;
-            left: 12px;
-            bottom: 12px;
+            left: 20px;
+            bottom: 80px;
             z-index: 195;
             display: none;
             gap: 8px;
@@ -426,8 +426,8 @@
 
         #mobileRight {
             position: fixed;
-            right: 12px;
-            bottom: 12px;
+            right: 20px;
+            bottom: 80px;
             z-index: 195;
             display: none;
             gap: 8px;
@@ -700,13 +700,35 @@
             gap: 8px;
         }
 
-        @media (max-width:700px) {
+        .mobile-hotbar .hot-slot {
+            width: 18% !important; /* Use important to override default inline styles if necessary */
+            padding-bottom: 18% !important;
+            max-width: 48px; /* Ensure slots don't get too big on wider screens in this mode */
+            max-height: 48px;
+        }
+
+        .minimap-small {
+            width: 80px !important;
+            height: 100px !important;
+        }
+
+        .minimap-small #minimap {
+            height: 80px !important;
+        }
+
+        @media (max-width: 700px) and (orientation: portrait) {
             #mobileControls, #mobileRight {
                 display: flex;
             }
 
             #hud {
-                display: none;
+                display: none !important;
+            }
+
+            #hotbar {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                max-width: 280px; /* 5 slots * (48px width + 4px gap) */
             }
 
             #rightPanel {

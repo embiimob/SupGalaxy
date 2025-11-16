@@ -3520,6 +3520,9 @@ async function downloadSinglePlayerSession() {
     document.getElementById("downloadAddressList").value = d.join(","), document.getElementById("downloadModal").style.display = "block"
 }
 
+// Add this call to the end of startGame
+handleResizeAndOrientation();
+
 function disposeObject(e) {
     e.traverse((function (e) {
         e.geometry && e.geometry.dispose(), e.material && (Array.isArray(e.material) ? e.material.forEach((function (e) {
@@ -3594,8 +3597,8 @@ function setupMobile() {
             joystick.right = !1, e.preventDefault()
         })), document.getElementById("mJump").addEventListener("touchstart", (function (e) {
             playerJump(), safePlayAudio(soundJump), e.preventDefault()
-        })), document.getElementById("mAttack").addEventListener("touchstart", (function (e) {
-            performAttack(), e.preventDefault()
+        })), document.getElementById("mInventory").addEventListener("touchstart", (function (e) {
+            toggleInventory(), e.preventDefault()
         })), document.getElementById("mCam").addEventListener("touchstart", (function (e) {
             toggleCameraMode(), e.preventDefault()
         }))
@@ -4590,6 +4593,61 @@ document.getElementById('magicianStoneCancel').addEventListener('click', functio
     isPromptOpen = false;
     magicianStonePlacement = null;
 });
+
+let mobileModeActive = false;
+
+function handleResizeAndOrientation() {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isSmallScreen = window.innerWidth < 700;
+
+    const hud = document.getElementById('hud');
+    const mobileControls = document.getElementById('mobileControls');
+    const mobileRight = document.getElementById('mobileRight');
+    const hotbar = document.getElementById('hotbar');
+    const rightPanel = document.getElementById('rightPanel');
+    const mobileModeToggle = document.getElementById('mobileModeToggle');
+
+    if (isSmallScreen && isPortrait) {
+        hud.style.display = 'none';
+        mobileControls.style.display = 'flex';
+        mobileRight.style.display = 'flex';
+        hotbar.classList.add('mobile-hotbar');
+        updateHotbarSlots(5);
+        mobileModeToggle.style.display = 'none';
+    } else {
+        mobileModeToggle.style.display = 'block';
+        if (mobileModeActive) {
+            hud.style.display = 'none';
+            mobileControls.style.display = 'flex';
+            mobileRight.style.display = 'flex';
+            rightPanel.classList.add('minimap-small');
+        } else {
+            hud.style.display = 'block';
+            mobileControls.style.display = 'none';
+            mobileRight.style.display = 'none';
+            rightPanel.classList.remove('minimap-small');
+        }
+        hotbar.classList.remove('mobile-hotbar');
+        updateHotbarSlots(9);
+    }
+}
+
+function updateHotbarSlots(numSlots) {
+    const hotbar = document.getElementById('hotbar');
+    const slots = hotbar.children;
+    for (let i = 0; i < slots.length; i++) {
+        slots[i].style.display = i < numSlots ? 'flex' : 'none';
+    }
+}
+
+document.getElementById('mobileModeToggle').addEventListener('click', function() {
+    mobileModeActive = !mobileModeActive;
+    this.style.opacity = mobileModeActive ? '1' : '0.5';
+    handleResizeAndOrientation();
+});
+
+window.addEventListener('resize', handleResizeAndOrientation);
+window.addEventListener('orientationchange', handleResizeAndOrientation);
 
 document.getElementById('magicianStoneUrl').addEventListener('input', async function() {
     let url = this.value;
