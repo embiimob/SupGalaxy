@@ -830,7 +830,7 @@
 
             .inv-slot {
                 width: auto;
-                height: 38px; /* Adjust height to be reasonable */
+                aspect-ratio: 1/1;
                 font-size: 8px;
             }
         }

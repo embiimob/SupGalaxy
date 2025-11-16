@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.2-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.3-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -1646,7 +1646,13 @@ function initHotbar() {
         n.className = "hot-count", o.appendChild(a), o.appendChild(n), e.appendChild(o), o.addEventListener("click", (function () {
             document.querySelectorAll(".hot-slot").forEach((function (e) {
                 e.classList.remove("active")
-            })), this.classList.add("active"), selectedHotIndex = parseInt(this.dataset.index), updateHotbarUI()
+            })), this.classList.add("active"), selectedHotIndex = parseInt(this.dataset.index), updateHotbarUI();
+            if ("flex" === document.getElementById("mobileControls").style.display) {
+                onPointerDown({
+                    button: 2,
+                    preventDefault: () => {}
+                })
+            }
         })), o.addEventListener("contextmenu", (function (e) {
             e.preventDefault(), INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0 && (trashIndex = this.dataset.index, document.getElementById("trashItemName").innerText = "Trash " + BLOCKS[INVENTORY[trashIndex].id].name + " x" + INVENTORY[trashIndex].count + " ? ", document.getElementById("trashConfirm").style.display = "block")
         }))
