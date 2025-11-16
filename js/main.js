@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.2-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.3-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -1640,14 +1640,27 @@ function initHotbar() {
     for (var t = 0; t < 9; t++) {
         var o = document.createElement("div");
         o.className = "hot-slot", o.dataset.index = t;
+        var content = document.createElement("div");
+        content.className = "hot-slot-content";
         var a = document.createElement("div");
         a.className = "hot-label";
         var n = document.createElement("div");
-        n.className = "hot-count", o.appendChild(a), o.appendChild(n), e.appendChild(o), o.addEventListener("click", (function () {
-            document.querySelectorAll(".hot-slot").forEach((function (e) {
+        n.className = "hot-count";
+        content.appendChild(a);
+        content.appendChild(n);
+        o.appendChild(content);
+        e.appendChild(o);
+        o.addEventListener("click", (function() {
+            document.querySelectorAll(".hot-slot").forEach((function(e) {
                 e.classList.remove("active")
-            })), this.classList.add("active"), selectedHotIndex = parseInt(this.dataset.index), updateHotbarUI()
-        })), o.addEventListener("contextmenu", (function (e) {
+            })), this.classList.add("active"), selectedHotIndex = parseInt(this.dataset.index), updateHotbarUI();
+            if ("flex" === document.getElementById("mobileControls").style.display) {
+                onPointerDown({
+                    button: 2,
+                    preventDefault: () => {}
+                })
+            }
+        })), o.addEventListener("contextmenu", (function(e) {
             e.preventDefault(), INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0 && (trashIndex = this.dataset.index, document.getElementById("trashItemName").innerText = "Trash " + BLOCKS[INVENTORY[trashIndex].id].name + " x" + INVENTORY[trashIndex].count + " ? ", document.getElementById("trashConfirm").style.display = "block")
         }))
     }
@@ -4712,7 +4725,7 @@ function handleResizeAndOrientation() {
         mobileControls.style.display = 'flex';
         mobileRight.style.display = 'flex';
         hotbar.classList.add('mobile-hotbar');
-        updateHotbarSlots(5);
+        updateHotbarSlots(4);
         mobileModeToggle.style.display = 'none';
     } else {
         mobileModeToggle.style.display = 'block';
