@@ -233,12 +233,20 @@
             border-radius: 10px;
             background: rgba(0,0,0,0.45);
             border: 2px solid rgba(255,255,255,0.06);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .hot-slot-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            position: relative;
         }
 
             .hot-slot.active {
@@ -252,6 +260,7 @@
             color: #fff;
             text-align: center;
             user-select: none;
+            position: relative; /* Ensure it's positioned correctly within the flex container */
         }
 
         .hot-count {
@@ -772,13 +781,6 @@
             gap: 8px;
         }
 
-        .mobile-hotbar .hot-slot {
-            width: 18% !important; /* Use important to override default inline styles if necessary */
-            padding-bottom: 18% !important;
-            max-width: 48px; /* Ensure slots don't get too big on wider screens in this mode */
-            max-height: 48px;
-        }
-
         .minimap-small {
             width: 80px !important;
             height: 100px !important;
@@ -800,7 +802,7 @@
             #hotbar {
                 flex-wrap: wrap;
                 justify-content: flex-start;
-                max-width: 280px; /* 5 slots * (48px width + 4px gap) */
+                max-width: 240px;
             }
 
             #rightPanel {
@@ -814,7 +816,9 @@
 
             .hot-slot {
                 width: 48px;
-                height: 48px;
+                height: 0;
+                padding-bottom: 48px; /* Force square aspect ratio */
+                flex-shrink: 0; /* Prevent shrinking */
             }
 
             #inventoryModal {
@@ -830,7 +834,7 @@
 
             .inv-slot {
                 width: auto;
-                height: 38px; /* Adjust height to be reasonable */
+                aspect-ratio: 1/1;
                 font-size: 8px;
             }
         }
