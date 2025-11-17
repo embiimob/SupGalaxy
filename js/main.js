@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.4-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.6-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -800,9 +800,6 @@ async function applySaveFile(e, t, o) {
 }
 
 function checkChunkOwnership(e, t) {
-    if (peers.size > 0 && !isHost) {
-        return true;
-    }
     const o = e.replace(/^#/, "");
     if (spawnChunks.size > 0)
         for (const [e, a] of spawnChunks) {
