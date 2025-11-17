@@ -1932,6 +1932,7 @@ Chunk.prototype.idx = function (e, t, o) {
         c = modWrap(s, CHUNK_SIZE),
         u = this.getChunk(i, l);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
+}
 ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, placer, n = !0, r = null) {
     placer = placer || userName;
     var s = modWrap(e, MAP_SIZE),
