@@ -795,7 +795,16 @@ async function applySaveFile(e, t, o) {
                 pending: p - new Date(o).getTime() < PENDING_PERIOD
             }), addMessage("Updated chunk " + s, 1e3)) : addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3)
         }
-        e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
+        e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI());
+        if (e.magicianStones) {
+            console.log("[SESSION] Loading magician stones from in-game load");
+            for (const key in e.magicianStones) {
+                if (Object.hasOwnProperty.call(e.magicianStones, key)) {
+                    const stoneData = e.magicianStones[key];
+                    createMagicianStoneScreen(stoneData);
+                }
+            }
+        }
     }
 }
 
