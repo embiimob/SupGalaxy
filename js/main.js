@@ -795,7 +795,6 @@ async function applySaveFile(e, t, o) {
                 pending: p - new Date(o).getTime() < PENDING_PERIOD
             }), addMessage("Updated chunk " + s, 1e3)) : addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3)
         }
-        }
         if (e.magicianStones) {
             console.log("[APPLY_SAVE] Loading magician stones from dropped file");
             for (const key in e.magicianStones) {
