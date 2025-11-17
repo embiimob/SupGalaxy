@@ -726,7 +726,9 @@ self.onmessage = async function(e) {
                                 continue;
                             }
                             var data = await fetchIPFS(hash);
-                            if (data && data.deltas) {
+                            if (data && data.playerData) {
+                                self.postMessage({ type: "ipfs_session_load", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
+                            } else if (data && data.deltas) {
                                 var normalizedDeltas = data.deltas.map(function(delta) {
                                     return {
                                         chunk: delta.chunk.replace(/^#/, ""),
@@ -1262,6 +1264,12 @@ self.onmessage = async function(e) {
                 }
             } else if (data.type === "chunk_ownership") {
                updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+            } else if (data.type === "ipfs_session_load") {
+                console.log('[Worker] Received ipfs_session_load:', data.transactionId);
+                applySaveFile(data.data, data.address, data.timestamp);
+            } else if (data.type === "ipfs_session_load") {
+                console.log('[Worker] Received ipfs_session_load:', data.transactionId);
+                applySaveFile(data.data, data.address, data.timestamp);
             } else if (data.type === "user_update") {
                 console.log('[Worker] Received user_update:', data.transactionId);
                 if (data.data.profile) {
