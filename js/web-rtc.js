@@ -178,14 +178,9 @@ async function handleMinimapFile(e) {
         const t = await e.text(),
             o = JSON.parse(t);
         if (o.playerData && o.hash) {
-            if (o.playerData.world !== worldName) return addMessage("Invalid file: wrong world", 3e3), void console.log("[MINIMAP] Invalid file: world mismatch, expected:", worldName, "got:", o.playerData.world);
-            const e = o.playerData;
-            if (e.deltas)
-                for (const t of e.deltas) {
-                    const e = t.chunk.replace(/^#/, "");
-                    chunkManager.applyDeltasToChunk(e, t.changes)
-                }
-            return e.foreignBlockOrigins && (foreignBlockOrigins = new Map(e.foreignBlockOrigins)), void addMessage("Loaded chunk data from session file.", 3e3)
+            console.log("[MINIMAP] Player session file detected, applying...");
+            await applySaveFile(o.playerData, "local", new Date().toISOString());
+            return;
         }
         if (o.deltas && o.profile) return console.log("[MINIMAP] Save session file detected, applying..."), await applySaveFile(o, userAddress, (new Date).toISOString()), void addMessage("Save session loaded successfully!", 3e3);
         if (!o.world || o.world !== worldName) return addMessage("Invalid file: wrong world", 3e3), void console.log("[MINIMAP] Invalid file: world mismatch, expected:", worldName, "got:", o.world);

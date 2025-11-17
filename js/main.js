@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.4-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.5-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -794,6 +794,13 @@ async function applySaveFile(e, t, o) {
                 timestamp: new Date(o).getTime(),
                 pending: p - new Date(o).getTime() < PENDING_PERIOD
             }), addMessage("Updated chunk " + s, 1e3)) : addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3)
+        }
+        if (e.magicianStones) {
+            for (const key in e.magicianStones) {
+                if (Object.hasOwnProperty.call(e.magicianStones, key)) {
+                    createMagicianStoneScreen(e.magicianStones[key]);
+                }
+            }
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
