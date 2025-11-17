@@ -3954,53 +3954,9 @@ function updateProximityVideo() {
     o.srcObject !== l && (a.innerText = i, o.srcObject = l)
 }
 
-function resetWorld() {
-    addMessage(`Syncing to host's world...`, 4e3);
+function switchWorld(newWorldName) {
     worldArchetype = null;
-
-    // Clear mobs and their meshes
-    mobs.forEach(mob => {
-        if (mob.mesh) scene.remove(mob.mesh);
-        if (mob.particles) scene.remove(mob.particles);
-    });
-    mobs = [];
-
-    // Clear volcanoes and related particles
-    volcanoes = [];
-    activeEruptions = [];
-    eruptedBlocks.forEach(block => scene.remove(block.mesh));
-    eruptedBlocks = [];
-    pebbles.forEach(pebble => scene.remove(pebble.mesh));
-    pebbles = [];
-    smokeParticles.forEach(particle => scene.remove(particle));
-    smokeParticles = [];
-
-    // Clear other world-specific data
-    hiveLocations = [];
-    flowerLocations = [];
-    torchRegistry.clear();
-    torchLights.clear();
-    torchParticles.forEach(p => scene.remove(p));
-    torchParticles.clear();
-
-    // Clear chunk data and meshes
-    chunkManager.chunks.clear();
-    meshGroup.children.forEach(disposeObject);
-    meshGroup.children = [];
-
-    // Clear world states
-    if (WORLD_STATES.has(worldName)) {
-        WORLD_STATES.get(worldName).chunkDeltas.clear();
-        WORLD_STATES.get(worldName).foreignBlockOrigins.clear();
-    }
-
-    // Reset chunk manager to re-request chunks
-    chunkManager = new ChunkManager(worldSeed);
-}
-
-function switchWorld() {
-    worldArchetype = null;
-    const e = prompt("Enter the name of the world to switch to:");
+    const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
     // Clear mobs and their meshes

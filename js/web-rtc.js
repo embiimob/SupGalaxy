@@ -244,6 +244,13 @@ async function handleMinimapFile(e) {
 
 function setupDataChannel(e, t) {
     console.log(`[FIXED] Setting up data channel for: ${t}`), e.onopen = () => {
+        // As per user request, when a client connects, they drop their world mappings
+        // and perform a switch to the same world, effectively syncing with the host.
+        if (!isHost) {
+            WORLD_STATES.clear();
+            console.log(`[WebRTC] Client cleared all world states to sync with host.`);
+            switchWorld(worldName);
+        }
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
@@ -270,15 +277,15 @@ function setupDataChannel(e, t) {
                 username: userName
             }));
 
-        } else {
-            // This is a client connecting to a host, reset world and request sync
-            resetWorld();
-            e.send(JSON.stringify({
-                type: "request_world_sync",
-                world: worldName,
-                username: userName
-            }));
-        }
+            if (!syncedWorlds.has(worldName)) {
+                e.send(JSON.stringify({
+                    type: "request_world_sync",
+                    world: worldName,
+                    username: userName
+                }));
+                syncedWorlds.add(worldName);
+            }
+
             // Sync magician stones to new player
             if (Object.keys(magicianStones).length > 0) {
                 const magicianStonesSync = {
