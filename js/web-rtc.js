@@ -270,6 +270,27 @@ function setupDataChannel(e, t) {
                 username: userName
             }));
 
+            // Spawn chunks protection
+            var spawn = calculateSpawnPoint(t + '@' + worldName);
+            spawnChunks.set(t, {
+                cx: Math.floor(spawn.x / CHUNK_SIZE),
+                cz: Math.floor(spawn.z / CHUNK_SIZE),
+                username: t,
+                world: worldName,
+                spawn: spawn
+            });
+            var spawnChunksData = Array.from(spawnChunks.entries());
+            var message = JSON.stringify({
+                type: 'spawn_chunks_update',
+                spawnChunks: spawnChunksData
+            });
+            for (const [peerUsername, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(message);
+                }
+            }
+
+
             if (!syncedWorlds.has(worldName)) {
                 e.send(JSON.stringify({
                     type: "request_world_sync",
@@ -873,6 +894,11 @@ function setupDataChannel(e, t) {
                                 userPositions[s.username].world = clientWorld;
                             }
                         }
+                    }
+                    break;
+                case 'spawn_chunks_update':
+                    if (!isHost) {
+                        spawnChunks = new Map(s.spawnChunks);
                     }
                     break;
             }

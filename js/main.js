@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.3-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.4-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -784,16 +784,49 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
-            var m = chunkOwners.get(s) || {
-                username: "",
-                timestamp: 0,
-                pending: !0
-            };
-            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), chunkOwners.set(s, {
-                username: u,
-                timestamp: new Date(o).getTime(),
-                pending: p - new Date(o).getTime() < PENDING_PERIOD
-            }), addMessage("Updated chunk " + s, 1e3)) : addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3)
+            var m = chunkOwners.get(s);
+            var p = Date.now();
+
+            if (!m) {
+                // Case 1: No owner. New updater becomes pending owner.
+                chunkManager.applyDeltasToChunk(s, i);
+                chunkOwners.set(s, { username: u, timestamp: p, pending: true });
+                addMessage("Updated chunk " + s + ", you are pending owner.", 1e3);
+                continue;
+            }
+
+            // Check for passive transition before proceeding
+            if (m.pending && (p - m.timestamp > PENDING_PERIOD)) {
+                m.pending = false; // Owner is now permanent
+                m.timestamp = p; // Ownership year starts now
+                addMessage(`Ownership of chunk ${s} is now permanent for ${m.username}.`, 1e3);
+            }
+
+            if (m.username === u) {
+                // Case 2: Same user updates.
+                // If they were pending, they become permanent. If they were permanent, they extend.
+                chunkManager.applyDeltasToChunk(s, i);
+                chunkOwners.set(s, { username: u, timestamp: p, pending: false });
+                addMessage("Updated chunk " + s + ", ownership confirmed/extended.", 1e3);
+
+            } else { // Different user (challenger)
+                if (m.pending) {
+                    // Case 3a: Current owner is pending. Chunk is contested. New user becomes pending owner.
+                    chunkManager.applyDeltasToChunk(s, i);
+                    chunkOwners.set(s, { username: u, timestamp: p, pending: true });
+                    addMessage("Contested chunk " + s + ", you are now pending owner.", 1e3);
+                } else { // Case 3b: Current owner is permanent.
+                    if (p - m.timestamp > OWNERSHIP_EXPIRY) {
+                        // Ownership expired. New user takes over as pending owner.
+                        chunkManager.applyDeltasToChunk(s, i);
+                        chunkOwners.set(s, { username: u, timestamp: p, pending: true });
+                        addMessage("Took ownership of expired chunk " + s + ", now pending.", 1e3);
+                    } else {
+                        // Permanent ownership is active. Challenger is blocked.
+                        addMessage("Cannot update chunk " + s + ": owned by " + m.username, 1e3);
+                    }
+                }
+            }
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
@@ -804,16 +837,27 @@ function checkChunkOwnership(e, t) {
         return true;
     }
     const o = e.replace(/^#/, "");
-    if (spawnChunks.size > 0)
-        for (const [e, a] of spawnChunks) {
-            const n = parseChunkKey(o);
-            if (!n) return !1;
-            if (a.cx === n.cx && a.cz === n.cz && e !== t) return !1
+    if (spawnChunks.has(t) && spawnChunks.get(t).cx === parseChunkKey(o)?.cx && spawnChunks.get(t).cz === parseChunkKey(o)?.cz) {
+        return true; // Owner can always modify their own spawn chunk
+    }
+    // Check if the chunk is anyone else's spawn chunk
+    for (const [owner, spawn] of spawnChunks) {
+        if (owner !== t && spawn.cx === parseChunkKey(o)?.cx && spawn.cz === parseChunkKey(o)?.cz) {
+            return false; // It's someone else's protected spawn chunk
         }
+    }
+
     const a = chunkOwners.get(o);
     if (!a) return !0;
     const n = Date.now();
-    return n - a.timestamp > OWNERSHIP_EXPIRY || (!!(a.pending && n - a.timestamp < PENDING_PERIOD) || a.username === t)
+
+    if (a.pending) {
+        // If pending, anyone can contest it. Only the owner check matters if they try to update.
+        return n - a.timestamp > PENDING_PERIOD || a.username === t;
+    } else {
+        // If permanent, only owner can modify until expiry.
+        return n - a.timestamp > OWNERSHIP_EXPIRY || a.username === t;
+    }
 }
 var skyProps, avatarGroup, chunkOwnership = new Map;
 
@@ -1888,13 +1932,23 @@ Chunk.prototype.idx = function (e, t, o) {
         c = modWrap(s, CHUNK_SIZE),
         u = this.getChunk(i, l);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
-}, ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null) {
+ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, placer, n = !0, r = null) {
+    placer = placer || userName;
+    var s = modWrap(e, MAP_SIZE),
+        i = modWrap(o, MAP_SIZE),
+        l = Math.floor(s / CHUNK_SIZE),
+        d = Math.floor(i / CHUNK_SIZE);
+    const chunkKey = makeChunkKey(worldName, l, d);
+
+    // Spawn chunk protection enforcement
+    if (!checkChunkOwnership(chunkKey, placer)) {
+        if (placer === userName) { // Only show message to the user trying to build
+            addMessage(`Cannot modify protected chunk.`);
+        }
+        return;
+    }
     if (!(t < 0 || t >= MAX_HEIGHT)) {
-        var s = modWrap(e, MAP_SIZE),
-            i = modWrap(o, MAP_SIZE),
-            l = Math.floor(s / CHUNK_SIZE),
-            d = Math.floor(i / CHUNK_SIZE),
-            c = Math.floor(s % CHUNK_SIZE),
+        var c = Math.floor(s % CHUNK_SIZE),
             u = Math.floor(i % CHUNK_SIZE),
             p = this.getChunk(l, d);
         p.generated || this.generateChunk(p);
@@ -1929,7 +1983,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     wz: o,
                     bid: a,
                     prevBid: m,
-                    username: userName,
+                    username: placer,
                     originSeed: r
                 });
                 for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && (console.log(`[WebRTC] Sending block change to ${e}`), t.dc.send(n))
@@ -2940,7 +2994,7 @@ function removeBlockAt(e, t, o, breaker) {
 
         const worldState = getCurrentWorldState();
         const l = worldState.foreignBlockOrigins.get(r);
-        chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
+        chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, breaker, true, l);
         if (l) worldState.foreignBlockOrigins.delete(r);
         if (breaker === userName) {
             addToInventory(a, 1, l);
@@ -3017,8 +3071,8 @@ function placeBlockAt(e, t, o, a) {
                         l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
                         d = makeChunkKey(worldName, i, l);
                     if (checkChunkOwnership(d, userName)) {
-                        if (a === 127) { // Magician's Stone
-                            const playerDirection = new THREE.Vector3();
+                        if (a === 127) {
+                            const playerDirection = new THREE.Vector3;
                             camera.getWorldDirection(playerDirection);
                             playerDirection.y = 0;
                             playerDirection.normalize();
@@ -3029,7 +3083,7 @@ function placeBlockAt(e, t, o, a) {
                             document.getElementById('magicianStoneModal').style.display = 'flex';
                             isPromptOpen = true;
                         } else {
-                           if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
+                           if (chunkManager.setBlockGlobal(e, t, o, a, userName, true, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
                                 const r = `${e},${t},${o}`;
                                 getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
                             } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
