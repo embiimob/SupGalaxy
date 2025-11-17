@@ -270,15 +270,15 @@ function setupDataChannel(e, t) {
                 username: userName
             }));
 
-            if (!syncedWorlds.has(worldName)) {
-                e.send(JSON.stringify({
-                    type: "request_world_sync",
-                    world: worldName,
-                    username: userName
-                }));
-                syncedWorlds.add(worldName);
-            }
-
+        } else {
+            // This is a client connecting to a host, reset world and request sync
+            resetWorld();
+            e.send(JSON.stringify({
+                type: "request_world_sync",
+                world: worldName,
+                username: userName
+            }));
+        }
             // Sync magician stones to new player
             if (Object.keys(magicianStones).length > 0) {
                 const magicianStonesSync = {
