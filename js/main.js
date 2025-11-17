@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.3-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.4-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -3952,6 +3952,52 @@ function updateProximityVideo() {
     const i = proximityVideoUsers[currentProximityVideoIndex],
         l = i === userName ? localVideoStream : userVideoStreams.get(i)?.stream;
     o.srcObject !== l && (a.innerText = i, o.srcObject = l)
+}
+
+function resetWorld() {
+    addMessage(`Syncing to host's world...`, 4e3);
+    worldArchetype = null;
+
+    // Clear mobs and their meshes
+    mobs.forEach(mob => {
+        if (mob.mesh) scene.remove(mob.mesh);
+        if (mob.particles) scene.remove(mob.particles);
+    });
+    mobs = [];
+
+    // Clear volcanoes and related particles
+    volcanoes = [];
+    activeEruptions = [];
+    eruptedBlocks.forEach(block => scene.remove(block.mesh));
+    eruptedBlocks = [];
+    pebbles.forEach(pebble => scene.remove(pebble.mesh));
+    pebbles = [];
+    smokeParticles.forEach(particle => scene.remove(particle));
+    smokeParticles = [];
+
+    // Clear other world-specific data
+    hiveLocations = [];
+    flowerLocations = [];
+    torchRegistry.clear();
+    torchLights.clear();
+    torchParticles.forEach(p => scene.remove(p));
+    torchParticles.clear();
+
+    // Clear chunk data and meshes
+    chunkManager.chunks.clear();
+    meshGroup.children.forEach(disposeObject);
+    meshGroup.children = [];
+    mobs.forEach((e => scene.remove(e.mesh)));
+    mobs = [];
+
+    // Clear world states
+    if (WORLD_STATES.has(worldName)) {
+        WORLD_STATES.get(worldName).chunkDeltas.clear();
+        WORLD_STATES.get(worldName).foreignBlockOrigins.clear();
+    }
+
+    // Reset chunk manager to re-request chunks
+    chunkManager = new ChunkManager(worldSeed);
 }
 
 function switchWorld() {
