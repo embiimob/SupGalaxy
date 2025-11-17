@@ -257,6 +257,10 @@ function setupDataChannel(e, t) {
             isAttacking: !1,
             timestamp: Date.now()
         })), isHost) {
+            e.send(JSON.stringify({
+                type: "force_world_switch",
+                world: worldName
+            }));
             for (const [e, o] of peers.entries()) e !== t && e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                 type: "new_player",
                 username: t
@@ -852,6 +856,15 @@ function setupDataChannel(e, t) {
                                 sendWorldStateAsync(peer, worldState, s.username);
                             }
                         }
+                    }
+                    break;
+                case "force_world_switch":
+                    if (s.world && s.world !== worldName) {
+                        console.log(`[WebRTC] Received force_world_switch to ${s.world}`);
+                        addMessage(`Host is in ${s.world}, switching worlds...`, 5e3);
+                        WORLD_STATES.delete(worldName);
+                        WORLD_STATES.delete(s.world);
+                        switchWorld(s.world);
                     }
                     break;
                 case 'world_switch':

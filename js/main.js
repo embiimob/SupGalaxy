@@ -17,7 +17,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.3-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.4-beta", // Contributed to by Jules
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -3954,9 +3954,9 @@ function updateProximityVideo() {
     o.srcObject !== l && (a.innerText = i, o.srcObject = l)
 }
 
-function switchWorld() {
+function switchWorld(newWorldName) {
     worldArchetype = null;
-    const e = prompt("Enter the name of the world to switch to:");
+    const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
     // Clear mobs and their meshes
