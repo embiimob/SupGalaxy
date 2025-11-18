@@ -1405,6 +1405,15 @@ function onPointerDown(e) {
         const y = Math.floor(i.y - .5 * l.y);
         const z = Math.floor(i.z - .5 * l.z);
 
+        const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+        const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+        const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+
+        if (!checkChunkOwnership(chunkKey, userName)) {
+            addMessage("You cannot break blocks in another player's spawn chunk.", 3000);
+            return;
+        }
+
         if (isHost || peers.size === 0) {
             removeBlockAt(x, y, z, userName);
         } else {
