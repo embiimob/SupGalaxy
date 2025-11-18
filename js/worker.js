@@ -726,13 +726,41 @@ self.onmessage = async function(e) {
                                 continue;
                             }
                             var data = await fetchIPFS(hash);
-                            if (data && data.deltas) {
-                                var normalizedDeltas = data.deltas.map(function(delta) {
+                            var processData = data;
+                            if (data && data.playerData) {
+                                processData = data.playerData;
+                            }
+                            if (processData && processData.deltas) {
+                                var normalizedDeltas = processData.deltas.map(function(delta) {
                                     return {
                                         chunk: delta.chunk.replace(/^#/, ""),
                                         changes: delta.changes
                                     };
                                 });
+
+                                if (processData.magicianStones) {
+                                     self.postMessage({ type: 'magician_stones_update', stones: processData.magicianStones, transactionId: msg.TransactionId });
+                                     for (const key in processData.magicianStones) {
+                                        if (Object.hasOwnProperty.call(processData.magicianStones, key)) {
+                                            const stone = processData.magicianStones[key];
+                                            const cx = Math.floor((stone.x % 16384 + 16384) % 16384 / 16);
+                                            const cz = Math.floor((stone.z % 16384 + 16384) % 16384 / 16);
+
+                                            const chunkKey = "" + processData.world + ":" + cx + ":" + cz;
+                                            const newDelta = {
+                                                chunk: chunkKey,
+                                                changes: [{
+                                                    x: (stone.x % 16 + 16) % 16,
+                                                    y: stone.y,
+                                                    z: (stone.z % 16 + 16) % 16,
+                                                    b: 127
+                                                }]
+                                            };
+                                            normalizedDeltas.push(newDelta);
+                                        }
+                                    }
+                                }
+
                                 updatesByTransaction.set(msg.TransactionId, {
                                     changes: normalizedDeltas,
                                     address: msg.FromAddress,
@@ -1262,6 +1290,14 @@ self.onmessage = async function(e) {
                 }
             } else if (data.type === "chunk_ownership") {
                updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+            } else if (data.type === 'magician_stones_update') {
+                if (data.stones) {
+                    for (const key in data.stones) {
+                        if (Object.hasOwnProperty.call(data.stones, key)) {
+                            createMagicianStoneScreen(data.stones[key]);
+                        }
+                    }
+                }
             } else if (data.type === "user_update") {
                 console.log('[Worker] Received user_update:', data.transactionId);
                 if (data.data.profile) {
