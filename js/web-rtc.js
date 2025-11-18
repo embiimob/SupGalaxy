@@ -259,6 +259,15 @@ function setupDataChannel(e, t) {
             isAttacking: !1,
             timestamp: Date.now()
         })), isHost) {
+            // When a new user connects, calculate their spawn chunk and add it to the host's mapping.
+            const spawnDetails = calculateSpawnPoint(t + "@" + worldName);
+            spawnChunks.set(t, {
+                cx: Math.floor(spawnDetails.x / CHUNK_SIZE),
+                cz: Math.floor(spawnDetails.z / CHUNK_SIZE),
+                username: t,
+                world: worldName,
+                spawn: spawnDetails,
+            });
             for (const [e, o] of peers.entries()) e !== t && e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                 type: "new_player",
                 username: t
@@ -333,11 +342,31 @@ function setupDataChannel(e, t) {
                     break;
                 case "new_player":
                     const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
-                        pc: null,
-                        dc: null,
-                        address: null
-                    }), updateHudButtons());
+                    if (i === userName || peers.has(i)) break;
+
+                    addMessage(`${i} has joined!`);
+                    if (!playerAvatars.has(i)) {
+                        createAndSetupAvatar(i, false);
+                    }
+                    if (!peers.has(i)) {
+                        peers.set(i, {
+                            pc: null,
+                            dc: null,
+                            address: null
+                        });
+                    }
+
+                    // Calculate the user's spawn chunk and add it to the home spawn chunk mapping
+                    const spawnDetails = calculateSpawnPoint(i + "@" + worldName);
+                    spawnChunks.set(i, {
+                        cx: Math.floor(spawnDetails.x / CHUNK_SIZE),
+                        cz: Math.floor(spawnDetails.z / CHUNK_SIZE),
+                        username: i,
+                        world: worldName,
+                        spawn: spawnDetails,
+                    });
+
+                    updateHudButtons();
                     break;
                 case "world_sync":
                     if (!isHost) {

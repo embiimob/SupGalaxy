@@ -2076,7 +2076,22 @@ function switchWorld(newWorldName) {
     torchParticles.clear();
 
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
-    const t = calculateSpawnPoint(userName + "@" + worldName);
+
+    // Add/update home spawn chunk mappings for all current peers and self for the new world
+    const allUsers = [...peers.keys(), userName];
+    for (const username of allUsers) {
+        if (!username) continue; // safety check
+        const spawnDetails = calculateSpawnPoint(username + "@" + worldName);
+        spawnChunks.set(username, {
+            cx: Math.floor(spawnDetails.x / CHUNK_SIZE),
+            cz: Math.floor(spawnDetails.z / CHUNK_SIZE),
+            username: username,
+            world: worldName,
+            spawn: spawnDetails,
+        });
+    }
+
+    const t = spawnChunks.get(userName).spawn;
     player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
         x: player.x,
         y: player.y,
