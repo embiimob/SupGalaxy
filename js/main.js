@@ -1005,6 +1005,15 @@ function onPointerDown(e) {
         const y = Math.floor(i.y - .5 * l.y);
         const z = Math.floor(i.z - .5 * l.z);
 
+        const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+        const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+        const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+
+        if (!checkChunkOwnership(chunkKey, userName)) {
+            addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+            return;
+        }
+
         if (isHost || peers.size === 0) {
             removeBlockAt(x, y, z, userName);
         } else {
@@ -2093,6 +2102,26 @@ function switchWorld(newWorldName) {
                 world: worldName,
                 username: userName
             }));
+        }
+    }
+    const mySpawn = calculateSpawnPoint(userName + "@" + worldName);
+    spawnChunks.set(userName, {
+        cx: Math.floor(mySpawn.x / CHUNK_SIZE),
+        cz: Math.floor(mySpawn.z / CHUNK_SIZE),
+        username: userName,
+        world: worldName,
+        spawn: mySpawn
+    });
+    for (const [peerUsername, peer] of peers.entries()) {
+        if (peerUsername !== userName) {
+            const spawnPoint = calculateSpawnPoint(peerUsername + "@" + worldName);
+            spawnChunks.set(peerUsername, {
+                cx: Math.floor(spawnPoint.x / CHUNK_SIZE),
+                cz: Math.floor(spawnPoint.z / CHUNK_SIZE),
+                username: peerUsername,
+                world: worldName,
+                spawn: spawnPoint
+            });
         }
     }
 }

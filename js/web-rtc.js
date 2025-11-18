@@ -332,12 +332,24 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "new_player":
-                    const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
-                        pc: null,
-                        dc: null,
-                        address: null
-                    }), updateHudButtons());
+                    const newUsername = s.username;
+                    if (newUsername !== userName && !peers.has(newUsername)) {
+                        addMessage(`${newUsername} has joined!`);
+                        if (!playerAvatars.has(newUsername)) {
+                            createAndSetupAvatar(newUsername, false);
+                        }
+                        peers.set(newUsername, { pc: null, dc: null, address: null });
+
+                        const spawnPoint = calculateSpawnPoint(newUsername + "@" + worldName);
+                        spawnChunks.set(newUsername, {
+                            cx: Math.floor(spawnPoint.x / CHUNK_SIZE),
+                            cz: Math.floor(spawnPoint.z / CHUNK_SIZE),
+                            username: newUsername,
+                            world: worldName,
+                            spawn: spawnPoint
+                        });
+                        updateHudButtons();
+                    }
                     break;
                 case "world_sync":
                     if (!isHost) {
