@@ -807,9 +807,6 @@ async function applySaveFile(e, t, o) {
 }
 
 function checkChunkOwnership(e, t) {
-    if (peers.size > 0 && !isHost) {
-        return true;
-    }
     const o = e.replace(/^#/, "");
     if (spawnChunks.size > 0)
         for (const [e, a] of spawnChunks) {
@@ -4863,4 +4860,5 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
+
 });
