@@ -333,11 +333,29 @@ function setupDataChannel(e, t) {
                     break;
                 case "new_player":
                     const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
-                        pc: null,
-                        dc: null,
-                        address: null
-                    }), updateHudButtons());
+                    if (i !== userName && !peers.has(i)) {
+                        addMessage(`${i} has joined!`);
+                        if (!playerAvatars.has(i)) {
+                            createAndSetupAvatar(i, false);
+                        }
+                        if (!peers.has(i)) {
+                            peers.set(i, {
+                                pc: null,
+                                dc: null,
+                                address: null
+                            });
+                        }
+                        // Calculate and add spawn chunk for the new user
+                        const spawn = calculateSpawnPoint(i + "@" + worldName);
+                        spawnChunks.set(i, {
+                            cx: Math.floor(spawn.x / CHUNK_SIZE),
+                            cz: Math.floor(spawn.z / CHUNK_SIZE),
+                            username: i,
+                            world: worldName,
+                            spawn: spawn
+                        });
+                        updateHudButtons();
+                    }
                     break;
                 case "world_sync":
                     if (!isHost) {

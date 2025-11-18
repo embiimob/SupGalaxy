@@ -2685,6 +2685,18 @@ function switchWorld(newWorldName) {
             }));
         }
     }
+
+    // Recalculate spawn chunks for all peers
+    spawnChunks.forEach((value, key) => {
+        const spawn = calculateSpawnPoint(key + "@" + worldName);
+        spawnChunks.set(key, {
+            cx: Math.floor(spawn.x / CHUNK_SIZE),
+            cz: Math.floor(spawn.z / CHUNK_SIZE),
+            username: key,
+            world: worldName,
+            spawn: spawn
+        });
+    });
 }
 
 function updateAvatarAnimation(e, t) {
