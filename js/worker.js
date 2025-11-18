@@ -725,8 +725,20 @@ self.onmessage = async function(e) {
                                 console.log('[Worker] Invalid CID in chunk message:', hash, 'txId:', msg.TransactionId);
                                 continue;
                             }
-                            var data = await fetchIPFS(hash);
-                            if (data && data.deltas) {
+                            var rawData = await fetchIPFS(hash);
+                            var data = rawData;
+                            if (data && data.playerData) {
+                                data = data.playerData;
+                            }
+                            if (data && (data.profile || data.magicianStones || (data.deltas && data.foreignBlockOrigins))) {
+                                self.postMessage({
+                                    type: "full_session_update",
+                                    data: rawData,
+                                    address: msg.FromAddress,
+                                    timestamp: new Date(msg.BlockDate).getTime(),
+                                    transactionId: msg.TransactionId
+                                });
+                            } else if (data && data.deltas) {
                                 var normalizedDeltas = data.deltas.map(function(delta) {
                                     return {
                                         chunk: delta.chunk.replace(/^#/, ""),
@@ -754,7 +766,7 @@ self.onmessage = async function(e) {
                                     }
                                 }
                             } else {
-                                console.log('[Worker] No valid deltas in IPFS data for chunk message:', hash, 'txId:', msg.TransactionId);
+                                console.log('[Worker] No valid deltas or session in IPFS data for chunk message:', hash, 'txId:', msg.TransactionId);
                             }
                         }
                         processedMessages.add(msg.TransactionId);
@@ -803,11 +815,31 @@ self.onmessage = async function(e) {
                                     console.log('[Worker] Invalid CID in user_update message:', hash, 'txId:', msg.TransactionId);
                                     continue;
                                 }
-                                var data = await fetchIPFS(hash);
-                                if (data) {
-                                    self.postMessage({ type: "user_update", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
+                                var rawData = await fetchIPFS(hash);
+                                var data = rawData;
+                                if (data && data.playerData) {
+                                    data = data.playerData;
+                                }
+
+                                if (data && (data.profile || data.magicianStones || (data.deltas && data.foreignBlockOrigins))) {
+                                    self.postMessage({
+                                        type: "full_session_update",
+                                        data: rawData, // Send the original structure
+                                        address: msg.FromAddress,
+                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        transactionId: msg.TransactionId
+                                    });
+                                } else if (data && data.profile) {
+                                    // Fallback for older formats or just profile updates
+                                    self.postMessage({
+                                        type: "user_update",
+                                        data: data,
+                                        address: msg.FromAddress,
+                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        transactionId: msg.TransactionId
+                                    });
                                 } else {
-                                    console.log('[Worker] No valid data in IPFS for user_update:', hash, 'txId:', msg.TransactionId);
+                                    console.log('[Worker] No valid session or profile data in IPFS for user_update:', hash, 'txId:', msg.TransactionId);
                                 }
                             }
                             processedMessages.add(msg.TransactionId);
@@ -1153,6 +1185,13 @@ self.onmessage = async function(e) {
                     data.processedIds.forEach(id => processedMessages.add(id));
                 }
                 updateLoginUI();
+            } else if (data.type === "full_session_update") {
+                console.log('[Main] Received full_session_update:', data.transactionId);
+                applySaveFile(data.data, data.address, data.timestamp);
+                if (data.transactionId) {
+                    processedMessages.add(data.transactionId);
+                    worker.postMessage({ type: 'update_processed', transactionIds: [data.transactionId] });
+                }
             } else if (data.type === 'chunk_generated') {
                 const chunk = chunkManager.chunks.get(data.key);
                 if (chunk) {
