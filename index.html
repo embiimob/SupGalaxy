@@ -128,14 +128,14 @@
             <button id="closeCraft">Close</button>
         </div>
     </div>
-        <div id="inventoryModal">
-            <h3>Inventory</h3>
-            <div id="inventoryGrid"></div>
-            <div id="inventoryHotbar"></div>
-             <div style="margin-top:10px;text-align:right;">
-                <button id="closeInventory">Close (I)</button>
-            </div>
+    <div id="inventoryModal">
+        <h3>Inventory</h3>
+        <div id="inventoryGrid"></div>
+        <div id="inventoryHotbar"></div>
+        <div style="margin-top:10px;text-align:right;">
+            <button id="closeInventory">Close (I)</button>
         </div>
+    </div>
     <div id="trashConfirm">
         <h3>Trash Item?</h3>
         <p id="trashItemName"></p>
@@ -220,10 +220,10 @@
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
         <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
             <h3>Music Menu</h3>
-                <div style="display: flex; margin-bottom: 10px;">
-                    <input type="text" id="musicSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    <button id="musicSearchBtn" style="margin-left: 5px; padding: 6px 10px; border-radius: 4px; background: var(--accent); color: #111; border: 0; cursor: pointer;">Search</button>
-                </div>
+            <div style="display: flex; margin-bottom: 10px;">
+                <input type="text" id="musicSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                <button id="musicSearchBtn" style="margin-left: 5px; padding: 6px 10px; border-radius: 4px; background: var(--accent); color: #111; border: 0; cursor: pointer;">Search</button>
+            </div>
             <div id="musicList" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
             <div id="musicPlaylistView" style="display: none; max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
             <div id="musicPagination" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -332,12 +332,14 @@
             </div>
         </div>
     </div>
+    <script src="js/declare.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
     <script src="js/video-player.js"></script>
     <script src="js/worker.js"></script>
     <script src="js/mobs.js"></script>
     <script src="js/web-rtc.js"></script>
+    <script src="js/chunk-manager.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
