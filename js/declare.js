@@ -9,8 +9,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     MAP_SIZE = 16384,
     BLOCK_AIR = 0,
     MASTER_WORLD_KEY = "MCWorlds",
-    PENDING_PERIOD = 2592e6,
-    OWNERSHIP_EXPIRY = 31536e6,
+    PENDING_PERIOD = 2592e6, // 30 days in milliseconds
+    OWNERSHIP_EXPIRY = 31536e6, // 1 year in milliseconds
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
     INITIAL_LOAD_RADIUS = 9,

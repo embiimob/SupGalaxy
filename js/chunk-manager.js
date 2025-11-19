@@ -307,7 +307,7 @@ Chunk.prototype.idx = function (e, t, o) {
         c = modWrap(s, CHUNK_SIZE),
         u = this.getChunk(i, l);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
-}, ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null) {
+ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null) {
     if (!(t < 0 || t >= MAX_HEIGHT)) {
         var s = modWrap(e, MAP_SIZE),
             i = modWrap(o, MAP_SIZE),
@@ -321,7 +321,6 @@ Chunk.prototype.idx = function (e, t, o) {
         if (m !== a) {
             p.set(c, t, u, a);
 
-            // If a block is removed, ensure its crack mesh is also removed.
             if (a === BLOCK_AIR) {
                 const key = `${e},${t},${o}`;
                 const damagedBlock = damagedBlocks.get(key);
@@ -339,7 +338,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 y: t,
                 z: u,
                 b: a
-            }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
+            }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n && (isHost || peers.size === 0)) {
                 const n = JSON.stringify({
                     type: "block_change",
                     world: worldName,

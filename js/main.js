@@ -109,16 +109,25 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
-            var m = chunkOwners.get(s) || {
-                username: "",
-                timestamp: 0,
-                pending: !0
-            };
-            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), chunkOwners.set(s, {
-                username: u,
-                timestamp: new Date(o).getTime(),
-                pending: p - new Date(o).getTime() < PENDING_PERIOD
-            }), addMessage("Updated chunk " + s, 1e3)) : addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3)
+            var m = chunkOwners.get(s);
+            var blockDate = new Date(o).getTime();
+
+            if (!m) { // No owner
+                if (p - blockDate > PENDING_PERIOD && p - blockDate < OWNERSHIP_EXPIRY) {
+                    chunkOwners.set(s, { username: u, timestamp: blockDate + OWNERSHIP_EXPIRY, expires: true });
+                    chunkManager.applyDeltasToChunk(s, i);
+                    addMessage("Claimed and updated chunk " + s, 1e3);
+                } else {
+                    // Older than 1 year, load structures but no ownership
+                    chunkManager.applyDeltasToChunk(s, i);
+                }
+            } else if (m.username === u) { // Owner is the same
+                chunkOwners.set(s, { username: u, timestamp: blockDate + OWNERSHIP_EXPIRY, expires: true });
+                chunkManager.applyDeltasToChunk(s, i);
+                addMessage("Updated owned chunk " + s, 1e3);
+            } else { // Owned by someone else
+                addMessage("Cannot edit chunk " + s + ": owned by another user", 3e3);
+            }
         }
         if (e.magicianStones) {
             for (const key in e.magicianStones) {
@@ -129,6 +138,43 @@ async function applySaveFile(e, t, o) {
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
+}
+
+function setHomeChunkOwnership(chunkKey, username) {
+    if (!chunkOwners.has(chunkKey)) {
+        chunkOwners.set(chunkKey, {
+            username: username,
+            timestamp: 0,
+            expires: false
+        });
+        console.log(`[Ownership] Home chunk ${chunkKey} set for ${username}.`);
+    } else {
+        const owner = chunkOwners.get(chunkKey).username;
+        if (owner !== username) {
+            const peer = peers.get(username);
+            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(JSON.stringify({
+                    type: 'home_chunk_collision',
+                    owner: owner
+                }));
+            }
+        }
+    }
+}
+
+function checkChunkOwnership(chunkKey, username) {
+    const ownerInfo = chunkOwners.get(chunkKey);
+    if (!ownerInfo) {
+        return true;
+    }
+    if (ownerInfo.username === username) {
+        return true;
+    }
+    if (ownerInfo.expires && Date.now() > ownerInfo.timestamp) {
+        return true;
+    }
+    addMessage(`Chunk ${chunkKey} is owned by ${ownerInfo.username}.`);
+    return false;
 }
 
 function updateTorchRegistry(e) {
@@ -1019,15 +1065,39 @@ function onPointerDown(e) {
                     world: worldName,
                     blockId: blockId
                 });
-                for (const [, peer] of peers.entries()) {
-                    if (peer.dc && peer.dc.readyState === 'open') {
-                        peer.dc.send(blockHitMsg);
-                    }
+                const hostPeer = Array.from(peers.values()).find(p => p.isHost);
+                if (hostPeer && hostPeer.dc && hostPeer.dc.readyState === 'open') {
+                    hostPeer.dc.send(blockHitMsg);
                 }
             }
         }
     } else if (2 === e.button) {
-        placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
+        const x = Math.floor(i.x + .5 * l.x);
+        const y = Math.floor(i.y + .5 * l.y);
+        const z = Math.floor(i.z + .5 * l.z);
+        const blockId = selectedBlockId;
+        const inventoryItem = INVENTORY[selectedHotIndex];
+
+        if (isHost || peers.size === 0) {
+            placeBlockAt(x, y, z, blockId);
+        } else {
+            if (blockId && inventoryItem && inventoryItem.id === blockId && inventoryItem.count > 0) {
+                const blockPlaceMsg = JSON.stringify({
+                    type: 'block_place',
+                    x: x,
+                    y: y,
+                    z: z,
+                    blockId: blockId,
+                    originSeed: inventoryItem.originSeed,
+                    username: userName,
+                    world: worldName
+                });
+                const hostPeer = Array.from(peers.values()).find(p => p.isHost);
+                if (hostPeer && hostPeer.dc && hostPeer.dc.readyState === 'open') {
+                    hostPeer.dc.send(blockPlaceMsg);
+                }
+            }
+        }
     }
 }
 
@@ -1282,54 +1352,75 @@ function removeBlockAt(e, t, o, breaker) {
     }
 }
 
-function placeBlockAt(e, t, o, a) {
+function placeBlockAt(e, t, o, a, placer = userName, originSeed = null) {
     if (a) {
         var n = INVENTORY[selectedHotIndex];
-        if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
-        else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
-        else {
-            var r = getBlockAt(e, t, o);
-            if (r === BLOCK_AIR || 6 === r)
-                if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
-                else {
-                    for (var s of mobs)
-                        if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
-                    var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
-                        l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
-                        d = makeChunkKey(worldName, i, l);
-                    if (checkChunkOwnership(d, userName)) {
-                        if (a === 127) { // Magician's Stone
-                            const playerDirection = new THREE.Vector3();
-                            camera.getWorldDirection(playerDirection);
-                            playerDirection.y = 0;
-                            playerDirection.normalize();
-                            magicianStonePlacement = {
-                                x: e, y: t, z: o,
-                                direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
-                            };
-                            document.getElementById('magicianStoneModal').style.display = 'flex';
-                            isPromptOpen = true;
-                        } else {
-                           if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
-                                const r = `${e},${t},${o}`;
-                                getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
-                            } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
+        if (placer === userName && (!n || n.id !== a || n.count <= 0)) {
+            addMessage("No item to place");
+            return;
+        }
+
+        if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5 && placer === userName) {
+            addMessage("Too far to place");
+            return;
+        }
+
+        var r = getBlockAt(e, t, o);
+        if (r === BLOCK_AIR || 6 === r) {
+            if (checkCollisionWithPlayer(e, t, o)) {
+                addMessage("Cannot place inside player");
+                return;
+            }
+
+            for (var s of mobs) {
+                if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) {
+                    addMessage("Cannot place inside mob");
+                    return;
+                }
+            }
+
+            var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
+                l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
+                d = makeChunkKey(worldName, i, l);
+
+            if (checkChunkOwnership(d, placer)) {
+                if (a === 127) { // Magician's Stone
+                    // This part remains client-side for the UI
+                    if (placer === userName) {
+                        const playerDirection = new THREE.Vector3();
+                        camera.getWorldDirection(playerDirection);
+                        playerDirection.y = 0;
+                        playerDirection.normalize();
+                        magicianStonePlacement = {
+                            x: e, y: t, z: o,
+                            direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+                        };
+                        document.getElementById('magicianStoneModal').style.display = 'flex';
+                        isPromptOpen = true;
+                    }
+                } else {
+                    const blockChanged = chunkManager.setBlockGlobal(e, t, o, a, true, originSeed || (n ? n.originSeed : null));
+
+                    if (blockChanged) {
+                        if (placer === userName) {
                             if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
                                 const a = `${e},${t},${o}`;
-                                torchRegistry.set(a, {
-                                    x: e,
-                                    y: t,
-                                    z: o
-                                });
+                                torchRegistry.set(a, { x: e, y: t, z: o });
                                 var c = createFlameParticles(e, t + .5, o);
-                                scene.add(c), torchParticles.set(a, c)
+                                scene.add(c), torchParticles.set(a, c);
                             }
                         }
-                    } else addMessage("Cannot place block in chunk " + d + ": owned by another user")
+                    }
                 }
-            else addMessage("Cannot place here")
+            } else {
+                addMessage("Cannot place block in chunk " + d + ": owned by another user");
+            }
+        } else {
+            addMessage("Cannot place here");
         }
-    } else addMessage("No item selected")
+    } else {
+        addMessage("No item selected");
+    }
 }
 
 function checkCollisionWithPlayer(e, t, o) {
@@ -1888,6 +1979,10 @@ async function startGame() {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
+    if (isHost || peers.size === 0) {
+        const homeChunkKey = makeChunkKey(worldName, i, l);
+        setHomeChunkOwnership(homeChunkKey, userName);
+    }
     if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
@@ -2434,10 +2529,9 @@ function gameLoop(e) {
                             world: worldName,
                             blockId: blockId
                         });
-                        for (const [, peer] of peers.entries()) {
-                            if (peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(blockHitMsg);
-                            }
+                        const hostPeer = Array.from(peers.values()).find(p => p.isHost);
+                        if (hostPeer && hostPeer.dc && hostPeer.dc.readyState === 'open') {
+                            hostPeer.dc.send(blockHitMsg);
                         }
                     }
                 }

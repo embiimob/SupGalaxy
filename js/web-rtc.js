@@ -89,7 +89,8 @@ async function connectToServer(e, t, o) {
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
-            address: null
+            address: null,
+            isHost: !0
         });
         var f = "MCAnswer@" + userName + "@" + worldName;
         answerPollingIntervals.set(f, setInterval((function () {
@@ -259,6 +260,13 @@ function setupDataChannel(e, t) {
             isAttacking: !1,
             timestamp: Date.now()
         })), isHost) {
+            // Assign home chunk ownership for the new player
+            const spawnPoint = calculateSpawnPoint(t + '@' + worldName);
+            const cx = Math.floor(spawnPoint.x / CHUNK_SIZE);
+            const cz = Math.floor(spawnPoint.z / CHUNK_SIZE);
+            const homeChunkKey = makeChunkKey(worldName, cx, cz);
+            setHomeChunkOwnership(homeChunkKey, t);
+
             for (const [e, o] of peers.entries()) e !== t && e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                 type: "new_player",
                 username: t
@@ -748,33 +756,21 @@ function setupDataChannel(e, t) {
                 case "remove_peer":
                     s.username && cleanupPeer(s.username);
                     break;
+                case 'home_chunk_collision':
+                    addMessage(`Your home spawn chunk is already claimed by ${s.owner}.`);
+                    break;
+                case "block_place":
+                    if (isHost) {
+                        placeBlockAt(s.x, s.y, s.z, s.blockId, s.username, s.originSeed);
+                    }
+                    break;
                 case "block_hit":
                     if (isHost) {
-                        const originalWorldName = worldName;
-                        const originalWorldSeed = worldSeed;
-
-                        // Use the world from the message, or default to the host's current world
-                        let blockWorld = s.world || originalWorldName;
-
-                        try {
-                            // Temporarily switch world context if the hit is in a different world
-                            if (blockWorld !== originalWorldName) {
-                                console.log(`[WebRTC] Host switching context to world "${blockWorld}" to process block hit from ${s.username}`);
-                                worldName = blockWorld;
-                                worldSeed = blockWorld;
-                            }
-
+                        const chunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
+                        const chunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
+                        const chunkKey = makeChunkKey(s.world, chunkX, chunkZ);
+                        if (checkChunkOwnership(chunkKey, s.username)) {
                             removeBlockAt(s.x, s.y, s.z, s.username);
-
-                        } catch (error) {
-                            console.error(`[WebRTC] Error processing block_hit in world ${blockWorld}:`, error);
-                        } finally {
-                            // Switch back to the original world context
-                            if (worldName !== originalWorldName) {
-                                console.log(`[WebRTC] Host switching context back to world "${originalWorldName}"`);
-                                worldName = originalWorldName;
-                                worldSeed = originalWorldSeed;
-                            }
                         }
                     }
                     break;
