@@ -626,9 +626,6 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
 }
 
 function checkChunkOwnership(e, t) {
-    if (peers.size > 0 && !isHost) {
-        return true;
-    }
     const o = e.replace(/^#/, "");
     if (spawnChunks.size > 0)
         for (const [e, a] of spawnChunks) {
