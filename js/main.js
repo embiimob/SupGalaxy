@@ -1,3 +1,4 @@
+var avatarGroup;
 function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
@@ -181,7 +182,7 @@ function initThree() {
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
+    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), createAndSetupAvatar(userName, !0), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
         onPointerDown(e)
     })), renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
@@ -229,7 +230,7 @@ function initThree() {
         }
     })), window.addEventListener("resize", (function () {
         camera.aspect = innerWidth / innerHeight, camera.updateProjectionMatrix(), renderer.setSize(innerWidth, innerHeight), updateMinimap()
-    })), createAndSetupAvatar(userName, !0)
+    }))
 }
 
 function createAndSetupAvatar(e, t, o = 0) {
