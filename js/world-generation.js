@@ -57,7 +57,7 @@ function calculateSpawnPoint(e) {
         a = Math.floor(t() * MAP_SIZE),
         n = Math.floor(o / CHUNK_SIZE),
         r = Math.floor(a / CHUNK_SIZE),
-        s = chunkManager.getChunk(n, r);
+        s = chunkManager.getChunk(n, r, e.split("@")[1] || worldName);
     s.generated || chunkManager.generateChunk(s);
     for (var i = MAX_HEIGHT - 1; i > 0 && s.get(o % CHUNK_SIZE, i, a % CHUNK_SIZE) === BLOCK_AIR;) i--;
     return {

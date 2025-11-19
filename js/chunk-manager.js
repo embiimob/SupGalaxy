@@ -131,11 +131,11 @@ Chunk.prototype.idx = function (e, t, o) {
         this.pendingDeltas.set(chunkKey, []);
     }
     this.pendingDeltas.get(chunkKey).push(...deltas);
-}, ChunkManager.prototype.getChunk = function (e, t) {
+}, ChunkManager.prototype.getChunk = function(e, t, worldCtx) {
     var o = Math.floor(MAP_SIZE / CHUNK_SIZE),
         a = modWrap(e, o),
         n = modWrap(t, o),
-        r = makeChunkKey(worldName, a, n);
+        r = makeChunkKey(worldCtx || worldName, a, n);
     if (this.chunks.has(r)) return this.chunks.get(r);
     var s = new Chunk(a, n);
     return this.chunks.set(s.key, s), pending.add(s.key), s
@@ -297,7 +297,7 @@ Chunk.prototype.idx = function (e, t, o) {
         }
     }
     e.mesh = I, meshGroup.add(e.mesh), e.needsRebuild = !1
-}, ChunkManager.prototype.getBlockGlobal = function (e, t, o, a, n) {
+}, ChunkManager.prototype.getBlockGlobal = function (e, t, o, a, n, worldCtx) {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var r = modWrap(e * CHUNK_SIZE + o, MAP_SIZE),
         s = modWrap(t * CHUNK_SIZE + n, MAP_SIZE),
@@ -305,9 +305,9 @@ Chunk.prototype.idx = function (e, t, o) {
         l = Math.floor(s / CHUNK_SIZE),
         d = modWrap(r, CHUNK_SIZE),
         c = modWrap(s, CHUNK_SIZE),
-        u = this.getChunk(i, l);
+        u = this.getChunk(i, l, worldCtx);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
-}, ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null) {
+}, ChunkManager.prototype.setBlockGlobal = function(e, t, o, a, n = !0, r = null, worldCtx, breaker) {
     if (!(t < 0 || t >= MAX_HEIGHT)) {
         var s = modWrap(e, MAP_SIZE),
             i = modWrap(o, MAP_SIZE),
@@ -315,7 +315,7 @@ Chunk.prototype.idx = function (e, t, o) {
             d = Math.floor(i / CHUNK_SIZE),
             c = Math.floor(s % CHUNK_SIZE),
             u = Math.floor(i % CHUNK_SIZE),
-            p = this.getChunk(l, d);
+            p = this.getChunk(l, d, worldCtx);
         p.generated || this.generateChunk(p);
         var m = p.get(c, t, u);
         if (m !== a) {
@@ -339,16 +339,16 @@ Chunk.prototype.idx = function (e, t, o) {
                 y: t,
                 z: u,
                 b: a
-            }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
+            }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d, worldCtx).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d, worldCtx).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1, worldCtx).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1, worldCtx).needsRebuild = !0), updateSaveChangesButton(), n) {
                 const n = JSON.stringify({
                     type: "block_change",
-                    world: worldName,
+                    world: worldCtx || worldName,
                     wx: e,
                     wy: t,
                     wz: o,
                     bid: a,
                     prevBid: m,
-                    username: userName,
+                    username: breaker || userName,
                     originSeed: r
                 });
                 for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && (console.log(`[WebRTC] Sending block change to ${e}`), t.dc.send(n))
@@ -370,22 +370,22 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.markDirty = function (e) {
     var t = this.chunks.get(e);
     t && (t.needsRebuild = !0, this.buildChunkMesh(t))
-}, ChunkManager.prototype.getSurfaceY = function (e, t) {
+ChunkManager.prototype.getSurfaceY = function(e, t, worldCtx) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),
         n = Math.floor(o / CHUNK_SIZE),
         r = Math.floor(a / CHUNK_SIZE),
-        s = this.getChunk(n, r);
+        s = this.getChunk(n, r, worldCtx);
     s.generated || this.generateChunk(s);
     for (var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE), d = MAX_HEIGHT - 1; d >= 0; d--)
         if (s.get(i, d, l) !== BLOCK_AIR && 6 !== s.get(i, d, l)) return d + 1;
     return SEA_LEVEL
-}, ChunkManager.prototype.getSurfaceYForBoulders = function (e, t) {
+}, ChunkManager.prototype.getSurfaceYForBoulders = function(e, t, worldCtx) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),
         n = Math.floor(o / CHUNK_SIZE),
         r = Math.floor(a / CHUNK_SIZE),
-        s = this.getChunk(n, r);
+        s = this.getChunk(n, r, worldCtx);
     s.generated || this.generateChunk(s);
     for (var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE), d = MAX_HEIGHT - 1; d >= 0; d--) {
         const e = s.get(i, d, l);

@@ -1142,7 +1142,7 @@ function attackAtPoint(e) {
     return !1
 }
 
-function checkAndDeactivateHive(e, t, o) {
+function checkAndDeactivateHive(e, t, o, worldCtx) {
     let a = null,
         n = 1 / 0;
     for (const r of hiveLocations) {
@@ -1153,7 +1153,7 @@ function checkAndDeactivateHive(e, t, o) {
     let r = 0;
     for (let e = a.y; e < a.y + 8; e++)
         for (let t = a.x - 3; t <= a.x + 3; t++)
-            for (let o = a.z - 3; o <= a.z + 3; o++) 123 === getBlockAt(t, e, o) && r++;
+            for (let o = a.z - 3; o <= a.z + 3; o++) 123 === getBlockAt(t, e, o, worldCtx) && r++;
     0 === r && (console.log(`[HIVE] All blocks for hive at ${a.x},${a.y},${a.z} are gone. Deactivating.`), hiveLocations = hiveLocations.filter((e => e.x !== a.x || e.y !== a.y || e.z !== a.z)), addMessage("A bee hive has been destroyed!", 3e3))
 }
 
@@ -1226,11 +1226,11 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
         var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-        if (!checkChunkOwnership(chunkKey, userName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+        if (!checkChunkOwnership(chunkKey, breaker)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
 
         const worldState = getCurrentWorldState();
         const l = worldState.foreignBlockOrigins.get(r);
-        chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
+        chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, true, l, worldName, breaker);
         if (l) worldState.foreignBlockOrigins.delete(r);
         if (breaker === userName) {
             addToInventory(a, 1, l);
@@ -1286,7 +1286,7 @@ function removeBlockAt(e, t, o, breaker) {
             }
         }
         if (a === 123 || a === 122) {
-            setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
+            setTimeout(() => checkAndDeactivateHive(e, t, o, worldName), 100);
         }
     }
 }
@@ -1297,7 +1297,7 @@ function placeBlockAt(e, t, o, a) {
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
-            var r = getBlockAt(e, t, o);
+            var r = getBlockAt(e, t, o, worldName);
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
@@ -1319,7 +1319,7 @@ function placeBlockAt(e, t, o, a) {
                             document.getElementById('magicianStoneModal').style.display = 'flex';
                             isPromptOpen = true;
                         } else {
-                           if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
+                           if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed, worldName, userName), n.originSeed && n.originSeed !== worldSeed) {
                                 const r = `${e},${t},${o}`;
                                 getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed), addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`)
                             } else addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
@@ -1351,13 +1351,13 @@ function checkCollisionWithPlayer(e, t, o) {
     return a < e + 1 && n > e && r < t + 1 && s > t && i < o + 1 && l > o
 }
 
-function getBlockAt(e, t, o) {
+function getBlockAt(e, t, o, worldCtx) {
     var a = modWrap(Math.floor(e), MAP_SIZE),
         n = modWrap(Math.floor(o), MAP_SIZE),
         r = Math.floor(a / CHUNK_SIZE),
         s = Math.floor(n / CHUNK_SIZE),
-        i = chunkManager.getChunk(r, s);
-    i.generated || chunkManager.generateChunk(i);
+        i = chunkManager.getChunk(r, s, worldCtx);
+    i.generated || chunkManager.generateChunk(i, worldCtx);
     var l = Math.floor(a % CHUNK_SIZE),
         d = Math.floor(n % CHUNK_SIZE);
     return i.get(l, Math.floor(t), d)
@@ -1376,26 +1376,26 @@ function handlePlayerDeath() {
 function respawnPlayer(e, t, o) {
     var a = modWrap(e || spawnPoint.x, MAP_SIZE),
         n = modWrap(o || spawnPoint.z, MAP_SIZE),
-        r = t || chunkManager.getSurfaceY(a, n) + 1;
-    if (checkCollision(a, r, n)) {
+        r = t || chunkManager.getSurfaceY(a, n, worldName) + 1;
+    if (checkCollision(a, r, n, worldName)) {
         for (var s = !1, i = 0; i <= 5; i++)
-            if (!checkCollision(a, r + i, n)) {
+            if (!checkCollision(a, r + i, n, worldName)) {
                 player.x = a, player.y = r + i, player.z = n, player.vy = 0, player.onGround = !1, s = !0;
                 break
-            } s || (player.x = a, player.y = chunkManager.getSurfaceY(a, n) + 1, player.z = n, player.vy = 0, player.onGround = !0, player.health = 20, player.yaw = 0, player.pitch = 0)
+            } s || (player.x = a, player.y = chunkManager.getSurfaceY(a, n, worldName) + 1, player.z = n, player.vy = 0, player.onGround = !0, player.health = 20, player.yaw = 0, player.pitch = 0)
     } else player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !1, player.health = 20, player.yaw = 0, player.pitch = 0;
     updateHotbarUI(), updateHealthBar(), document.getElementById("health").innerText = player.health;
     var l = Math.floor(a / CHUNK_SIZE),
         d = Math.floor(n / CHUNK_SIZE);
-    currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
+    currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius, worldName);
     for (var c = -currentLoadRadius; c <= currentLoadRadius; c++)
         for (var u = -currentLoadRadius; u <= currentLoadRadius; u++) {
             var p = modWrap(l + c, CHUNKS_PER_SIDE),
                 m = modWrap(d + u, CHUNKS_PER_SIDE),
-                y = chunkManager.getChunk(p, m);
-            y.generated || chunkManager.generateChunk(y), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y)
+                y = chunkManager.getChunk(p, m, worldName);
+            y.generated || chunkManager.generateChunk(y, worldName), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y, worldName)
         }
-    if (chunkManager.update(player.x, player.z), "first" === cameraMode) {
+    if (chunkManager.update(player.x, player.z, null, worldName), "first" === cameraMode) {
         camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2), camera.rotation.set(0, 0, 0, "YXZ");
         try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
@@ -1426,7 +1426,7 @@ function checkCollisionWithBlock(e, t, o) {
     return !1
 }
 
-function checkCollision(e, t, o) {
+function checkCollision(e, t, o, worldCtx) {
     const a = Math.floor(e),
         n = Math.floor(e + player.width),
         r = Math.floor(t),
@@ -1436,7 +1436,7 @@ function checkCollision(e, t, o) {
     for (let e = a; e <= n; e++)
         for (let t = r; t <= s; t++)
             for (let o = i; o <= l; o++)
-                if (isSolid(getBlockAt(e, t, o))) return !0;
+                if (isSolid(getBlockAt(e, t, o, worldCtx), worldCtx)) return !0;
     return !1
 }
 
@@ -1470,7 +1470,7 @@ function pushPlayerOut() {
             var a = modWrap(player.x + o.dx, MAP_SIZE),
                 n = modWrap(player.z + o.dz, MAP_SIZE),
                 r = player.y + t;
-            if (!checkCollision(a, r, n)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, addMessage("Pushed out of block"), !0
+            if (!checkCollision(a, r, n, worldName)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, addMessage("Pushed out of block"), !0
         }
     return !1
 }
@@ -1889,7 +1889,7 @@ async function startGame() {
         count: 1
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var s = calculateSpawnPoint(r);
-    player.x = s.x, player.y = chunkManager.getSurfaceY(s.x, s.z) + 1, player.z = s.z, spawnPoint = {
+    player.x = s.x, player.y = chunkManager.getSurfaceY(s.x, s.z, worldName) + 1, player.z = s.z, spawnPoint = {
         x: player.x,
         y: player.y,
         z: player.z
@@ -1897,7 +1897,7 @@ async function startGame() {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
-    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
+    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS, worldName), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
         addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
@@ -2199,25 +2199,25 @@ function gameLoop(e) {
             c = l.z * r * t;
         d += player.vx * t, c += player.vz * t, player.vx *= 1 - 2 * t, player.vz *= 1 - 2 * t;
         let M = player.x + d;
-        checkCollision(M, player.y, player.z) ? player.vx = 0 : player.x = M;
+        checkCollision(M, player.y, player.z, worldName) ? player.vx = 0 : player.x = M;
         let S = player.z + c;
-        checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= gravity * t;
+        checkCollision(player.x, player.y, S, worldName) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= gravity * t;
         var u = player.vy * t,
             p = player.y + u;
-        checkCollision(player.x, p, player.z) ? u < 0 ? (player.y = Math.ceil(p - .001), player.vy = 0, player.onGround = !0) : u > 0 && (player.y = Math.floor(p + player.height) - player.height, player.vy = 0) : (player.y = p, player.onGround = !1), checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")));
+        checkCollision(player.x, p, player.z, worldName) ? u < 0 ? (player.y = Math.ceil(p - .001), player.vy = 0, player.onGround = !0) : u > 0 && (player.y = Math.floor(p + player.height) - player.height, player.vy = 0) : (player.y = p, player.onGround = !1), checkCollision(player.x, player.y, player.z, worldName) && (pushPlayerOut() || (player.y = chunkManager.getSurfaceY(player.x, player.z, worldName) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")));
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
                 const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
                     o = (new THREE.Box3).setFromObject(e.mesh);
                 t.intersectsBox(o) && (player.health = Math.max(0, player.health - 2), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a Grub! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
-            } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isHost || 0 === peers.size) {
-                16 === getBlockAt(player.x, player.y + .5, player.z) && e - lastDamageTime > 500 && (player.health = Math.max(0, player.health - 1), lastDamageTime = e, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Burning in lava! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
+            } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z, worldName) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isHost || 0 === peers.size) {
+                16 === getBlockAt(player.x, player.y + .5, player.z, worldName) && e - lastDamageTime > 500 && (player.health = Math.max(0, player.health - 1), lastDamageTime = e, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Burning in lava! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             }
         if (isHost)
             for (const [t, o] of peers.entries())
                 if (userPositions[t]) {
                     const a = userPositions[t];
-                    16 === getBlockAt(a.targetX, a.targetY + .5, a.targetZ) && (!o.lastLavaDamageTime || e - o.lastLavaDamageTime > 500) && (o.lastLavaDamageTime = e, o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
+                    16 === getBlockAt(a.targetX, a.targetY + .5, a.targetZ, worldName) && (!o.lastLavaDamageTime || e - o.lastLavaDamageTime > 500) && (o.lastLavaDamageTime = e, o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                         type: "player_damage",
                         damage: 1,
                         attacker: "lava"
@@ -2405,14 +2405,14 @@ function gameLoop(e) {
         for (let e = pebbles.length - 1; e >= 0; e--) {
             const o = pebbles[e];
             o.mesh.position.add(o.velocity.clone().multiplyScalar(t));
-            const a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z);
+            const a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z, worldName);
             o.mesh.position.y <= a && (o.isGlowing ? setTimeout((() => {
                 scene.remove(o.mesh), disposeObject(o.mesh)
             }), 500) : (scene.remove(o.mesh), disposeObject(o.mesh)), pebbles.splice(e, 1))
         }
         for (let e = droppedItems.length - 1; e >= 0; e--) {
             const o = droppedItems[e],
-                a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z);
+                a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z, worldName);
             if (o.mesh.position.y > a + .25 ? o.mesh.position.y -= 4 * t : o.mesh.position.y = a + .25, o.light.position.copy(o.mesh.position), Date.now() - o.createdAt > 3e5) {
                 scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
                 continue
@@ -2448,11 +2448,11 @@ function gameLoop(e) {
             const a = Math.floor(o.mesh.position.x),
                 n = Math.floor(o.mesh.position.y),
                 r = Math.floor(o.mesh.position.z);
-            if (isSolid(getBlockAt(a, n, r))) {
+            if (isSolid(getBlockAt(a, n, r, worldName), worldName)) {
                 if (isHost || peers.size === 0) {
                     removeBlockAt(a, n, r, o.user);
                 } else {
-                    const blockId = getBlockAt(a, n, r);
+                    const blockId = getBlockAt(a, n, r, worldName);
                     if (blockId > 0) {
                         const blockHitMsg = JSON.stringify({
                             type: 'block_hit',

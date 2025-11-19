@@ -1,6 +1,6 @@
-function Mob(t, e, s, i = "crawley") {
-    this.lastDamageTime = 0, this.lastRegenTime = 0;
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+function Mob(t, e, s, i = "crawley", worldCtx = worldName) {
+    this.world = worldCtx, this.lastDamageTime = 0, this.lastRegenTime = 0;
+    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e, this.world) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
     } else {
@@ -157,7 +157,7 @@ function manageMobs() {
             const e = t[Math.floor(Math.random() * t.length)],
                 i = Math.random() * Math.PI * 2,
                 o = 32 + 64 * Math.random() / 2,
-                h = new Mob(modWrap(e.x + Math.cos(i) * o, MAP_SIZE), modWrap(e.z + Math.sin(i) * o, MAP_SIZE), Date.now() + Math.random(), s);
+                h = new Mob(modWrap(e.x + Math.cos(i) * o, MAP_SIZE), modWrap(e.z + Math.sin(i) * o, MAP_SIZE), Date.now() + Math.random(), s, worldName);
             mobs.push(h);
             const a = JSON.stringify({
                 type: "mob_spawn",
@@ -216,7 +216,7 @@ Mob.prototype.update = function (t) {
                         const t = (o - i) / i;
                         this.pos.x += e * t * .2, this.pos.z += s * t * .2
                     }
-                } let e = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + .5;
+                } let e = chunkManager.getSurfaceY(this.pos.x, this.pos.z, this.world) + .5;
             for (const t of mobs)
                 if (t.id !== this.id && "crawley" === t.type) {
                     Math.hypot(this.pos.x - t.pos.x, this.pos.z - t.pos.z) < .9 && t.pos.y < this.pos.y && (e = Math.max(e, t.pos.y + .9))
@@ -250,7 +250,7 @@ Mob.prototype.update = function (t) {
                             const h = Math.floor(this.pos.x + i),
                                 a = Math.floor(this.pos.y + t),
                                 n = Math.floor(this.pos.z + o);
-                            if (9 === getBlockAt(h, a, n)) {
+                            if (9 === getBlockAt(h, a, n, this.world)) {
                                 const t = this.pos.distanceTo(new THREE.Vector3(h + .5, a + .5, n + .5));
                                 t < s && (s = t, e = {
                                     x: h,
@@ -261,7 +261,7 @@ Mob.prototype.update = function (t) {
                         }
                 if (e) {
                     let t = e.y;
-                    for (; 9 === getBlockAt(e.x, t + 1, e.z);) t++;
+                    for (; 9 === getBlockAt(e.x, t + 1, e.z, this.world);) t++;
                     this.aiState = "MOVING_TO_CACTUS", this.targetBlock = {
                         x: e.x,
                         y: t,
@@ -271,19 +271,19 @@ Mob.prototype.update = function (t) {
             }
             if ("MOVING_TO_CACTUS" === this.aiState && this.targetBlock) i = new THREE.Vector3(this.targetBlock.x + .5, this.targetBlock.y + .5, this.targetBlock.z + .5), o = Math.hypot(this.pos.x - i.x, this.pos.z - i.z), o < 1.8 && (this.aiState = "EATING_CACTUS", this.lingerTime = Date.now());
             else if ("EATING_CACTUS" === this.aiState && this.targetBlock && Date.now() - this.lingerTime > 2500) {
-                if (9 === getBlockAt(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z) && (chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0), this.cactusEaten++, this.cactusEaten >= 5)) {
+                if (9 === getBlockAt(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, this.world) && (chunkManager.setBlockGlobal(this.targetBlock.x, this.targetBlock.y, this.targetBlock.z, 0, !0, null, this.world, null), this.cactusEaten++, this.cactusEaten >= 5)) {
                     this.cactusEaten = 0;
                     const t = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion),
                         e = this.pos.clone().add(t.multiplyScalar(-7.5)),
-                        s = chunkManager.getSurfaceY(e.x, e.z);
-                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 125, !0, worldSeed)
+                        s = chunkManager.getSurfaceY(e.x, e.z, this.world);
+                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 125, !0, worldSeed, this.world, null)
                 }
                 const t = {
                     x: this.targetBlock.x,
                     y: this.targetBlock.y - 1,
                     z: this.targetBlock.z
                 };
-                9 === getBlockAt(t.x, t.y, t.z) ? (this.targetBlock = t, this.lingerTime = Date.now()) : (this.aiState = "IDLE", this.targetBlock = null)
+                9 === getBlockAt(t.x, t.y, t.z, this.world) ? (this.targetBlock = t, this.lingerTime = Date.now()) : (this.aiState = "IDLE", this.targetBlock = null)
             }
         } else if (this.isAggressive || !i) {
             let t = null,
@@ -330,7 +330,7 @@ Mob.prototype.update = function (t) {
                         const n = Math.floor(this.pos.x + i),
                             r = Math.floor(this.pos.y + t),
                             l = Math.floor(this.pos.z + o),
-                            p = getBlockAt(n, r, l);
+                            p = getBlockAt(n, r, l, this.world);
                         if (123 === p) {
                             const t = this.pos.distanceTo(new THREE.Vector3(n + .5, r + .5, l + .5));
                             t < h && (h = t, e = {
@@ -352,7 +352,7 @@ Mob.prototype.update = function (t) {
             if (e ? (i = e, o = h) : s && (i = s, o = a), i && o < 1.5) {
                 if (0 === this.lingerTime) this.lingerTime = Date.now();
                 else if (Date.now() - this.lingerTime > 2e3) {
-                    Math.hypot(player.x - i.x, player.y - i.y, player.z - i.z) < maxAudioDistance && safePlayAudio(soundBreak), chunkManager.setBlockGlobal(i.x, i.y, i.z, 0), setTimeout((() => checkAndDeactivateHive(i.x, i.y, i.z)), 100), i = null, this.lingerTime = 0
+                    Math.hypot(player.x - i.x, player.y - i.y, player.z - i.z) < maxAudioDistance && safePlayAudio(soundBreak), chunkManager.setBlockGlobal(i.x, i.y, i.z, 0, !0, null, this.world, null), setTimeout((() => checkAndDeactivateHive(i.x, i.y, i.z, this.world)), 100), i = null, this.lingerTime = 0
                 }
             } else this.lingerTime = 0
         }
@@ -362,7 +362,7 @@ Mob.prototype.update = function (t) {
             for (let x = -avoidanceRadius; x <= avoidanceRadius; x++) {
                 for (let y = -avoidanceRadius; y <= avoidanceRadius; y++) {
                     for (let z = -avoidanceRadius; z <= avoidanceRadius; z++) {
-                        const blockId = getBlockAt(Math.floor(this.pos.x + x), Math.floor(this.pos.y + y), Math.floor(this.pos.z + z));
+                        const blockId = getBlockAt(Math.floor(this.pos.x + x), Math.floor(this.pos.y + y), Math.floor(this.pos.z + z), this.world);
                         if (blockId === 3 || blockId === 4) { // Dirt or Stone
                             const vec = new THREE.Vector3(x, y, z);
                             const dist = vec.length();
@@ -393,14 +393,14 @@ Mob.prototype.update = function (t) {
                     o = minDistance; // o is the distance to target
 
                     if (i) {
-                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y);
+                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z, this.world) + 2 - this.pos.y);
 
                         if (o < 1.5) {
                             this.hasPollen = true;
                             this.aiState = "FLYING_TO_HIVE";
 
                             // Consume the flower
-                            chunkManager.setBlockGlobal(i.x, i.y, i.z, BLOCK_AIR);
+                            chunkManager.setBlockGlobal(i.x, i.y, i.z, BLOCK_AIR, !0, null, this.world, null);
 
                             // Remove from flowerLocations array on host
                             const flowerIndex = flowerLocations.findIndex(f => f.x === i.x && f.y === i.y && f.z === i.z);
@@ -436,7 +436,7 @@ Mob.prototype.update = function (t) {
                     o = minDistance;
 
                     if (i) {
-                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y);
+                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z, this.world) + 8 - this.pos.y);
                     }
                     if (o < 2) {
                         this.aiState = "DEPOSITING_HONEY";
@@ -465,7 +465,7 @@ Mob.prototype.update = function (t) {
                                     for (let dy = -1; dy <= 1; dy++) {
                                         for (let dz = -1; dz <= 1; dz++) {
                                             if (dx === 0 && dy === 0 && dz === 0) continue;
-                                            if (getBlockAt(checkX + dx, checkY + dy, checkZ + dz) === 123) {
+                                            if (getBlockAt(checkX + dx, checkY + dy, checkZ + dz, this.world) === 123) {
                                                 isAdjacentToHive = true;
                                                 break;
                                             }
@@ -475,8 +475,8 @@ Mob.prototype.update = function (t) {
                                     if(isAdjacentToHive) break;
                                 }
 
-                                if (isAdjacentToHive && getBlockAt(checkX, checkY, checkZ) === BLOCK_AIR && isSolid(getBlockAt(checkX, checkY - 1, checkZ))) {
-                                    chunkManager.setBlockGlobal(checkX, checkY, checkZ, 122); // Place Honey
+                                if (isAdjacentToHive && getBlockAt(checkX, checkY, checkZ, this.world) === BLOCK_AIR && isSolid(getBlockAt(checkX, checkY - 1, checkZ, this.world), this.world)) {
+                                    chunkManager.setBlockGlobal(checkX, checkY, checkZ, 122, !0, null, this.world, null); // Place Honey
                                     honeyPlaced = true;
                                     break;
                                 }
@@ -494,8 +494,8 @@ Mob.prototype.update = function (t) {
                                      const checkX = closestHive.x + xOffset;
                                      const checkY = closestHive.y + yOffset;
                                      const checkZ = closestHive.z + zOffset;
-                                    if (getBlockAt(checkX, checkY, checkZ) === 122 && getBlockAt(checkX, checkY + 1, checkZ) === BLOCK_AIR) {
-                                        chunkManager.setBlockGlobal(checkX, checkY + 1, checkZ, 122);
+                                    if (getBlockAt(checkX, checkY, checkZ, this.world) === 122 && getBlockAt(checkX, checkY + 1, checkZ, this.world) === BLOCK_AIR) {
+                                        chunkManager.setBlockGlobal(checkX, checkY + 1, checkZ, 122, !0, null, this.world, null);
                                         honeyPlaced = true;
                                         break;
                                     }
@@ -553,23 +553,23 @@ Mob.prototype.update = function (t) {
                 r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
                 l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
             if ("crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
+                const t = chunkManager.getSurfaceY(r, l, this.world);
                 t > this.pos.y && t <= this.pos.y + 1 && (this.pos.y = t + .5)
             }
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
+                const t = chunkManager.getSurfaceY(r, l, this.world);
                 t > this.pos.y && t <= this.pos.y + 1.2 && (this.pos.y = t + .5)
             }
-            checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
+            checkCollisionWithBlock(r, this.pos.y, l, this.world) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
             const e = .5 * this.speed,
                 s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE),
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(s, i);
+                const t = chunkManager.getSurfaceY(s, i, this.world);
                 t > this.pos.y && t <= this.pos.y + 1.2 && (this.pos.y = t + .5)
             }
-            checkCollisionWithBlock(s, this.pos.y, i) || (this.pos.x = s, this.pos.z = i, h = !0)
+            checkCollisionWithBlock(s, this.pos.y, i, this.world) || (this.pos.x = s, this.pos.z = i, h = !0)
         }
         if (this.isMoving = h, "grub" === this.type && i) {
             const t = (new THREE.Vector3).subVectors(new THREE.Vector3(i.x, this.pos.y, i.z), this.pos).normalize(),

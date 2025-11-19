@@ -503,7 +503,7 @@ function setupDataChannel(e, t) {
                         }
                     }
                     if (s.world === worldName) {
-                         if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed), s.originSeed && s.originSeed !== worldSeed) {
+                        if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed, s.world, s.username), s.originSeed && s.originSeed !== worldSeed) {
                             const e = `${s.wx},${s.wy},${s.wz}`;
                             getCurrentWorldState().foreignBlockOrigins.set(e, s.originSeed)
                         }
