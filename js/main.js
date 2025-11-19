@@ -962,6 +962,12 @@ function onPointerDown(e) {
         return
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 128 === t.id) {
+        const now = Date.now();
+        fishEatenTimestamps = fishEatenTimestamps.filter(timestamp => now - timestamp < 36e5);
+        if (fishEatenTimestamps.length >= 5) return void addMessage("I am full.", 1500);
+        player.health = Math.min(999, player.health + 20), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Fish! +20 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), fishEatenTimestamps.push(now), updateHotbarUI()
+    }
     const magicianStoneMeshes = Object.values(magicianStones).map(s => s.mesh);
     const magicianStoneIntersects = raycaster.intersectObjects(magicianStoneMeshes, true);
 
@@ -1289,7 +1295,11 @@ function placeBlockAt(e, t, o, a) {
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
-            if (r === BLOCK_AIR || 6 === r)
+            if (128 === a) {
+                if (6 !== r) return void addMessage("Can only place in water");
+                var s = new Mob(e, o, Date.now() + Math.random(), "fish", n.originSeed);
+                mobs.push(s), n.count--, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI()
+            } else if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
                     for (var s of mobs)

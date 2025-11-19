@@ -263,6 +263,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Magician's Stone",
             color: "#8A2BE2",
             strength: 3
+        },
+        128: {
+            name: "Fish",
+            color: "#3498db",
+            strength: 1
         }
     },
     BIOMES = [{
@@ -594,6 +599,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     mobs = [],
     lastDamageTime = 0,
     lastRegenTime = 0,
+    fishEatenTimestamps = [],
     joystick = {
         up: !1,
         down: !1,
@@ -671,4 +677,3 @@ const lightManager = {
             } else this.lights[e].intensity = 0
     }
 };
-

@@ -1,8 +1,10 @@
-function Mob(t, e, s, i = "crawley") {
+function Mob(t, e, s, i = "crawley", originSeed = null) {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    if (this.id = s || Date.now(), this.type = i, this.originSeed = originSeed || worldSeed, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
+    } else if ("fish" === this.type) {
+        this.isAggressive = makeSeededRandom(this.originSeed + "_fish_aggro")() > .5, this.speed = .01 + .02 * Math.random(), this.pos.y = SEA_LEVEL - 2
     } else {
         const t = makeSeededRandom(worldSeed + "_crawley_aggro")();
         this.isAggressive = t > .5
@@ -111,6 +113,34 @@ function Mob(t, e, s, i = "crawley") {
             color: 16711680
         });
         this.redMaterials = Array(a.length).fill(T)
+    } else if ("fish" === this.type) {
+        this.mesh = new THREE.Group, this.hp = 10;
+        const random = makeSeededRandom(this.originSeed + "_fish_" + this.id);
+        const bodyColor = new THREE.Color().setHSL(random(), .5 + .4 * random(), .5 + .3 * random());
+        const finColor = new THREE.Color().setHSL(random(), .5 + .4 * random(), .3 + .3 * random());
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: bodyColor,
+            transparent: !0,
+            opacity: .8
+        });
+        const finMaterial = new THREE.MeshStandardMaterial({
+            color: finColor,
+            transparent: !0,
+            opacity: .8
+        });
+        this.originalColor = bodyColor;
+        const bodyWidth = .5 + .8 * random();
+        const bodyHeight = .2 + .3 * random();
+        const bodyLength = .3 + .4 * random();
+        const bodyGeometry = new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyLength);
+        const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        this.mesh.add(bodyMesh);
+        const tailGeometry = new THREE.BoxGeometry(.1, bodyHeight, bodyLength * (.5 + .5 * random()));
+        const tailMesh = new THREE.Mesh(tailGeometry, finMaterial);
+        tailMesh.position.set(bodyWidth / 2, 0, 0), this.mesh.add(tailMesh);
+        const topFinGeometry = new THREE.BoxGeometry(bodyWidth * (.2 + .3 * random()), .1, bodyLength * (.2 + .3 * random()));
+        const topFinMesh = new THREE.Mesh(topFinGeometry, finMaterial);
+        topFinMesh.position.set(0, bodyHeight / 2, 0), this.mesh.add(topFinMesh)
     }
     this.mesh.userData.mobId = this.id, this.mesh.position.copy(this.pos), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
 }
@@ -172,6 +202,14 @@ function manageMobs() {
             for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(a)
         }
     }
+    if (mobs.filter((t => "fish" === t.type)).length < 15 * (makeSeededRandom(worldSeed + "_fish_rarity")() + .1)) {
+        const e = t[0],
+            s = Math.random() * Math.PI * 2,
+            i = 4 + 20 * Math.random(),
+            o = modWrap(e.x + Math.cos(s) * i, MAP_SIZE),
+            h = modWrap(e.z + Math.sin(s) * i, MAP_SIZE);
+        chunkManager.getSurfaceY(o, h) < SEA_LEVEL && mobs.push(new Mob(o, h, Date.now() + Math.random(), "fish"))
+    }
 }
 
 function handleMobHit(t) {
@@ -221,10 +259,25 @@ Mob.prototype.update = function (t) {
                 if (t.id !== this.id && "crawley" === t.type) {
                     Math.hypot(this.pos.x - t.pos.x, this.pos.z - t.pos.z) < .9 && t.pos.y < this.pos.y && (e = Math.max(e, t.pos.y + .9))
                 } this.pos.y > e ? this.pos.y = Math.max(e, this.pos.y - 16 * t) : this.pos.y = e
+        } else if ("fish" === this.type) {
+            const e = .2 * Math.sin(.002 * Date.now()) * t * 60;
+            this.pos.y += e;
+            const s = getBlockAt(this.pos.x, this.pos.y, this.pos.z);
+            6 !== s && this.pos.y > SEA_LEVEL - 4 && (this.pos.y -= 2 * e), this.pos.y < 1 && (this.pos.y = 1)
         }
         let e = new THREE.Vector3(0, 0, 0),
             s = !1;
-        if ("crawley" === this.type) {
+        if (this.isAggressive && "fish" === this.type) {
+            let t = null,
+                e = 1 / 0;
+            const s = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
+            s < e && (e = s, t = {
+                x: player.x,
+                z: player.z
+            });
+            let i = t,
+                o = e
+        } else if ("crawley" === this.type) {
             const i = 8;
             let o = 1 / 0;
             for (const t of torchRegistry.values()) {
@@ -560,7 +613,9 @@ Mob.prototype.update = function (t) {
                 const t = chunkManager.getSurfaceY(r, l);
                 t > this.pos.y && t <= this.pos.y + 1.2 && (this.pos.y = t + .5)
             }
-            checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
+            if ("fish" === this.type) {
+                6 === getBlockAt(r, this.pos.y, l) && (this.pos.x = r, this.pos.z = l, h = !0)
+            } else checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
             const e = .5 * this.speed,
                 s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE),
@@ -666,5 +721,5 @@ Mob.prototype.update = function (t) {
         id: this.id
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)
-
+    "fish" === this.type && createDroppedItemOrb(Date.now(), this.pos, 128, this.originSeed, null)
 };

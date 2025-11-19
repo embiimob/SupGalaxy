@@ -105,8 +105,7 @@ function buildGreedyMesh(e, t, o) {
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
-                opacity: .6,
-                side: THREE.DoubleSide
+                opacity: .6
             });
             else {
                 const e = createBlockTexture(t.seed, t.blockId);
@@ -283,8 +282,7 @@ Chunk.prototype.idx = function (e, t, o) {
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
-                opacity: .6,
-                side: THREE.DoubleSide
+                opacity: .6
             });
             else {
                 const e = createBlockTexture(b, w);
