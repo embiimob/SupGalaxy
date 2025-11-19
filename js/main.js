@@ -1888,6 +1888,16 @@ async function startGame() {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
+
+    const spawnChunk = {
+        cx: i,
+        cz: l,
+        username: userName,
+        world: worldName,
+        spawn: s
+    };
+    spawnChunks.set(userName, spawnChunk);
+
     if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
@@ -1903,6 +1913,15 @@ async function startGame() {
         type: "sync_processed",
         ids: Array.from(processedMessages)
     }), startWorker(), setInterval(pollServers, POLL_INTERVAL), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
+
+    for (const [peerUsername, peer] of peers.entries()) {
+        if (peer.dc && peer.dc.readyState === 'open') {
+            peer.dc.send(JSON.stringify({
+                type: 'register_home_chunk',
+                spawnChunk: spawnChunk
+            }));
+        }
+    }
 }
 
 function setupEmojiPicker() {

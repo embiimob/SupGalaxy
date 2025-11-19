@@ -309,7 +309,13 @@ function setupDataChannel(e, t) {
                 z: t.pos.z,
                 hp: t.hp,
                 mobType: t.type
-            }))
+            }));
+
+            e.send(JSON.stringify({
+                type: "home_chunk_info",
+                spawnChunks: Array.from(spawnChunks.entries()),
+                chunkOwners: Array.from(chunkOwners.entries())
+            }));
         }
         const s = setInterval((() => {
             "open" === e.readyState && e.send(JSON.stringify({
@@ -856,6 +862,17 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "home_chunk_info":
+                    if (!isHost) {
+                        console.log("[WebRTC] Received home_chunk_info");
+                        if (s.spawnChunks) {
+                            spawnChunks = new Map(s.spawnChunks);
+                        }
+                        if (s.chunkOwners) {
+                            chunkOwners = new Map(s.chunkOwners);
+                        }
+                    }
+                    break;
                 case 'world_switch':
                     if (isHost) {
                         const peer = peers.get(s.username);
@@ -873,6 +890,53 @@ function setupDataChannel(e, t) {
                             }
                             if (userPositions[s.username]) {
                                 userPositions[s.username].world = clientWorld;
+                            }
+                        }
+                    } else {
+                        const spawnChunk = {
+                            cx: Math.floor(player.x / CHUNK_SIZE),
+                            cz: Math.floor(player.z / CHUNK_SIZE),
+                            username: userName,
+                            world: worldName,
+                            spawn: {
+                                x: player.x,
+                                y: player.y,
+                                z: player.z
+                            }
+                        };
+                        spawnChunks.set(userName, spawnChunk);
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'register_home_chunk',
+                                    spawnChunk: spawnChunk
+                                }));
+                            }
+                        }
+                    }
+                    break;
+                case "register_home_chunk":
+                    if (isHost) {
+                        const {
+                            spawnChunk
+                        } = s;
+                        if (spawnChunk) {
+                            spawnChunks.set(spawnChunk.username, spawnChunk);
+                            const chunkKey = makeChunkKey(spawnChunk.world, spawnChunk.cx, spawnChunk.cz);
+                            chunkOwners.set(chunkKey, {
+                                username: spawnChunk.username,
+                                timestamp: Date.now()
+                            });
+
+                            const message = JSON.stringify({
+                                type: "home_chunk_info",
+                                spawnChunks: Array.from(spawnChunks.entries()),
+                                chunkOwners: Array.from(chunkOwners.entries())
+                            });
+                            for (const [peerUsername, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(message);
+                                }
                             }
                         }
                     }
