@@ -4,6 +4,8 @@ const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
+const PENDING_PERIOD = 2592e6,
+OWNERSHIP_EXPIRY = 31536e6;
 
 const ARCHETYPES = {
     'Earth': {
@@ -769,15 +771,29 @@ self.onmessage = async function(e) {
                                 });
                                 for (var delta of normalizedDeltas) {
                                     var chunk = delta.chunk;
-                                    if (!ownershipByChunk.has(chunk)) {
-                                        var fromProfile = await getProfileByAddress(msg.FromAddress);
-                                        if (fromProfile && fromProfile.URN) {
-                                            var username = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
-                                            ownershipByChunk.set(chunk, {
-                                                chunkKey: chunk,
-                                                username: username,
-                                                timestamp: new Date(msg.BlockDate).getTime()
-                                            });
+                                    var ownership = ownershipByChunk.get(chunk);
+                                    var newTimestamp = new Date(msg.BlockDate).getTime();
+                                    var fromProfile = await getProfileByAddress(msg.FromAddress);
+                                    if (fromProfile && fromProfile.URN) {
+                                        var username = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                        if (!ownership || newTimestamp > ownership.timestamp) {
+                                            const now = Date.now();
+                                            const thirtyDaysAgo = now - 2592e6;
+                                            const oneYearAgo = now - 31536e6;
+
+                                            const isNewTimestampValid = newTimestamp < thirtyDaysAgo && newTimestamp > oneYearAgo;
+                                            const isExistingTimestampValid = ownership && ownership.timestamp < thirtyDaysAgo && ownership.timestamp > oneYearAgo;
+
+                                            if (isNewTimestampValid && !isExistingTimestampValid) {
+                                                ownershipByChunk.set(chunk, {
+                                                    chunkKey: chunk,
+                                                    username: username,
+                                                    timestamp: newTimestamp
+                                                });
+                                            } else {
+                                                self.postMessage({ type: "chunk_load_rejected", chunkKey: chunk, reason: "Chunk load does not meet ownership criteria." });
+                                                continue;
+                                            }
                                         }
                                     }
                                 }
@@ -1289,7 +1305,7 @@ self.onmessage = async function(e) {
                     applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
                 }
             } else if (data.type === "chunk_ownership") {
-               updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+                updateChunkOwnership(data.chunkKey, data.username, data.timestamp, worldName);
             } else if (data.type === 'magician_stones_update') {
                 if (data.stones) {
                     for (const key in data.stones) {

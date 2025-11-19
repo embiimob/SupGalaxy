@@ -620,7 +620,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     soundHit = document.getElementById("soundHit"),
     pending = (knownWorlds = new Map, knownUsers = new Map, new Set),
     spawnChunks = new Map,
-    chunkOwners = new Map,
     apiCallTimestamps = [],
     audioErrorLogged = !1,
     textureCache = new Map,

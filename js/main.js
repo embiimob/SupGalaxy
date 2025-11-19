@@ -2,7 +2,8 @@ function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
             chunkDeltas: new Map,
-            foreignBlockOrigins: new Map
+            foreignBlockOrigins: new Map,
+            chunkOwners: new Map
         });
     }
     return WORLD_STATES.get(worldName);
@@ -21,7 +22,8 @@ async function applySaveFile(e, t, o) {
         for (const [worldName, data] of e.worldStates) {
             WORLD_STATES.set(worldName, {
                 chunkDeltas: new Map(data.chunkDeltas),
-                foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+                foreignBlockOrigins: new Map(data.foreignBlockOrigins),
+                chunkOwners: new Map(data.chunkOwners || [])
             });
         }
         processedMessages = new Set(e.processedMessages);
@@ -109,12 +111,12 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
-            var m = chunkOwners.get(s) || {
+            var m = getCurrentWorldState().chunkOwners.get(s) || {
                 username: "",
                 timestamp: 0,
                 pending: !0
             };
-            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), chunkOwners.set(s, {
+            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), getCurrentWorldState().chunkOwners.set(s, {
                 username: u,
                 timestamp: new Date(o).getTime(),
                 pending: p - new Date(o).getTime() < PENDING_PERIOD
@@ -1217,7 +1219,7 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
         var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-        if (!checkChunkOwnership(chunkKey, userName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+        if (!checkChunkOwnership(chunkKey, userName, worldName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
 
         const worldState = getCurrentWorldState();
         const l = worldState.foreignBlockOrigins.get(r);
@@ -1297,7 +1299,7 @@ function placeBlockAt(e, t, o, a) {
                     var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
                         l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
                         d = makeChunkKey(worldName, i, l);
-                    if (checkChunkOwnership(d, userName)) {
+                    if (checkChunkOwnership(d, userName, worldName)) {
                         if (a === 127) { // Magician's Stone
                             const playerDirection = new THREE.Vector3();
                             camera.getWorldDirection(playerDirection);
@@ -1598,7 +1600,8 @@ async function downloadHostSession() {
     const serializableWorldStates = Array.from(WORLD_STATES.entries()).map(([worldName, data]) => {
         return [worldName, {
             chunkDeltas: Array.from(data.chunkDeltas.entries()),
-            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries())
+            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries()),
+            chunkOwners: Array.from(data.chunkOwners.entries())
         }];
     });
 
@@ -1667,6 +1670,7 @@ async function downloadSinglePlayerSession() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
+        chunkOwners: Array.from(getCurrentWorldState().chunkOwners.entries()),
         magicianStones: serializableMagicianStones,
         profile: {
             x: player.x,

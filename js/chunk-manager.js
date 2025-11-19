@@ -523,7 +523,8 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
                             chunkDeltas: new Map(),
-                            foreignBlockOrigins: new Map()
+                            foreignBlockOrigins: new Map(),
+                            chunkOwners: new Map()
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
@@ -625,24 +626,31 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
     }
 }
 
-function checkChunkOwnership(e, t) {
-    const o = e.replace(/^#/, "");
+function checkChunkOwnership(e, t, o) {
+    const a = e.replace(/^#/, ""),
+        n = parseChunkKey(a);
+    if (!n) return !1;
+    const r = n.world || o;
     if (spawnChunks.size > 0)
-        for (const [e, a] of spawnChunks) {
-            const n = parseChunkKey(o);
-            if (!n) return !1;
-            if (a.cx === n.cx && a.cz === n.cz && e !== t) return !1
-        }
-    const a = chunkOwners.get(o);
-    if (!a) return !0;
-    const n = Date.now();
-    return n - a.timestamp > OWNERSHIP_EXPIRY || (!!(a.pending && n - a.timestamp < PENDING_PERIOD) || a.username === t)
+        for (const [e, o] of spawnChunks)
+            if (o.world === r && o.cx === n.cx && o.cz === n.cz && e !== t) return !1;
+    const s = WORLD_STATES.get(r);
+    if (!s) return !0;
+    const i = s.chunkOwners.get(a);
+    if (!i) return !0;
+    const l = Date.now();
+    return l - i.timestamp > OWNERSHIP_EXPIRY || !!(i.pending && l - i.timestamp < PENDING_PERIOD) || i.username === t
 }
-var skyProps, avatarGroup, chunkOwnership = new Map;
+var skyProps, avatarGroup;
 
-function updateChunkOwnership(e, t, o) {
+function updateChunkOwnership(e, t, o, a) {
     try {
-        chunkOwnership.set(e, {
+        const n = parseChunkKey(e);
+        if (!n) return;
+        const r = n.world || a;
+        if (!WORLD_STATES.has(r)) return;
+        const s = WORLD_STATES.get(r);
+        s.chunkOwners.set(e, {
             username: t,
             timestamp: o
         })

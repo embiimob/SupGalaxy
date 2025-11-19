@@ -122,6 +122,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
     const dataToSend = {
         chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
         foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
+        chunkOwners: Array.from(worldState.chunkOwners.entries()),
         processedIds: Array.from(processedMessages)
     };
 
@@ -351,6 +352,9 @@ function setupDataChannel(e, t) {
                         if (s.foreignBlockOrigins) {
                             getCurrentWorldState().foreignBlockOrigins = new Map(s.foreignBlockOrigins);
                         }
+                        if (s.chunkOwners) {
+                            getCurrentWorldState().chunkOwners = new Map(s.chunkOwners);
+                        }
                     }
                     break;
                 case 'world_sync_start':
@@ -397,6 +401,9 @@ function setupDataChannel(e, t) {
                                 }
                                 if (fullData.foreignBlockOrigins) {
                                     getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
+                                }
+                                if (fullData.chunkOwners) {
+                                    getCurrentWorldState().chunkOwners = new Map(fullData.chunkOwners);
                                 }
                                 if (fullData.processedIds) {
                                     for (const id of fullData.processedIds) {
