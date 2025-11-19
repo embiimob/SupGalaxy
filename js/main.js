@@ -109,12 +109,25 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
-            var m = chunkOwners.get(s) || {
+            const e = parseChunkKey(s);
+            if (!e) continue;
+            const l = e.world;
+            if (!WORLD_STATES.has(l)) {
+                const e = {
+                    chunkDeltas: new Map,
+                    foreignBlockOrigins: new Map,
+                    chunkOwners: new Map
+                };
+                WORLD_STATES.set(l, e)
+            }
+            const d = WORLD_STATES.get(l);
+            d.chunkOwners || (d.chunkOwners = new Map);
+            var m = d.chunkOwners.get(s) || {
                 username: "",
                 timestamp: 0,
                 pending: !0
             };
-            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), chunkOwners.set(s, {
+            !m.username || m.username === u || p - m.timestamp >= OWNERSHIP_EXPIRY ? (chunkManager.applyDeltasToChunk(s, i), d.chunkOwners.set(s, {
                 username: u,
                 timestamp: new Date(o).getTime(),
                 pending: p - new Date(o).getTime() < PENDING_PERIOD
@@ -1598,7 +1611,8 @@ async function downloadHostSession() {
     const serializableWorldStates = Array.from(WORLD_STATES.entries()).map(([worldName, data]) => {
         return [worldName, {
             chunkDeltas: Array.from(data.chunkDeltas.entries()),
-            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries())
+            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries()),
+            chunkOwners: Array.from(data.chunkOwners.entries())
         }];
     });
 
@@ -1634,6 +1648,7 @@ async function downloadHostSession() {
     a.remove();
     URL.revokeObjectURL(url);
     addMessage("Host session downloaded");
+}
 }
 
 async function downloadSinglePlayerSession() {

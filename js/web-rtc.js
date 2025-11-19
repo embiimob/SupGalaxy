@@ -877,6 +877,16 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "chunk_ownership_update":
+                    updateChunkOwnership(s.chunkKey, s.username, s.timestamp);
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    break;
             }
         } catch (e) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)

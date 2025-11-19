@@ -523,7 +523,8 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
                             chunkDeltas: new Map(),
-                            foreignBlockOrigins: new Map()
+                            foreignBlockOrigins: new Map(),
+                            chunkOwners: new Map()
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
@@ -531,6 +532,29 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         worldState.chunkDeltas.set(r, []);
                     }
                     worldState.chunkDeltas.get(r).push(...s);
+
+                    // Update chunk ownership
+                    const now = Date.now();
+                    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+                    const oneYear = 365 * 24 * 60 * 60 * 1000;
+                    const age = now - o;
+
+                    if (age > thirtyDays && age < oneYear) {
+                        const ownerInfo = worldState.chunkOwners.get(r);
+                        if (!ownerInfo) {
+                            updateChunkOwnership(r, sourceUsername, o);
+                            for (const [, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(JSON.stringify({
+                                        type: 'chunk_ownership_update',
+                                        chunkKey: r,
+                                        username: sourceUsername,
+                                        timestamp: o
+                                    }));
+                                }
+                            }
+                        }
+                    }
                 }
                 chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
             } else console.error("[ChunkManager] chunkManager not defined")
@@ -627,22 +651,42 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
 function checkChunkOwnership(e, t) {
     const o = e.replace(/^#/, "");
+    const n = parseChunkKey(o);
+    if (!n) return !1;
+    const {
+        world: r,
+        cx: s,
+        cz: i
+    } = n;
     if (spawnChunks.size > 0)
-        for (const [e, a] of spawnChunks) {
-            const n = parseChunkKey(o);
-            if (!n) return !1;
-            if (a.cx === n.cx && a.cz === n.cz && e !== t) return !1
+        for (const [e, o] of spawnChunks) {
+            if (o.world === r && o.cx === s && o.cz === i && e !== t) return !1
         }
-    const a = chunkOwners.get(o);
-    if (!a) return !0;
-    const n = Date.now();
-    return n - a.timestamp > OWNERSHIP_EXPIRY || (!!(a.pending && n - a.timestamp < PENDING_PERIOD) || a.username === t)
+    if (!WORLD_STATES.has(r)) return !0;
+    const l = WORLD_STATES.get(r);
+    if (!l.chunkOwners) return !0;
+    const d = l.chunkOwners.get(e);
+    if (!d) return !0;
+    const c = Date.now();
+    return c - d.timestamp > OWNERSHIP_EXPIRY || !!d.pending && c - d.timestamp < PENDING_PERIOD || d.username === t
 }
-var skyProps, avatarGroup, chunkOwnership = new Map;
+var skyProps, avatarGroup;
 
 function updateChunkOwnership(e, t, o) {
     try {
-        chunkOwnership.set(e, {
+        const a = parseChunkKey(e);
+        if (!a) return void console.error("[ChunkManager] Invalid chunk key in updateChunkOwnership:", e);
+        const n = a.world;
+        if (!WORLD_STATES.has(n)) {
+            const e = {
+                chunkDeltas: new Map,
+                foreignBlockOrigins: new Map,
+                chunkOwners: new Map
+            };
+            WORLD_STATES.set(n, e)
+        }
+        const r = WORLD_STATES.get(n);
+        r.chunkOwners || (r.chunkOwners = new Map), r.chunkOwners.set(e, {
             username: t,
             timestamp: o
         })
