@@ -1,3 +1,4 @@
+var clock = new THREE.Clock();
 function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
@@ -178,6 +179,7 @@ function initThree() {
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    mixer = new THREE.AnimationMixer(scene);
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
@@ -701,118 +703,6 @@ function createMusicSymbolMesh() {
     return symbolGroup;
 }
 
-async function createMagicianStoneScreen(stoneData) {
-    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
-    const key = `${x},${y},${z}`;
-
-    // Remove existing screen if it exists
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        scene.remove(magicianStones[key].mesh);
-        disposeObject(magicianStones[key].mesh);
-    }
-
-    if (url.startsWith('IPFS:')) {
-        try {
-            url = await resolveIPFS(url);
-        } catch (error) {
-            console.error('Error resolving IPFS URL for in-world screen:', error);
-            return; // Don't create a screen if the URL is invalid
-        }
-    }
-
-    const planeGeometry = new THREE.PlaneGeometry(width, height);
-    let texture;
-    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
-
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
-        texture = new THREE.TextureLoader().load(url);
-    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
-        const video = document.createElement('video');
-        video.src = url;
-        video.loop = loop;
-        video.muted = true; // Muted by default, will be unmuted based on proximity
-        video.playsInline = true;
-        if (autoplay) {
-            // Video will be played in the game loop based on distance
-        }
-        texture = new THREE.VideoTexture(video);
-        stoneData.videoElement = video;
-    } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
-        const audio = document.createElement('audio');
-        audio.src = url;
-        audio.loop = loop;
-        stoneData.audioElement = audio;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        const context = canvas.getContext('2d');
-        context.fillStyle = '#111';
-        context.fillRect(0, 0, 256, 128);
-        context.fillStyle = '#fff';
-        context.font = '16px Arial';
-        context.textAlign = 'center';
-        context.fillText('Audio: ' + url.split('/').pop(), 128, 64);
-        texture = new THREE.CanvasTexture(canvas);
-    } else {
-        // For unsupported types, create a visualizer
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        const context = canvas.getContext('2d');
-        context.fillStyle = '#111';
-        context.fillRect(0, 0, 256, 128);
-        context.fillStyle = '#fff';
-        context.font = '16px Arial';
-        context.textAlign = 'center';
-        context.fillText('Preview Unavailable', 128, 64);
-        texture = new THREE.CanvasTexture(canvas);
-    }
-
-    let screenMesh;
-
-    if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
-        screenMesh = createMusicSymbolMesh();
-    } else {
-        const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
-        if (texture) {
-            material.map = texture;
-            material.needsUpdate = true;
-        }
-        screenMesh = new THREE.Mesh(planeGeometry, material);
-    }
-
-    // Orientation and Position
-    let playerDirection;
-    if (stoneData.direction) {
-        playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
-    } else {
-        // Fallback for old stones saved without direction
-        playerDirection = new THREE.Vector3();
-        camera.getWorldDirection(playerDirection);
-        playerDirection.y = 0;
-        playerDirection.normalize();
-    }
-
-    const forward = playerDirection.clone();
-    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-
-    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
-        .add(right.multiplyScalar(offsetX))
-        .add(up.multiplyScalar(offsetY))
-        .add(forward.multiplyScalar(offsetZ));
-
-    screenMesh.position.copy(position);
-
-    // The direction vector is the normal of the plane we want to create.
-    // The lookAt target should be a point along that normal vector, starting from the plane's own position.
-    const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
-    screenMesh.lookAt(lookAtTarget);
-
-    magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
-    scene.add(screenMesh);
-}
 
 function dropSelectedItem() {
     const e = INVENTORY[selectedHotIndex];
@@ -2148,7 +2038,8 @@ function gameLoop(e) {
             const e = (n - t) / o;
             avatarGroup.position.y -= .05 * e
         }
-        return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"), renderer.render(scene, camera), void requestAnimationFrame(gameLoop)
+        return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"),
+        renderer.render(scene, camera), void requestAnimationFrame(gameLoop)
     }
     var t = Math.min(.06, (e - lastFrame) / 1e3);
     if (lastFrame = e, player.health <= 0 && !isDying && handlePlayerDeath(), deathScreenShown) {
@@ -2156,7 +2047,8 @@ function gameLoop(e) {
             e.update(t)
         })), updateSky(t), updateMinimap();
         var o = document.getElementById("score");
-        o && (o.innerText = player.score), renderer.render(scene, camera)
+        o && (o.innerText = player.score),
+        renderer.render(scene, camera)
     } else {
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
@@ -2528,9 +2420,17 @@ function gameLoop(e) {
 
         // Magician stone media playback logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
+        const delta = clock.getDelta();
         for (const key in magicianStones) {
             if (Object.hasOwnProperty.call(magicianStones, key)) {
                 const stone = magicianStones[key];
+                if (stone.mixer) {
+                    const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
+                    const distance = playerPosition.distanceTo(stonePosition);
+                    if (distance <= stone.distance) {
+                        stone.mixer.update(delta);
+                    }
+                }
                 const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
                 const distance = playerPosition.distanceTo(stonePosition);
                 const mediaElement = stone.videoElement || stone.audioElement;
@@ -2948,3 +2848,143 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     isPromptOpen = false;
     magicianStonePlacement = null;
 });
+
+async function createMagicianStoneScreen(stoneData) {
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
+    const key = `${x},${y},${z}`;
+
+    // Remove existing screen if it exists
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        scene.remove(magicianStones[key].mesh);
+        disposeObject(magicianStones[key].mesh);
+    }
+
+    if (url.startsWith('IPFS:')) {
+        try {
+            url = await resolveIPFS(url);
+        } catch (error) {
+            console.error('Error resolving IPFS URL for in-world screen:', error);
+            return; // Don't create a screen if the URL is invalid
+        }
+    }
+
+    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
+    let screenMesh;
+
+    if (fileExtension === 'glb') {
+        const loader = new THREE.GLTFLoader();
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('lib/draco/');
+        loader.setDRACOLoader(dracoLoader);
+
+        loader.load(url, (gltf) => {
+            const model = gltf.scene;
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const scale = Math.min(width / size.x, height / size.y);
+            model.scale.set(scale, scale, scale);
+
+            if (autoplay && gltf.animations && gltf.animations.length) {
+                const mixer = new THREE.AnimationMixer(model);
+                const action = mixer.clipAction(gltf.animations[0]);
+                action.play();
+                stoneData.mixer = mixer;
+            }
+            screenMesh = model;
+            positionAndOrientScreen();
+        }, undefined, (error) => {
+            console.error('An error happened while loading the GLB model:', error);
+        });
+    } else {
+        const planeGeometry = new THREE.PlaneGeometry(width, height);
+        let texture;
+
+        if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+            texture = new THREE.TextureLoader().load(url);
+        } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+            const video = document.createElement('video');
+            video.src = url;
+            video.loop = loop;
+            video.muted = true;
+            video.playsInline = true;
+            if (autoplay) {}
+            texture = new THREE.VideoTexture(video);
+            stoneData.videoElement = video;
+        } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+            const audio = document.createElement('audio');
+            audio.src = url;
+            audio.loop = loop;
+            stoneData.audioElement = audio;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 128;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#111';
+            context.fillRect(0, 0, 256, 128);
+            context.fillStyle = '#fff';
+            context.font = '16px Arial';
+            context.textAlign = 'center';
+            context.fillText('Audio: ' + url.split('/').pop(), 128, 64);
+            texture = new THREE.CanvasTexture(canvas);
+        } else {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 128;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#111';
+            context.fillRect(0, 0, 256, 128);
+            context.fillStyle = '#fff';
+            context.font = '16px Arial';
+            context.textAlign = 'center';
+            context.fillText('Preview Unavailable', 128, 64);
+            texture = new THREE.CanvasTexture(canvas);
+        }
+
+        if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+            screenMesh = createMusicSymbolMesh();
+        } else {
+            const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
+            if (texture) {
+                material.map = texture;
+                material.needsUpdate = true;
+            }
+            screenMesh = new THREE.Mesh(planeGeometry, material);
+        }
+        positionAndOrientScreen();
+    }
+
+    function positionAndOrientScreen() {
+        if (!screenMesh) return;
+
+        let playerDirection;
+        if (stoneData.direction) {
+            playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
+        } else {
+            // Fallback for old stones saved without direction
+            playerDirection = new THREE.Vector3();
+            camera.getWorldDirection(playerDirection);
+            playerDirection.y = 0;
+            playerDirection.normalize();
+        }
+
+        const forward = playerDirection.clone();
+        const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+        const up = new THREE.Vector3(0, 1, 0);
+
+        const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
+            .add(right.multiplyScalar(offsetX))
+            .add(up.multiplyScalar(offsetY))
+            .add(forward.multiplyScalar(offsetZ));
+
+        screenMesh.position.copy(position);
+
+        // The direction vector is the normal of the plane we want to create.
+        // The lookAt target should be a point along that normal vector, starting from the plane's own position.
+        const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+        screenMesh.lookAt(lookAtTarget);
+
+        magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+        scene.add(screenMesh);
+    }
+}
