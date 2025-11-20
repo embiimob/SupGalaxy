@@ -8,14 +8,11 @@ const keywordCache = new Map();
 const processedMessages = new Set();
 let isInitialLoad = false;
 
-// Import constants from CONFIG module (defined in config.js)
-const { CHUNK_SIZE, MAX_HEIGHT, SEA_LEVEL, MAP_SIZE, BLOCK_AIR, MASTER_WORLD_KEY } = CONFIG;
-const { PENDING_PERIOD, OWNERSHIP_EXPIRY, IPFS_MATURITY_PERIOD, IPFS_MAX_OWNERSHIP_PERIOD } = CONFIG;
-const { API_CALLS_PER_SECOND, POLL_RADIUS, INITIAL_LOAD_RADIUS, LOAD_RADIUS } = CONFIG;
-const { CHUNKS_PER_SIDE, VERSION, POLL_INTERVAL, MAX_PEERS } = CONFIG;
+// Use constants from CONFIG module (defined in config.js and available globally)
+// Access via CONFIG.CHUNK_SIZE, CONFIG.VERSION, etc.
 
 // Current load radius (mutable state)
-let currentLoadRadius = INITIAL_LOAD_RADIUS;
+let currentLoadRadius = CONFIG.INITIAL_LOAD_RADIUS;
 
 const BLOCKS = {
         1: {
@@ -261,8 +258,9 @@ const BLOCKS = {
             color: "#8A2BE2",
             strength: 3
         }
-    },
-    BIOMES = [{
+    };
+
+const BIOMES = [{
         key: "plains",
         palette: [2, 3, 4, 13, 15],
         heightScale: .8,
@@ -298,8 +296,9 @@ const BLOCKS = {
         heightScale: .5,
         roughness: .2,
         featureDensity: .04
-    }],
-    RECIPES = [{
+    }];
+
+const RECIPES = [{
         id: "glass",
         out: {
             id: 100,
@@ -537,8 +536,10 @@ const BLOCKS = {
         requires: {
             5: 4
         }
-    }],
-    raycaster = new THREE.Raycaster,
+    }];
+
+// Mutable game state variables (originally var, now let)
+let raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
     WORLD_STATES = new Map,
     worldSeed = "KANYE",
@@ -605,7 +606,6 @@ const BLOCKS = {
     deathScreenShown = !1,
     isDying = !1,
     isNight = !1,
-    mobileModeActive = !1,
     deathAnimationStart = 0,
     lastPollPosition = new THREE.Vector3,
     pauseTimer = 0,
@@ -615,7 +615,7 @@ const BLOCKS = {
     soundPlace = document.getElementById("soundPlace"),
     soundJump = document.getElementById("soundJump"),
     soundHit = document.getElementById("soundHit"),
-    pending = (knownWorlds = new Map, knownUsers = new Map, new Set),
+    pending = new Set,
     spawnChunks = new Map,
     chunkOwners = new Map,
     OWNED_CHUNKS = new Map,
@@ -641,6 +641,9 @@ const BLOCKS = {
     activeEruptions = [],
     hiveLocations = [],
     flowerLocations = [];
+
+// Additional state variables
+let mobileModeActive = false;
 
 let crackTexture;
 const damagedBlocks = new Map();
