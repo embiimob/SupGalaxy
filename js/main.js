@@ -1388,7 +1388,8 @@ function placeBlockAt(e, t, o, a) {
                             l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
                             d = makeChunkKey(worldName, i, l);
                         if (!checkChunkOwnership(d, userName)) {
-                            return void addMessage("Cannot place block in chunk " + d + ": owned by another user");
+                            console.log(`[Ownership] Block place denied for host at chunk ${d}`);
+                            return; // Don't show message - silently fail for host
                         }
                         
                         if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
