@@ -41,6 +41,7 @@ class Logger {
 
     // Console output
     const consoleMethod = level === LogLevel.ERROR ? 'error' : level === LogLevel.WARN ? 'warn' : 'log';
+    // eslint-disable-next-line no-console
     console[consoleMethod](`[${timestamp}] [${levelName}]`, message, ...args);
   }
 

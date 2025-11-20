@@ -6,16 +6,20 @@
   "extends": ["airbnb-base"],
   "parserOptions": {
     "ecmaVersion": "latest",
-    "sourceType": "module"
+    "sourceType": "script"
   },
   "globals": {
-    "THREE": "readonly"
+    "THREE": "readonly",
+    "CONFIG": "readonly",
+    "logger": "readonly",
+    "addMessage": "readonly",
+    "LogLevel": "readonly"
   },
   "rules": {
     "no-console": ["warn", { "allow": ["warn", "error"] }],
     "no-var": "error",
     "prefer-const": "error",
-    "max-len": ["warn", { "code": 120, "ignoreStrings": true, "ignoreTemplateLiterals": true }],
+    "max-len": ["warn", { "code": 120, "ignoreStrings": true, "ignoreTemplateLiterals": true, "ignoreUrls": true }],
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "no-param-reassign": ["error", { "props": false }],
     "no-plusplus": "off",
@@ -24,6 +28,16 @@
     "no-restricted-syntax": "off",
     "prefer-destructuring": "warn",
     "import/extensions": "off",
-    "import/no-unresolved": "off"
+    "import/no-unresolved": "off",
+    "no-underscore-dangle": ["error", { "allowAfterThis": true, "allow": ["_log"] }],
+    "no-nested-ternary": "warn",
+    "comma-dangle": ["error", {
+      "arrays": "always-multiline",
+      "objects": "always-multiline",
+      "imports": "always-multiline",
+      "exports": "always-multiline",
+      "functions": "never"
+    }],
+    "no-multiple-empty-lines": ["error", { "max": 2, "maxEOF": 1 }]
   }
 }

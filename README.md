@@ -130,18 +130,203 @@ Connection established → avatars appear → PvP active.
 
 # 🧩 Developer Guide
 
-SupGalaxy is entirely browser-based—no bundlers, node modules, or build steps.
+SupGalaxy is entirely browser-based—no bundlers required for basic usage. For development with linting and formatting, Node.js tooling is available.
 
-### Core Architecture
-- **three.js** rendering  
-- Infinite procedural chunks (16×64×16)  
-- Background worker polling P2FK  
-- WebRTC peer-to-peer networking  
-- Simple JS modules
+## 🏗 Architecture Overview
 
-### Extend SupGalaxy
+### High-Level Structure
+SupGalaxy follows a modular architecture with clear separation of concerns:
 
-#### Add a Block
+```
+SupGalaxy/
+├── js/               # JavaScript modules
+│   ├── config.js     # Centralized configuration
+│   ├── logger.js     # Logging utility
+│   ├── api.js        # External API calls (p2fk.io, IPFS)
+│   ├── declare.js    # Global declarations and constants
+│   ├── main.js       # Main game loop and UI
+│   ├── chunk-manager.js    # Chunk loading and ownership
+│   ├── world-generation.js # Procedural generation
+│   ├── mobs.js       # Entity behavior
+│   ├── web-rtc.js    # P2P multiplayer
+│   ├── worker.js     # Background polling worker
+│   ├── audio-player.js     # Music playback
+│   └── video-player.js     # Video playback
+├── css/              # Stylesheets
+├── lib/              # Third-party libraries (three.js)
+├── sounds/           # Audio assets
+└── index.html        # Entry point
+```
+
+### Core Systems
+
+#### 1. **Rendering Engine** (three.js)
+- Scene graph management
+- Camera controls (first-person & orbit)
+- Dynamic chunk mesh generation
+- Procedural skybox (stars, sun, moon, clouds)
+
+#### 2. **World Generation** (Perlin noise-based)
+- Infinite procedural terrain from keyword seeds
+- Multiple biome types (vulcan, lunar, desert, etc.)
+- Toroidal world wrapping at edges
+- Chunk-based loading (16×256×16 blocks)
+
+#### 3. **Decentralized Persistence** (IPFS + P2FK)
+- Chunk deltas stored as JSON on IPFS
+- Ownership anchored on Bitcoin testnet3 via P2FK
+- Background worker polls for updates
+- 1-year renewable world ownership
+
+#### 4. **Multiplayer** (WebRTC)
+- Peer-to-peer connections with TURN fallback
+- Position and action synchronization
+- Proximity-based voice & video
+- Drag-and-drop session file exchange
+
+#### 5. **Gameplay Systems**
+- Voxel mining and placement
+- Crafting and inventory management
+- Mob AI (bees, night crawlers)
+- Health and combat mechanics
+- The Magician's Stone (embed media)
+
+## 📦 Module Layout
+
+### Configuration (`js/config.js`)
+Centralized constants for:
+- World generation parameters
+- Network endpoints (API_BASE_URL, IPFS_GATEWAY)
+- Timing constants (POLL_INTERVAL, ownership periods)
+- Feature flags for debugging
+
+### Logger (`js/logger.js`)
+Standardized logging with severity levels:
+- `logger.debug()` - Development diagnostics
+- `logger.info()` - General information
+- `logger.warn()` - Warnings
+- `logger.error()` - Errors with stack traces
+
+### API Module (`js/api.js`)
+Handles all external communication:
+- `GetPublicAddressByKeyword()` - Resolve keywords to addresses
+- `GetPublicMessagesByAddress()` - Fetch messages from p2fk.io
+- `fetchIPFS()` - Retrieve chunk data from IPFS
+- Built-in caching and rate limiting
+
+### Chunk Manager (`js/chunk-manager.js`)
+Manages world state:
+- Chunk loading/unloading based on player position
+- Ownership verification and expiry
+- Delta synchronization with IPFS
+- Mesh generation and optimization
+
+### World Generation (`js/world-generation.js`)
+Procedural algorithms:
+- Seeded random number generation
+- Multi-octave Perlin noise
+- Biome selection and blending
+- Feature placement (trees, cacti, flowers)
+
+### WebRTC (`js/web-rtc.js`)
+Multiplayer networking:
+- Peer connection management
+- Offer/answer exchange via files
+- Position and action broadcasting
+- Audio/video stream handling
+
+## 🛠 Development Workflow
+
+### Initial Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/embiimob/SupGalaxy.git
+   cd SupGalaxy
+   ```
+
+2. **Install development dependencies** (optional)
+   ```bash
+   npm install
+   ```
+
+3. **Run locally**
+   - **Simple:** Open `index.html` in a browser
+   - **With server:** `npm start` (runs on http://localhost:8080)
+
+### Code Style and Linting
+
+SupGalaxy uses ESLint with Airbnb base configuration:
+
+```bash
+# Check for linting errors
+npm run lint
+
+# Auto-fix linting errors
+npm run lint:fix
+
+# Format code with Prettier
+npm run format
+
+# Check formatting without changes
+npm run format:check
+```
+
+### Making Changes
+
+1. **Edit source files** in the `js/` directory
+2. **Test changes** by refreshing the browser (no build step)
+3. **Lint and format** before committing
+4. **Test multiplayer** if WebRTC code is affected
+
+### Key Development Principles
+
+- **Minimal dependencies**: Keep the codebase lean
+- **Browser compatibility**: Support Chrome and Firefox
+- **No build step**: Direct JavaScript execution
+- **Modular design**: Clear separation between systems
+- **Functional integrity**: Never break crypto, IPFS, or core mechanics
+
+## 🧪 Testing & Linting
+
+### Manual Testing Checklist
+
+- [ ] World spawns correctly from seed
+- [ ] Blocks can be mined and placed
+- [ ] Inventory and crafting work
+- [ ] Mobs spawn and behave correctly
+- [ ] Health and damage systems function
+- [ ] Chunks load/unload properly
+- [ ] IPFS chunk loading works
+- [ ] WebRTC connections establish
+- [ ] Position sync works in multiplayer
+- [ ] Audio/video proximity features work
+
+### Linting
+
+Run ESLint to catch common issues:
+```bash
+npm run lint
+```
+
+Common issues caught:
+- Use of `var` instead of `const`/`let`
+- Unused variables
+- Missing semicolons
+- Inconsistent formatting
+- Console.log statements (warnings)
+
+### Browser Console
+
+Check for errors:
+1. Open browser DevTools (F12)
+2. Check Console tab for errors
+3. Check Network tab for failed requests
+4. Use logger history: `logger.getHistory()`
+
+## 🔧 Extending SupGalaxy
+
+### Add a Block
 ```js
 BLOCKS[id] = {
   name: "StarBlock",
@@ -150,7 +335,7 @@ BLOCKS[id] = {
 };
 ```
 
-#### Add a Recipe
+### Add a Recipe
 ```js
 RECIPES.push({
   id: "star",
@@ -159,7 +344,7 @@ RECIPES.push({
 });
 ```
 
-#### Add a Biome
+### Add a Biome
 ```js
 BIOMES.push({
   key: "nebula",
@@ -170,7 +355,7 @@ BIOMES.push({
 });
 ```
 
-#### Multiplayer Hooks
+### Multiplayer Hooks
 - Position sync via `user_update`  
 - Avatar rendering through `userPositions`  
 - TURN server strongly recommended  
@@ -224,6 +409,64 @@ Export JSON from the game → publish using Sup!? → peers sync automatically.
 | Multiplayer | WebRTC P2P | Hosted servers |
 | Ownership | Player-controlled | Company-owned |
 | Licensing | **CC0** | Proprietary |
+
+---
+
+# 📝 Migration Notes (v0.5.7-beta)
+
+## What's New in v0.5.7-beta
+
+### Code Quality Improvements
+- ✅ Converted all `var` declarations to `const`/`let` for modern JavaScript
+- ✅ Added centralized configuration module (`js/config.js`)
+- ✅ Implemented standardized logging utility (`js/logger.js`)
+- ✅ Improved error handling and async patterns in API module
+- ✅ Added JSDoc annotations for better code documentation
+
+### Development Tools
+- ✅ Added `package.json` with npm scripts for linting and formatting
+- ✅ Configured ESLint with Airbnb base style guide
+- ✅ Added Prettier for consistent code formatting
+- ✅ Added EditorConfig for cross-editor consistency
+
+### Documentation
+- ✅ Expanded README with Architecture Overview
+- ✅ Added Module Layout section explaining each file
+- ✅ Included Development Workflow guide
+- ✅ Added Testing & Linting best practices
+
+## Breaking Changes
+None. All changes are backward compatible. The game functionality remains identical.
+
+## For Developers
+
+If you're working with a local copy:
+
+1. **Pull latest changes:**
+   ```bash
+   git pull origin main
+   ```
+
+2. **Optional - Install dev dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Run linting (optional):**
+   ```bash
+   npm run lint
+   ```
+
+## Code Structure Changes
+- Constants now reference `CONFIG` module instead of being redeclared
+- API calls use centralized rate limiting helper
+- Logger replaces some console.log calls (more to come)
+
+## Future Plans
+- Consider directory reorganization (/src, /assets, /styles)
+- Add more comprehensive JSDoc coverage
+- Implement retry strategies for network calls
+- Add optional performance benchmarking
 
 ---
 
