@@ -1179,13 +1179,16 @@ function removeBlockAt(e, t, o, breaker) {
     const n = BLOCKS[a];
     if (!n || n.strength > 5) return void addMessage("Cannot break that block");
 
-    // Check ownership FIRST before showing any visual feedback
-    var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
-    var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
-    var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-    if (!checkChunkOwnership(chunkKey, breaker || userName)) {
-        console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
-        return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+    // Check ownership BEFORE showing any visual feedback (for host/solo only)
+    // Clients will send request and get approved/denied by host
+    if (isHost || peers.size === 0) {
+        var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
+        var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
+        var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+        if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
+            return; // Don't show message here - WebRTC handler will send to client
+        }
     }
 
     const r = `${e},${t},${o}`;
@@ -1249,7 +1252,7 @@ function removeBlockAt(e, t, o, breaker) {
 
         // Host-authoritative: only host mutates directly, clients send requests
         if (isHost || peers.size === 0) {
-            // Host or solo: break immediately
+            // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
             chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
@@ -1257,6 +1260,7 @@ function removeBlockAt(e, t, o, breaker) {
             if (breaker === userName) {
                 addToInventory(a, 1, l);
                 addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+                safePlayAudio(soundBreak);
             } else if (isHost) {
                 const peer = peers.get(breaker);
                 if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1268,7 +1272,6 @@ function removeBlockAt(e, t, o, breaker) {
                     }));
                 }
             }
-            safePlayAudio(soundBreak);
             createBlockParticles(e, t, o, a);
 
             if (BLOCKS[a] && BLOCKS[a].light) {
@@ -1362,83 +1365,89 @@ function placeBlockAt(e, t, o, a) {
                 else {
                     for (var s of mobs)
                         if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
-                    var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
-                        l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
-                        d = makeChunkKey(worldName, i, l);
-                    if (checkChunkOwnership(d, userName)) {
-                        if (a === 127) { // Magician's Stone
-                            const playerDirection = new THREE.Vector3();
-                            camera.getWorldDirection(playerDirection);
-                            playerDirection.y = 0;
-                            playerDirection.normalize();
-                            magicianStonePlacement = {
-                                x: e, y: t, z: o,
-                                direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
-                            };
-                            document.getElementById('magicianStoneModal').style.display = 'flex';
-                            isPromptOpen = true;
+                    
+                    // Special handling for Magician's Stone
+                    if (a === 127) {
+                        const playerDirection = new THREE.Vector3();
+                        camera.getWorldDirection(playerDirection);
+                        playerDirection.y = 0;
+                        playerDirection.normalize();
+                        magicianStonePlacement = {
+                            x: e, y: t, z: o,
+                            direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+                        };
+                        document.getElementById('magicianStoneModal').style.display = 'flex';
+                        isPromptOpen = true;
+                        return;
+                    }
+                    
+                    // Host-authoritative: only host mutates directly, clients send requests
+                    if (isHost || peers.size === 0) {
+                        // Host or solo: check ownership and place immediately
+                        var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
+                            l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
+                            d = makeChunkKey(worldName, i, l);
+                        if (!checkChunkOwnership(d, userName)) {
+                            console.log(`[Ownership] Block place denied for host at chunk ${d}`);
+                            return; // Don't show message - silently fail for host
+                        }
+                        
+                        if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
+                            const r = `${e},${t},${o}`;
+                            getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
+                            addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`);
                         } else {
-                            // Host-authoritative: only host mutates directly, clients send requests
-                            if (isHost || peers.size === 0) {
-                                // Host or solo: place immediately
-                                if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
-                                    const r = `${e},${t},${o}`;
-                                    getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
-                                    addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`);
-                                } else {
-                                    addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
+                            addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
+                        }
+                        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
+                            const a = `${e},${t},${o}`;
+                            torchRegistry.set(a, {
+                                x: e,
+                                y: t,
+                                z: o
+                            });
+                            var c = createFlameParticles(e, t + .5, o);
+                            scene.add(c), torchParticles.set(a, c);
+                        }
+                        
+                        // Broadcast to clients
+                        if (isHost) {
+                            const placeMsg = JSON.stringify({
+                                type: 'block_place',
+                                x: e,
+                                y: t,
+                                z: o,
+                                blockId: a,
+                                username: userName,
+                                world: worldName,
+                                originSeed: n.originSeed
+                            });
+                            for (const [, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(placeMsg);
                                 }
-                                if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
-                                    const a = `${e},${t},${o}`;
-                                    torchRegistry.set(a, {
-                                        x: e,
-                                        y: t,
-                                        z: o
-                                    });
-                                    var c = createFlameParticles(e, t + .5, o);
-                                    scene.add(c), torchParticles.set(a, c);
-                                }
-                                
-                                // Broadcast to clients
-                                if (isHost) {
-                                    const placeMsg = JSON.stringify({
-                                        type: 'block_place',
-                                        x: e,
-                                        y: t,
-                                        z: o,
-                                        blockId: a,
-                                        username: userName,
-                                        world: worldName,
-                                        originSeed: n.originSeed
-                                    });
-                                    for (const [, peer] of peers.entries()) {
-                                        if (peer.dc && peer.dc.readyState === 'open') {
-                                            peer.dc.send(placeMsg);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Client: send request to host
-                                const requestMsg = JSON.stringify({
-                                    type: 'request_block_place',
-                                    x: e,
-                                    y: t,
-                                    z: o,
-                                    blockId: a,
-                                    username: userName,
-                                    world: worldName,
-                                    originSeed: n.originSeed
-                                });
-                                for (const [peerName, peer] of peers.entries()) {
-                                    if (peer.dc && peer.dc.readyState === 'open') {
-                                        peer.dc.send(requestMsg);
-                                        break; // Send to first available peer (should be host)
-                                    }
-                                }
-                                addMessage("Placing...", 500);
                             }
                         }
-                    } else addMessage("Cannot place block in chunk " + d + ": owned by another user")
+                    } else {
+                        // Client: send request to host
+                        const requestMsg = JSON.stringify({
+                            type: 'request_block_place',
+                            x: e,
+                            y: t,
+                            z: o,
+                            blockId: a,
+                            username: userName,
+                            world: worldName,
+                            originSeed: n.originSeed
+                        });
+                        for (const [peerName, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(requestMsg);
+                                break; // Send to first available peer (should be host)
+                            }
+                        }
+                        addMessage("Placing...", 500);
+                    }
                 }
             else addMessage("Cannot place here")
         }

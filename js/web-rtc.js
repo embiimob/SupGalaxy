@@ -299,6 +299,43 @@ function setupDataChannel(e, t) {
                 }
                 e.send(JSON.stringify(magicianStonesSync));
             }
+            
+            // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
+            if (isHost) {
+                console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${worldName}`);
+                for (const [peerName, peer] of peers.entries()) {
+                    const playerSpawn = calculateSpawnPoint(peerName + "@" + worldName);
+                    const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                    const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                    
+                    spawnChunks.set(peerName, {
+                        cx: spawnCx,
+                        cz: spawnCz,
+                        username: peerName,
+                        world: worldName,
+                        spawn: playerSpawn
+                    });
+                    
+                    const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
+                    updateChunkOwnership(playerHomeChunkKey, peerName, Date.now(), 'home');
+                }
+                // Also recalculate for the host itself
+                const hostSpawn = calculateSpawnPoint(userName + "@" + worldName);
+                const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                
+                spawnChunks.set(userName, {
+                    cx: hostSpawnCx,
+                    cz: hostSpawnCz,
+                    username: userName,
+                    world: worldName,
+                    spawn: hostSpawn
+                });
+                
+                const hostHomeChunkKey = makeChunkKey(worldName, hostSpawnCx, hostSpawnCz);
+                updateChunkOwnership(hostHomeChunkKey, userName, Date.now(), 'home');
+                console.log(`[Ownership] Host recalculated spawn chunks for all peers in world ${worldName}`);
+            }
 
             console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
             for (const t of mobs) e.send(JSON.stringify({
@@ -886,6 +923,42 @@ function setupDataChannel(e, t) {
                                 sendWorldStateAsync(peer, worldState, s.username);
                             }
                         }
+                        
+                        // Recalculate spawn chunks for ALL peers in the requested world
+                        // This is important: we calculate spawn chunks for all known peers in this world,
+                        // not just those currently in it, since spawn points are deterministic
+                        console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${s.world} (world sync request)`);
+                        for (const [peerName, otherPeer] of peers.entries()) {
+                            const peerSpawn = calculateSpawnPoint(peerName + "@" + s.world);
+                            const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
+                            const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
+                            
+                            spawnChunks.set(peerName, {
+                                cx: peerSpawnCx,
+                                cz: peerSpawnCz,
+                                username: peerName,
+                                world: s.world,
+                                spawn: peerSpawn
+                            });
+                            
+                            const peerChunkKey = makeChunkKey(s.world, peerSpawnCx, peerSpawnCz);
+                            updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
+                        }
+                        // Also recalculate for host
+                        const hostSpawn = calculateSpawnPoint(userName + "@" + s.world);
+                        const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                        const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                        
+                        spawnChunks.set(userName, {
+                            cx: hostSpawnCx,
+                            cz: hostSpawnCz,
+                            username: userName,
+                            world: s.world,
+                            spawn: hostSpawn
+                        });
+                        
+                        const hostChunkKey = makeChunkKey(s.world, hostSpawnCx, hostSpawnCz);
+                        updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
                     }
                     break;
                 case 'world_switch':
@@ -924,6 +997,41 @@ function setupDataChannel(e, t) {
                             const playerHomeChunkKey = makeChunkKey(clientWorld, spawnCx, spawnCz);
                             updateChunkOwnership(playerHomeChunkKey, s.username, Date.now(), 'home');
                             console.log(`[Ownership] Host calculated spawn for ${s.username} switching to world ${clientWorld}: chunk ${playerHomeChunkKey}`);
+                            
+                            // Recalculate spawn chunks for ALL peers in this world
+                            // Calculate for all known peers, not just those currently in the world
+                            console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${clientWorld}`);
+                            for (const [peerName, otherPeer] of peers.entries()) {
+                                const peerSpawn = calculateSpawnPoint(peerName + "@" + clientWorld);
+                                const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
+                                const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
+                                
+                                spawnChunks.set(peerName, {
+                                    cx: peerSpawnCx,
+                                    cz: peerSpawnCz,
+                                    username: peerName,
+                                    world: clientWorld,
+                                    spawn: peerSpawn
+                                });
+                                
+                                const peerChunkKey = makeChunkKey(clientWorld, peerSpawnCx, peerSpawnCz);
+                                updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
+                            }
+                            // Also recalculate for host
+                            const hostSpawn = calculateSpawnPoint(userName + "@" + clientWorld);
+                            const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                            const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                            
+                            spawnChunks.set(userName, {
+                                cx: hostSpawnCx,
+                                cz: hostSpawnCz,
+                                username: userName,
+                                world: clientWorld,
+                                spawn: hostSpawn
+                            });
+                            
+                            const hostChunkKey = makeChunkKey(clientWorld, hostSpawnCx, hostSpawnCz);
+                            updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
                         }
                     }
                     break;
@@ -1114,6 +1222,8 @@ function setupDataChannel(e, t) {
                                 updateHotbarUI();
                                 addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
                             }
+                            // Play audio only for the initiating client
+                            safePlayAudio(soundPlace);
                         }
                         
                         // Handle light blocks
@@ -1124,8 +1234,6 @@ function setupDataChannel(e, t) {
                             scene.add(particles);
                             torchParticles.set(blockKey, particles);
                         }
-                        
-                        safePlayAudio(soundPlace);
                     }
                     break;
                 case 'block_break':
@@ -1142,6 +1250,11 @@ function setupDataChannel(e, t) {
                         
                         createBlockParticles(s.x, s.y, s.z, blockId);
                         
+                        // Play audio only for the initiating client
+                        if (s.username === userName) {
+                            safePlayAudio(soundBreak);
+                        }
+                        
                         // Handle light blocks
                         if (BLOCKS[blockId] && BLOCKS[blockId].light) {
                             torchRegistry.delete(blockKey);
@@ -1154,8 +1267,6 @@ function setupDataChannel(e, t) {
                             }
                             lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                         }
-                        
-                        safePlayAudio(soundBreak);
                     }
                     break;
                 case 'block_action_denied':
