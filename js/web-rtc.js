@@ -877,6 +877,25 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case 'player_spawn_info':
+                    if (isHost) {
+                        console.log(`[WebRTC] Host received spawn info from ${s.username}: world=${s.world}, chunk=(${s.cx},${s.cz})`);
+                        
+                        // Update host's spawnChunks map with client's spawn data
+                        spawnChunks.set(s.username, {
+                            cx: s.cx,
+                            cz: s.cz,
+                            username: s.username,
+                            world: s.world,
+                            spawn: s.spawn
+                        });
+                        
+                        // Also assign home spawn ownership on the host
+                        const clientHomeChunkKey = makeChunkKey(s.world, s.cx, s.cz);
+                        updateChunkOwnership(clientHomeChunkKey, s.username, Date.now(), 'home');
+                        console.log(`[Ownership] Host assigned home spawn chunk ${clientHomeChunkKey} to ${s.username}`);
+                    }
+                    break;
                 case 'request_block_place':
                     if (isHost) {
                         console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
