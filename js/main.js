@@ -1179,6 +1179,18 @@ function removeBlockAt(e, t, o, breaker) {
     const n = BLOCKS[a];
     if (!n || n.strength > 5) return void addMessage("Cannot break that block");
 
+    // Check ownership BEFORE showing any visual feedback (for host/solo only)
+    // Clients will send request and get approved/denied by host
+    if (isHost || peers.size === 0) {
+        var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
+        var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
+        var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+        if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
+            return; // Don't show message here - WebRTC handler will send to client
+        }
+    }
+
     const r = `${e},${t},${o}`;
     let s = damagedBlocks.get(r) || {
         hits: 0,
@@ -1240,16 +1252,7 @@ function removeBlockAt(e, t, o, breaker) {
 
         // Host-authoritative: only host mutates directly, clients send requests
         if (isHost || peers.size === 0) {
-            // Host or solo: break immediately
-            // Check ownership for host breaking their own blocks
-            var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
-            var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
-            var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-            if (!checkChunkOwnership(chunkKey, breaker || userName)) {
-                console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
-                return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
-            }
-            
+            // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
             chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);

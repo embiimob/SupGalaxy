@@ -923,6 +923,45 @@ function setupDataChannel(e, t) {
                                 sendWorldStateAsync(peer, worldState, s.username);
                             }
                         }
+                        
+                        // Recalculate spawn chunks for ALL peers in the requested world
+                        console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${s.world} (world sync request)`);
+                        for (const [peerName, otherPeer] of peers.entries()) {
+                            const peerWorld = userPositions[peerName] ? userPositions[peerName].world : null;
+                            if (peerWorld === s.world) {
+                                const peerSpawn = calculateSpawnPoint(peerName + "@" + s.world);
+                                const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
+                                const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
+                                
+                                spawnChunks.set(peerName, {
+                                    cx: peerSpawnCx,
+                                    cz: peerSpawnCz,
+                                    username: peerName,
+                                    world: s.world,
+                                    spawn: peerSpawn
+                                });
+                                
+                                const peerChunkKey = makeChunkKey(s.world, peerSpawnCx, peerSpawnCz);
+                                updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
+                            }
+                        }
+                        // Also recalculate for host if in same world
+                        if (worldName === s.world) {
+                            const hostSpawn = calculateSpawnPoint(userName + "@" + s.world);
+                            const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                            const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                            
+                            spawnChunks.set(userName, {
+                                cx: hostSpawnCx,
+                                cz: hostSpawnCz,
+                                username: userName,
+                                world: s.world,
+                                spawn: hostSpawn
+                            });
+                            
+                            const hostChunkKey = makeChunkKey(s.world, hostSpawnCx, hostSpawnCz);
+                            updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
+                        }
                     }
                     break;
                 case 'world_switch':
