@@ -1,3 +1,4 @@
+// WebRTC peer management
 var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
@@ -20,26 +21,29 @@ var userPositions = {},
     syncedWorlds = new Set;
 
 async function getTurnCredentials() {
-    return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
+    return [{
         urls: "stun:supturn.com:3478"
     }, {
         urls: ["turn:supturn.com:3478?transport=udp", "turn:supturn.com:3478?transport=tcp", "turn:supturn.com:443?transport=tcp"],
         username: "supgalaxy",
         credential: "supgalaxy",
         credentialType: "password"
-    }]
+    }];
 }
 async function connectToServer(e, t, o) {
-    if (peers.size >= MAX_PEERS) return addMessage("Cannot connect: too many peers.", 3e3), void console.log("[WebRTC] Connection failed: max peers reached");
-    if (!knownServers.find((function (t) {
-        return t.hostUser === e
-    }))) return addMessage("No server found for " + e, 3e3), void console.log("[WebRTC] No server found for:", e);
-    console.log("[WebRTC] Initiating connection to server:", e), connectionAttempts.set(e, Date.now());
+    if (peers.size >= MAX_PEERS) {
+        addMessage("Cannot connect: too many peers.", 3e3);
+        return;
+    }
+    if (!knownServers.find((function (t) { return t.hostUser === e }))) {
+        addMessage("No server found for " + e, 3e3);
+        return;
+    }
+    
+    connectionAttempts.set(e, Date.now());
     const a = await getTurnCredentials();
-    var r = new RTCPeerConnection({
-        iceServers: a
-    });
-    r.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${e}: ${r.iceConnectionState}`), localAudioStream && localAudioStream.getTracks().forEach((e => {
+    var r = new RTCPeerConnection({ iceServers: a });
+    r.oniceconnectionstatechange = () => {}, localAudioStream && localAudioStream.getTracks().forEach((e => {
         r.addTrack(e, localAudioStream)
     })), r.ontrack = t => {
         const o = e;
@@ -49,14 +53,17 @@ async function connectToServer(e, t, o) {
                 e.srcObject = t.streams[0], e.autoplay = !0, userAudioStreams.set(o, {
                     audio: e,
                     stream: t.streams[0]
-                }), console.log(`[WebRTC] Received audio stream from ${o}`)
+                }), userAudioStreams.set(o, {
+                    audio: e,
+                    stream: t.streams[0]
+                })
             }
         } else if ("video" === t.track.kind && !userVideoStreams.has(o)) {
             const e = document.createElement("video");
             e.srcObject = t.streams[0], e.autoplay = !0, e.playsInline = !0, e.style.display = "none", document.body.appendChild(e), userVideoStreams.set(o, {
                 video: e,
                 stream: t.streams[0]
-            }), console.log(`[WebRTC] Received video stream from ${o}`)
+            })
         }
     };
     var s = r.createDataChannel("game");

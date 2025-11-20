@@ -7,8 +7,6 @@ var isVideoMuted = true;
 var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
-
-// Video Player Logic
 function initVideoPlayer() {
     const playPauseBtn = document.getElementById('videoPlayPauseBtn');
     const skipBtn = document.getElementById('videoSkipBtn');
@@ -29,7 +27,7 @@ function initVideoPlayer() {
     if (videoMenuBtn) videoMenuBtn.addEventListener('click', () => {
         videoMenuModal.style.display = 'flex';
         isPromptOpen = true;
-        videoSearchInput.value = 'game'; // Default search term
+        videoSearchInput.value = 'game';
         fetchVideosForMenu('game', 1);
     });
 
@@ -48,9 +46,7 @@ function initVideoPlayer() {
 
     if (videoSearchBtn) videoSearchBtn.addEventListener('click', performVideoSearch);
     if (videoSearchInput) videoSearchInput.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            performVideoSearch();
-        }
+        if (e.key === 'Enter') performVideoSearch();
     });
 
     const prevBtn = document.getElementById('videoPrevBtn');
