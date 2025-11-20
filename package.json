@@ -1,0 +1,45 @@
+{
+  "name": "supgalaxy",
+  "version": "0.5.7-beta",
+  "description": "Open-source, serverless voxel world with decentralized persistence via IPFS + Bitcoin",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1",
+    "lint": "eslint js/**/*.js",
+    "lint:fix": "eslint js/**/*.js --fix",
+    "format": "prettier --write \"**/*.{js,css,html,md}\"",
+    "format:check": "prettier --check \"**/*.{js,css,html,md}\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/embiimob/SupGalaxy.git"
+  },
+  "keywords": [
+    "voxel",
+    "minecraft",
+    "blockchain",
+    "ipfs",
+    "decentralized",
+    "webrtc",
+    "multiplayer"
+  ],
+  "authors": [
+    "embii4u",
+    "Grok (xAI)",
+    "Jules",
+    "kattacomi",
+    "ChatGPT",
+    "GitHub Copilot"
+  ],
+  "license": "CC0-1.0",
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "http-server": "^14.1.1",
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

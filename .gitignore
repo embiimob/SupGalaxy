@@ -2,3 +2,14 @@ node_modules/
 .DS_Store
 *.log
 test-results/
+package-lock.json
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+.env.local
+dist/
+build/
+coverage/
