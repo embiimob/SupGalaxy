@@ -25,6 +25,16 @@ async function applySaveFile(e, t, o) {
             });
         }
         processedMessages = new Set(e.processedMessages);
+        
+        // Restore spawnChunks from host session
+        if (e.spawnChunks) {
+            spawnChunks.clear();
+            for (const [username, data] of e.spawnChunks) {
+                spawnChunks.set(username, data);
+            }
+            console.log(`[OWNERSHIP] Restored ${spawnChunks.size} spawn chunks from host session`);
+        }
+        
         addMessage("Host session loaded. Restoring all world states.", 3e3);
     }
     if (e.playerData && e.hash) {
@@ -60,6 +70,16 @@ async function applySaveFile(e, t, o) {
                     i = r.changes;
                 chunkManager.applyDeltasToChunk(s, i)
             }
+        
+        // Restore spawnChunks from save file if available
+        if (t.spawnChunks) {
+            spawnChunks.clear();
+            for (const [username, data] of t.spawnChunks) {
+                spawnChunks.set(username, data);
+            }
+            console.log(`[OWNERSHIP] Restored ${spawnChunks.size} spawn chunks from save file`);
+        }
+        
         populateSpawnChunks();
         
         // Add current player's home chunk to spawnChunks
@@ -1618,6 +1638,12 @@ async function downloadHostSession() {
         isHostSession: true,
         worldStates: serializableWorldStates,
         processedMessages: Array.from(processedMessages),
+        spawnChunks: Array.from(spawnChunks.entries()).map(([username, data]) => [username, {
+            cx: data.cx,
+            cz: data.cz,
+            username: data.username,
+            world: data.world
+        }]),
         playerData: {
             world: worldName,
             seed: worldSeed,
@@ -1680,6 +1706,12 @@ async function downloadSinglePlayerSession() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
+        spawnChunks: Array.from(spawnChunks.entries()).map(([username, data]) => [username, {
+            cx: data.cx,
+            cz: data.cz,
+            username: data.username,
+            world: data.world
+        }]),
         profile: {
             x: player.x,
             y: player.y,
