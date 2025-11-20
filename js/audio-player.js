@@ -9,7 +9,6 @@ var previewAudio = new Audio();
 var currentPreviewUrl = null;
 var showingPlaylist = false;
 
-// Music Player Logic
 function initMusicPlayer() {
     const playPauseBtn = document.getElementById('playPauseBtn');
     const skipBtn = document.getElementById('skipBtn');
@@ -18,20 +17,22 @@ function initMusicPlayer() {
     const musicMenuModal = document.getElementById('musicMenuModal');
     const closeMusicMenuBtn = document.getElementById('closeMusicMenu');
     const showPlaylistBtn = document.getElementById('showPlaylistBtn');
-    const musicList = document.getElementById('musicList');
     const musicSearchInput = document.getElementById('musicSearchInput');
     const musicSearchBtn = document.getElementById('musicSearchBtn');
 
     if (playPauseBtn) playPauseBtn.addEventListener('click', playPauseMusic);
     if (skipBtn) skipBtn.addEventListener('click', skipMusic);
     if (muteBtn) muteBtn.addEventListener('click', muteMusic);
+    
     document.getElementById('cameraBtn').addEventListener('click', toggleCamera);
+    
     if (musicMenuBtn) musicMenuBtn.addEventListener('click', () => {
         musicMenuModal.style.display = 'flex';
         isPromptOpen = true;
         musicSearchInput.value = 'game';
         fetchSongsForMenu('game', 1);
     });
+    
     if (closeMusicMenuBtn) closeMusicMenuBtn.addEventListener('click', () => {
         musicMenuModal.style.display = 'none';
         isPromptOpen = false;
@@ -47,9 +48,7 @@ function initMusicPlayer() {
 
     if (musicSearchBtn) musicSearchBtn.addEventListener('click', performMusicSearch);
     if (musicSearchInput) musicSearchInput.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            performMusicSearch();
-        }
+        if (e.key === 'Enter') performMusicSearch();
     });
 
 
@@ -140,7 +139,6 @@ async function fetchAndPlayMusic() {
             playTrack(currentTrackIndex);
         }
     } catch (error) {
-        console.error("Failed to fetch music:", error);
         musicStatus.innerText = 'Error loading music';
     }
 }
@@ -169,7 +167,6 @@ function playTrack(index) {
             isMusicPlaying = true;
             playPauseBtn.innerText = '⏸';
         }).catch(error => {
-            console.error(`Audio playback for ${track.name} failed:`, error);
             isMusicPlaying = false;
             playPauseBtn.innerText = '▶';
             setTimeout(skipMusic, 2000);
@@ -191,9 +188,7 @@ function playPauseMusic() {
                 playPromise.then(() => {
                     isMusicPlaying = true;
                     if (playPauseBtn) playPauseBtn.innerText = '⏸';
-                }).catch(error => {
-                    console.error("Audio playback failed on resume:", error);
-                });
+                }).catch(() => {});
             }
         } else {
             playTrack(currentTrackIndex);
@@ -218,16 +213,12 @@ function muteMusic() {
 function togglePreview(button, songUrl) {
     const isCurrentlyPlaying = !previewAudio.paused && currentPreviewUrl === songUrl;
 
-    // Stop any playing audio from the main player
-    if (isMusicPlaying) {
-        playPauseMusic();
-    }
+    if (isMusicPlaying) playPauseMusic();
 
-    // Stop any currently playing preview
     if (!previewAudio.paused) {
         previewAudio.pause();
         const playingButton = document.querySelector('.preview-play-btn[data-playing="true"]');
-        if(playingButton) {
+        if (playingButton) {
             playingButton.innerText = '▶';
             playingButton.removeAttribute('data-playing');
         }
@@ -313,14 +304,9 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
                 addButton.style.fontSize = '10px';
                 addButton.style.marginLeft = '5px';
                 addButton.onclick = () => {
-                    const track = {
-                        name: sanitizedFilename,
-                        url: `https://ipfs.io/ipfs/${hash}`
-                    };
+                    const track = { name: sanitizedFilename, url: `https://ipfs.io/ipfs/${hash}` };
                     if (!musicPlaylist.some(t => t.url === track.url)) {
-                        if (musicPlaylist.length >= 10) {
-                            musicPlaylist.shift(); // Remove the oldest song
-                        }
+                        if (musicPlaylist.length >= 10) musicPlaylist.shift();
                         musicPlaylist.push(track);
                         addMessage(`${sanitizedFilename} added to playlist`);
                     } else {
@@ -334,7 +320,6 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
         });
         document.getElementById('musicNextBtn').disabled = messages.length < 50;
     } catch (error) {
-        console.error("Failed to fetch songs for menu:", error);
         musicList.innerHTML = '<li>Error loading songs</li>';
     }
 }

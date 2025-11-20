@@ -1,9 +1,15 @@
-var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
+// Three.js and scene variables
+var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture;
+
+// Cache and state management
+var knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,
     processedMessages = new Set,
-    isInitialLoad = !1,
-    CHUNK_SIZE = 16,
+    isInitialLoad = !1;
+
+// World configuration constants
+var CHUNK_SIZE = 16,
     MAX_HEIGHT = 256,
     SEA_LEVEL = 16,
     MAP_SIZE = 16384,
@@ -19,10 +25,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.7-beta", // Contributed to by Jules
+    VERSION = "SupGalaxy v0.5.7-beta",
     POLL_INTERVAL = 3e4,
-    MAX_PEERS = 10,
-    BLOCKS = {
+    MAX_PEERS = 10;
+// Block definitions
+var BLOCKS = {
         1: {
             name: "Bedrock",
             color: "#0b0b0b",
@@ -266,8 +273,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#8A2BE2",
             strength: 3
         }
-    },
-    BIOMES = [{
+    };
+
+// Biome definitions
+var BIOMES = [{
         key: "plains",
         palette: [2, 3, 4, 13, 15],
         heightScale: .8,
@@ -303,8 +312,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         heightScale: .5,
         roughness: .2,
         featureDensity: .04
-    }],
-    RECIPES = [{
+    }];
+
+// Crafting recipes
+var RECIPES = [{
         id: "glass",
         out: {
             id: 100,
@@ -542,15 +553,21 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             5: 4
         }
-    }],
-    raycaster = new THREE.Raycaster,
-    pointer = new THREE.Vector2(0, 0),
-    WORLD_STATES = new Map,
+    }];
+
+// Raycaster and interaction
+var raycaster = new THREE.Raycaster,
+    pointer = new THREE.Vector2(0, 0);
+
+// World state management
+var WORLD_STATES = new Map,
     worldSeed = "KANYE",
     worldName = "KANYE",
     userName = "player",
-    userAddress = "anonymous",
-    player = {
+    userAddress = "anonymous";
+
+// Player state
+var player = {
         x: 0,
         y: 24,
         z: 0,

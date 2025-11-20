@@ -4,7 +4,13 @@ function Chunk(e, t) {
 }
 
 function ChunkManager(e) {
-    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
+    this.seed = e;
+    this.noise = makeNoise(e);
+    this.blockNoise = makeNoise(e + "_block");
+    this.chunks = new Map;
+    this.lastPcx = null;
+    this.lastPcz = null;
+    this.pendingDeltas = new Map;
 }
 
 function buildGreedyMesh(e, t, o) {
@@ -351,7 +357,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     username: userName,
                     originSeed: r
                 });
-                for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && (console.log(`[WebRTC] Sending block change to ${e}`), t.dc.send(n))
+                for (const [e, t] of peers.entries()) e !== userName && t.dc && "open" === t.dc.readyState && t.dc.send(n)
             }
         }
     }
@@ -526,7 +532,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                 }
             } catch (err) {
-                console.error("[ChunkManager] Failed to get profile for address:", t, err);
+                // Silent fail for profile lookup
             }
         }
 
@@ -580,15 +586,12 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
                         if (shouldUpdate) {
                             updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
-                        } else {
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership not updated - existing ownership takes precedence`);
                         }
                     }
                 }
 
                 chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
-            } else console.error("[ChunkManager] chunkManager not defined")
+            }
         }
 
         const dataString = JSON.stringify(e);
@@ -676,57 +679,33 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             }
         }
     } catch (e) {
-        console.error("[ChunkManager] Failed to apply chunk updates:", e)
+        console.error("[ChunkManager] Failed to apply chunk updates:", e);
     }
 }
 
 function isChunkMutationAllowed(chunkKey, username) {
     const normalized = chunkKey.replace(/^#/, "");
     
-    // Check home spawn ownership
     if (spawnChunks.size > 0) {
         for (const [spawnUser, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
             if (!parsed) continue;
-            // Check if this is a spawn chunk AND the world matches
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                // This chunk is a home spawn chunk in this world
-                if (spawnUser !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser} in world ${parsed.world}`);
-                    return false;
-                }
-                return true; // Own home spawn
+                if (spawnUser !== username) return false;
+                return true;
             }
         }
     }
     
-    // Check OWNED_CHUNKS ownership
     const ownership = OWNED_CHUNKS.get(normalized);
-    if (!ownership) {
-        return true; // No ownership, free to edit
-    }
+    if (!ownership) return true;
     
     const now = Date.now();
     
-    // Check if ownership is pending (immature IPFS claim < 30 days)
-    if (ownership.pending) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
-        return true; // Pending chunks are editable by anyone
-    }
+    if (ownership.pending) return true;
+    if (ownership.expiryDate && now > ownership.expiryDate) return true;
+    if (ownership.username !== username) return false;
     
-    // Check if ownership has expired (> 1 year)
-    if (ownership.expiryDate && now > ownership.expiryDate) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
-        return true; // Expired chunks are editable by anyone
-    }
-    
-    // Check if owned by different user (mature ownership 30d-1y)
-    if (ownership.username !== username) {
-        console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
-        return false;
-    }
-    
-    // User owns the chunk
     return true;
 }
 
@@ -742,15 +721,12 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
         const now = Date.now();
         
         if (ownershipType === 'home') {
-            // Home spawn ownership: non-expiring
             OWNED_CHUNKS.set(normalized, {
                 username: username,
                 claimDate: claimDate || now,
                 type: 'home'
             });
-            console.log(`[Ownership] Home spawn chunk ${normalized} assigned to ${username}`);
         } else if (ownershipType === 'ipfs') {
-            // IPFS ownership: check maturity and set expiry
             const age = now - blockDate;
             const isPending = age < IPFS_MATURITY_PERIOD;
             const expiryDate = blockDate + IPFS_MAX_OWNERSHIP_PERIOD;
@@ -762,8 +738,6 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
                 type: 'ipfs',
                 pending: isPending
             });
-            
-            console.log(`[Ownership] IPFS chunk ${normalized} assigned to ${username}, pending: ${isPending}, expires: ${new Date(expiryDate).toISOString()}`);
         }
     } catch (e) {
         console.error("[ChunkManager] Failed to update chunk ownership:", e);
