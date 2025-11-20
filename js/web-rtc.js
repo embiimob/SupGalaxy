@@ -1114,6 +1114,8 @@ function setupDataChannel(e, t) {
                                 updateHotbarUI();
                                 addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
                             }
+                            // Play audio only for the initiating client
+                            safePlayAudio(soundPlace);
                         }
                         
                         // Handle light blocks
@@ -1124,8 +1126,6 @@ function setupDataChannel(e, t) {
                             scene.add(particles);
                             torchParticles.set(blockKey, particles);
                         }
-                        
-                        safePlayAudio(soundPlace);
                     }
                     break;
                 case 'block_break':
@@ -1142,6 +1142,11 @@ function setupDataChannel(e, t) {
                         
                         createBlockParticles(s.x, s.y, s.z, blockId);
                         
+                        // Play audio only for the initiating client
+                        if (s.username === userName) {
+                            safePlayAudio(soundBreak);
+                        }
+                        
                         // Handle light blocks
                         if (BLOCKS[blockId] && BLOCKS[blockId].light) {
                             torchRegistry.delete(blockKey);
@@ -1154,8 +1159,6 @@ function setupDataChannel(e, t) {
                             }
                             lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                         }
-                        
-                        safePlayAudio(soundBreak);
                     }
                     break;
                 case 'block_action_denied':

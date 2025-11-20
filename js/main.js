@@ -1257,6 +1257,7 @@ function removeBlockAt(e, t, o, breaker) {
             if (breaker === userName) {
                 addToInventory(a, 1, l);
                 addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+                safePlayAudio(soundBreak);
             } else if (isHost) {
                 const peer = peers.get(breaker);
                 if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1268,7 +1269,6 @@ function removeBlockAt(e, t, o, breaker) {
                     }));
                 }
             }
-            safePlayAudio(soundBreak);
             createBlockParticles(e, t, o, a);
 
             if (BLOCKS[a] && BLOCKS[a].light) {
