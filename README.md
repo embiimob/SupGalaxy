@@ -35,7 +35,7 @@ Built with ❤️ by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**,**Cha
 - PvP through left-click with knockback  
 
 ### 🪄 The Magician’s Stone
-A special block capable of adding **images, video and audio** into the game world.
+A special block capable of adding **images, video, audio and animated 3d models** into the game world.
 
 ### 🎙 Proximity Video & Voice
 See and hear players based on distance—natural spatial communication.
