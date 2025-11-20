@@ -333,11 +333,43 @@ function setupDataChannel(e, t) {
                     break;
                 case "new_player":
                     const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
-                        pc: null,
-                        dc: null,
-                        address: null
-                    }), updateHudButtons());
+                    if (i === userName || peers.has(i)) break;
+                    
+                    addMessage(`${i} has joined!`);
+                    
+                    if (!playerAvatars.has(i)) {
+                        createAndSetupAvatar(i, !1);
+                    }
+                    
+                    if (!peers.has(i)) {
+                        peers.set(i, {
+                            pc: null,
+                            dc: null,
+                            address: null
+                        });
+                    }
+                    
+                    // If host, calculate and store new player's spawn point
+                    if (isHost) {
+                        const playerSpawn = calculateSpawnPoint(i + "@" + worldName);
+                        const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                        const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                        
+                        spawnChunks.set(i, {
+                            cx: spawnCx,
+                            cz: spawnCz,
+                            username: i,
+                            world: worldName,
+                            spawn: playerSpawn
+                        });
+                        
+                        // Assign home spawn ownership
+                        const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
+                        updateChunkOwnership(playerHomeChunkKey, i, Date.now(), 'home');
+                        console.log(`[Ownership] Host calculated and assigned home spawn chunk ${playerHomeChunkKey} to ${i}`);
+                    }
+                    
+                    updateHudButtons();
                     break;
                 case "world_sync":
                     if (!isHost) {
@@ -874,26 +906,25 @@ function setupDataChannel(e, t) {
                             if (userPositions[s.username]) {
                                 userPositions[s.username].world = clientWorld;
                             }
+                            
+                            // Calculate and store player's spawn point for the new world
+                            const playerSpawn = calculateSpawnPoint(s.username + "@" + clientWorld);
+                            const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                            const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                            
+                            spawnChunks.set(s.username, {
+                                cx: spawnCx,
+                                cz: spawnCz,
+                                username: s.username,
+                                world: clientWorld,
+                                spawn: playerSpawn
+                            });
+                            
+                            // Assign home spawn ownership for new world
+                            const playerHomeChunkKey = makeChunkKey(clientWorld, spawnCx, spawnCz);
+                            updateChunkOwnership(playerHomeChunkKey, s.username, Date.now(), 'home');
+                            console.log(`[Ownership] Host calculated spawn for ${s.username} switching to world ${clientWorld}: chunk ${playerHomeChunkKey}`);
                         }
-                    }
-                    break;
-                case 'player_spawn_info':
-                    if (isHost) {
-                        console.log(`[WebRTC] Host received spawn info from ${s.username}: world=${s.world}, chunk=(${s.cx},${s.cz})`);
-                        
-                        // Update host's spawnChunks map with client's spawn data
-                        spawnChunks.set(s.username, {
-                            cx: s.cx,
-                            cz: s.cz,
-                            username: s.username,
-                            world: s.world,
-                            spawn: s.spawn
-                        });
-                        
-                        // Also assign home spawn ownership on the host
-                        const clientHomeChunkKey = makeChunkKey(s.world, s.cx, s.cz);
-                        updateChunkOwnership(clientHomeChunkKey, s.username, Date.now(), 'home');
-                        console.log(`[Ownership] Host assigned home spawn chunk ${clientHomeChunkKey} to ${s.username}`);
                     }
                     break;
                 case 'request_block_place':

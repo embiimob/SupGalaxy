@@ -2058,24 +2058,6 @@ async function startGame() {
         spawn: s
     });
     
-    // If connected to peers, send spawn info to host
-    if (peers.size > 0) {
-        const spawnMsg = JSON.stringify({
-            type: 'player_spawn_info',
-            username: userName,
-            world: worldName,
-            cx: i,
-            cz: l,
-            spawn: { x: s.x, y: s.y, z: s.z }
-        });
-        for (const [peerName, peer] of peers.entries()) {
-            if (peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(spawnMsg);
-                break; // Send to first available peer (should be host)
-            }
-        }
-    }
-    
     if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
@@ -2317,23 +2299,6 @@ function switchWorld(newWorldName) {
         world: worldName,
         spawn: t
     });
-    
-    // If connected to peers, send spawn info to host
-    if (peers.size > 0) {
-        const spawnMsg = JSON.stringify({
-            type: 'player_spawn_info',
-            username: userName,
-            world: worldName,
-            cx: o,
-            cz: a,
-            spawn: { x: t.x, y: t.y, z: t.z }
-        });
-        for (const [peerName, peer] of peers.entries()) {
-            if (peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(spawnMsg);
-            }
-        }
-    }
     
     chunkManager.preloadChunks(o, a, LOAD_RADIUS), addMessage(`Switched to world: ${worldName}`, 4e3)
 
