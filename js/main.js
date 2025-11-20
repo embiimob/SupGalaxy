@@ -3149,24 +3149,6 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneAutoplayAnimation').checked = true;
     document.getElementById('magicianStoneDistance').value = '10';
     document.getElementById('magicianStonePreview').innerHTML = '<span>URL Preview</span>';
-    
-    // Clean up preview renderer if it exists
-    if (window.magicianStonePreviewRenderer) {
-        window.magicianStonePreviewRenderer.dispose();
-        delete window.magicianStonePreviewRenderer;
-    }
-    if (window.magicianStonePreviewScene) {
-        delete window.magicianStonePreviewScene;
-    }
-    if (window.magicianStonePreviewCamera) {
-        delete window.magicianStonePreviewCamera;
-    }
-    if (window.magicianStonePreviewModel) {
-        delete window.magicianStonePreviewModel;
-    }
-    if (window.magicianStonePreviewMixer) {
-        delete window.magicianStonePreviewMixer;
-    }
 }
 
 document.getElementById('magicianStoneCancel').addEventListener('click', function() {
@@ -3233,15 +3215,6 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
     let url = this.value;
     const previewContainer = document.getElementById('magicianStonePreview');
     previewContainer.innerHTML = ''; // Clear previous preview
-    
-    // Clean up any existing preview renderer
-    if (window.magicianStonePreviewRenderer) {
-        window.magicianStonePreviewRenderer.dispose();
-        delete window.magicianStonePreviewRenderer;
-    }
-    if (window.magicianStonePreviewScene) {
-        delete window.magicianStonePreviewScene;
-    }
 
     if (url.startsWith('IPFS:')) {
         previewContainer.innerHTML = '<span>Resolving IPFS link...</span>';
@@ -3276,98 +3249,39 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         audio.controls = true;
         previewContainer.appendChild(audio);
     } else if (['glb', 'gltf'].includes(fileExtension)) {
-        // Create a 3D preview for GLB/GLTF files
-        previewContainer.innerHTML = '<canvas id="glbPreviewCanvas" style="width: 100%; height: 200px;"></canvas>';
-        const canvas = document.getElementById('glbPreviewCanvas');
+        // Show loading indicator while checking GLB/GLTF file
+        previewContainer.innerHTML = '<span style="color: #888;">Loading 3D model...</span>';
         
-        try {
-            const previewScene = new THREE.Scene();
-            previewScene.background = new THREE.Color(0x222222);
-            
-            const previewCamera = new THREE.PerspectiveCamera(50, canvas.clientWidth / 200, 0.1, 1000);
-            previewCamera.position.set(2, 2, 2);
-            previewCamera.lookAt(0, 0, 0);
-            
-            const previewRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-            previewRenderer.setSize(canvas.clientWidth, 200);
-            previewRenderer.setPixelRatio(window.devicePixelRatio);
-            
-            // Add lights
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-            previewScene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 5, 5);
-            previewScene.add(directionalLight);
-            
-            // Load the GLB/GLTF model
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                url,
-                function(gltf) {
-                    const model = gltf.scene;
-                    
-                    // Center and scale the model
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = 2 / maxDim;
-                    
-                    model.position.sub(center);
-                    model.scale.multiplyScalar(scale);
-                    
-                    previewScene.add(model);
-                    
-                    // Store for animation
-                    window.magicianStonePreviewModel = model;
-                    window.magicianStonePreviewMixer = gltf.animations.length > 0 ? new THREE.AnimationMixer(model) : null;
-                    if (window.magicianStonePreviewMixer && gltf.animations.length > 0) {
-                        const action = window.magicianStonePreviewMixer.clipAction(gltf.animations[0]);
-                        action.play();
-                    }
-                    
-                    previewContainer.innerHTML = '';
-                    previewContainer.appendChild(canvas);
-                },
-                function(progress) {
-                    // Loading progress
-                },
-                function(error) {
-                    console.error('Error loading GLB/GLTF:', error);
-                    previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to load 3D model</span>';
-                }
-            );
-            
-            // Animation loop for preview
-            window.magicianStonePreviewRenderer = previewRenderer;
-            window.magicianStonePreviewScene = previewScene;
-            window.magicianStonePreviewCamera = previewCamera;
-            
-            const clock = new THREE.Clock();
-            function animatePreview() {
-                if (!window.magicianStonePreviewRenderer) return;
+        // Validate the GLB/GLTF file by attempting to load it
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            url,
+            function(gltf) {
+                // Success - show model info
+                const animationCount = gltf.animations.length;
+                const modelName = url.split('/').pop();
                 
-                const delta = clock.getDelta();
+                let infoHTML = '<div style="padding: 10px; background: #2a2a2a; border-radius: 4px;">';
+                infoHTML += '<div style="color: #4CAF50; font-size: 18px; margin-bottom: 8px;">✓ 3D Model Ready</div>';
+                infoHTML += '<div style="color: #ccc; font-size: 12px; margin-bottom: 4px;">File: ' + modelName + '</div>';
                 
-                // Rotate the model
-                if (window.magicianStonePreviewModel) {
-                    window.magicianStonePreviewModel.rotation.y += 0.01;
+                if (animationCount > 0) {
+                    infoHTML += '<div style="color: #64B5F6; font-size: 12px;">🎬 ' + animationCount + ' animation(s) detected</div>';
+                } else {
+                    infoHTML += '<div style="color: #888; font-size: 12px;">Static model (no animations)</div>';
                 }
                 
-                // Update animations
-                if (window.magicianStonePreviewMixer) {
-                    window.magicianStonePreviewMixer.update(delta);
-                }
-                
-                window.magicianStonePreviewRenderer.render(window.magicianStonePreviewScene, window.magicianStonePreviewCamera);
-                requestAnimationFrame(animatePreview);
+                infoHTML += '</div>';
+                previewContainer.innerHTML = infoHTML;
+            },
+            function(progress) {
+                // Loading progress - could show percentage if needed
+            },
+            function(error) {
+                console.error('Error loading GLB/GLTF:', error);
+                previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to load 3D model</span>';
             }
-            animatePreview();
-            
-        } catch (error) {
-            console.error('Error creating 3D preview:', error);
-            previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to create 3D preview</span>';
-        }
+        );
     } else {
         previewContainer.innerHTML = '<span>URL Preview</span>';
     }
