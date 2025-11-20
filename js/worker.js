@@ -1289,7 +1289,7 @@ self.onmessage = async function(e) {
                     applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
                 }
             } else if (data.type === "chunk_ownership") {
-               updateChunkOwnership(data.chunkKey, data.username, data.timestamp);
+               updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
             } else if (data.type === 'magician_stones_update') {
                 if (data.stones) {
                     for (const key in data.stones) {

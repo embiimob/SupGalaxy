@@ -512,8 +512,27 @@ function parseChunkKey(e) {
     } : null
 }
 
-function applyChunkUpdates(e, t, o, a, sourceUsername) {
+async function applyChunkUpdates(e, t, o, a, sourceUsername) {
     try {
+        // Get username from fromAddress
+        let ownerUsername = null;
+        if (t) {
+            try {
+                const profile = await GetProfileByAddress(t);
+                if (profile && profile.URN) {
+                    const urnProfile = await GetProfileByURN(profile.URN);
+                    if (urnProfile && urnProfile.Creators && urnProfile.Creators.includes(t)) {
+                        ownerUsername = profile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                    }
+                }
+            } catch (err) {
+                console.error("[ChunkManager] Failed to get profile for address:", t, err);
+            }
+        }
+
+        const now = Date.now();
+        const blockDate = o; // o is the BlockDate timestamp
+
         for (var n of e) {
             var r = n.chunk,
                 s = n.changes;
@@ -532,6 +551,42 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                     worldState.chunkDeltas.get(r).push(...s);
                 }
+
+                // Set ownership based on BlockDate and owner
+                if (ownerUsername && blockDate) {
+                    const normalized = r.replace(/^#/, "");
+                    const existing = OWNED_CHUNKS.get(normalized);
+                    const blockAge = now - blockDate;
+
+                    // Only set ownership if claim is valid (30d-1y) or pending (<30d)
+                    if (blockAge < IPFS_MAX_OWNERSHIP_PERIOD) {
+                        // Check if we should update ownership
+                        let shouldUpdate = false;
+                        
+                        if (!existing) {
+                            // No existing ownership
+                            shouldUpdate = true;
+                        } else if (existing.type === 'ipfs' && existing.username === ownerUsername) {
+                            // Same owner, update if this is newer
+                            if (!existing.claimDate || blockDate > existing.claimDate) {
+                                shouldUpdate = true;
+                            }
+                        } else if (existing.type !== 'home') {
+                            // Different owner, but not a home spawn - check if existing is expired
+                            if (existing.expiryDate && now > existing.expiryDate) {
+                                shouldUpdate = true;
+                            }
+                        }
+
+                        if (shouldUpdate) {
+                            updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
+                            console.log(`[Ownership] IPFS chunk ${normalized} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
+                        } else {
+                            console.log(`[Ownership] IPFS chunk ${normalized} ownership not updated - existing ownership takes precedence`);
+                        }
+                    }
+                }
+
                 chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
             } else console.error("[ChunkManager] chunkManager not defined")
         }
