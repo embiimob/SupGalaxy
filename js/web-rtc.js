@@ -333,11 +333,43 @@ function setupDataChannel(e, t) {
                     break;
                 case "new_player":
                     const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
-                        pc: null,
-                        dc: null,
-                        address: null
-                    }), updateHudButtons());
+                    if (i === userName || peers.has(i)) break;
+                    
+                    addMessage(`${i} has joined!`);
+                    
+                    if (!playerAvatars.has(i)) {
+                        createAndSetupAvatar(i, !1);
+                    }
+                    
+                    if (!peers.has(i)) {
+                        peers.set(i, {
+                            pc: null,
+                            dc: null,
+                            address: null
+                        });
+                    }
+                    
+                    // If host, calculate and store new player's spawn point
+                    if (isHost) {
+                        const playerSpawn = calculateSpawnPoint(i + "@" + worldName);
+                        const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                        const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                        
+                        spawnChunks.set(i, {
+                            cx: spawnCx,
+                            cz: spawnCz,
+                            username: i,
+                            world: worldName,
+                            spawn: playerSpawn
+                        });
+                        
+                        // Assign home spawn ownership
+                        const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
+                        updateChunkOwnership(playerHomeChunkKey, i, Date.now(), 'home');
+                        console.log(`[Ownership] Host calculated and assigned home spawn chunk ${playerHomeChunkKey} to ${i}`);
+                    }
+                    
+                    updateHudButtons();
                     break;
                 case "world_sync":
                     if (!isHost) {
@@ -874,7 +906,263 @@ function setupDataChannel(e, t) {
                             if (userPositions[s.username]) {
                                 userPositions[s.username].world = clientWorld;
                             }
+                            
+                            // Calculate and store player's spawn point for the new world
+                            const playerSpawn = calculateSpawnPoint(s.username + "@" + clientWorld);
+                            const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                            const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                            
+                            spawnChunks.set(s.username, {
+                                cx: spawnCx,
+                                cz: spawnCz,
+                                username: s.username,
+                                world: clientWorld,
+                                spawn: playerSpawn
+                            });
+                            
+                            // Assign home spawn ownership for new world
+                            const playerHomeChunkKey = makeChunkKey(clientWorld, spawnCx, spawnCz);
+                            updateChunkOwnership(playerHomeChunkKey, s.username, Date.now(), 'home');
+                            console.log(`[Ownership] Host calculated spawn for ${s.username} switching to world ${clientWorld}: chunk ${playerHomeChunkKey}`);
                         }
+                    }
+                    break;
+                case 'request_block_place':
+                    if (isHost) {
+                        console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
+                        
+                        // Validate ownership
+                        const placeChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
+                        const placeChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
+                        const placeChunkKey = makeChunkKey(s.world, placeChunkX, placeChunkZ);
+                        
+                        if (isChunkMutationAllowed(placeChunkKey, s.username)) {
+                            // Allowed: place block and broadcast
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed);
+                            
+                            if (s.originSeed && s.originSeed !== worldSeed) {
+                                const blockKey = `${s.x},${s.y},${s.z}`;
+                                getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
+                            }
+                            
+                            // Broadcast to all clients
+                            const placeMsg = JSON.stringify({
+                                type: 'block_place',
+                                x: s.x,
+                                y: s.y,
+                                z: s.z,
+                                blockId: s.blockId,
+                                username: s.username,
+                                world: s.world,
+                                originSeed: s.originSeed
+                            });
+                            for (const [peerName, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(placeMsg);
+                                }
+                            }
+                            console.log(`[Ownership] Block place allowed for ${s.username} at chunk ${placeChunkKey}`);
+                        } else {
+                            // Denied: send denial message
+                            let reason = 'Unknown';
+                            const ownership = OWNED_CHUNKS.get(placeChunkKey);
+                            
+                            // Check if it's a spawn chunk
+                            const parsed = parseChunkKey(placeChunkKey);
+                            if (parsed && spawnChunks.size > 0) {
+                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If not spawn chunk, check OWNED_CHUNKS
+                            if (reason === 'Unknown' && ownership) {
+                                if (ownership.pending) {
+                                    reason = 'Claim immature (<30d)';
+                                } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {
+                                    reason = 'Claim expired (>1y)';
+                                } else {
+                                    reason = `Chunk owned by ${ownership.username}`;
+                                }
+                            }
+                            
+                            const peer = peers.get(s.username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'block_action_denied',
+                                    x: s.x,
+                                    y: s.y,
+                                    z: s.z,
+                                    reason: reason,
+                                    chunkKey: placeChunkKey
+                                }));
+                            }
+                            console.log(`[Ownership] Block place denied for ${s.username} at chunk ${placeChunkKey}: ${reason}`);
+                        }
+                    }
+                    break;
+                case 'request_block_break':
+                    if (isHost) {
+                        console.log(`[WebRTC] Host received block break request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
+                        
+                        // Validate ownership
+                        const breakChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
+                        const breakChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
+                        const breakChunkKey = makeChunkKey(s.world, breakChunkX, breakChunkZ);
+                        
+                        if (isChunkMutationAllowed(breakChunkKey, s.username)) {
+                            // Allowed: break block and broadcast
+                            const blockKey = `${s.x},${s.y},${s.z}`;
+                            const worldState = getCurrentWorldState();
+                            const originSeed = worldState.foreignBlockOrigins.get(blockKey);
+                            const blockId = getBlockAt(s.x, s.y, s.z);
+                            
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
+                            if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
+                            
+                            // Send inventory update to the breaker
+                            const peer = peers.get(s.username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'add_to_inventory',
+                                    blockId: blockId,
+                                    count: 1,
+                                    originSeed: originSeed
+                                }));
+                            }
+                            
+                            // Broadcast to all clients
+                            const breakMsg = JSON.stringify({
+                                type: 'block_break',
+                                x: s.x,
+                                y: s.y,
+                                z: s.z,
+                                username: s.username,
+                                world: s.world,
+                                originSeed: originSeed
+                            });
+                            for (const [peerName, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(breakMsg);
+                                }
+                            }
+                            console.log(`[Ownership] Block break allowed for ${s.username} at chunk ${breakChunkKey}`);
+                        } else {
+                            // Denied: send denial message
+                            let reason = 'Unknown';
+                            const ownership = OWNED_CHUNKS.get(breakChunkKey);
+                            
+                            // Check if it's a spawn chunk
+                            const parsed = parseChunkKey(breakChunkKey);
+                            if (parsed && spawnChunks.size > 0) {
+                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If not spawn chunk, check OWNED_CHUNKS
+                            if (reason === 'Unknown' && ownership) {
+                                if (ownership.pending) {
+                                    reason = 'Claim immature (<30d)';
+                                } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {
+                                    reason = 'Claim expired (>1y)';
+                                } else {
+                                    reason = `Chunk owned by ${ownership.username}`;
+                                }
+                            }
+                            
+                            const peer = peers.get(s.username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'block_action_denied',
+                                    x: s.x,
+                                    y: s.y,
+                                    z: s.z,
+                                    reason: reason,
+                                    chunkKey: breakChunkKey
+                                }));
+                            }
+                            console.log(`[Ownership] Block break denied for ${s.username} at chunk ${breakChunkKey}: ${reason}`);
+                        }
+                    }
+                    break;
+                case 'block_place':
+                    if (!isHost) {
+                        // Client receives authoritative block place from host
+                        console.log(`[WebRTC] Client received block place from host: (${s.x}, ${s.y}, ${s.z}) blockId: ${s.blockId}`);
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, false, s.originSeed);
+                        
+                        if (s.originSeed && s.originSeed !== worldSeed) {
+                            const blockKey = `${s.x},${s.y},${s.z}`;
+                            getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
+                        }
+                        
+                        // Update inventory if this was our request
+                        if (s.username === userName) {
+                            const item = INVENTORY[selectedHotIndex];
+                            if (item && item.id === s.blockId) {
+                                item.count -= 1;
+                                if (item.count <= 0) {
+                                    INVENTORY[selectedHotIndex] = null;
+                                }
+                                updateHotbarUI();
+                                addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
+                            }
+                        }
+                        
+                        // Handle light blocks
+                        if (BLOCKS[s.blockId] && BLOCKS[s.blockId].light) {
+                            const blockKey = `${s.x},${s.y},${s.z}`;
+                            torchRegistry.set(blockKey, { x: s.x, y: s.y, z: s.z });
+                            const particles = createFlameParticles(s.x, s.y + 0.5, s.z);
+                            scene.add(particles);
+                            torchParticles.set(blockKey, particles);
+                        }
+                        
+                        safePlayAudio(soundPlace);
+                    }
+                    break;
+                case 'block_break':
+                    if (!isHost) {
+                        // Client receives authoritative block break from host
+                        console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
+                        const blockId = getBlockAt(s.x, s.y, s.z);
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
+                        
+                        const blockKey = `${s.x},${s.y},${s.z}`;
+                        if (s.originSeed) {
+                            getCurrentWorldState().foreignBlockOrigins.delete(blockKey);
+                        }
+                        
+                        createBlockParticles(s.x, s.y, s.z, blockId);
+                        
+                        // Handle light blocks
+                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                            torchRegistry.delete(blockKey);
+                            if (torchParticles.has(blockKey)) {
+                                const particles = torchParticles.get(blockKey);
+                                scene.remove(particles);
+                                particles.geometry.dispose();
+                                particles.material.dispose();
+                                torchParticles.delete(blockKey);
+                            }
+                            lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+                        }
+                        
+                        safePlayAudio(soundBreak);
+                    }
+                    break;
+                case 'block_action_denied':
+                    if (!isHost) {
+                        // Client receives denial from host
+                        addMessage(`Cannot edit: ${s.reason}`, 3000);
+                        console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
                     }
                     break;
             }
