@@ -708,19 +708,19 @@ function isChunkMutationAllowed(chunkKey, username) {
     
     const now = Date.now();
     
-    // Check if ownership is pending (immature IPFS claim)
+    // Check if ownership is pending (immature IPFS claim < 30 days)
     if (ownership.pending) {
-        console.log(`[Ownership] Chunk ${normalized} denied: claim immature (<30d)`);
-        return false;
+        console.log(`[Ownership] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
+        return true; // Pending chunks are editable by anyone
     }
     
-    // Check if ownership has expired
+    // Check if ownership has expired (> 1 year)
     if (ownership.expiryDate && now > ownership.expiryDate) {
-        console.log(`[Ownership] Chunk ${normalized} denied: claim expired (>1y)`);
-        return false;
+        console.log(`[Ownership] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
+        return true; // Expired chunks are editable by anyone
     }
     
-    // Check if owned by different user
+    // Check if owned by different user (mature ownership 30d-1y)
     if (ownership.username !== username) {
         console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
         return false;

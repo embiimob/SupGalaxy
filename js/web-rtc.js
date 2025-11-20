@@ -1053,6 +1053,45 @@ function setupDataChannel(e, t) {
                                 getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
                             }
                             
+                            // Renew or establish ownership on edit
+                            const normalized = placeChunkKey.replace(/^#/, "");
+                            const ownership = OWNED_CHUNKS.get(normalized);
+                            const now = Date.now();
+                            
+                            if (!ownership || ownership.type === 'ipfs') {
+                                // Check if this is not a home spawn chunk
+                                const parsed = parseChunkKey(normalized);
+                                let isHomeSpawn = false;
+                                if (parsed && spawnChunks.size > 0) {
+                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                        if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                            isHomeSpawn = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (!isHomeSpawn) {
+                                    if (!ownership) {
+                                        // No ownership exists - establish new ownership for 1 year
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.username === s.username) {
+                                        // Owner is editing - renew for 1 year from now
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.expiryDate && now > ownership.expiryDate) {
+                                        // Previous ownership expired - establish new ownership
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.pending) {
+                                        // Pending ownership - anyone can claim by editing
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
+                                    }
+                                }
+                            }
+                            
                             // Broadcast to all clients
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
@@ -1130,6 +1169,45 @@ function setupDataChannel(e, t) {
                             
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
                             if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
+                            
+                            // Renew or establish ownership on edit
+                            const normalized = breakChunkKey.replace(/^#/, "");
+                            const ownership = OWNED_CHUNKS.get(normalized);
+                            const now = Date.now();
+                            
+                            if (!ownership || ownership.type === 'ipfs') {
+                                // Check if this is not a home spawn chunk
+                                const parsed = parseChunkKey(normalized);
+                                let isHomeSpawn = false;
+                                if (parsed && spawnChunks.size > 0) {
+                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                        if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                            isHomeSpawn = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (!isHomeSpawn) {
+                                    if (!ownership) {
+                                        // No ownership exists - establish new ownership for 1 year
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.username === s.username) {
+                                        // Owner is editing - renew for 1 year from now
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.expiryDate && now > ownership.expiryDate) {
+                                        // Previous ownership expired - establish new ownership
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
+                                    } else if (ownership.pending) {
+                                        // Pending ownership - anyone can claim by editing
+                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
+                                    }
+                                }
+                            }
                             
                             // Send inventory update to the breaker
                             const peer = peers.get(s.username);
