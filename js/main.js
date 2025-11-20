@@ -2059,7 +2059,38 @@ async function startGame() {
     c && (c.innerText = player.score), initServers(), worker.postMessage({
         type: "sync_processed",
         ids: Array.from(processedMessages)
-    }), startWorker(), setInterval(pollServers, POLL_INTERVAL), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
+    }), startWorker(), setInterval(pollServers, POLL_INTERVAL), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
+}
+
+function scanExpiredOwnership() {
+    if (!isHost) return; // Only host scans for expired ownership
+    
+    const now = Date.now();
+    const expired = [];
+    
+    for (const [chunkKey, ownership] of OWNED_CHUNKS.entries()) {
+        // Only scan IPFS ownership (home spawns never expire)
+        if (ownership.type === 'ipfs' && ownership.expiryDate && now > ownership.expiryDate) {
+            expired.push(chunkKey);
+        }
+        
+        // Update pending status if maturity period has passed
+        if (ownership.pending && ownership.claimDate && now - ownership.claimDate >= IPFS_MATURITY_PERIOD) {
+            ownership.pending = false;
+            console.log(`[Ownership] Chunk ${chunkKey} claim matured for ${ownership.username}`);
+        }
+    }
+    
+    // Remove expired ownerships
+    for (const chunkKey of expired) {
+        const ownership = OWNED_CHUNKS.get(chunkKey);
+        OWNED_CHUNKS.delete(chunkKey);
+        console.log(`[Ownership] Expired IPFS ownership removed for chunk ${chunkKey} (was owned by ${ownership.username})`);
+    }
+    
+    if (expired.length > 0) {
+        console.log(`[Ownership] Scanned ownership: ${expired.length} expired claims removed, ${OWNED_CHUNKS.size} active claims remaining`);
+    }
 }
 
 function setupEmojiPicker() {
