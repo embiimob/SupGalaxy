@@ -300,20 +300,41 @@ function setupDataChannel(e, t) {
                 e.send(JSON.stringify(magicianStonesSync));
             }
             
-            // Sync spawn chunks for all players in the current world to the newly connected peer
-            console.log(`[WEBRTC] Host syncing spawn chunks to ${t} for world ${worldName}`);
-            for (const [spawnUser, spawnData] of spawnChunks) {
-                if (spawnData.world === worldName) {
-                    e.send(JSON.stringify({
-                        type: 'spawn_chunk_sync',
-                        username: spawnUser,
-                        world: spawnData.world,
-                        cx: spawnData.cx,
-                        cz: spawnData.cz,
-                        spawn: spawnData.spawn
-                    }));
-                    console.log(`[Ownership] Sent spawn sync for ${spawnUser} to new peer ${t}`);
+            // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
+            if (isHost) {
+                console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${worldName}`);
+                for (const [peerName, peer] of peers.entries()) {
+                    const playerSpawn = calculateSpawnPoint(peerName + "@" + worldName);
+                    const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
+                    const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
+                    
+                    spawnChunks.set(peerName, {
+                        cx: spawnCx,
+                        cz: spawnCz,
+                        username: peerName,
+                        world: worldName,
+                        spawn: playerSpawn
+                    });
+                    
+                    const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
+                    updateChunkOwnership(playerHomeChunkKey, peerName, Date.now(), 'home');
                 }
+                // Also recalculate for the host itself
+                const hostSpawn = calculateSpawnPoint(userName + "@" + worldName);
+                const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                
+                spawnChunks.set(userName, {
+                    cx: hostSpawnCx,
+                    cz: hostSpawnCz,
+                    username: userName,
+                    world: worldName,
+                    spawn: hostSpawn
+                });
+                
+                const hostHomeChunkKey = makeChunkKey(worldName, hostSpawnCx, hostSpawnCz);
+                updateChunkOwnership(hostHomeChunkKey, userName, Date.now(), 'home');
+                console.log(`[Ownership] Host recalculated spawn chunks for all peers in world ${worldName}`);
             }
 
             console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
@@ -941,46 +962,45 @@ function setupDataChannel(e, t) {
                             updateChunkOwnership(playerHomeChunkKey, s.username, Date.now(), 'home');
                             console.log(`[Ownership] Host calculated spawn for ${s.username} switching to world ${clientWorld}: chunk ${playerHomeChunkKey}`);
                             
-                            // Broadcast spawn chunk info to all other clients in the same world
-                            const spawnSyncMsg = JSON.stringify({
-                                type: 'spawn_chunk_sync',
-                                username: s.username,
-                                world: clientWorld,
-                                cx: spawnCx,
-                                cz: spawnCz,
-                                spawn: playerSpawn
-                            });
+                            // Recalculate spawn chunks for ALL peers in this world
+                            console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${clientWorld}`);
                             for (const [peerName, otherPeer] of peers.entries()) {
-                                if (peerName !== s.username && otherPeer.dc && otherPeer.dc.readyState === 'open') {
-                                    const peerWorld = userPositions[peerName] ? userPositions[peerName].world : null;
-                                    if (peerWorld === clientWorld) {
-                                        otherPeer.dc.send(spawnSyncMsg);
-                                        console.log(`[Ownership] Sent spawn sync for ${s.username} to ${peerName} in world ${clientWorld}`);
-                                    }
+                                const peerWorld = userPositions[peerName] ? userPositions[peerName].world : null;
+                                if (peerWorld === clientWorld) {
+                                    const peerSpawn = calculateSpawnPoint(peerName + "@" + clientWorld);
+                                    const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
+                                    const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
+                                    
+                                    spawnChunks.set(peerName, {
+                                        cx: peerSpawnCx,
+                                        cz: peerSpawnCz,
+                                        username: peerName,
+                                        world: clientWorld,
+                                        spawn: peerSpawn
+                                    });
+                                    
+                                    const peerChunkKey = makeChunkKey(clientWorld, peerSpawnCx, peerSpawnCz);
+                                    updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
                                 }
                             }
+                            // Also recalculate for host if in same world
+                            if (worldName === clientWorld) {
+                                const hostSpawn = calculateSpawnPoint(userName + "@" + clientWorld);
+                                const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
+                                const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
+                                
+                                spawnChunks.set(userName, {
+                                    cx: hostSpawnCx,
+                                    cz: hostSpawnCz,
+                                    username: userName,
+                                    world: clientWorld,
+                                    spawn: hostSpawn
+                                });
+                                
+                                const hostChunkKey = makeChunkKey(clientWorld, hostSpawnCx, hostSpawnCz);
+                                updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
+                            }
                         }
-                    } else {
-                        // Client receives world_switch notification from host (spawn info for other clients)
-                        // This case is for when the host wants to sync spawn info to clients
-                        // But actually, we'll use a dedicated spawn_chunk_sync message instead
-                    }
-                    break;
-                case 'spawn_chunk_sync':
-                    // Client receives spawn chunk information about another player
-                    if (!isHost && s.username && s.world && s.cx !== undefined && s.cz !== undefined) {
-                        console.log(`[Ownership] Client received spawn sync for ${s.username} in world ${s.world} at chunk (${s.cx}, ${s.cz})`);
-                        spawnChunks.set(s.username, {
-                            cx: s.cx,
-                            cz: s.cz,
-                            username: s.username,
-                            world: s.world,
-                            spawn: s.spawn
-                        });
-                        // Also update chunk ownership locally
-                        const chunkKey = makeChunkKey(s.world, s.cx, s.cz);
-                        updateChunkOwnership(chunkKey, s.username, Date.now(), 'home');
-                        console.log(`[Ownership] Client registered home spawn chunk ${chunkKey} for ${s.username}`);
                     }
                     break;
                 case 'request_block_place':
