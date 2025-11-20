@@ -1,13 +1,19 @@
+/**
+ * Audio Player Module
+ * Manages music playback and playlist functionality
+ * @module audio-player
+ */
+
 // Music Player state
-var musicPlaylist = [];
-var currentTrackIndex = 0;
-var musicAudioElement = new Audio();
-var isMusicPlaying = false;
-var isMuted = false;
-var musicCurrentPage = 1;
-var previewAudio = new Audio();
-var currentPreviewUrl = null;
-var showingPlaylist = false;
+let musicPlaylist = [];
+let currentTrackIndex = 0;
+const musicAudioElement = new Audio();
+let isMusicPlaying = false;
+let isMuted = false;
+let musicCurrentPage = 1;
+const previewAudio = new Audio();
+let currentPreviewUrl = null;
+let showingPlaylist = false;
 
 // Music Player Logic
 function initMusicPlayer() {

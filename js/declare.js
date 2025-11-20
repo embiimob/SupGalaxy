@@ -1,28 +1,23 @@
-var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
-    knownUsers = new Map,
-    keywordCache = new Map,
-    processedMessages = new Set,
-    isInitialLoad = !1,
-    CHUNK_SIZE = 16,
-    MAX_HEIGHT = 256,
-    SEA_LEVEL = 16,
-    MAP_SIZE = 16384,
-    BLOCK_AIR = 0,
-    MASTER_WORLD_KEY = "MCWorlds",
-    PENDING_PERIOD = 2592e6,
-    OWNERSHIP_EXPIRY = 31536e6,
-    IPFS_MATURITY_PERIOD = 30 * 24 * 60 * 60 * 1000,
-    IPFS_MAX_OWNERSHIP_PERIOD = 365 * 24 * 60 * 60 * 1000,
-    API_CALLS_PER_SECOND = 3,
-    POLL_RADIUS = 2,
-    INITIAL_LOAD_RADIUS = 9,
-    LOAD_RADIUS = 3,
-    currentLoadRadius = INITIAL_LOAD_RADIUS,
-    CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v0.5.7-beta", // Contributed to by Jules
-    POLL_INTERVAL = 3e4,
-    MAX_PEERS = 10,
-    BLOCKS = {
+// Global rendering and scene objects
+let scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture;
+
+// Data structures
+const knownWorlds = new Map();
+const knownUsers = new Map();
+const keywordCache = new Map();
+const processedMessages = new Set();
+let isInitialLoad = false;
+
+// Import constants from CONFIG module (defined in config.js)
+const { CHUNK_SIZE, MAX_HEIGHT, SEA_LEVEL, MAP_SIZE, BLOCK_AIR, MASTER_WORLD_KEY } = CONFIG;
+const { PENDING_PERIOD, OWNERSHIP_EXPIRY, IPFS_MATURITY_PERIOD, IPFS_MAX_OWNERSHIP_PERIOD } = CONFIG;
+const { API_CALLS_PER_SECOND, POLL_RADIUS, INITIAL_LOAD_RADIUS, LOAD_RADIUS } = CONFIG;
+const { CHUNKS_PER_SIDE, VERSION, POLL_INTERVAL, MAX_PEERS } = CONFIG;
+
+// Current load radius (mutable state)
+let currentLoadRadius = INITIAL_LOAD_RADIUS;
+
+const BLOCKS = {
         1: {
             name: "Bedrock",
             color: "#0b0b0b",
@@ -646,15 +641,19 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     activeEruptions = [],
     hiveLocations = [],
     flowerLocations = [];
-var crackTexture, damagedBlocks = new Map,
-    crackMeshes = new THREE.Group,
-    blockParticles = [];
-const maxAudioDistance = 32,
-    rolloffFactor = 2;
-var volcanoes = [],
-    initialTeleportLocation = null,
-    magicianStonePlacement = null,
-    magicianStones = {};
+
+let crackTexture;
+const damagedBlocks = new Map();
+const crackMeshes = new THREE.Group();
+const blockParticles = [];
+
+const maxAudioDistance = 32;
+const rolloffFactor = 2;
+
+let volcanoes = [];
+let initialTeleportLocation = null;
+let magicianStonePlacement = null;
+const magicianStones = {};
 const lightManager = {
     lights: [],
     poolSize: 8,

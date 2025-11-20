@@ -1,11 +1,17 @@
+/**
+ * Video Player Module
+ * Manages video playback and playlist functionality
+ * @module video-player
+ */
+
 // Video Player state
-var videoPlaylist = [];
-var currentVideoIndex = 0;
-var videoElement = document.getElementById('videoElement');
-var isVideoPlaying = false;
-var isVideoMuted = true;
-var videoCurrentPage = 1;
-var showingVideoPlaylist = false;
+let videoPlaylist = [];
+let currentVideoIndex = 0;
+let videoElement = document.getElementById('videoElement');
+let isVideoPlaying = false;
+let isVideoMuted = true;
+let videoCurrentPage = 1;
+let showingVideoPlaylist = false;
 
 
 // Video Player Logic

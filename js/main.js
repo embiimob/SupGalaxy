@@ -383,7 +383,8 @@ function hexToRgb(e) {
     return e = e.replace("#", ""), [parseInt(e.substring(0, 2), 16), parseInt(e.substring(2, 4), 16), parseInt(e.substring(4, 6), 16)]
 }
 
-var minimapCtx, trashIndex = -1;
+let minimapCtx;
+let trashIndex = -1;
 
 function attemptCraft(e) {
     const t = {},
@@ -1634,7 +1635,7 @@ document.getElementById("trashCancel").addEventListener("click", (function () {
 })), document.getElementById("trashOk").addEventListener("click", (function () {
     trashIndex >= 0 && (INVENTORY[trashIndex] = null, updateHotbarUI(), addMessage("Item trashed")), document.getElementById("trashConfirm").style.display = "none", trashIndex = -1, this.blur()
 }));
-var keys = {};
+const keys = {};
 
 function registerKeyEvents() {
     function e(e) {

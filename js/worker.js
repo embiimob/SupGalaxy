@@ -65,7 +65,7 @@ function selectArchetype(seed) {
     return archetype;
 }
 
-var worldArchetypes = new Map();
+const worldArchetypes = new Map();
 const BLOCKS = {
         1: { name: 'Bedrock', color: '#0b0b0b' }, 2: { name: 'Grass', color: '#3fb34f' },
         3: { name: 'Dirt', color: '#7a4f29' }, 4: { name: 'Stone', color: '#9aa0a6' },
@@ -472,17 +472,18 @@ function generateChunkData(chunkKey) {
         return chunkData;
 }
 
-var profileByURNCache = new Map();
-var profileByAddressCache = new Map();
-var keywordByAddressCache = new Map();
-var addressByKeywordCache = new Map();
-var processedMessages = new Set();
-var API_CALLS_PER_SECOND = 3;
-var apiDelay = 350;
+const profileByURNCache = new Map();
+const profileByAddressCache = new Map();
+const keywordByAddressCache = new Map();
+const addressByKeywordCache = new Map();
+const processedMessages = new Set();
+const API_CALLS_PER_SECOND = 3;
+const apiDelay = 350;
+
 async function fetchData(url) {
         try {
             await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch(url);
+            const response = await fetch(url);
             return response.ok ? await response.json() : null;
         } catch (e) {
             console.error('[Worker] Fetch error:', url, e);

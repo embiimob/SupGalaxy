@@ -1,23 +1,31 @@
-var peers = new Map,
-    pendingOffers = [],
-    connectionAttempts = new Map;
-window.hasPolledHost = !1;
-var knownServers = [],
-    isHost = !1,
-    isConnecting = !1,
-    answerPollingIntervals = new Map,
-    offerPollingIntervals = new Map,
-    localAudioStream = null,
-    userAudioStreams = new Map,
-    localVideoStream = null,
-    userVideoStreams = new Map;
-let proximityVideoUsers = [],
-    currentProximityVideoIndex = 0,
-    lastProximityVideoChangeTime = 0;
-var userPositions = {},
-    playerAvatars = new Map,
-    partialIPFSUpdates = new Map,
-    syncedWorlds = new Set;
+/**
+ * WebRTC Module
+ * Handles peer-to-peer connections and multiplayer functionality
+ * @module web-rtc
+ */
+
+const peers = new Map();
+const pendingOffers = [];
+const connectionAttempts = new Map();
+window.hasPolledHost = false;
+
+const knownServers = [];
+let isHost = false;
+let isConnecting = false;
+const answerPollingIntervals = new Map();
+const offerPollingIntervals = new Map();
+let localAudioStream = null;
+const userAudioStreams = new Map();
+let localVideoStream = null;
+const userVideoStreams = new Map();
+let proximityVideoUsers = [];
+let currentProximityVideoIndex = 0;
+let lastProximityVideoChangeTime = 0;
+
+const userPositions = {};
+const playerAvatars = new Map();
+const partialIPFSUpdates = new Map();
+const syncedWorlds = new Set();
 
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{

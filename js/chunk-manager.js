@@ -679,7 +679,8 @@ function checkChunkOwnership(chunkKey, username) {
     return isChunkMutationAllowed(chunkKey, username);
 }
 
-var skyProps, avatarGroup;
+let skyProps;
+let avatarGroup;
 
 function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, blockDate) {
     try {
