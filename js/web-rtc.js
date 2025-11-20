@@ -914,9 +914,22 @@ function setupDataChannel(e, t) {
                             console.log(`[Ownership] Block place allowed for ${s.username} at chunk ${placeChunkKey}`);
                         } else {
                             // Denied: send denial message
-                            const ownership = OWNED_CHUNKS.get(placeChunkKey);
                             let reason = 'Unknown';
-                            if (ownership) {
+                            const ownership = OWNED_CHUNKS.get(placeChunkKey);
+                            
+                            // Check if it's a spawn chunk
+                            const parsed = parseChunkKey(placeChunkKey);
+                            if (parsed && spawnChunks.size > 0) {
+                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If not spawn chunk, check OWNED_CHUNKS
+                            if (reason === 'Unknown' && ownership) {
                                 if (ownership.pending) {
                                     reason = 'Claim immature (<30d)';
                                 } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {
@@ -989,9 +1002,22 @@ function setupDataChannel(e, t) {
                             console.log(`[Ownership] Block break allowed for ${s.username} at chunk ${breakChunkKey}`);
                         } else {
                             // Denied: send denial message
-                            const ownership = OWNED_CHUNKS.get(breakChunkKey);
                             let reason = 'Unknown';
-                            if (ownership) {
+                            const ownership = OWNED_CHUNKS.get(breakChunkKey);
+                            
+                            // Check if it's a spawn chunk
+                            const parsed = parseChunkKey(breakChunkKey);
+                            if (parsed && spawnChunks.size > 0) {
+                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If not spawn chunk, check OWNED_CHUNKS
+                            if (reason === 'Unknown' && ownership) {
                                 if (ownership.pending) {
                                     reason = 'Claim immature (<30d)';
                                 } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {

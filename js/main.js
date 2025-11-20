@@ -1179,6 +1179,15 @@ function removeBlockAt(e, t, o, breaker) {
     const n = BLOCKS[a];
     if (!n || n.strength > 5) return void addMessage("Cannot break that block");
 
+    // Check ownership FIRST before showing any visual feedback
+    var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
+    var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
+    var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+    if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+        console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
+        return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
+    }
+
     const r = `${e},${t},${o}`;
     let s = damagedBlocks.get(r) || {
         hits: 0,
@@ -1237,11 +1246,6 @@ function removeBlockAt(e, t, o, breaker) {
             crackMeshes.remove(s.mesh);
             disposeObject(s.mesh);
         }
-
-        var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
-        var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
-        var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-        if (!checkChunkOwnership(chunkKey, breaker || userName)) return void addMessage("Cannot break block in chunk " + chunkKey + ": owned by another user");
 
         // Host-authoritative: only host mutates directly, clients send requests
         if (isHost || peers.size === 0) {
@@ -2272,6 +2276,21 @@ function switchWorld(newWorldName) {
     }, chunkManager = new ChunkManager(worldSeed), initSky();
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
+    
+    // Assign home spawn ownership for the new world
+    const homeChunkKey = makeChunkKey(worldName, o, a);
+    updateChunkOwnership(homeChunkKey, userName, Date.now(), 'home');
+    console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName} after world switch`);
+    
+    // Update spawnChunks map with new world data
+    spawnChunks.set(userName, {
+        cx: o,
+        cz: a,
+        username: userName,
+        world: worldName,
+        spawn: t
+    });
+    
     chunkManager.preloadChunks(o, a, LOAD_RADIUS), addMessage(`Switched to world: ${worldName}`, 4e3)
 
     for (const [peerUsername, peer] of peers.entries()) {

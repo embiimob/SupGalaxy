@@ -633,10 +633,11 @@ function isChunkMutationAllowed(chunkKey, username) {
         for (const [spawnUser, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
             if (!parsed) continue;
-            if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz) {
-                // This chunk is a home spawn chunk
+            // Check if this is a spawn chunk AND the world matches
+            if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                // This chunk is a home spawn chunk in this world
                 if (spawnUser !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser}`);
+                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser} in world ${parsed.world}`);
                     return false;
                 }
                 return true; // Own home spawn
