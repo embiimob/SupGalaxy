@@ -726,7 +726,7 @@ function createMusicSymbolMesh() {
 }
 
 async function createMagicianStoneScreen(stoneData) {
-    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, distance } = stoneData;
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance } = stoneData;
     const key = `${x},${y},${z}`;
 
     // Remove existing screen if it exists
@@ -744,9 +744,136 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
+    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
+    
+    // Handle GLB/GLTF files
+    if (['glb', 'gltf'].includes(fileExtension)) {
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            url,
+            function(gltf) {
+                const model = gltf.scene;
+                
+                // Calculate bounding box and scale to fit within width x height
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+                
+                // Scale to fit the bounding box defined by width and height
+                const scaleX = width / size.x;
+                const scaleY = height / size.y;
+                const scaleZ = width / size.z; // Use width for depth as well
+                const scale = Math.min(scaleX, scaleY, scaleZ);
+                
+                model.scale.multiplyScalar(scale);
+                
+                // Center the model at origin after scaling
+                model.position.sub(center.multiplyScalar(scale));
+                
+                // Setup animations if they exist
+                let mixer = null;
+                if (gltf.animations && gltf.animations.length > 0) {
+                    mixer = new THREE.AnimationMixer(model);
+                    // Play all animations if autoplayAnimation is enabled
+                    if (autoplayAnimation !== false) { // Default to true if not specified
+                        gltf.animations.forEach(clip => {
+                            const action = mixer.clipAction(clip);
+                            action.loop = loop ? THREE.LoopRepeat : THREE.LoopOnce;
+                            action.play();
+                        });
+                    }
+                }
+                
+                // Create a container group for positioning
+                const screenMesh = new THREE.Group();
+                screenMesh.add(model);
+                
+                // Orientation and Position
+                let playerDirection;
+                if (stoneData.direction) {
+                    playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
+                } else {
+                    // Fallback for old stones saved without direction
+                    playerDirection = new THREE.Vector3();
+                    camera.getWorldDirection(playerDirection);
+                    playerDirection.y = 0;
+                    playerDirection.normalize();
+                }
+
+                const forward = playerDirection.clone();
+                const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+                const up = new THREE.Vector3(0, 1, 0);
+
+                const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
+                    .add(right.multiplyScalar(offsetX))
+                    .add(up.multiplyScalar(offsetY))
+                    .add(forward.multiplyScalar(offsetZ));
+
+                screenMesh.position.copy(position);
+
+                // Set rotation to face the player direction
+                const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+                screenMesh.lookAt(lookAtTarget);
+
+                magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false };
+                scene.add(screenMesh);
+            },
+            function(progress) {
+                // Loading progress
+            },
+            function(error) {
+                console.error('Error loading GLB/GLTF for in-world display:', error);
+                // Create an error placeholder
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 128;
+                const context = canvas.getContext('2d');
+                context.fillStyle = '#111';
+                context.fillRect(0, 0, 256, 128);
+                context.fillStyle = '#ff6666';
+                context.font = '16px Arial';
+                context.textAlign = 'center';
+                context.fillText('Failed to load 3D model', 128, 64);
+                const texture = new THREE.CanvasTexture(canvas);
+                
+                const planeGeometry = new THREE.PlaneGeometry(width, height);
+                const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, map: texture });
+                const screenMesh = new THREE.Mesh(planeGeometry, material);
+                
+                // Position and orient the error placeholder
+                let playerDirection;
+                if (stoneData.direction) {
+                    playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
+                } else {
+                    playerDirection = new THREE.Vector3();
+                    camera.getWorldDirection(playerDirection);
+                    playerDirection.y = 0;
+                    playerDirection.normalize();
+                }
+
+                const forward = playerDirection.clone();
+                const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+                const up = new THREE.Vector3(0, 1, 0);
+
+                const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)
+                    .add(right.multiplyScalar(offsetX))
+                    .add(up.multiplyScalar(offsetY))
+                    .add(forward.multiplyScalar(offsetZ));
+
+                screenMesh.position.copy(position);
+                const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+                screenMesh.lookAt(lookAtTarget);
+
+                magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+                scene.add(screenMesh);
+            }
+        );
+        return;
+    }
+
+    // Original code for non-GLB/GLTF files
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
-    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
@@ -2751,7 +2878,7 @@ function gameLoop(e) {
         }
         }
 
-        // Magician stone media playback logic
+        // Magician stone media playback and animation logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
         for (const key in magicianStones) {
             if (Object.hasOwnProperty.call(magicianStones, key)) {
@@ -2759,6 +2886,11 @@ function gameLoop(e) {
                 const stonePosition = new THREE.Vector3(stone.x, stone.y, stone.z);
                 const distance = playerPosition.distanceTo(stonePosition);
                 const mediaElement = stone.videoElement || stone.audioElement;
+
+                // Update animation mixer if exists
+                if (stone.mixer) {
+                    stone.mixer.update(t);
+                }
 
                 if (mediaElement && stone.autoplay) {
                     if (distance <= stone.distance) {
@@ -3014,8 +3146,27 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneOffsetZ').value = '0';
     document.getElementById('magicianStoneLoop').checked = false;
     document.getElementById('magicianStoneAutoplay').checked = false;
+    document.getElementById('magicianStoneAutoplayAnimation').checked = true;
     document.getElementById('magicianStoneDistance').value = '10';
     document.getElementById('magicianStonePreview').innerHTML = '<span>URL Preview</span>';
+    
+    // Clean up preview renderer if it exists
+    if (window.magicianStonePreviewRenderer) {
+        window.magicianStonePreviewRenderer.dispose();
+        delete window.magicianStonePreviewRenderer;
+    }
+    if (window.magicianStonePreviewScene) {
+        delete window.magicianStonePreviewScene;
+    }
+    if (window.magicianStonePreviewCamera) {
+        delete window.magicianStonePreviewCamera;
+    }
+    if (window.magicianStonePreviewModel) {
+        delete window.magicianStonePreviewModel;
+    }
+    if (window.magicianStonePreviewMixer) {
+        delete window.magicianStonePreviewMixer;
+    }
 }
 
 document.getElementById('magicianStoneCancel').addEventListener('click', function() {
@@ -3082,6 +3233,15 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
     let url = this.value;
     const previewContainer = document.getElementById('magicianStonePreview');
     previewContainer.innerHTML = ''; // Clear previous preview
+    
+    // Clean up any existing preview renderer
+    if (window.magicianStonePreviewRenderer) {
+        window.magicianStonePreviewRenderer.dispose();
+        delete window.magicianStonePreviewRenderer;
+    }
+    if (window.magicianStonePreviewScene) {
+        delete window.magicianStonePreviewScene;
+    }
 
     if (url.startsWith('IPFS:')) {
         previewContainer.innerHTML = '<span>Resolving IPFS link...</span>';
@@ -3115,6 +3275,99 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         audio.src = url;
         audio.controls = true;
         previewContainer.appendChild(audio);
+    } else if (['glb', 'gltf'].includes(fileExtension)) {
+        // Create a 3D preview for GLB/GLTF files
+        previewContainer.innerHTML = '<canvas id="glbPreviewCanvas" style="width: 100%; height: 200px;"></canvas>';
+        const canvas = document.getElementById('glbPreviewCanvas');
+        
+        try {
+            const previewScene = new THREE.Scene();
+            previewScene.background = new THREE.Color(0x222222);
+            
+            const previewCamera = new THREE.PerspectiveCamera(50, canvas.clientWidth / 200, 0.1, 1000);
+            previewCamera.position.set(2, 2, 2);
+            previewCamera.lookAt(0, 0, 0);
+            
+            const previewRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            previewRenderer.setSize(canvas.clientWidth, 200);
+            previewRenderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            previewScene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            previewScene.add(directionalLight);
+            
+            // Load the GLB/GLTF model
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                url,
+                function(gltf) {
+                    const model = gltf.scene;
+                    
+                    // Center and scale the model
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 2 / maxDim;
+                    
+                    model.position.sub(center);
+                    model.scale.multiplyScalar(scale);
+                    
+                    previewScene.add(model);
+                    
+                    // Store for animation
+                    window.magicianStonePreviewModel = model;
+                    window.magicianStonePreviewMixer = gltf.animations.length > 0 ? new THREE.AnimationMixer(model) : null;
+                    if (window.magicianStonePreviewMixer && gltf.animations.length > 0) {
+                        const action = window.magicianStonePreviewMixer.clipAction(gltf.animations[0]);
+                        action.play();
+                    }
+                    
+                    previewContainer.innerHTML = '';
+                    previewContainer.appendChild(canvas);
+                },
+                function(progress) {
+                    // Loading progress
+                },
+                function(error) {
+                    console.error('Error loading GLB/GLTF:', error);
+                    previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to load 3D model</span>';
+                }
+            );
+            
+            // Animation loop for preview
+            window.magicianStonePreviewRenderer = previewRenderer;
+            window.magicianStonePreviewScene = previewScene;
+            window.magicianStonePreviewCamera = previewCamera;
+            
+            const clock = new THREE.Clock();
+            function animatePreview() {
+                if (!window.magicianStonePreviewRenderer) return;
+                
+                const delta = clock.getDelta();
+                
+                // Rotate the model
+                if (window.magicianStonePreviewModel) {
+                    window.magicianStonePreviewModel.rotation.y += 0.01;
+                }
+                
+                // Update animations
+                if (window.magicianStonePreviewMixer) {
+                    window.magicianStonePreviewMixer.update(delta);
+                }
+                
+                window.magicianStonePreviewRenderer.render(window.magicianStonePreviewScene, window.magicianStonePreviewCamera);
+                requestAnimationFrame(animatePreview);
+            }
+            animatePreview();
+            
+        } catch (error) {
+            console.error('Error creating 3D preview:', error);
+            previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to create 3D preview</span>';
+        }
     } else {
         previewContainer.innerHTML = '<span>URL Preview</span>';
     }
@@ -3139,6 +3392,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         offsetZ: parseFloat(document.getElementById('magicianStoneOffsetZ').value),
         loop: document.getElementById('magicianStoneLoop').checked,
         autoplay: document.getElementById('magicianStoneAutoplay').checked,
+        autoplayAnimation: document.getElementById('magicianStoneAutoplayAnimation').checked,
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
         direction: magicianStonePlacement.direction // Use the direction saved on placement
     };
