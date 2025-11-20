@@ -60,7 +60,19 @@ async function applySaveFile(e, t, o) {
                     i = r.changes;
                 chunkManager.applyDeltasToChunk(s, i)
             }
-        populateSpawnChunks(), spawnPoint = {
+        populateSpawnChunks(), 
+        
+        // Add current player's home chunk to spawnChunks
+        var homeChunk = calculateHomeChunk(worldSeed, userName);
+        spawnChunks.set(userName, {
+            cx: homeChunk.chunkX,
+            cz: homeChunk.chunkZ,
+            username: userName,
+            world: worldName
+        });
+        console.log(`[OWNERSHIP] Set home chunk for ${userName} at (${homeChunk.chunkX}, ${homeChunk.chunkZ})`);
+        
+        spawnPoint = {
             x: player.x,
             y: player.y,
             z: player.z
@@ -1825,14 +1837,14 @@ function updateLoginUI() {
 async function populateSpawnChunks() {
     for (var e of spawnChunks) {
         var t = e[0],
-            o = e[1],
-            a = calculateSpawnPoint(t + "@" + o.world);
+            o = e[1];
+        // Use deterministic home chunk calculation
+        var homeChunk = calculateHomeChunk(o.world || worldName, t);
         spawnChunks.set(t, {
-            cx: Math.floor(a.x / CHUNK_SIZE),
-            cz: Math.floor(a.z / CHUNK_SIZE),
-            username: o.username,
-            world: o.world,
-            spawn: a
+            cx: homeChunk.chunkX,
+            cz: homeChunk.chunkZ,
+            username: t,
+            world: o.world || worldName
         })
     }
 }
@@ -1878,7 +1890,19 @@ async function startGame() {
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), 
+    
+    // Add current player's home chunk to spawnChunks
+    var homeChunk = calculateHomeChunk(worldSeed, userName);
+    spawnChunks.set(userName, {
+        cx: homeChunk.chunkX,
+        cz: homeChunk.chunkZ,
+        username: userName,
+        world: worldName
+    });
+    console.log(`[OWNERSHIP] Set home chunk for ${userName} at (${homeChunk.chunkX}, ${homeChunk.chunkZ})`);
+    
+    populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var s = calculateSpawnPoint(r);
     player.x = s.x, player.y = chunkManager.getSurfaceY(s.x, s.z) + 1, player.z = s.z, spawnPoint = {
         x: player.x,

@@ -300,6 +300,24 @@ function setupDataChannel(e, t) {
                 e.send(JSON.stringify(magicianStonesSync));
             }
 
+            // Sync owned chunks (home spawns) to new player
+            console.log(`[OWNERSHIP] Host sending owned chunks to ${t}`);
+            const ownedChunks = [];
+            for (const [username, chunkData] of spawnChunks.entries()) {
+                ownedChunks.push({
+                    player: username,
+                    chunkX: chunkData.cx,
+                    chunkZ: chunkData.cz,
+                    world: chunkData.world || worldName,
+                    reason: 'home'
+                });
+            }
+            e.send(JSON.stringify({
+                type: "ownedChunks:bulk",
+                worldId: worldName,
+                ownedChunks: ownedChunks
+            }));
+
             console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
             for (const t of mobs) e.send(JSON.stringify({
                 type: "mob_update",
@@ -333,11 +351,48 @@ function setupDataChannel(e, t) {
                     break;
                 case "new_player":
                     const i = s.username;
-                    i === userName || peers.has(i) || (addMessage(`${i} has joined!`), playerAvatars.has(i) || createAndSetupAvatar(i, !1), peers.has(i) || peers.set(i, {
+                    if (i === userName || peers.has(i)) break;
+                    
+                    addMessage(`${i} has joined!`);
+                    playerAvatars.has(i) || createAndSetupAvatar(i, !1);
+                    peers.has(i) || peers.set(i, {
                         pc: null,
                         dc: null,
                         address: null
-                    }), updateHudButtons());
+                    });
+                    
+                    // Add new player's home chunk
+                    const newPlayerHomeChunk = calculateHomeChunk(worldSeed, i);
+                    spawnChunks.set(i, {
+                        cx: newPlayerHomeChunk.chunkX,
+                        cz: newPlayerHomeChunk.chunkZ,
+                        username: i,
+                        world: worldName
+                    });
+                    console.log(`[OWNERSHIP] Added home chunk for new player ${i} at (${newPlayerHomeChunk.chunkX}, ${newPlayerHomeChunk.chunkZ})`);
+                    
+                    // If host, broadcast the new chunk ownership to all other clients
+                    if (isHost) {
+                        const updateMsg = JSON.stringify({
+                            type: "ownedChunks:update",
+                            worldId: worldName,
+                            ownedChunks: [{
+                                player: i,
+                                chunkX: newPlayerHomeChunk.chunkX,
+                                chunkZ: newPlayerHomeChunk.chunkZ,
+                                world: worldName,
+                                action: 'add',
+                                reason: 'home'
+                            }]
+                        });
+                        for (const [peerName, peer] of peers.entries()) {
+                            if (peerName !== i && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(updateMsg);
+                            }
+                        }
+                    }
+                    
+                    updateHudButtons();
                     break;
                 case "world_sync":
                     if (!isHost) {
@@ -811,6 +866,40 @@ function setupDataChannel(e, t) {
                                 createMagicianStoneScreen(s.stones[key]);
                             }
                         }
+                    }
+                    break;
+                case "ownedChunks:bulk":
+                    // Receive bulk owned chunks update from host
+                    console.log(`[OWNERSHIP] Received bulk owned chunks for world ${s.worldId}`);
+                    if (s.worldId === worldName && s.ownedChunks) {
+                        for (const chunk of s.ownedChunks) {
+                            spawnChunks.set(chunk.player, {
+                                cx: chunk.chunkX,
+                                cz: chunk.chunkZ,
+                                username: chunk.player,
+                                world: chunk.world
+                            });
+                        }
+                        console.log(`[OWNERSHIP] Updated ${s.ownedChunks.length} owned chunks`);
+                    }
+                    break;
+                case "ownedChunks:update":
+                    // Receive incremental owned chunks update
+                    console.log(`[OWNERSHIP] Received owned chunks update for world ${s.worldId}`);
+                    if (s.worldId === worldName && s.ownedChunks) {
+                        for (const chunk of s.ownedChunks) {
+                            if (chunk.action === 'add') {
+                                spawnChunks.set(chunk.player, {
+                                    cx: chunk.chunkX,
+                                    cz: chunk.chunkZ,
+                                    username: chunk.player,
+                                    world: chunk.world
+                                });
+                            } else if (chunk.action === 'remove') {
+                                spawnChunks.delete(chunk.player);
+                            }
+                        }
+                        console.log(`[OWNERSHIP] Processed ${s.ownedChunks.length} chunk ownership updates`);
                     }
                     break;
                 case "magician_stone_mute":
