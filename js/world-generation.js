@@ -1,4 +1,6 @@
-// This file will contain functions related to procedural world generation.
+// Procedural world generation utilities
+
+// Seeded random number generator
 function makeSeededRandom(e) {
     for (var t = 2166136261, o = 0; o < e.length; o++) t = Math.imul(t ^ e.charCodeAt(o), 16777619) >>> 0;
     return function () {
@@ -8,6 +10,7 @@ function makeSeededRandom(e) {
     }
 }
 
+// Perlin-style noise generator
 function makeNoise(e) {
     makeSeededRandom(e);
     var t = {};
@@ -37,6 +40,7 @@ function makeNoise(e) {
     }
 }
 
+// Fractal Brownian Motion for terrain generation
 function fbm(e, t, o, a, n) {
     for (var r = 0, s = 1, i = 1, l = 0, d = 0; d < a; d++) r += s * e(t * i, o * i), l += s, s *= n, i *= 2;
     return r / l
