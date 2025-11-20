@@ -625,28 +625,91 @@ function applyChunkUpdates(e, t, o, a, sourceUsername) {
     }
 }
 
-function checkChunkOwnership(e, t) {
-    const o = e.replace(/^#/, "");
-    if (spawnChunks.size > 0)
-        for (const [e, a] of spawnChunks) {
-            const n = parseChunkKey(o);
-            if (!n) return !1;
-            if (a.cx === n.cx && a.cz === n.cz && e !== t) return !1
+function isChunkMutationAllowed(chunkKey, username) {
+    const normalized = chunkKey.replace(/^#/, "");
+    
+    // Check home spawn ownership
+    if (spawnChunks.size > 0) {
+        for (const [spawnUser, spawnData] of spawnChunks) {
+            const parsed = parseChunkKey(normalized);
+            if (!parsed) continue;
+            if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz) {
+                // This chunk is a home spawn chunk
+                if (spawnUser !== username) {
+                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser}`);
+                    return false;
+                }
+                return true; // Own home spawn
+            }
         }
-    const a = chunkOwners.get(o);
-    if (!a) return !0;
-    const n = Date.now();
-    return n - a.timestamp > OWNERSHIP_EXPIRY || (!!(a.pending && n - a.timestamp < PENDING_PERIOD) || a.username === t)
+    }
+    
+    // Check OWNED_CHUNKS ownership
+    const ownership = OWNED_CHUNKS.get(normalized);
+    if (!ownership) {
+        return true; // No ownership, free to edit
+    }
+    
+    const now = Date.now();
+    
+    // Check if ownership is pending (immature IPFS claim)
+    if (ownership.pending) {
+        console.log(`[Ownership] Chunk ${normalized} denied: claim immature (<30d)`);
+        return false;
+    }
+    
+    // Check if ownership has expired
+    if (ownership.expiryDate && now > ownership.expiryDate) {
+        console.log(`[Ownership] Chunk ${normalized} denied: claim expired (>1y)`);
+        return false;
+    }
+    
+    // Check if owned by different user
+    if (ownership.username !== username) {
+        console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
+        return false;
+    }
+    
+    // User owns the chunk
+    return true;
 }
-var skyProps, avatarGroup, chunkOwnership = new Map;
 
-function updateChunkOwnership(e, t, o) {
+function checkChunkOwnership(chunkKey, username) {
+    return isChunkMutationAllowed(chunkKey, username);
+}
+
+var skyProps, avatarGroup;
+
+function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, blockDate) {
     try {
-        chunkOwnership.set(e, {
-            username: t,
-            timestamp: o
-        })
+        const normalized = chunkKey.replace(/^#/, "");
+        const now = Date.now();
+        
+        if (ownershipType === 'home') {
+            // Home spawn ownership: non-expiring
+            OWNED_CHUNKS.set(normalized, {
+                username: username,
+                claimDate: claimDate || now,
+                type: 'home'
+            });
+            console.log(`[Ownership] Home spawn chunk ${normalized} assigned to ${username}`);
+        } else if (ownershipType === 'ipfs') {
+            // IPFS ownership: check maturity and set expiry
+            const age = now - blockDate;
+            const isPending = age < IPFS_MATURITY_PERIOD;
+            const expiryDate = blockDate + IPFS_MAX_OWNERSHIP_PERIOD;
+            
+            OWNED_CHUNKS.set(normalized, {
+                username: username,
+                claimDate: blockDate,
+                expiryDate: expiryDate,
+                type: 'ipfs',
+                pending: isPending
+            });
+            
+            console.log(`[Ownership] IPFS chunk ${normalized} assigned to ${username}, pending: ${isPending}, expires: ${new Date(expiryDate).toISOString()}`);
+        }
     } catch (e) {
-        console.error("[ChunkManager] Failed to update chunk ownership:", e)
+        console.error("[ChunkManager] Failed to update chunk ownership:", e);
     }
 }
