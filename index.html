@@ -334,6 +334,100 @@
             </div>
         </div>
     </div>
+    <!-- Calligraphy Stone Configuration Modal -->
+    <div id="calligraphyStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
+        <div style="background: var(--panel); padding: 20px; border-radius: 10px; min-width: 500px; max-width: 600px; color: #fff; display: flex; flex-direction: column; gap: 15px;">
+            <h3>Calligraphy Stone Configuration</h3>
+            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
+                <legend>Display Settings</legend>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <div>
+                        <label for="calligraphyStoneWidth">Width (blocks)</label>
+                        <input type="number" id="calligraphyStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneHeight">Height (blocks)</label>
+                        <input type="number" id="calligraphyStoneHeight" value="2" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label for="calligraphyStoneOffsetX">Offset X (Left/Right)</label>
+                        <input type="number" id="calligraphyStoneOffsetX" value="0" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneOffsetY">Offset Y (Up/Down)</label>
+                        <input type="number" id="calligraphyStoneOffsetY" value="2" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneOffsetZ">Offset Z (Forward/Back)</label>
+                        <input type="number" id="calligraphyStoneOffsetZ" value="0" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
+                <legend>Background</legend>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label for="calligraphyStoneBgColor">Background Color</label>
+                        <input type="color" id="calligraphyStoneBgColor" value="#ffffff" style="width: 100%; height: 40px; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="calligraphyStoneTransparent">
+                            Transparent Background
+                        </label>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
+                <legend>Font Settings</legend>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label for="calligraphyStoneFontFamily">Font Family</label>
+                        <select id="calligraphyStoneFontFamily" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                            <option value="Arial">Arial</option>
+                            <option value="Helvetica">Helvetica</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Verdana">Verdana</option>
+                            <option value="Comic Sans MS">Comic Sans MS</option>
+                            <option value="Impact">Impact</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneFontSize">Font Size</label>
+                        <input type="number" id="calligraphyStoneFontSize" value="24" min="8" max="200" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneFontWeight">Font Weight</label>
+                        <select id="calligraphyStoneFontWeight" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                            <option value="normal">Normal</option>
+                            <option value="bold">Bold</option>
+                            <option value="lighter">Lighter</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="calligraphyStoneFontColor">Font Color</label>
+                        <input type="color" id="calligraphyStoneFontColor" value="#000000" style="width: 100%; height: 40px; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                    </div>
+                </div>
+            </fieldset>
+            <div>
+                <label for="calligraphyStoneText">Text Content</label>
+                <textarea id="calligraphyStoneText" placeholder="Enter your text here..." rows="4" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; resize: vertical;"></textarea>
+            </div>
+            <div>
+                <label for="calligraphyStoneUrl">Link URL (optional)</label>
+                <input type="text" id="calligraphyStoneUrl" placeholder="https://example.com" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+            </div>
+            <div style="text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="calligraphyStoneCancel">Cancel</button>
+                <button id="calligraphyStoneSave" style="background: var(--accent); color: #111;">Place</button>
+            </div>
+        </div>
+    </div>
     <script src="js/declare.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>

@@ -90,6 +90,28 @@ async function applySaveFile(e, t, o) {
                 }
             }
         }
+        if (t.calligraphyStones) {
+            console.log("[LOGIN] Loading calligraphy stones from session");
+            calligraphyStones = {}; // Clear existing stones
+            for (const key in t.calligraphyStones) {
+                if (Object.hasOwnProperty.call(t.calligraphyStones, key)) {
+                    const stoneData = t.calligraphyStones[key];
+                    createCalligraphyStoneScreen(stoneData);
+
+                    // Defer block placement until the chunk is loaded
+                    const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(stoneData.z, MAP_SIZE) / CHUNK_SIZE);
+                    const chunkKey = makeChunkKey(worldName, cx, cz);
+                    const delta = {
+                        x: modWrap(stoneData.x, CHUNK_SIZE),
+                        y: stoneData.y,
+                        z: modWrap(stoneData.z, CHUNK_SIZE),
+                        b: 128
+                    };
+                    chunkManager.addPendingDeltas(chunkKey, [delta]);
+                }
+            }
+        }
         setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
         if (!isMobile()) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
@@ -148,6 +170,13 @@ async function applySaveFile(e, t, o) {
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {
                     createMagicianStoneScreen(e.magicianStones[key]);
+                }
+            }
+        }
+        if (e.calligraphyStones) {
+            for (const key in e.calligraphyStones) {
+                if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
+                    createCalligraphyStoneScreen(e.calligraphyStones[key]);
                 }
             }
         }
@@ -965,6 +994,116 @@ async function createMagicianStoneScreen(stoneData) {
     scene.add(screenMesh);
 }
 
+function createCalligraphyStoneScreen(stoneData) {
+    let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
+    const key = `${x},${y},${z}`;
+
+    // Remove existing screen if it exists
+    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+        scene.remove(calligraphyStones[key].mesh);
+        disposeObject(calligraphyStones[key].mesh);
+    }
+
+    // Create canvas for text rendering
+    const pixelsPerBlock = 128; // Resolution per block
+    const canvasWidth = width * pixelsPerBlock;
+    const canvasHeight = height * pixelsPerBlock;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const context = canvas.getContext('2d');
+
+    // Draw background (or leave transparent)
+    if (!transparent) {
+        context.fillStyle = bgColor || '#ffffff';
+        context.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+
+    // Setup font
+    context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    context.fillStyle = fontColor || '#000000';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    // Word wrap text
+    const lines = [];
+    const words = text.split(' ');
+    let currentLine = '';
+    const maxWidth = canvasWidth - 20; // 10px padding on each side
+
+    for (const word of words) {
+        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+        const metrics = context.measureText(testLine);
+        if (metrics.width > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = testLine;
+        }
+    }
+    if (currentLine) {
+        lines.push(currentLine);
+    }
+
+    // Draw text lines centered vertically
+    const lineHeight = fontSize * 1.2;
+    const totalHeight = lines.length * lineHeight;
+    const startY = (canvasHeight - totalHeight) / 2 + lineHeight / 2;
+
+    for (let i = 0; i < lines.length; i++) {
+        const yPos = startY + i * lineHeight;
+        context.fillText(lines[i], canvasWidth / 2, yPos);
+    }
+
+    // Create texture
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    // Create plane geometry
+    const planeGeometry = new THREE.PlaneGeometry(width, height);
+    const material = new THREE.MeshBasicMaterial({
+        side: THREE.DoubleSide,
+        map: texture,
+        transparent: transparent || false
+    });
+    const screenMesh = new THREE.Mesh(planeGeometry, material);
+
+    // Orientation and Position
+    let playerDirection;
+    if (direction) {
+        playerDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
+    } else {
+        // Fallback for old stones saved without direction
+        playerDirection = new THREE.Vector3();
+        camera.getWorldDirection(playerDirection);
+        playerDirection.y = 0;
+        playerDirection.normalize();
+    }
+
+    const forward = playerDirection.clone();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
+        .add(right.multiplyScalar(offsetX))
+        .add(up.multiplyScalar(offsetY))
+        .add(forward.multiplyScalar(offsetZ));
+
+    screenMesh.position.copy(position);
+
+    // Set rotation to face the player direction
+    const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+    screenMesh.lookAt(lookAtTarget);
+
+    // Store link in userData for click handling
+    screenMesh.userData.calligraphyLink = link;
+    screenMesh.userData.calligraphyKey = key;
+
+    calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
+    scene.add(screenMesh);
+}
+
 function dropSelectedItem() {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
@@ -1140,6 +1279,30 @@ function onPointerDown(e) {
                     }
                 }
                 addMessage(stone.isMuted ? "Muted stone" : "Unmuted stone", 1500);
+            }
+        }
+        return;
+    }
+
+    // Handle calligraphy stone clicks (open link if present)
+    const calligraphyStoneMeshes = Object.values(calligraphyStones).map(s => s.mesh).filter(m => m);
+    const calligraphyStoneIntersects = raycaster.intersectObjects(calligraphyStoneMeshes, true);
+
+    if (calligraphyStoneIntersects.length > 0) {
+        let intersectedObject = calligraphyStoneIntersects[0].object;
+        let parentMesh = intersectedObject.parent instanceof THREE.Group ? intersectedObject.parent : intersectedObject;
+        const intersectedStone = Object.values(calligraphyStones).find(s => s.mesh === parentMesh);
+
+        if (intersectedStone && intersectedStone.link) {
+            const link = intersectedStone.link.trim();
+            // Only open http:// or https:// links
+            if (link && (link.startsWith('http://') || link.startsWith('https://'))) {
+                window.open(link, '_blank');
+                addMessage("Opening link...", 1500);
+            } else if (link) {
+                addMessage("Invalid URL (must start with http:// or https://)", 2000);
+            } else {
+                addMessage("No link set for this sign", 1500);
             }
         }
         return;
@@ -1474,6 +1637,28 @@ function removeBlockAt(e, t, o, breaker) {
                 }
             }
         }
+
+        if (a === 128) {
+            const key = `${e},${t},${o}`;
+            if (calligraphyStones[key]) {
+                if (calligraphyStones[key].mesh) {
+                    scene.remove(calligraphyStones[key].mesh);
+                    disposeObject(calligraphyStones[key].mesh);
+                }
+                delete calligraphyStones[key];
+
+                const message = JSON.stringify({
+                    type: 'calligraphy_stone_removed',
+                    key: key
+                });
+                for (const [username, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(message);
+                    }
+                }
+            }
+        }
+
         if (a === 123 || a === 122) {
             setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
         }
@@ -1504,6 +1689,21 @@ function placeBlockAt(e, t, o, a) {
                             direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
                         };
                         document.getElementById('magicianStoneModal').style.display = 'flex';
+                        isPromptOpen = true;
+                        return;
+                    }
+
+                    // Special handling for Calligraphy Stone
+                    if (a === 128) {
+                        const playerDirection = new THREE.Vector3();
+                        camera.getWorldDirection(playerDirection);
+                        playerDirection.y = 0;
+                        playerDirection.normalize();
+                        calligraphyStonePlacement = {
+                            x: e, y: t, z: o,
+                            direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+                        };
+                        document.getElementById('calligraphyStoneModal').style.display = 'flex';
                         isPromptOpen = true;
                         return;
                     }
@@ -1909,6 +2109,32 @@ async function downloadSinglePlayerSession() {
         }
     }
 
+    const serializableCalligraphyStones = {};
+    for (const key in calligraphyStones) {
+        if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+            const stone = calligraphyStones[key];
+            serializableCalligraphyStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor,
+                transparent: stone.transparent,
+                fontFamily: stone.fontFamily,
+                fontSize: stone.fontSize,
+                fontWeight: stone.fontWeight,
+                fontColor: stone.fontColor,
+                text: stone.text,
+                link: stone.link,
+                direction: stone.direction
+            };
+        }
+    }
+
     var e = {
         world: worldName,
         seed: worldSeed,
@@ -1917,6 +2143,7 @@ async function downloadSinglePlayerSession() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
+        calligraphyStones: serializableCalligraphyStones,
         profile: {
             x: player.x,
             y: player.y,
@@ -3340,4 +3567,68 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
+});
+
+// Calligraphy Stone event handlers
+document.getElementById('calligraphyStoneCancel').addEventListener('click', function() {
+    document.getElementById('calligraphyStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    calligraphyStonePlacement = null;
+});
+
+document.getElementById('calligraphyStoneSave').addEventListener('click', function() {
+    const text = document.getElementById('calligraphyStoneText').value;
+    if (!text || !text.trim()) {
+        addMessage("Text is required.", 3000);
+        return;
+    }
+
+    const stoneData = {
+        x: calligraphyStonePlacement.x,
+        y: calligraphyStonePlacement.y,
+        z: calligraphyStonePlacement.z,
+        width: parseFloat(document.getElementById('calligraphyStoneWidth').value),
+        height: parseFloat(document.getElementById('calligraphyStoneHeight').value),
+        offsetX: parseFloat(document.getElementById('calligraphyStoneOffsetX').value),
+        offsetY: parseFloat(document.getElementById('calligraphyStoneOffsetY').value),
+        offsetZ: parseFloat(document.getElementById('calligraphyStoneOffsetZ').value),
+        bgColor: document.getElementById('calligraphyStoneBgColor').value,
+        transparent: document.getElementById('calligraphyStoneTransparent').checked,
+        fontFamily: document.getElementById('calligraphyStoneFontFamily').value,
+        fontSize: parseFloat(document.getElementById('calligraphyStoneFontSize').value),
+        fontWeight: document.getElementById('calligraphyStoneFontWeight').value,
+        fontColor: document.getElementById('calligraphyStoneFontColor').value,
+        text: text,
+        link: document.getElementById('calligraphyStoneUrl').value,
+        direction: calligraphyStonePlacement.direction // Use the direction saved on placement
+    };
+
+    createCalligraphyStoneScreen(stoneData);
+
+    const n = INVENTORY[selectedHotIndex];
+    if (calligraphyStonePlacement && n && n.id === 128) {
+        chunkManager.setBlockGlobal(calligraphyStonePlacement.x, calligraphyStonePlacement.y, calligraphyStonePlacement.z, 128, true, n.originSeed);
+
+        n.count -= 1;
+        if (n.count <= 0) {
+            INVENTORY[selectedHotIndex] = null;
+        }
+        updateHotbarUI();
+        safePlayAudio(soundPlace);
+
+        // Send calligraphy stone data to other peers
+        const message = JSON.stringify({
+            type: 'calligraphy_stone_placed',
+            stoneData: stoneData
+        });
+        for (const [username, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(message);
+            }
+        }
+    }
+
+    document.getElementById('calligraphyStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    calligraphyStonePlacement = null;
 });
