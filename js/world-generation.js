@@ -139,7 +139,7 @@ function createBlockTexture(e, t) {
     let blockId = sanitizeBlockId(t);
     if (blockId === null) {
         console.warn(`[createBlockTexture] Missing BLOCKS[${t}] for seed ${e}. Using fallback color #ff00ff`);
-        blockId = 4; // Use Stone as fallback for invalid blocks
+        blockId = FALLBACK_BLOCK_ID; // Use Stone as fallback for invalid blocks
     }
     
     // Get block definition safely; use fallback if missing (defense-in-depth)

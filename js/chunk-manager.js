@@ -1,11 +1,13 @@
 // Utility function to sanitize and validate block IDs from external sources
+const FALLBACK_BLOCK_ID = 4; // Stone - safe, visible fallback for invalid blocks
+
 function sanitizeBlockId(blockId) {
     // Coerce numeric strings to integers
     if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
         blockId = parseInt(blockId, 10);
     }
     
-    // Validate block id
+    // Validate block id (BLOCK_AIR is 0 and not in BLOCKS object, but is valid)
     if (blockId === BLOCK_AIR) {
         return BLOCK_AIR;
     } else if (Number.isInteger(blockId) && BLOCKS[blockId]) {
@@ -13,6 +15,26 @@ function sanitizeBlockId(blockId) {
     } else {
         return null; // Return null to indicate invalid block
     }
+}
+
+// Utility function to sanitize complete deltas (coordinates + block ID)
+function sanitizeDelta(delta, chunkKey = '') {
+    const sanitized = {
+        x: Math.floor(delta.x),
+        y: Math.floor(delta.y),
+        z: Math.floor(delta.z)
+    };
+    
+    const blockId = sanitizeBlockId(delta.b);
+    if (blockId === null) {
+        const contextMsg = chunkKey ? ` in chunk ${chunkKey}` : '';
+        console.warn(`[sanitizeDelta] Invalid block id ${delta.b}${contextMsg}. Using fallback block id ${FALLBACK_BLOCK_ID}`);
+        sanitized.b = FALLBACK_BLOCK_ID;
+    } else {
+        sanitized.b = blockId;
+    }
+    
+    return sanitized;
 }
 
 function Chunk(e, t) {
@@ -194,18 +216,8 @@ Chunk.prototype.idx = function (e, t, o) {
         const deltas = worldState.chunkDeltas.get(e.key);
         for (const delta of deltas) {
             // Defense-in-depth: validate deltas before applying
-            let x = Math.floor(delta.x);
-            let y = Math.floor(delta.y);
-            let z = Math.floor(delta.z);
-            
-            // Use utility function for consistent validation
-            let blockId = sanitizeBlockId(delta.b);
-            if (blockId === null) {
-                console.warn(`[buildChunkMesh] Invalid block id ${delta.b} in chunk ${e.key}. Using fallback block id 4`);
-                blockId = 4; // Stone as safe fallback
-            }
-            
-            e.set(x, y, z, blockId);
+            const sanitized = sanitizeDelta(delta, e.key);
+            e.set(sanitized.x, sanitized.y, sanitized.z, sanitized.b);
         }
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
@@ -579,24 +591,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                     
                     // Sanitize incoming deltas before storing
-                    const sanitizedDeltas = s.map(delta => {
-                        const sanitized = {
-                            x: Math.floor(delta.x),
-                            y: Math.floor(delta.y),
-                            z: Math.floor(delta.z)
-                        };
-                        
-                        // Use utility function for consistent validation
-                        let blockId = sanitizeBlockId(delta.b);
-                        if (blockId === null) {
-                            console.warn(`[applyChunkUpdates] Invalid block id ${delta.b} in chunk ${r}. Using fallback block id 4`);
-                            sanitized.b = 4; // Stone as safe fallback
-                        } else {
-                            sanitized.b = blockId;
-                        }
-                        
-                        return sanitized;
-                    });
+                    const sanitizedDeltas = s.map(delta => sanitizeDelta(delta, r));
                     
                     worldState.chunkDeltas.get(r).push(...sanitizedDeltas);
                 }
