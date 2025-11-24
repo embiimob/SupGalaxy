@@ -177,7 +177,26 @@ Chunk.prototype.idx = function (e, t, o) {
     if (worldState.chunkDeltas.has(e.key)) {
         const deltas = worldState.chunkDeltas.get(e.key);
         for (const delta of deltas) {
-            e.set(delta.x, delta.y, delta.z, delta.b);
+            // Defense-in-depth: validate deltas before applying
+            let x = Math.floor(delta.x);
+            let y = Math.floor(delta.y);
+            let z = Math.floor(delta.z);
+            let blockId = delta.b;
+            
+            // Coerce numeric strings to integers
+            if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
+                blockId = parseInt(blockId, 10);
+            }
+            
+            // Validate block id
+            if (blockId === BLOCK_AIR) {
+                // Air block is valid
+            } else if (!Number.isInteger(blockId) || !BLOCKS[blockId]) {
+                console.warn(`[buildChunkMesh] Invalid block id ${delta.b} in chunk ${e.key}. Using fallback block id 4`);
+                blockId = 4; // Stone as safe fallback
+            }
+            
+            e.set(x, y, z, blockId);
         }
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
@@ -549,7 +568,36 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!worldState.chunkDeltas.has(r)) {
                         worldState.chunkDeltas.set(r, []);
                     }
-                    worldState.chunkDeltas.get(r).push(...s);
+                    
+                    // Sanitize incoming deltas before storing
+                    const sanitizedDeltas = s.map(delta => {
+                        const sanitized = {
+                            x: Math.floor(delta.x),
+                            y: Math.floor(delta.y),
+                            z: Math.floor(delta.z)
+                        };
+                        
+                        // Sanitize block id
+                        let blockId = delta.b;
+                        // Coerce numeric strings to integers
+                        if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
+                            blockId = parseInt(blockId, 10);
+                        }
+                        
+                        // Validate block id
+                        if (blockId === BLOCK_AIR) {
+                            sanitized.b = BLOCK_AIR;
+                        } else if (Number.isInteger(blockId) && BLOCKS[blockId]) {
+                            sanitized.b = blockId;
+                        } else {
+                            console.warn(`[applyChunkUpdates] Invalid block id ${delta.b} in chunk ${r}. Using fallback block id 4`);
+                            sanitized.b = 4; // Stone as safe fallback
+                        }
+                        
+                        return sanitized;
+                    });
+                    
+                    worldState.chunkDeltas.get(r).push(...sanitizedDeltas);
                 }
 
                 // Set ownership based on BlockDate and owner

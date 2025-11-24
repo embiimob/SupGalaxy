@@ -134,12 +134,26 @@ function createMobTexture(e, t, o = !1) {
 function createBlockTexture(e, t) {
     const o = `${e}:${t}`;
     if (textureCache.has(o)) return textureCache.get(o);
+    
+    // Coerce blockId string to integer if possible
+    let blockId = t;
+    if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
+        blockId = parseInt(blockId, 10);
+    }
+    
+    // Get block definition safely; use fallback if missing
+    const blockDef = BLOCKS[blockId];
+    if (!blockDef) {
+        console.warn(`[createBlockTexture] Missing BLOCKS[${blockId}] for seed ${e}. Using fallback color #ff00ff`);
+    }
+    const baseColor = blockDef ? blockDef.color : '#ff00ff';
+    
     const a = 16,
         n = document.createElement("canvas");
     n.width = a, n.height = a;
     const r = n.getContext("2d"),
-        s = makeSeededRandom(e + "_block_texture_" + t),
-        i = new THREE.Color(BLOCKS[t].color);
+        s = makeSeededRandom(e + "_block_texture_" + blockId),
+        i = new THREE.Color(baseColor);
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
     const d = Math.floor(5 * s()),
