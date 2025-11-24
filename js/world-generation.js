@@ -135,17 +135,15 @@ function createBlockTexture(e, t) {
     const o = `${e}:${t}`;
     if (textureCache.has(o)) return textureCache.get(o);
     
-    // Coerce blockId string to integer if possible
-    let blockId = t;
-    if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
-        blockId = parseInt(blockId, 10);
+    // Use utility function for consistent validation
+    let blockId = sanitizeBlockId(t);
+    if (blockId === null) {
+        console.warn(`[createBlockTexture] Missing BLOCKS[${t}] for seed ${e}. Using fallback color #ff00ff`);
+        blockId = 4; // Use Stone as fallback for invalid blocks
     }
     
-    // Get block definition safely; use fallback if missing
+    // Get block definition safely; use fallback if missing (defense-in-depth)
     const blockDef = BLOCKS[blockId];
-    if (!blockDef) {
-        console.warn(`[createBlockTexture] Missing BLOCKS[${blockId}] for seed ${e}. Using fallback color #ff00ff`);
-    }
     const baseColor = blockDef ? blockDef.color : '#ff00ff';
     
     const a = 16,

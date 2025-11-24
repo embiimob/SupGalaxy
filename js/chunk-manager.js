@@ -1,3 +1,19 @@
+// Utility function to sanitize and validate block IDs from external sources
+function sanitizeBlockId(blockId) {
+    // Coerce numeric strings to integers
+    if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
+        blockId = parseInt(blockId, 10);
+    }
+    
+    // Validate block id
+    if (blockId === BLOCK_AIR) {
+        return BLOCK_AIR;
+    } else if (Number.isInteger(blockId) && BLOCKS[blockId]) {
+        return blockId;
+    } else {
+        return null; // Return null to indicate invalid block
+    }
+}
 
 function Chunk(e, t) {
     this.cx = e, this.cz = t, this.key = makeChunkKey(worldName, e, t), this.data = new Uint8Array(CHUNK_SIZE * MAX_HEIGHT * CHUNK_SIZE), this.mesh = null, this.generated = !1, this.needsRebuild = !0
@@ -181,17 +197,10 @@ Chunk.prototype.idx = function (e, t, o) {
             let x = Math.floor(delta.x);
             let y = Math.floor(delta.y);
             let z = Math.floor(delta.z);
-            let blockId = delta.b;
             
-            // Coerce numeric strings to integers
-            if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
-                blockId = parseInt(blockId, 10);
-            }
-            
-            // Validate block id
-            if (blockId === BLOCK_AIR) {
-                // Air block is valid
-            } else if (!Number.isInteger(blockId) || !BLOCKS[blockId]) {
+            // Use utility function for consistent validation
+            let blockId = sanitizeBlockId(delta.b);
+            if (blockId === null) {
                 console.warn(`[buildChunkMesh] Invalid block id ${delta.b} in chunk ${e.key}. Using fallback block id 4`);
                 blockId = 4; // Stone as safe fallback
             }
@@ -577,21 +586,13 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                             z: Math.floor(delta.z)
                         };
                         
-                        // Sanitize block id
-                        let blockId = delta.b;
-                        // Coerce numeric strings to integers
-                        if (typeof blockId === 'string' && /^\d+$/.test(blockId)) {
-                            blockId = parseInt(blockId, 10);
-                        }
-                        
-                        // Validate block id
-                        if (blockId === BLOCK_AIR) {
-                            sanitized.b = BLOCK_AIR;
-                        } else if (Number.isInteger(blockId) && BLOCKS[blockId]) {
-                            sanitized.b = blockId;
-                        } else {
+                        // Use utility function for consistent validation
+                        let blockId = sanitizeBlockId(delta.b);
+                        if (blockId === null) {
                             console.warn(`[applyChunkUpdates] Invalid block id ${delta.b} in chunk ${r}. Using fallback block id 4`);
                             sanitized.b = 4; // Stone as safe fallback
+                        } else {
+                            sanitized.b = blockId;
                         }
                         
                         return sanitized;
