@@ -1026,24 +1026,37 @@ function createCalligraphyStoneScreen(stoneData) {
     context.textAlign = 'center';
     context.textBaseline = 'middle';
 
-    // Word wrap text
+    // Word wrap text while respecting newlines
     const lines = [];
-    const words = (text || '').split(' ');
-    let currentLine = '';
     const maxWidth = canvasWidth - 20; // 10px padding on each side
-
-    for (const word of words) {
-        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-        const metrics = context.measureText(testLine);
-        if (metrics.width > maxWidth && currentLine) {
-            lines.push(currentLine);
-            currentLine = word;
-        } else {
-            currentLine = testLine;
+    
+    // Split by newlines first to respect user line breaks
+    const paragraphs = (text || '').split('\n');
+    
+    for (const paragraph of paragraphs) {
+        // Handle empty lines (blank lines between paragraphs)
+        if (paragraph.trim() === '') {
+            lines.push('');
+            continue;
         }
-    }
-    if (currentLine) {
-        lines.push(currentLine);
+        
+        // Word wrap within each paragraph
+        const words = paragraph.split(' ');
+        let currentLine = '';
+        
+        for (const word of words) {
+            const testLine = currentLine + (currentLine ? ' ' : '') + word;
+            const metrics = context.measureText(testLine);
+            if (metrics.width > maxWidth && currentLine) {
+                lines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        }
+        if (currentLine) {
+            lines.push(currentLine);
+        }
     }
 
     // Draw text lines centered vertically
