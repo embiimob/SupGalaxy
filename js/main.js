@@ -15,6 +15,84 @@ function simpleHash(e) {
     }
     return Math.abs(t)
 }
+function reconstructCalligraphyStonesFromDeltas(deltas) {
+    if (!deltas || deltas.length === 0) return;
+    
+    // Ensure calligraphyStones global exists
+    if (typeof calligraphyStones === 'undefined') {
+        calligraphyStones = {};
+    }
+    
+    console.log("[RECONSTRUCTION] Scanning deltas for orphaned calligraphy stones (b:128)");
+    let reconstructedCount = 0;
+    
+    for (const deltaGroup of deltas) {
+        const chunkKey = deltaGroup.chunk.replace(/^#/, "");
+        const changes = deltaGroup.changes;
+        
+        if (!changes || !Array.isArray(changes)) continue;
+        
+        for (const change of changes) {
+            // Check if this is a calligraphy stone block (id 128)
+            if (change.b === 128) {
+                // Parse chunk coordinates from chunk key (format: worldname:cx:cz)
+                const parts = chunkKey.split(':');
+                if (parts.length < 3) {
+                    console.warn(`[RECONSTRUCTION] Invalid chunk key format: ${chunkKey}`);
+                    continue;
+                }
+                
+                const cx = parseInt(parts[1]);
+                const cz = parseInt(parts[2]);
+                
+                // Calculate world coordinates using modWrap for consistency
+                const worldX = modWrap(cx * CHUNK_SIZE + change.x, MAP_SIZE);
+                const worldY = change.y;
+                const worldZ = modWrap(cz * CHUNK_SIZE + change.z, MAP_SIZE);
+                
+                const key = `${worldX},${worldY},${worldZ}`;
+                
+                // Only reconstruct if no metadata exists for this position
+                if (!calligraphyStones[key]) {
+                    console.log(`[RECONSTRUCTION] Creating placeholder for calligraphy stone at ${key}`);
+                    
+                    // Create placeholder with sensible defaults
+                    const placeholderData = {
+                        x: worldX,
+                        y: worldY,
+                        z: worldZ,
+                        width: 2,
+                        height: 1.5,
+                        offsetX: 0,
+                        offsetY: 0.5,
+                        offsetZ: 0.6,
+                        bgColor: '#ffffff',
+                        transparent: false,
+                        fontFamily: 'Arial',
+                        fontSize: 32,
+                        fontWeight: 'normal',
+                        fontColor: '#000000',
+                        text: '',
+                        link: '',
+                        direction: { x: 0, y: 0, z: 1 } // Default forward direction
+                    };
+                    
+                    try {
+                        createCalligraphyStoneScreen(placeholderData);
+                        reconstructedCount++;
+                    } catch (error) {
+                        console.error(`[RECONSTRUCTION] Failed to create calligraphy stone at ${key}:`, error);
+                    }
+                }
+            }
+        }
+    }
+    
+    if (reconstructedCount > 0) {
+        console.log(`[RECONSTRUCTION] Successfully reconstructed ${reconstructedCount} calligraphy stone(s)`);
+    }
+}
+
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
@@ -111,6 +189,9 @@ async function applySaveFile(e, t, o) {
                     chunkManager.addPendingDeltas(chunkKey, [delta]);
                 }
             }
+        } else if (t.deltas) {
+            // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
+            reconstructCalligraphyStonesFromDeltas(t.deltas);
         }
         setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
         if (!isMobile()) try {
@@ -179,6 +260,9 @@ async function applySaveFile(e, t, o) {
                     createCalligraphyStoneScreen(e.calligraphyStones[key]);
                 }
             }
+        } else if (e.deltas) {
+            // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
+            reconstructCalligraphyStonesFromDeltas(e.deltas);
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
