@@ -45,10 +45,10 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
                 const cx = parseInt(parts[1]);
                 const cz = parseInt(parts[2]);
                 
-                // Calculate world coordinates
-                const worldX = cx * CHUNK_SIZE + change.x;
+                // Calculate world coordinates using modWrap for consistency
+                const worldX = modWrap(cx * CHUNK_SIZE + change.x, MAP_SIZE);
                 const worldY = change.y;
-                const worldZ = cz * CHUNK_SIZE + change.z;
+                const worldZ = modWrap(cz * CHUNK_SIZE + change.z, MAP_SIZE);
                 
                 const key = `${worldX},${worldY},${worldZ}`;
                 
@@ -191,9 +191,6 @@ async function applySaveFile(e, t, o) {
             }
         } else if (t.deltas) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
-            if (typeof calligraphyStones === 'undefined') {
-                calligraphyStones = {};
-            }
             reconstructCalligraphyStonesFromDeltas(t.deltas);
         }
         setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
@@ -265,9 +262,6 @@ async function applySaveFile(e, t, o) {
             }
         } else if (e.deltas) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
-            if (typeof calligraphyStones === 'undefined') {
-                calligraphyStones = {};
-            }
             reconstructCalligraphyStonesFromDeltas(e.deltas);
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
