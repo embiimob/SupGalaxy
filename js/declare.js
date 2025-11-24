@@ -265,6 +265,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Magician's Stone",
             color: "#8A2BE2",
             strength: 3
+        },
+        128: {
+            name: "Calligraphy Stone",
+            color: "#D4AF37",
+            strength: 3
         }
     },
     BIOMES = [{
@@ -542,6 +547,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             5: 4
         }
+    }, {
+        id: "calligraphy_stone",
+        out: {
+            id: 128,
+            count: 1
+        },
+        requires: {
+            4: 2,
+            11: 2
+        }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
@@ -654,7 +669,9 @@ const maxAudioDistance = 32,
 var volcanoes = [],
     initialTeleportLocation = null,
     magicianStonePlacement = null,
-    magicianStones = {};
+    magicianStones = {},
+    calligraphyStonePlacement = null,
+    calligraphyStones = {};
 const lightManager = {
     lights: [],
     poolSize: 8,

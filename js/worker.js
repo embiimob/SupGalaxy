@@ -93,6 +93,7 @@ const BLOCKS = {
         125: { name: 'Emerald', color: '#00ff7b' },
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
         127: { name: "Magician's Stone", color: "#8A2BE2" },
+        128: { name: "Calligraphy Stone", color: "#D4AF37" },
 };
 
 const BIOMES = [
@@ -761,6 +762,29 @@ self.onmessage = async function(e) {
                                     }
                                 }
 
+                                if (processData.calligraphyStones) {
+                                     self.postMessage({ type: 'calligraphy_stones_update', stones: processData.calligraphyStones, transactionId: msg.TransactionId });
+                                     for (const key in processData.calligraphyStones) {
+                                        if (Object.hasOwnProperty.call(processData.calligraphyStones, key)) {
+                                            const stone = processData.calligraphyStones[key];
+                                            const cx = Math.floor((stone.x % 16384 + 16384) % 16384 / 16);
+                                            const cz = Math.floor((stone.z % 16384 + 16384) % 16384 / 16);
+
+                                            const chunkKey = "" + processData.world + ":" + cx + ":" + cz;
+                                            const newDelta = {
+                                                chunk: chunkKey,
+                                                changes: [{
+                                                    x: (stone.x % 16 + 16) % 16,
+                                                    y: stone.y,
+                                                    z: (stone.z % 16 + 16) % 16,
+                                                    b: 128
+                                                }]
+                                            };
+                                            normalizedDeltas.push(newDelta);
+                                        }
+                                    }
+                                }
+
                                 updatesByTransaction.set(msg.TransactionId, {
                                     changes: normalizedDeltas,
                                     address: msg.FromAddress,
@@ -1295,6 +1319,14 @@ self.onmessage = async function(e) {
                     for (const key in data.stones) {
                         if (Object.hasOwnProperty.call(data.stones, key)) {
                             createMagicianStoneScreen(data.stones[key]);
+                        }
+                    }
+                }
+            } else if (data.type === 'calligraphy_stones_update') {
+                if (data.stones) {
+                    for (const key in data.stones) {
+                        if (Object.hasOwnProperty.call(data.stones, key)) {
+                            createCalligraphyStoneScreen(data.stones[key]);
                         }
                     }
                 }

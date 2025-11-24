@@ -299,6 +299,28 @@ function setupDataChannel(e, t) {
                 }
                 e.send(JSON.stringify(magicianStonesSync));
             }
+
+            // Sync calligraphy stones to new player
+            if (Object.keys(calligraphyStones).length > 0) {
+                const calligraphyStonesSync = {
+                    type: "calligraphy_stones_sync",
+                    stones: {}
+                };
+                for (const key in calligraphyStones) {
+                    const stone = calligraphyStones[key];
+                    calligraphyStonesSync.stones[key] = {
+                        x: stone.x, y: stone.y, z: stone.z,
+                        width: stone.width, height: stone.height,
+                        offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                        bgColor: stone.bgColor, transparent: stone.transparent,
+                        fontFamily: stone.fontFamily, fontSize: stone.fontSize,
+                        fontWeight: stone.fontWeight, fontColor: stone.fontColor,
+                        text: stone.text, link: stone.link,
+                        direction: stone.direction
+                    };
+                }
+                e.send(JSON.stringify(calligraphyStonesSync));
+            }
             
             // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
             if (isHost) {
@@ -911,6 +933,39 @@ function setupDataChannel(e, t) {
                                 magicianStones[key].audioElement.src = '';
                             }
                             delete magicianStones[key];
+                        }
+                    }
+                    break;
+                case "calligraphy_stone_placed":
+                    // When the host receives this message from a client, it needs to both
+                    // create the screen locally AND relay the message to all other clients.
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    createCalligraphyStoneScreen(s.stoneData);
+                    break;
+                case "calligraphy_stones_sync":
+                    if (!isHost) {
+                        for (const key in s.stones) {
+                            if (Object.hasOwnProperty.call(s.stones, key)) {
+                                createCalligraphyStoneScreen(s.stones[key]);
+                            }
+                        }
+                    }
+                    break;
+                case "calligraphy_stone_removed":
+                    if (!isHost) {
+                        const key = s.key;
+                        if (calligraphyStones[key]) {
+                            if (calligraphyStones[key].mesh) {
+                                scene.remove(calligraphyStones[key].mesh);
+                                disposeObject(calligraphyStones[key].mesh);
+                            }
+                            delete calligraphyStones[key];
                         }
                     }
                     break;
