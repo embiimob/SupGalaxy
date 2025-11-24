@@ -35,8 +35,8 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
         for (const change of changes) {
             // Check if this is a calligraphy stone block (id 128)
             if (change.b === 128) {
-                // Parse chunk coordinates from chunk key
-                const parts = chunkKey.split('_');
+                // Parse chunk coordinates from chunk key (format: worldname:cx:cz)
+                const parts = chunkKey.split(':');
                 if (parts.length < 3) {
                     console.warn(`[RECONSTRUCTION] Invalid chunk key format: ${chunkKey}`);
                     continue;
