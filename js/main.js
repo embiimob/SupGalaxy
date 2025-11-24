@@ -1028,7 +1028,7 @@ function createCalligraphyStoneScreen(stoneData) {
 
     // Word wrap text
     const lines = [];
-    const words = text.split(' ');
+    const words = (text || '').split(' ');
     let currentLine = '';
     const maxWidth = canvasWidth - 20; // 10px padding on each side
 
@@ -1086,9 +1086,9 @@ function createCalligraphyStoneScreen(stoneData) {
     const up = new THREE.Vector3(0, 1, 0);
 
     const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
-        .add(right.multiplyScalar(offsetX))
-        .add(up.multiplyScalar(offsetY))
-        .add(forward.multiplyScalar(offsetZ));
+        .add(right.clone().multiplyScalar(offsetX))
+        .add(up.clone().multiplyScalar(offsetY))
+        .add(forward.clone().multiplyScalar(offsetZ));
 
     screenMesh.position.copy(position);
 
@@ -1293,7 +1293,7 @@ function onPointerDown(e) {
         let parentMesh = intersectedObject.parent instanceof THREE.Group ? intersectedObject.parent : intersectedObject;
         const intersectedStone = Object.values(calligraphyStones).find(s => s.mesh === parentMesh);
 
-        if (intersectedStone && intersectedStone.link) {
+        if (intersectedStone && intersectedStone.link && typeof intersectedStone.link === 'string') {
             const link = intersectedStone.link.trim();
             // Only open http:// or https:// links
             if (link && (link.startsWith('http://') || link.startsWith('https://'))) {
@@ -3578,7 +3578,7 @@ document.getElementById('calligraphyStoneCancel').addEventListener('click', func
 
 document.getElementById('calligraphyStoneSave').addEventListener('click', function() {
     const text = document.getElementById('calligraphyStoneText').value;
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
         addMessage("Text is required.", 3000);
         return;
     }
