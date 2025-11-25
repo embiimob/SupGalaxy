@@ -534,19 +534,31 @@ async function prepareSessionAddresses(sessionData, inqJson = null) {
 /**
  * Create a WebRTC offer/answer for blockchain broadcast
  * 
- * @param {Object} offerData - WebRTC offer or answer data
- * @param {string} world - World name
- * @param {string} user - Username
+ * @param {Object} signalData - WebRTC offer/answer data (can be complete object or just offer/answer parts)
+ * @param {string} [world] - World name (optional if included in signalData)
+ * @param {string} [user] - Username (optional if included in signalData)
  * @returns {Promise<{txid: string, addresses: string[]}>} Transaction result
  */
-async function broadcastWebRTCSignal(offerData, world, user) {
-    const sessionData = {
-        world: world,
-        user: user,
-        offer: offerData.offer || null,
-        answer: offerData.answer || null,
-        iceCandidates: offerData.iceCandidates || []
-    };
+async function broadcastWebRTCSignal(signalData, world, user) {
+    // Handle both cases: 
+    // 1. signalData is already complete {world, user, offer/answer/batch, iceCandidates}
+    // 2. signalData is just the offer/answer part and world/user are passed separately
+    let sessionData;
+    
+    if (signalData.world && signalData.user) {
+        // signalData is already complete
+        sessionData = signalData;
+    } else {
+        // Build sessionData from parts
+        sessionData = {
+            world: world,
+            user: user,
+            offer: signalData.offer || null,
+            answer: signalData.answer || null,
+            batch: signalData.batch || null,
+            iceCandidates: signalData.iceCandidates || []
+        };
+    }
     
     return broadcastSession(sessionData);
 }
