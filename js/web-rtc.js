@@ -84,6 +84,18 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
+        
+        // Try to save offer to blockchain via UniSat if available
+        if (typeof saveOfferToBlockchain === 'function') {
+            saveOfferToBlockchain(i).then(result => {
+                if (result && result.txid) {
+                    console.log("[WebRTC] Offer saved to blockchain:", result.txid);
+                }
+            }).catch(err => {
+                console.log("[WebRTC] Blockchain save skipped:", err.message);
+            });
+        }
+        
         var p = "MCConn@" + e + "@" + worldName,
             m = await GetPublicAddressByKeyword(p);
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
@@ -1530,6 +1542,19 @@ async function acceptPendingOffers() {
             r = URL.createObjectURL(a),
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
+        
+        // Try to save batch answer to blockchain via UniSat if available
+        if (typeof saveAnswerToBlockchain === 'function') {
+            saveAnswerToBlockchain(e).then(result => {
+                if (result && result.txid) {
+                    console.log("[WebRTC] Batch answer saved to blockchain:", result.txid);
+                    addMessage("Batch answer saved to blockchain!", 3000);
+                }
+            }).catch(err => {
+                console.log("[WebRTC] Blockchain save skipped:", err.message);
+            });
+        }
+        
         const n = document.getElementById("joinScriptModal"),
             i = "MCBatch@" + userName + "@" + worldName,
             c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;

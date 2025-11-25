@@ -2297,7 +2297,41 @@ function updateHealthBar() {
 
 function updateSaveChangesButton() {
     const worldState = getCurrentWorldState();
-    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none"
+    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none";
+    // Also update UniSat save button visibility
+    updateUnisatSaveButton();
+}
+
+function updateUnisatSaveButton() {
+    const worldState = getCurrentWorldState();
+    const saveToChainBtn = document.getElementById("saveToChainBtn");
+    const unisatBtn = document.getElementById("unisatBtn");
+    
+    if (saveToChainBtn) {
+        // Show save to chain button if UniSat is available and connected, and there are changes
+        const status = typeof UniSatWallet !== 'undefined' ? UniSatWallet.getStatus() : { isConnected: false };
+        saveToChainBtn.style.display = (status.isConnected && worldState.chunkDeltas.size > 0) ? "inline-block" : "none";
+    }
+    
+    if (unisatBtn) {
+        // Show UniSat button if wallet extension is available
+        const available = typeof UniSatWallet !== 'undefined' && UniSatWallet.isAvailable();
+        unisatBtn.style.display = available ? "inline-block" : "none";
+        
+        // Update button text based on connection status
+        if (available) {
+            const status = UniSatWallet.getStatus();
+            if (status.isConnected) {
+                unisatBtn.innerText = "₿ " + status.address.substring(0, 6) + "...";
+                unisatBtn.style.background = "#f7931a";
+                unisatBtn.style.color = "#000";
+            } else {
+                unisatBtn.innerText = "₿ Connect";
+                unisatBtn.style.background = "";
+                unisatBtn.style.color = "";
+            }
+        }
+    }
 }
 
 function updateHudButtons() {
@@ -2306,7 +2340,8 @@ function updateHudButtons() {
         t = peers.size > 0 ? peers.size - (peers.has(userName) ? 1 : 0) : 0;
     console.log("[WebRTC] Updating usersBtn: peerCount=", t, "peers=", Array.from(peers.keys())), e.style.display = "inline-block", e.innerText = "🌐 " + t, e.onclick = function () {
         console.log("[Modal] usersBtn clicked, opening modal"), openUsersModal()
-    }, setupPendingModal()
+    }, setupPendingModal();
+    updateUnisatSaveButton();
 }
 
 function updateHud() {
@@ -3455,6 +3490,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
             }
         });
 
+        // Initialize UniSat wallet UI
+        initUnisatWalletUI();
+
         console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
     } catch (e) {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
@@ -3729,3 +3767,355 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     isPromptOpen = false;
     calligraphyStonePlacement = null;
 });
+
+/**
+ * Initialize UniSat Wallet UI and event handlers
+ */
+function initUnisatWalletUI() {
+    console.log("[UniSat] Initializing UniSat Wallet UI");
+
+    // Check if UniSat is available
+    const available = typeof UniSatWallet !== 'undefined' && UniSatWallet.isAvailable();
+    console.log("[UniSat] Wallet available:", available);
+
+    // Get UI elements
+    const unisatBtn = document.getElementById('unisatBtn');
+    const saveToChainBtn = document.getElementById('saveToChainBtn');
+    const unisatModal = document.getElementById('unisatModal');
+    const unisatConnectBtn = document.getElementById('unisatConnectBtn');
+    const unisatDisconnectBtn = document.getElementById('unisatDisconnectBtn');
+    const unisatCloseBtn = document.getElementById('unisatCloseBtn');
+    const unisatSaveSessionBtn = document.getElementById('unisatSaveSessionBtn');
+
+    if (!unisatBtn || !unisatModal) {
+        console.warn("[UniSat] UI elements not found");
+        return;
+    }
+
+    // Update initial button visibility
+    unisatBtn.style.display = available ? "inline-block" : "none";
+
+    // Open UniSat modal
+    unisatBtn.addEventListener('click', function() {
+        isPromptOpen = true;
+        unisatModal.style.display = 'flex';
+        updateUnisatModalUI();
+    });
+
+    // Close modal
+    unisatCloseBtn.addEventListener('click', function() {
+        isPromptOpen = false;
+        unisatModal.style.display = 'none';
+    });
+
+    // Connect wallet
+    unisatConnectBtn.addEventListener('click', async function() {
+        try {
+            unisatConnectBtn.disabled = true;
+            unisatConnectBtn.innerText = 'Connecting...';
+            
+            const result = await UniSatWallet.connect();
+            addMessage('UniSat connected: ' + result.address.substring(0, 10) + '...', 3000);
+            updateUnisatModalUI();
+            updateUnisatSaveButton();
+        } catch (error) {
+            console.error('[UniSat] Connection failed:', error);
+            addMessage('UniSat connection failed: ' + error.message, 5000);
+        } finally {
+            unisatConnectBtn.disabled = false;
+            unisatConnectBtn.innerText = 'Connect UniSat Wallet';
+        }
+    });
+
+    // Disconnect wallet
+    unisatDisconnectBtn.addEventListener('click', function() {
+        UniSatWallet.disconnect();
+        addMessage('UniSat disconnected', 2000);
+        updateUnisatModalUI();
+        updateUnisatSaveButton();
+    });
+
+    // Save session to chain (from modal)
+    unisatSaveSessionBtn.addEventListener('click', async function() {
+        await saveSessionToBlockchain();
+    });
+
+    // Save to chain button in HUD
+    if (saveToChainBtn) {
+        saveToChainBtn.addEventListener('click', async function() {
+            await saveSessionToBlockchain();
+        });
+    }
+
+    // Listen for account changes
+    if (available) {
+        UniSatWallet.onAccountsChanged(function(accounts) {
+            console.log('[UniSat] Accounts changed:', accounts);
+            if (accounts.length === 0) {
+                UniSatWallet.disconnect();
+            }
+            updateUnisatModalUI();
+            updateUnisatSaveButton();
+        });
+
+        UniSatWallet.onNetworkChanged(function(network) {
+            console.log('[UniSat] Network changed:', network);
+            updateUnisatModalUI();
+        });
+    }
+}
+
+/**
+ * Update the UniSat modal UI based on wallet status
+ */
+async function updateUnisatModalUI() {
+    const status = typeof UniSatWallet !== 'undefined' ? UniSatWallet.getStatus() : { isConnected: false };
+    
+    const statusText = document.getElementById('unisatStatusText');
+    const addressDiv = document.getElementById('unisatAddress');
+    const balanceDiv = document.getElementById('unisatBalance');
+    const connectBtn = document.getElementById('unisatConnectBtn');
+    const disconnectBtn = document.getElementById('unisatDisconnectBtn');
+    const saveSection = document.getElementById('unisatSaveSection');
+    const estimatedCost = document.getElementById('unisatEstimatedCost');
+    const addressCount = document.getElementById('unisatAddressCount');
+
+    if (status.isConnected) {
+        statusText.innerHTML = '<span style="color: #4CAF50;">✓ Connected</span> to ' + status.network;
+        addressDiv.innerText = status.address;
+        addressDiv.style.display = 'block';
+        
+        connectBtn.style.display = 'none';
+        disconnectBtn.style.display = 'block';
+        saveSection.style.display = 'block';
+
+        // Get balance
+        try {
+            const balance = await UniSatWallet.getBalance();
+            balanceDiv.innerHTML = 'Balance: <strong>' + (balance.total / 100000000).toFixed(8) + '</strong> tBTC';
+            balanceDiv.style.display = 'block';
+        } catch (e) {
+            balanceDiv.innerText = 'Balance: Unable to fetch';
+            balanceDiv.style.display = 'block';
+        }
+
+        // Estimate session save cost
+        updateSaveEstimate();
+    } else {
+        statusText.innerText = 'Not connected';
+        addressDiv.style.display = 'none';
+        balanceDiv.style.display = 'none';
+        connectBtn.style.display = 'block';
+        disconnectBtn.style.display = 'none';
+        saveSection.style.display = 'none';
+    }
+}
+
+/**
+ * Update the estimated save cost display
+ */
+function updateSaveEstimate() {
+    const estimatedCost = document.getElementById('unisatEstimatedCost');
+    const addressCount = document.getElementById('unisatAddressCount');
+
+    try {
+        // Create a sample session to estimate size
+        const sampleSession = buildSessionDataForBlockchain();
+        const jsonStr = JSON.stringify(sampleSession);
+        
+        // Estimate number of addresses (each address encodes 20 bytes)
+        // Add overhead for SIG header (~100 bytes) and OBJP2FK formatting (~20 bytes)
+        const totalBytes = jsonStr.length + 120;
+        const numAddresses = Math.ceil(totalBytes / 20);
+        
+        // Calculate cost: dust per address + estimated fee
+        const dustCost = numAddresses * UniSatWallet.DUST_SATOSHIS;
+        const estimatedFee = UniSatWallet.estimateFee(numAddresses);
+        const totalCost = dustCost + estimatedFee;
+
+        addressCount.innerText = numAddresses;
+        estimatedCost.innerText = totalCost.toLocaleString();
+    } catch (e) {
+        addressCount.innerText = '--';
+        estimatedCost.innerText = '--';
+    }
+}
+
+/**
+ * Build session data object for blockchain saving
+ */
+function buildSessionDataForBlockchain() {
+    const worldState = getCurrentWorldState();
+    
+    const serializableMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            serializableMagicianStones[key] = {
+                x: stone.x, y: stone.y, z: stone.z, url: stone.url,
+                width: stone.width, height: stone.height,
+                offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                loop: stone.loop, autoplay: stone.autoplay, distance: stone.distance,
+                direction: stone.direction
+            };
+        }
+    }
+
+    const serializableCalligraphyStones = {};
+    for (const key in calligraphyStones) {
+        if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+            const stone = calligraphyStones[key];
+            serializableCalligraphyStones[key] = {
+                x: stone.x, y: stone.y, z: stone.z,
+                width: stone.width, height: stone.height,
+                offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor, transparent: stone.transparent,
+                fontFamily: stone.fontFamily, fontSize: stone.fontSize,
+                fontWeight: stone.fontWeight, fontColor: stone.fontColor,
+                text: stone.text, link: stone.link, direction: stone.direction
+            };
+        }
+    }
+
+    const deltas = [];
+    for (const [chunkKey, changes] of worldState.chunkDeltas) {
+        if (parseChunkKey(chunkKey)) {
+            deltas.push({ chunk: chunkKey, changes: changes });
+        }
+    }
+
+    return {
+        world: worldName,
+        seed: worldSeed,
+        user: userName,
+        savedAt: new Date().toISOString(),
+        deltas: deltas,
+        foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
+        magicianStones: serializableMagicianStones,
+        calligraphyStones: serializableCalligraphyStones,
+        profile: {
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            health: player.health,
+            score: player.score,
+            inventory: INVENTORY
+        }
+    };
+}
+
+/**
+ * Save the current session to Bitcoin blockchain via UniSat
+ */
+async function saveSessionToBlockchain() {
+    if (typeof UniSatWallet === 'undefined') {
+        addMessage('UniSat wallet module not loaded', 3000);
+        return;
+    }
+
+    const status = UniSatWallet.getStatus();
+    if (!status.isConnected) {
+        addMessage('Please connect UniSat wallet first', 3000);
+        return;
+    }
+
+    const saveBtn = document.getElementById('unisatSaveSessionBtn');
+    const txResult = document.getElementById('unisatTxResult');
+    const txLink = document.getElementById('unisatTxLink');
+
+    try {
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'Preparing transaction...';
+        addMessage('Preparing session for blockchain...', 2000);
+
+        // Build session data
+        const sessionData = buildSessionDataForBlockchain();
+
+        // Save to chain
+        saveBtn.innerText = 'Please confirm in UniSat...';
+        const result = await UniSatWallet.saveSessionToChain(sessionData);
+
+        console.log('[UniSat] Session saved to chain:', result);
+        addMessage('Session saved to blockchain! TX: ' + result.txid.substring(0, 16) + '...', 5000);
+
+        // Show result in modal
+        if (txResult && txLink) {
+            txLink.href = 'https://mempool.space/testnet/tx/' + result.txid;
+            txLink.innerText = result.txid;
+            txResult.style.display = 'block';
+        }
+
+        // Also show in download modal for reference
+        const downloadAddressList = document.getElementById('downloadAddressList');
+        if (downloadAddressList) {
+            downloadAddressList.value = 'Bitcoin TX: ' + result.txid + '\n\nAddresses:\n' + result.addresses.join('\n');
+        }
+
+    } catch (error) {
+        console.error('[UniSat] Failed to save session:', error);
+        addMessage('Failed to save to blockchain: ' + error.message, 5000);
+        
+        if (txResult) {
+            txResult.style.display = 'none';
+        }
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = 'Save Session to Chain';
+    }
+}
+
+/**
+ * Save WebRTC offer to blockchain
+ */
+async function saveOfferToBlockchain(offerData) {
+    if (typeof UniSatWallet === 'undefined' || !UniSatWallet.getStatus().isConnected) {
+        console.log('[UniSat] Wallet not connected, skipping blockchain save for offer');
+        return null;
+    }
+
+    try {
+        addMessage('Saving offer to blockchain...', 2000);
+        const result = await UniSatWallet.saveOfferToChain({
+            type: 'offer',
+            world: worldName,
+            user: userName,
+            offer: offerData.offer,
+            iceCandidates: offerData.iceCandidates,
+            timestamp: Date.now()
+        });
+        addMessage('Offer saved to blockchain!', 3000);
+        return result;
+    } catch (error) {
+        console.error('[UniSat] Failed to save offer:', error);
+        addMessage('Failed to save offer: ' + error.message, 3000);
+        return null;
+    }
+}
+
+/**
+ * Save WebRTC answer to blockchain
+ */
+async function saveAnswerToBlockchain(answerData) {
+    if (typeof UniSatWallet === 'undefined' || !UniSatWallet.getStatus().isConnected) {
+        console.log('[UniSat] Wallet not connected, skipping blockchain save for answer');
+        return null;
+    }
+
+    try {
+        addMessage('Saving answer to blockchain...', 2000);
+        const result = await UniSatWallet.saveAnswerToChain({
+            type: 'answer',
+            world: worldName,
+            user: userName,
+            answer: answerData.answer,
+            iceCandidates: answerData.iceCandidates,
+            timestamp: Date.now()
+        });
+        addMessage('Answer saved to blockchain!', 3000);
+        return result;
+    } catch (error) {
+        console.error('[UniSat] Failed to save answer:', error);
+        addMessage('Failed to save answer: ' + error.message, 3000);
+        return null;
+    }
+}

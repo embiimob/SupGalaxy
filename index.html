@@ -105,6 +105,8 @@
             <button id="saveChangesBtn" style="display:none;">Save (X)</button>
             <button id="joinScriptBtn" style="display:none;">Join (J)</button>
             <button id="usersBtn" style="display:none;">🌐 0</button>
+            <button id="unisatBtn" style="display:none;" title="UniSat Wallet">₿ Connect</button>
+            <button id="saveToChainBtn" style="display:none;" title="Save to Bitcoin">₿ Save</button>
         </div>
     </div>
     <div id="messages"></div>
@@ -428,7 +430,44 @@
             </div>
         </div>
     </div>
+    <!-- UniSat Wallet Modal -->
+    <div id="unisatModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 250; background: rgba(0,0,0,0.8);">
+        <div style="background: var(--panel); padding: 24px; border-radius: 12px; min-width: 400px; max-width: 500px; color: #fff;">
+            <h3 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 24px;">₿</span> UniSat Wallet
+            </h3>
+            <div id="unisatStatus" style="margin-bottom: 16px; padding: 12px; background: #1a2a3a; border-radius: 8px;">
+                <div id="unisatStatusText">Not connected</div>
+                <div id="unisatAddress" style="font-family: monospace; font-size: 11px; word-break: break-all; margin-top: 8px; display: none;"></div>
+                <div id="unisatBalance" style="margin-top: 8px; display: none;"></div>
+            </div>
+            <div id="unisatActions" style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="unisatConnectBtn" style="padding: 12px; background: #f7931a; color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Connect UniSat Wallet</button>
+                <button id="unisatDisconnectBtn" style="padding: 12px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; display: none;">Disconnect</button>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #333; margin: 16px 0;">
+            <div id="unisatSaveSection" style="display: none;">
+                <h4 style="margin-top: 0;">Save to Bitcoin Testnet</h4>
+                <p style="font-size: 12px; opacity: 0.8; margin-bottom: 12px;">Save your session directly to the Bitcoin testnet blockchain using Sup!? encoding.</p>
+                <div id="unisatSaveEstimate" style="padding: 12px; background: #1a2a3a; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
+                    <div>Estimated cost: <span id="unisatEstimatedCost">--</span> satoshis</div>
+                    <div>Addresses: <span id="unisatAddressCount">--</span></div>
+                </div>
+                <button id="unisatSaveSessionBtn" style="width: 100%; padding: 12px; background: #4CAF50; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">Save Session to Chain</button>
+                <div id="unisatTxResult" style="display: none; margin-top: 12px; padding: 12px; background: #1a3a2a; border-radius: 8px;">
+                    <div style="color: #4CAF50; font-weight: bold;">✓ Transaction Broadcast</div>
+                    <div style="font-family: monospace; font-size: 10px; word-break: break-all; margin-top: 8px;">
+                        <a id="unisatTxLink" href="#" target="_blank" style="color: #64B5F6;">View on Explorer</a>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: right; margin-top: 16px;">
+                <button id="unisatCloseBtn" style="padding: 10px 20px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer;">Close</button>
+            </div>
+        </div>
+    </div>
     <script src="js/declare.js"></script>
+    <script src="js/unisat-wallet.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
     <script src="js/video-player.js"></script>
