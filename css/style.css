@@ -64,6 +64,16 @@
                 cursor: pointer;
             }
 
+            #loginCard #unisatConnectBtn {
+                background: #f7931a;
+                color: #fff;
+                transition: background 0.3s;
+            }
+
+            #loginCard #unisatConnectBtn:hover {
+                background: #e07800;
+            }
+
         .inputContainer {
             display: flex;
             align-items: center;
@@ -188,6 +198,17 @@
                 color: #fff;
                 border-radius: 6px;
                 cursor: pointer;
+            }
+
+            #hud #unisatSaveBtn {
+                background: #f7931a;
+                color: #fff;
+                font-weight: 700;
+                transition: background 0.3s;
+            }
+
+            #hud #unisatSaveBtn:hover {
+                background: #e07800;
             }
 
         #messages {

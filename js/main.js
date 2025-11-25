@@ -3365,7 +3365,88 @@ document.addEventListener("DOMContentLoaded", (async function () {
             acceptPendingOffers(), this.blur()
         })), document.getElementById("closePending").addEventListener("click", (function () {
             document.getElementById("pendingModal").style.display = "none", pendingOffers = [], updatePendingModal(), this.blur()
-        })), async function () {
+        })), 
+        // UniSat wallet button handlers
+        document.getElementById("unisatConnectBtn").addEventListener("click", (async function () {
+            this.blur();
+            try {
+                if (!window.UniSat || !window.UniSat.isAvailable()) {
+                    addMessage("UniSat wallet not found. Please install the UniSat browser extension.", 5000);
+                    window.open("https://unisat.io/download", "_blank");
+                    return;
+                }
+                addMessage("Connecting to UniSat wallet...", 2000);
+                const result = await window.UniSat.connect();
+                addMessage("Connected to UniSat: " + result.address.slice(0, 8) + "...", 3000);
+                this.textContent = "🦊 " + result.address.slice(0, 8) + "...";
+                this.style.background = "#4ade80";
+                // Show UniSat save button if available
+                const unisatSaveBtn = document.getElementById("unisatSaveBtn");
+                if (unisatSaveBtn) {
+                    unisatSaveBtn.style.display = "inline-block";
+                }
+            } catch (error) {
+                console.error("[UniSat] Connection error:", error);
+                addMessage("Failed to connect UniSat: " + error.message, 5000);
+            }
+        })),
+        document.getElementById("unisatSaveBtn") && document.getElementById("unisatSaveBtn").addEventListener("click", (async function () {
+            this.blur();
+            try {
+                if (!window.UniSat || !window.UniSat.getStatus().connected) {
+                    addMessage("Please connect UniSat wallet first", 3000);
+                    return;
+                }
+                
+                addMessage("Preparing session for Bitcoin broadcast...", 2000);
+                
+                // Collect session data (similar to downloadSession)
+                const worldState = getCurrentWorldState();
+                const deltas = [];
+                
+                for (const [chunkKey, changes] of worldState.chunkDeltas.entries()) {
+                    deltas.push({
+                        chunk: chunkKey,
+                        changes: changes
+                    });
+                }
+                
+                const sessionData = {
+                    world: worldName,
+                    seed: worldSeed,
+                    user: userName,
+                    profile: {
+                        x: player.x,
+                        y: player.y,
+                        z: player.z,
+                        health: player.health,
+                        score: player.score,
+                        inventory: INVENTORY
+                    },
+                    deltas: deltas,
+                    magicianStones: magicianStones,
+                    calligraphyStones: calligraphyStones
+                };
+                
+                // Prepare and show preview
+                const preview = await window.UniSat.prepareAddresses(sessionData);
+                addMessage("Session encoded to " + preview.addresses.length + " addresses. Requesting signature...", 3000);
+                
+                // Broadcast to Bitcoin testnet
+                const result = await window.UniSat.broadcastSession(sessionData);
+                
+                if (result && result.txid) {
+                    addMessage("✅ Session saved to Bitcoin! TxID: " + result.txid.slice(0, 16) + "...", 10000);
+                    console.log("[UniSat] Session broadcast complete:", result);
+                } else {
+                    addMessage("Session broadcast initiated. Check UniSat for status.", 5000);
+                }
+            } catch (error) {
+                console.error("[UniSat] Save error:", error);
+                addMessage("Failed to save to Bitcoin: " + error.message, 5000);
+            }
+        })),
+        async function () {
             console.log("[USERS] Initializing worlds and users");
             var e = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
             if (e) {

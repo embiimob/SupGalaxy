@@ -86,7 +86,45 @@ async function connectToServer(e, t, o) {
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
         var p = "MCConn@" + e + "@" + worldName,
             m = await GetPublicAddressByKeyword(p);
-        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
+        
+        // Check if UniSat is connected and offer to broadcast directly
+        if (window.UniSat && window.UniSat.getStatus().connected) {
+            document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p;
+            document.getElementById("joinScriptModal").style.display = "block";
+            document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server";
+            document.getElementById("joinScriptModal").querySelector("p").innerHTML = 
+                "You can broadcast this connection request directly to Bitcoin:<br><br>" +
+                "<button id='unisatBroadcastOfferBtn' style='background:#f7931a;color:#fff;padding:10px;border:0;border-radius:6px;cursor:pointer;margin-bottom:10px;'>⛓️ Broadcast via UniSat</button><br>" +
+                "<small>Or copy the address and use Sup!? manually.</small>";
+            
+            // Add click handler for the broadcast button
+            setTimeout(() => {
+                const broadcastBtn = document.getElementById("unisatBroadcastOfferBtn");
+                if (broadcastBtn) {
+                    broadcastBtn.onclick = async () => {
+                        try {
+                            addMessage("Broadcasting connection offer via UniSat...", 3000);
+                            const result = await window.UniSat.broadcastWebRTCSignal(i, worldName, userName);
+                            if (result && result.txid) {
+                                addMessage("✅ Offer broadcast to Bitcoin! TxID: " + result.txid.slice(0, 16) + "...", 10000);
+                            } else {
+                                addMessage("Offer broadcast initiated. Check UniSat for status.", 5000);
+                            }
+                        } catch (error) {
+                            console.error("[UniSat] Broadcast offer error:", error);
+                            addMessage("Broadcast failed: " + error.message, 5000);
+                        }
+                    };
+                }
+            }, 100);
+        } else {
+            document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p;
+            document.getElementById("joinScriptModal").style.display = "block";
+            document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server";
+            document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.";
+        }
+        
+        addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
@@ -1533,7 +1571,47 @@ async function acceptPendingOffers() {
         const n = document.getElementById("joinScriptModal"),
             i = "MCBatch@" + userName + "@" + worldName,
             c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        
+        // Check if UniSat is connected and offer to broadcast directly
+        if (window.UniSat && window.UniSat.getStatus().connected) {
+            n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW";
+            n.querySelector("p").innerHTML = 
+                "You can broadcast this batch directly to Bitcoin:<br><br>" +
+                "<button id='unisatBroadcastBatchBtn' style='background:#f7931a;color:#fff;padding:10px;border:0;border-radius:6px;cursor:pointer;margin-bottom:10px;'>⛓️ Broadcast via UniSat</button><br>" +
+                "<small>Or copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY</small>";
+            n.querySelector("#joinScriptText").value = c;
+            n.style.display = "block";
+            isPromptOpen = !0;
+            
+            // Add click handler for the broadcast button
+            setTimeout(() => {
+                const broadcastBtn = document.getElementById("unisatBroadcastBatchBtn");
+                if (broadcastBtn) {
+                    broadcastBtn.onclick = async () => {
+                        try {
+                            addMessage("Broadcasting batch answers via UniSat...", 3000);
+                            const result = await window.UniSat.broadcastWebRTCSignal(e, worldName, userName);
+                            if (result && result.txid) {
+                                addMessage("✅ Batch broadcast to Bitcoin! TxID: " + result.txid.slice(0, 16) + "...", 10000);
+                            } else {
+                                addMessage("Batch broadcast initiated. Check UniSat for status.", 5000);
+                            }
+                        } catch (error) {
+                            console.error("[UniSat] Broadcast batch error:", error);
+                            addMessage("Broadcast failed: " + error.message, 5000);
+                        }
+                    };
+                }
+            }, 100);
+        } else {
+            n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW";
+            n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY";
+            n.querySelector("#joinScriptText").value = c;
+            n.style.display = "block";
+            isPromptOpen = !0;
+        }
+        
+        addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
