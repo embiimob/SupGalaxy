@@ -1,3 +1,43 @@
+async function handleFileDrop(file) {
+    if (!file) {
+        addMessage("No file provided to handle.", 3000);
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function(event) {
+        try {
+            const content = event.target.result;
+            const data = JSON.parse(content);
+
+            // Heuristic to determine file type
+            if (data.playerData && data.hash) {
+                // Looks like a session file
+                console.log("[FileDrop] Detected session file.");
+                applySaveFile(data, "local", new Date().toISOString());
+            } else if (data.offer && data.username) {
+                // Looks like a WebRTC offer
+                console.log("[FileDrop] Detected WebRTC offer file.");
+                await handleMinimapFile(file);
+            } else if (data.answer && data.username) {
+                // Looks like a WebRTC answer
+                console.log("[FileDrop] Detected WebRTC answer file.");
+                await handleMinimapFile(file);
+            } else if (data.deltas && data.foreignBlockOrigins) {
+                // Looks like a world data file (no player data)
+                console.log("[FileDrop] Detected world data file.");
+                applySaveFile(data, "local", new Date().toISOString());
+            } else {
+                addMessage("Unrecognized JSON file format.", 3000);
+            }
+        } catch (err) {
+            console.error("Error processing dropped file:", err);
+            addMessage("Sorry, file appears to be malformed or not valid JSON.", 3000);
+        }
+    };
+    reader.readAsText(file);
+}
+
 function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
@@ -2803,7 +2843,15 @@ function initMinimap() {
     })), e.addEventListener("drop", (async function (t) {
         t.preventDefault(), e.style.border = "1px solid rgba(255,255,255,0.1)";
         const o = t.dataTransfer.files;
-        for (const e of o) e && "application/json" === e.type ? (console.log("[MINIMAP] File dropped:", e.name), await handleMinimapFile(e)) : (addMessage("Skipped non-JSON file: " + (e ? e.name : "unknown"), 3e3), console.log("[MINIMAP] Invalid file dropped:", e ? e.type : "no file"))
+        for (const file of o) {
+            if (file && file.type === "application/json") {
+                console.log("[MINIMAP] File dropped:", file.name);
+                await handleFileDrop(file);
+            } else {
+                addMessage("Skipped non-JSON file: " + (file ? file.name : "unknown"), 3000);
+                console.log("[MINIMAP] Invalid file dropped:", file ? file.type : "no file");
+            }
+        }
     })), t.addEventListener("change", (async function () {
         if (t.files.length > 0) {
             for (const e of t.files) console.log("[MINIMAP] File selected via double-click:", e.name), await handleMinimapFile(e);
@@ -3421,14 +3469,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             e.preventDefault(), s.style.backgroundColor = "";
             var t = e.dataTransfer.files[0];
             if (t) {
-                var o = new FileReader;
-                o.onload = function (e) {
-                    try {
-                        applySaveFile(JSON.parse(e.target.result), "local", (new Date).toISOString())
-                    } catch (e) {
-                        console.error("Error parsing session file:", e), addMessage("Sorry, file malformed.", 3e3)
-                    }
-                }, o.readAsText(t)
+                handleFileDrop(t);
             }
         }));
 
