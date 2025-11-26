@@ -19,6 +19,29 @@ var userPositions = {},
     partialIPFSUpdates = new Map,
     syncedWorlds = new Set;
 
+// Helper functions for peer keyword format: world@username (max 20 chars)
+function sanitizePeerUsername(username) {
+    return (username || '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+function makePeerKeyword(world, username) {
+    var w = (world || '').slice(0, 8);
+    var maxUserLen = 20 - w.length - 1;
+    var sanitized = sanitizePeerUsername(username);
+    var truncated = sanitized.slice(0, Math.max(0, maxUserLen));
+    return w + '@' + truncated;
+}
+
+function parsePeerKeyword(keyword) {
+    if (!keyword || typeof keyword !== 'string') return null;
+    var idx = keyword.indexOf('@');
+    if (idx < 0) return null;
+    return {
+        world: keyword.slice(0, idx),
+        username: keyword.slice(idx + 1)
+    };
+}
+
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -84,14 +107,14 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
-        var p = "MCConn@" + e + "@" + worldName,
+        var p = makePeerKeyword(worldName, e),
             m = await GetPublicAddressByKeyword(p);
-        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
+        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address (format: world@username) and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
-        var f = "MCAnswer@" + userName + "@" + worldName;
+        var f = makePeerKeyword(worldName, userName);
         answerPollingIntervals.set(f, setInterval((function () {
             if (worker.postMessage({
                 type: "poll",
@@ -110,7 +133,8 @@ async function connectToServer(e, t, o) {
             }
         }), 3e4))
     } catch (t) {
-        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+        var answerKey = makePeerKeyword(worldName, userName);
+        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get(answerKey)), answerPollingIntervals.delete(answerKey)
     }
 }
 async function sendWorldStateAsync(peer, worldState, username) {
@@ -210,7 +234,8 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                var answerKeyCleanup = makePeerKeyword(worldName, userName);
+                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(answerKeyCleanup)), answerPollingIntervals.delete(answerKeyCleanup)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -227,7 +252,8 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                var batchAnswerKeyCleanup = makePeerKeyword(worldName, userName);
+                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(batchAnswerKeyCleanup)), answerPollingIntervals.delete(batchAnswerKeyCleanup)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -1531,9 +1557,9 @@ async function acceptPendingOffers() {
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
         const n = document.getElementById("joinScriptModal"),
-            i = "MCBatch@" + userName + "@" + worldName,
+            i = makePeerKeyword(worldName, userName),
             c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address (format: world@username) → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
@@ -1588,7 +1614,7 @@ function setupPendingModal() {
 function startOfferPolling() {
     if (isHost) {
         console.log("[SYSTEM] Starting offer polling for:", userName);
-        var e = "MCConn@" + userName + "@" + worldName,
+        var e = makePeerKeyword(worldName, userName),
             t = setInterval((async function () {
                 try {
                     await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
@@ -1611,7 +1637,7 @@ function startOfferPolling() {
 }
 
 function startAnswerPolling(e) {
-    var t = "MCAnswer@" + userName + "@" + worldName;
+    var t = makePeerKeyword(worldName, userName);
     answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
         if (worker.postMessage({
             type: "poll",
@@ -1793,7 +1819,7 @@ async function initServers() {
                     timestamp: l,
                     connectionRequestCount: 0,
                     latestRequestTime: null
-                }), o.push("MCConn@" + m + "@" + worldName)
+                }), o.push(makePeerKeyword(worldName, m))
             } catch (e) {
                 console.error("[SYSTEM] Error processing initial server message:", c.TransactionId, e)
             }
@@ -1802,7 +1828,7 @@ async function initServers() {
         for (var w of knownServers) (!h.has(w.hostUser) || h.get(w.hostUser).timestamp < w.timestamp) && h.set(w.hostUser, w);
         for (var v of (knownServers = Array.from(h.values()).sort((function (e, t) {
             return t.timestamp - e.timestamp
-        })).slice(0, 10), isHost && o.push("MCConn@" + userName + "@" + worldName), o)) {
+        })).slice(0, 10), isHost && o.push(makePeerKeyword(worldName, userName)), o)) {
             try {
                 await new Promise((e => setTimeout(e, n))), M = await GetPublicAddressByKeyword(v)
             } catch (e) {
@@ -1826,14 +1852,15 @@ async function initServers() {
                 }
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                m = v.match(/MCConn@(.+)@[^@]+$/)[1];
+                var parsedKeyword = parsePeerKeyword(v);
+                m = parsedKeyword ? parsedKeyword.username : v.split('@')[1];
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
             }
         }
         if (isHost) {
-            var M, b = "MCConn@" + userName + "@" + worldName;
+            var M, b = makePeerKeyword(worldName, userName);
             if (M = await GetPublicAddressByKeyword(b)) {
                 for (a = [], r = 0, s = 5e3; ;) try {
                     var C;

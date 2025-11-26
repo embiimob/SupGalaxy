@@ -1405,12 +1405,12 @@ self.onmessage = async function(e) {
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
             var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            var offerKeyword = isHost ? makePeerKeyword(worldName, userName) : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                    answerKeywords.push(makePeerKeyword(worldName, userName));
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
