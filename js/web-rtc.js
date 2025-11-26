@@ -1449,7 +1449,7 @@ function updatePendingModal() {
         var s = document.createElement("input");
         s.type = "checkbox", s.className = "selectOffer", s.dataset.user = o.clientUser, a.appendChild(r), a.appendChild(s), t.appendChild(a)
     }
-    e.style.display = isHost && pendingOffers.length > 0 ? "block" : "none"
+    e.style.display = pendingOffers.length > 0 ? "block" : "none"
 }
 
 function activateHost() {
@@ -1692,7 +1692,7 @@ function setupPendingModal() {
     const e = document.getElementById("pendingModal");
     e && (e.remove(), console.log("[MODAL] Removed existing pendingModal"));
     const t = document.createElement("div");
-    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = isHost && pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] pendingModal added to DOM");
+    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] pendingModal added to DOM");
     const o = t.querySelector("#pendingList");
     o.style.maxHeight = "calc(80vh - 100px)", o.style.overflow = "auto", o.innerHTML = "";
     let a = !1;
