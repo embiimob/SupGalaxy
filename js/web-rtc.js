@@ -41,10 +41,14 @@ function makePeerKeyword(world, username) {
  * @returns {{world: string, username: string}} - Parsed world and username
  */
 function parsePeerKeyword(keyword) {
-    var parts = String(keyword || "").split("@");
+    var str = String(keyword || "");
+    var idx = str.indexOf("@");
+    if (idx === -1) {
+        return { world: str, username: "" };
+    }
     return {
-        world: parts[0] || "",
-        username: parts[1] || ""
+        world: str.slice(0, idx),
+        username: str.slice(idx + 1)
     };
 }
 
