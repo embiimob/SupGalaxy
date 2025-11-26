@@ -35,7 +35,9 @@ function parseJoinString(input) {
     // World names are max 8 chars, usernames are max 20 chars
     // If first part is <= 8 chars and second part is > 8 chars, assume world@user
     // If second part is <= 8 chars and first part is > 8 chars, assume user@world
-    // Otherwise, assume the input is world@user format (preferred)
+    // Edge case: When both parts are <= 8 chars (e.g., both could be worlds or short usernames),
+    // we default to treating the input as world@user format since this is the preferred/canonical format.
+    // This preserves backward compatibility while standardizing new inputs.
     let world, user;
 
     if (first.length <= 8 && second.length > 8) {
@@ -47,7 +49,8 @@ function parseJoinString(input) {
         world = second.slice(0, 8);
         user = first.slice(0, 20);
     } else {
-        // Ambiguous case or both are short - treat as world@user (preferred format)
+        // Ambiguous case (both <= 8 chars or both > 8 chars) - treat as world@user (preferred format)
+        // This is the canonical format and preserves the input order for ambiguous cases
         world = first.slice(0, 8);
         user = second.slice(0, 20);
     }
