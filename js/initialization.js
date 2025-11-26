@@ -153,14 +153,16 @@ function processCachedMessages(messages, progressCallback) {
     for (const msg of messages) {
         try {
             // Extract join tokens from message content
-            if (msg.Message && typeof msg.Message === 'string') {
+            // Note: extractJoinTokens is loaded globally from joinParser.js
+            if (msg.Message && typeof msg.Message === 'string' && typeof extractJoinTokens === 'function') {
                 const tokens = extractJoinTokens(msg.Message);
                 const timestamp = msg.BlockDate ? new Date(msg.BlockDate) : null;
                 aggregateWorldActivity(tokens, timestamp);
             }
 
             // Check for keyword patterns
-            if (msg.ToAddress && typeof msg.ToAddress === 'string') {
+            // Note: parseMCWorldKeyword is loaded globally from joinParser.js
+            if (msg.ToAddress && typeof msg.ToAddress === 'string' && typeof parseMCWorldKeyword === 'function') {
                 const keyword = parseMCWorldKeyword(msg.ToAddress);
                 if (keyword && keyword.world) {
                     // Add world without user context

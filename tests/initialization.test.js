@@ -27,58 +27,10 @@ function assertEqual(actual, expected, message) {
     }
 }
 
-// Mock the extractJoinTokens and parseMCWorldKeyword from joinParser
-global.extractJoinTokens = function(text) {
-    if (!text || typeof text !== 'string') {
-        return [];
-    }
-    const pattern = /\b([a-zA-Z0-9]+)@([a-zA-Z0-9]+)\b/g;
-    const tokens = [];
-    const seen = new Set();
-    let match;
-
-    while ((match = pattern.exec(text)) !== null) {
-        const first = match[1].slice(0, 20);
-        const second = match[2].slice(0, 20);
-        let world, user;
-        
-        if (first.length <= 8 && second.length > 8) {
-            world = first.slice(0, 8);
-            user = second.slice(0, 20);
-        } else if (second.length <= 8 && first.length > 8) {
-            world = second.slice(0, 8);
-            user = first.slice(0, 20);
-        } else {
-            world = first.slice(0, 8);
-            user = second.slice(0, 20);
-        }
-        
-        const normalized = world + '@' + user;
-        if (!seen.has(normalized)) {
-            seen.add(normalized);
-            tokens.push({ world, user, normalized });
-        }
-    }
-    return tokens;
-};
-
-global.parseMCWorldKeyword = function(keyword) {
-    if (!keyword || typeof keyword !== 'string') {
-        return null;
-    }
-    const patterns = [
-        /^MCWorld@([a-zA-Z0-9]+)/i,
-        /^MCUserJoin@([a-zA-Z0-9]+)/i,
-        /^MCServerJoin@([a-zA-Z0-9]+)/i
-    ];
-    for (const pattern of patterns) {
-        const match = keyword.match(pattern);
-        if (match && match[1]) {
-            return { world: match[1].slice(0, 8), type: keyword.split('@')[0] };
-        }
-    }
-    return null;
-};
+// Import the functions from joinParser.js to make them available globally
+const joinParser = require('../js/joinParser.js');
+global.extractJoinTokens = joinParser.extractJoinTokens;
+global.parseMCWorldKeyword = joinParser.parseMCWorldKeyword;
 
 // Mock knownWorlds
 global.knownWorlds = new Map();
