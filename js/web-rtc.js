@@ -259,6 +259,10 @@ function setupDataChannel(e, t) {
             WORLD_STATES.clear();
             console.log(`[WebRTC] Client cleared all world states to sync with host.`);
             switchWorld(worldName);
+            // Stop polling for offers when connected as a client
+            // (hosts should continue polling for offers from other players)
+            stopOfferPolling();
+            console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
@@ -1732,29 +1736,43 @@ function setupPendingModal() {
 }
 
 function startOfferPolling() {
-    if (isHost) {
-        console.log("[SYSTEM] Starting offer polling for:", userName);
-        // Use uniform keyword format: world@username (monitoring own thread for offers)
-        var e = worldName + "@" + userName,
-            t = setInterval((async function () {
-                try {
-                    await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
-                        type: "poll",
-                        chunkKeys: [],
-                        masterKey: MASTER_WORLD_KEY,
-                        userAddress: userAddress,
-                        worldName: worldName,
-                        serverKeyword: "MCServerJoin@" + worldName,
-                        offerKeyword: e,
-                        answerKeywords: [],
-                        userName: userName
-                    })
-                } catch (e) {
-                    console.error("[SYSTEM] Error in offer polling:", e)
-                }
-            }), 3e4);
-        offerPollingIntervals.set(e, t)
-    } else console.log("[SYSTEM] Not hosting, skipping offer polling")
+    // All players should poll for offers at their own world@username thread
+    // (not just hosts). This enables IPFS-based signaling where anyone can receive offers.
+    console.log("[SYSTEM] Starting offer polling for:", userName);
+    // Use uniform keyword format: world@username (monitoring own thread for offers)
+    var e = worldName + "@" + userName;
+    if (offerPollingIntervals.has(e)) {
+        console.log("[SYSTEM] Offer polling already active for:", e);
+        return;
+    }
+    var t = setInterval((async function () {
+        try {
+            await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
+                type: "poll",
+                chunkKeys: [],
+                masterKey: MASTER_WORLD_KEY,
+                userAddress: userAddress,
+                worldName: worldName,
+                serverKeyword: "MCServerJoin@" + worldName,
+                offerKeyword: e,
+                answerKeywords: [],
+                userName: userName
+            })
+        } catch (e) {
+            console.error("[SYSTEM] Error in offer polling:", e)
+        }
+    }), 3e4);
+    offerPollingIntervals.set(e, t)
+}
+
+function stopOfferPolling() {
+    // Stop offer polling (called when client connects to a host)
+    var e = worldName + "@" + userName;
+    if (offerPollingIntervals.has(e)) {
+        console.log("[SYSTEM] Stopping offer polling for:", e);
+        clearInterval(offerPollingIntervals.get(e));
+        offerPollingIntervals.delete(e);
+    }
 }
 
 function startAnswerPolling(e) {
@@ -2087,7 +2105,10 @@ async function initServers() {
         console.log("[SYSTEM] Initial load complete."), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
-        }), isInitialLoad = !1
+        }), isInitialLoad = !1;
+        // Start offer polling for all players at their own world@username thread
+        // This enables receiving offers via IPFS signaling
+        startOfferPolling();
     } else console.error("[SYSTEM] No server address for:", t)
 }
 
