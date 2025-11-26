@@ -1293,8 +1293,30 @@ self.onmessage = async function(e) {
                     var peer = peers.get(answer.hostUser);
                     if (peer && peer.pc) {
                         try {
-                            peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
-                            for (var candidate of answer.iceCandidates || []) {
+                            // Handle both direct answer and batch answer formats
+                            var answerSdp = answer.answer;
+                            var iceCandidates = answer.iceCandidates || [];
+                            
+                            // If this is a batch answer (no direct answer but has batch array), find the answer for the current user
+                            if (answer.answer === undefined && Array.isArray(answer.batch)) {
+                                var batchEntry = answer.batch.find(function(b) { return b.user === userName; });
+                                if (batchEntry) {
+                                    answerSdp = batchEntry.answer;
+                                    iceCandidates = batchEntry.iceCandidates || [];
+                                    console.log('[WebRTC] Found batch answer for user:', userName);
+                                } else {
+                                    console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser);
+                                    continue;
+                                }
+                            }
+                            
+                            if (!answerSdp) {
+                                console.log('[WebRTC] No valid answer SDP for:', answer.hostUser);
+                                continue;
+                            }
+                            
+                            peer.pc.setRemoteDescription(new RTCSessionDescription(answerSdp));
+                            for (var candidate of iceCandidates) {
                                 peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
                             }
                             console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
