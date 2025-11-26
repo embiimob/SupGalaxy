@@ -1557,10 +1557,14 @@ async function acceptPendingOffers() {
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
         const n = document.getElementById("joinScriptModal");
-        // Generate keywords for all recipients in the batch
+        // Generate keywords and resolve to addresses for all recipients in the batch
         const recipientKeywords = o.map(recipientUser => makePeerKeyword(worldName, recipientUser));
-        const recipientKeywordsText = recipientKeywords.join('\n');
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy recipient keywords (format: world@username) → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = recipientKeywordsText, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        const recipientAddresses = await Promise.all(recipientKeywords.map(async (keyword) => {
+            const addr = await GetPublicAddressByKeyword(keyword);
+            return addr ? addr.trim().replace(/"|'/g, "") : keyword;
+        }));
+        const recipientAddressesText = recipientAddresses.join('\n');
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy recipient addresses → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = recipientAddressesText, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
