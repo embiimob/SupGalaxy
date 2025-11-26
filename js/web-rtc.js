@@ -84,31 +84,14 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
-        var p = "MCConn@" + e + "@" + worldName,
+        var p = worldName + "@" + e,
             m = await GetPublicAddressByKeyword(p);
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
-        var f = "MCAnswer@" + userName + "@" + worldName;
-        answerPollingIntervals.set(f, setInterval((function () {
-            if (worker.postMessage({
-                type: "poll",
-                chunkKeys: [],
-                masterKey: MASTER_WORLD_KEY,
-                userAddress: userAddress,
-                worldName: worldName,
-                serverKeyword: "MCServerJoin@" + worldName,
-                offerKeyword: null,
-                answerKeywords: [f],
-                userName: userName
-            }), Date.now() - connectionAttempts.get(e) > 18e5) {
-                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
-                var t = peers.get(e);
-                t && t.pc && t.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
-            }
-        }), 3e4))
+        startPolling();
     } catch (t) {
         console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
     }
@@ -1436,7 +1419,7 @@ function updatePendingModal() {
 
 function activateHost() {
     if (!isHost) {
-        isHost = !0, console.log("[SYSTEM] Hosting activated."), addMessage("Host mode activated!", 3e3), startOfferPolling();
+        isHost = !0, console.log("[SYSTEM] Hosting activated."), addMessage("Host mode activated!", 3e3), startPolling();
         const e = document.getElementById("usersBtn");
         e && e.classList.add("hosting"), setInterval((() => {
             if (!isHost) return;
@@ -1530,10 +1513,20 @@ async function acceptPendingOffers() {
             r = URL.createObjectURL(a),
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
-        const n = document.getElementById("joinScriptModal"),
-            i = "MCBatch@" + userName + "@" + worldName,
-            c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        const n = document.getElementById("joinScriptModal");
+
+        // Determine the list of recipients' keywords
+        const recipientKeywords = t.map(recipient => `${worldName}@${recipient.user}`);
+        const uniqueRecipientKeywords = [...new Set(recipientKeywords)];
+
+        // Get public addresses for all unique keywords
+        const addressPromises = uniqueRecipientKeywords.map(keyword => GetPublicAddressByKeyword(keyword));
+        const resolvedAddresses = await Promise.all(addressPromises);
+
+        // Create the final address string for the 'To:' field
+        const finalAddresses = resolvedAddresses.map((addr, index) => addr ? addr.trim().replace(/"|'/g, "") : uniqueRecipientKeywords[index]).join(',');
+
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = finalAddresses, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
@@ -1585,51 +1578,7 @@ function setupPendingModal() {
     }
 }
 
-function startOfferPolling() {
-    if (isHost) {
-        console.log("[SYSTEM] Starting offer polling for:", userName);
-        var e = "MCConn@" + userName + "@" + worldName,
-            t = setInterval((async function () {
-                try {
-                    await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
-                        type: "poll",
-                        chunkKeys: [],
-                        masterKey: MASTER_WORLD_KEY,
-                        userAddress: userAddress,
-                        worldName: worldName,
-                        serverKeyword: "MCServerJoin@" + worldName,
-                        offerKeyword: e,
-                        answerKeywords: [],
-                        userName: userName
-                    })
-                } catch (e) {
-                    console.error("[SYSTEM] Error in offer polling:", e)
-                }
-            }), 3e4);
-        offerPollingIntervals.set(e, t)
-    } else console.log("[SYSTEM] Not hosting, skipping offer polling")
-}
 
-function startAnswerPolling(e) {
-    var t = "MCAnswer@" + userName + "@" + worldName;
-    answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
-        if (worker.postMessage({
-            type: "poll",
-            chunkKeys: [],
-            masterKey: MASTER_WORLD_KEY,
-            userAddress: userAddress,
-            worldName: worldName,
-            serverKeyword: "MCServerJoin@" + worldName,
-            offerKeyword: null,
-            answerKeywords: [t],
-            userName: userName
-        }), Date.now() - connectionAttempts.get(e) > 18e5) {
-            console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
-            var o = peers.get(e);
-            o && o.pc && o.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
-        }
-    }), 3e4)))
-}
 async function pollServers() {
     if (isInitialLoad) console.log("[SYSTEM] Skipping poll, initial load not complete");
     else {
@@ -1996,6 +1945,122 @@ function cleanupPeer(e) {
     }
     userVideoStreams.has(e) && userVideoStreams.delete(e), delete userPositions[e], addMessage(`${e} has disconnected.`), updateHudButtons(), console.log(`[WebRTC] Cleaned up peer: ${e}`)
 }
+
+worker.onmessage = async e => {
+    if (e.data.type === 'rtc_messages') {
+        const {
+            offers,
+            answers
+        } = e.data;
+        for (const offer of offers) {
+            const clientUser = offer.user || "anonymous";
+            if (clientUser === userName) {
+                continue;
+            }
+            const profile = await GetProfileByURN(clientUser);
+            pendingOffers.push({
+                clientUser: clientUser,
+                offer: offer.offer,
+                iceCandidates: offer.iceCandidates || [],
+                transactionId: offer.transactionId,
+                timestamp: offer.timestamp,
+                profile: profile || {
+                    URN: clientUser,
+                    Creators: [null]
+                }
+            });
+            addMessage(`Connection request from ${clientUser}`, 5e3);
+            setupPendingModal();
+            if (isHost) {
+                document.getElementById("pendingModal").style.display = "block";
+                isPromptOpen = true;
+            }
+        }
+
+        for (const answer of answers) {
+            const peerUser = answer.user || "anonymous";
+            const peer = peers.get(peerUser);
+            if (!peer || !peer.pc) {
+                continue;
+            }
+            if (peer.pc.connectionState === 'stable') {
+                continue;
+            }
+
+            try {
+                let remoteDescription;
+                let iceCandidates;
+
+                if (answer.answer) {
+                    remoteDescription = new RTCSessionDescription(answer.answer);
+                    iceCandidates = answer.iceCandidates || [];
+                } else if (answer.batch) {
+                    const userAnswer = answer.batch.find(a => a.user === userName);
+                    if (userAnswer) {
+                        remoteDescription = new RTCSessionDescription(userAnswer.answer);
+                        iceCandidates = userAnswer.iceCandidates || [];
+                    }
+                }
+
+                if (remoteDescription) {
+                    await peer.pc.setRemoteDescription(remoteDescription);
+                    for (const candidate of iceCandidates) {
+                        try {
+                            await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch (error) {
+                            console.error(`[WebRTC] Failed to add ICE candidate for: ${peerUser}`, error);
+                        }
+                    }
+                }
+
+                addMessage(`Connected to ${peerUser}`, 5e3);
+                updateHudButtons();
+
+            } catch (error) {
+                console.error(`[WebRTC] Failed to process answer for: ${peerUser}`, error);
+            }
+        }
+    } else if (e.data.type === 'chunk_data') {
+        const {
+            chunkKey,
+            data
+        } = e.data;
+        const parsedKey = parseChunkKey(chunkKey);
+        if (parsedKey) {
+            const chunk = chunkManager.getChunk(parsedKey.cx, parsedKey.cz);
+            if (chunk) {
+                chunk.loadData(data);
+                chunk.generated = true;
+                chunk.needsRebuild = true;
+            }
+        }
+    } else if (e.data.type === 'chunk_generated') {
+        const {
+            chunkKey,
+            data
+        } = e.data;
+        const parsedKey = parseChunkKey(chunkKey);
+        if (parsedKey) {
+            const chunk = chunkManager.getChunk(parsedKey.cx, parsedKey.cz);
+            if (chunk) {
+                chunk.loadData(data);
+                chunk.generated = true;
+                chunk.needsRebuild = true;
+                if (initialChunkLoad && parsedKey.cx === Math.floor(player.x / CHUNK_SIZE) && parsedKey.cz === Math.floor(player.z / CHUNK_SIZE)) {
+                    initialChunkLoad = false;
+                    player.y = chunkManager.getSurfaceY(player.x, player.z) + 1;
+                    spawnPoint.y = player.y;
+                    requestAnimationFrame(gameLoop);
+                }
+            }
+        }
+    } else if (e.data.type === 'world_archetype') {
+        worldArchetype = e.data.archetype;
+        gravity = worldArchetype.gravity || 20;
+        console.log(`[Archetype] Set world archetype to: ${worldArchetype.name} with gravity ${gravity}`);
+    }
+};
+
 async function toggleCamera() {
     const e = document.getElementById("cameraBtn"),
         t = document.getElementById("proximityVideo"),

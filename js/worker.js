@@ -609,7 +609,7 @@ async function fetchIPFS(hash) {
 }
 self.onmessage = async function(e) {
         var data = e.data;
-        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, rtcKeyword = data.rtcKeyword, userName = data.userName;
 
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);
@@ -617,7 +617,7 @@ self.onmessage = async function(e) {
             return;
         }
 
-        console.log('[Worker] Received message type:', type, 'offerKeyword:', offerKeyword, 'worldName:', worldName);
+        console.log('[Worker] Received message type:', type, 'rtcKeyword:', rtcKeyword, 'worldName:', worldName);
         if (type === "sync_processed") {
             data.ids.forEach(id => processedMessages.add(id));
             console.log('[Worker] Synced processedMessages, size:', processedMessages.size);
@@ -947,33 +947,31 @@ self.onmessage = async function(e) {
                 console.error('[Worker] Error in server_updates poll:', e);
             }
             try {
-                if (offerKeyword) {
-                    var offerAddr = await getPublicAddressByKeyword(offerKeyword);
-                    if (offerAddr) {
+                if (rtcKeyword) {
+                    var rtcAddr = await getPublicAddressByKeyword(rtcKeyword);
+                    if (rtcAddr) {
                         var messages = [];
                         var skip = 0;
                         var qty = 5000;
                         while (true) {
-                            var response = await getPublicMessagesByAddress(offerAddr, skip, qty);
+                            var response = await getPublicMessagesByAddress(rtcAddr, skip, qty);
                             if (!response || response.length === 0) break;
                             messages = messages.concat(response);
                             if (response.length < qty) break;
                             skip += qty;
                         }
-                        var offers = [];
+                        var rtcMessages = [];
                         var processedIds = [];
-                        var offerMap = new Map();
                         for (var msg of messages || []) {
                             if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                                console.log('[Worker] Stopping offer processing at cached ID:', msg.TransactionId);
-                                break; // Stop processing as all remaining messages are older
+                                console.log('[Worker] Stopping RTC message processing at cached ID:', msg.TransactionId);
+                                break;
                             }
                             if (!msg.TransactionId) continue;
-                            console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
+                            console.log('[Worker] Processing RTC message:', msg.TransactionId, 'from:', msg.FromAddress);
                             processedMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
                             try {
-                                // Efficiently handle IPFS data and user profiles
                                 var fromProfile = await getProfileByAddress(msg.FromAddress);
                                 var clientUser = 'anonymous';
                                 var data = null;
@@ -989,8 +987,8 @@ self.onmessage = async function(e) {
                                             clientUser = data.user.replace(/[^a-zA-Z0-9]/g, "");
                                         }
                                     } else {
-                                        console.log('[Worker] Invalid CID in offer message:', hash, 'txId:', msg.TransactionId);
-                                        hash = null; // Invalidate hash to prevent further processing
+                                        console.log('[Worker] Invalid CID in RTC message:', hash, 'txId:', msg.TransactionId);
+                                        hash = null;
                                     }
                                 }
 
@@ -999,170 +997,30 @@ self.onmessage = async function(e) {
                                 }
 
                                 if (clientUser === userName) {
-                                    console.log('[Worker] Skipping offer from self:', clientUser, 'txId:', msg.TransactionId);
+                                    console.log('[Worker] Skipping RTC message from self:', clientUser, 'txId:', msg.TransactionId);
                                     continue;
                                 }
 
-                                // Security check: If the claimed username is a registered user, verify the sender is an authorized creator.
-                                var userProfile = await getProfileByURN(clientUser);
-                                if (userProfile) {
-                                    if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                                        console.log('[Worker] Skipping offer: Sender is not an authorized creator for registered user:', clientUser, 'txId:', msg.TransactionId);
-                                        continue;
-                                    }
-                                }
-
-                                if (!hash || !data) {
-                                    if (!hash) console.log('[Worker] No valid IPFS hash in offer message:', msg.Message, 'txId:', msg.TransactionId);
-                                    else if (!data) console.log('[Worker] No data fetched from IPFS for hash:', hash, 'txId:', msg.TransactionId);
-
-                                    offers.push({
-                                        clientUser: clientUser,
-                                        offer: null,
-                                        iceCandidates: [],
-                                        transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime(),
-                                        profile: fromProfile
-                                    });
-                                    continue;
-                                }
-
-                                if (!data.world || data.world !== worldName) {
-                                    console.log('[Worker] Invalid IPFS data for offer message: wrong world.', 'txId:', msg.TransactionId);
-                                    continue;
-                                }
-
-                                if (data.offer || data.answer) {
-                                    if (!offerMap.has(clientUser)) {
-                                        offerMap.set(clientUser, {
-                                            clientUser: clientUser,
-                                            offer: data.offer || data.answer,
-                                            iceCandidates: data.iceCandidates || [],
-                                            transactionId: msg.TransactionId,
-                                            timestamp: new Date(msg.BlockDate).getTime(),
-                                            profile: fromProfile
-                                        });
-                                    }
-                                } else {
-                                    console.log('[Worker] No offer or answer in IPFS data:', hash, 'txId:', msg.TransactionId);
-                                    offers.push({
-                                        clientUser: clientUser,
-                                        offer: null,
-                                        iceCandidates: [],
+                                if (data && data.world === worldName && (data.offer || data.answer || data.batch)) {
+                                     rtcMessages.push({
+                                        from: clientUser,
+                                        data: data,
                                         transactionId: msg.TransactionId,
                                         timestamp: new Date(msg.BlockDate).getTime(),
                                         profile: fromProfile
                                     });
                                 }
                             } catch (e) {
-                                console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
+                                console.error('[Worker] Error processing RTC message:', msg.TransactionId, e);
                             }
                         }
-                        offers = Array.from(offerMap.values());
-                        if (offers.length > 0) {
-                            console.log('[Worker] Sending offer_updates:', offers.map(o => o.clientUser));
-                            self.postMessage({ type: "offer_updates", offers: offers, processedIds: processedIds });
-                        } else {
-                            console.log('[Worker] No new offers for:', offerKeyword);
+                        if (rtcMessages.length > 0) {
+                            self.postMessage({ type: "rtc_messages", messages: rtcMessages, processedIds: processedIds });
                         }
-                    } else {
-                        console.log('[Worker] No address for offer keyword:', offerKeyword);
-                    }
-                } else {
-                    console.log('[Worker] No offerKeyword provided for offer polling');
-                }
-            } catch (e) {
-                console.error('[Worker] Error in offer_updates poll:', e);
-            }
-            try {
-                for (var answerKeyword of answerKeywords || []) {
-                    var answerAddr = await getPublicAddressByKeyword(answerKeyword);
-                    if (answerAddr) {
-                        var messages = [];
-                        var skip = 0;
-                        var qty = 5000;
-                        while (true) {
-                            var response = await getPublicMessagesByAddress(answerAddr, skip, qty);
-                            if (!response || response.length === 0) break;
-                            messages = messages.concat(response);
-                            if (response.length < qty) break;
-                            skip += qty;
-                        }
-                        var answers = [];
-                        var processedIds = [];
-                        for (var msg of messages || []) {
-                            if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                                console.log('[Worker] Stopping answer processing at cached ID:', msg.TransactionId);
-                                break; // Stop processing as all remaining messages are older
-                            }
-                            if (!msg.TransactionId) continue;
-                            console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
-                            processedMessages.add(msg.TransactionId);
-                            processedIds.push(msg.TransactionId);
-                            try {
-                                var fromProfile = await getProfileByAddress(msg.FromAddress);
-                                if (!fromProfile || !fromProfile.URN) {
-                                    console.log('[Worker] Skipping answer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
-                                    continue;
-                                }
-                                var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
-                                var userProfile = await getProfileByURN(hostUser);
-                                if (!userProfile) {
-                                    console.log('[Worker] No profile for user:', hostUser, 'txId:', msg.TransactionId);
-                                    answers.push({
-                                        hostUser: hostUser,
-                                        answer: null,
-                                        batch: null,
-                                        iceCandidates: [],
-                                        transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
-                                    });
-                                    continue;
-                                }
-                                if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                                    console.log('[Worker] Skipping answer message, invalid creators for user:', hostUser, 'txId:', msg.TransactionId);
-                                    continue;
-                                }
-                                var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                                if (!match) {
-                                    console.log('[Worker] No IPFS hash in answer message:', msg.Message, 'txId:', msg.TransactionId);
-                                    continue;
-                                }
-                                var hash = match[1];
-                                var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
-                                if (!cidRegex.test(hash)) {
-                                    console.log('[Worker] Invalid CID in answer message:', hash, 'txId:', msg.TransactionId);
-                                    continue;
-                                }
-                                var data = await fetchIPFS(hash);
-                                if (data && (data.answer || data.batch) && data.world === worldName) {
-                                    answers.push({
-                                        hostUser: data.user || hostUser,
-                                        answer: data.answer,
-                                        batch: data.batch,
-                                        iceCandidates: data.iceCandidates || [],
-                                        transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
-                                    });
-                                } else {
-                                    console.log('[Worker] Invalid IPFS data for answer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
-                                }
-                            } catch (e) {
-                                console.error('[Worker] Error in answer_updates poll:', e);
-                            }
-                        }
-                        if (answers.length > 0) {
-                            console.log('[Worker] Sending answer_updates:', answers);
-                            self.postMessage({ type: "answer_updates", answers: answers, keyword: answerKeyword, processedIds: processedIds });
-                        } else {
-                            console.log('[Worker] No new answers for:', answerKeyword);
-                        }
-                    } else {
-                        console.log('[Worker] No address for answer keyword:', answerKeyword);
                     }
                 }
             } catch (e) {
-                console.error('[Worker] Error in answer_updates poll:', e);
+                console.error('[Worker] Error in RTC poll:', e);
             }
         } else if (type === "update_processed") {
             data.transactionIds.forEach(function(id) { processedMessages.add(id); });
@@ -1270,43 +1128,47 @@ self.onmessage = async function(e) {
                     addMessage('New player(s) available to connect!', 3000);
                     updateHudButtons();
                 }
-            } else if (data.type === "offer_updates") {
-                console.log('[WebRTC] Received offer_updates:', data.offers);
-                if (data.offers && data.offers.length > 0) {
-                    console.log('[WebRTC] Adding offers to pendingOffers:', data.offers.map(o => o.clientUser));
-                    pendingOffers = pendingOffers.concat(data.offers);
-                    addMessage('New connection request(s) received!', 5000);
-                    updateHudButtons();
-                    setupPendingModal();
-                    if (isHost) {
-                        document.getElementById('pendingModal').style.display = 'block';
+            } else if (data.type === "rtc_messages") {
+                for (var msg of data.messages) {
+                    if (msg.data.offer) {
+                        pendingOffers.push({
+                            clientUser: msg.from,
+                            offer: msg.data.offer,
+                            iceCandidates: msg.data.iceCandidates || [],
+                            transactionId: msg.transactionId,
+                            timestamp: msg.timestamp,
+                            profile: msg.profile
+                        });
+                        addMessage('New connection request from ' + msg.from, 5000);
+                        if (isHost) {
+                            setupPendingModal();
+                            document.getElementById('pendingModal').style.display = 'block';
+                        }
+                    } else if (msg.data.answer || msg.data.batch) {
+                        var peer = peers.get(msg.from);
+                        if (peer && peer.pc) {
+                            try {
+                                var answerData = msg.data.answer;
+                                if (msg.data.batch) {
+                                    var myAnswer = msg.data.batch.find(b => b.user === userName);
+                                    if (myAnswer) {
+                                        answerData = myAnswer.answer;
+                                    }
+                                }
+                                if(answerData) {
+                                    peer.pc.setRemoteDescription(new RTCSessionDescription(answerData));
+                                    for (var candidate of msg.data.iceCandidates || []) {
+                                        peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[WebRTC] Failed to process answer for:', msg.from, 'error:', e);
+                            }
+                        }
                     }
-                } else {
-                    console.log('[WebRTC] No new offers received in offer_updates');
                 }
                 if (data.processedIds) {
                     data.processedIds.forEach(id => processedMessages.add(id));
-                }
-            } else if (data.type === "answer_updates") {
-                console.log('[WebRTC] Received answer_updates for:', data.keyword, 'answers:', data.answers);
-                for (var answer of data.answers || []) {
-                    var peer = peers.get(answer.hostUser);
-                    if (peer && peer.pc) {
-                        try {
-                            peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
-                            for (var candidate of answer.iceCandidates || []) {
-                                peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
-                            }
-                            console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
-                        } catch (e) {
-                            console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
-                        }
-                    } else {
-                        console.log('[WebRTC] No peer connection found for:', answer.hostUser);
-                    }
-                    if (data.processedIds) {
-                        data.processedIds.forEach(id => processedMessages.add(id));
-                    }
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {
@@ -1405,15 +1267,8 @@ self.onmessage = async function(e) {
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
             var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
-            var answerKeywords = [];
-            for (var peer of peers) {
-                var peerUser = peer[0];
-                if (peerUser !== userName) {
-                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
-                }
-            }
-            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            var rtcKeyword = worldName + '@' + userName;
+            console.log('[Worker] Starting poll with rtcKeyword:', rtcKeyword);
             worker.postMessage({
                 type: 'poll',
                 chunkKeys: filteredKeys,
@@ -1421,8 +1276,7 @@ self.onmessage = async function(e) {
                 userAddress: userAddress,
                 worldName: worldName,
                 serverKeyword: serverKeyword,
-                offerKeyword: offerKeyword,
-                answerKeywords: answerKeywords,
+                rtcKeyword: rtcKeyword,
                 userName: userName
             });
         }
