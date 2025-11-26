@@ -692,3 +692,35 @@ const lightManager = {
     }
 };
 
+/**
+ * Creates a peer keyword in the format: world@username
+ * Max 20 characters total. World is up to 8 chars (not truncated).
+ * Username is sanitized to [A-Za-z0-9_-] and truncated to fit.
+ * @param {string} world - World name (up to 8 chars)
+ * @param {string} username - Username to encode
+ * @returns {string} The keyword in format world@username
+ */
+function makePeerKeyword(world, username) {
+    var w = (world || "").slice(0, 8);
+    var sanitized = (username || "").replace(/[^A-Za-z0-9_-]/g, "");
+    var maxUserLen = 20 - w.length - 1;
+    if (maxUserLen < 0) maxUserLen = 0;
+    var u = sanitized.slice(0, maxUserLen);
+    return w + "@" + u;
+}
+
+/**
+ * Parses a peer keyword in the format: world@username
+ * @param {string} keyword - The keyword to parse
+ * @returns {{world: string, username: string}|null} Parsed world and username, or null if invalid
+ */
+function parsePeerKeyword(keyword) {
+    if (!keyword || typeof keyword !== "string") return null;
+    var atIndex = keyword.indexOf("@");
+    if (atIndex === -1) return null;
+    return {
+        world: keyword.slice(0, atIndex),
+        username: keyword.slice(atIndex + 1)
+    };
+}
+
