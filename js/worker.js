@@ -1308,11 +1308,29 @@ self.onmessage = async function(e) {
                     var peer = peers.get(answer.hostUser);
                     if (peer && peer.pc) {
                         try {
-                            peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
-                            for (var candidate of answer.iceCandidates || []) {
-                                peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                            // Handle regular answer
+                            if (answer.answer) {
+                                peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
+                                for (var candidate of answer.iceCandidates || []) {
+                                    peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
+                                console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
+                            } 
+                            // Handle batch answer - find the entry for this user
+                            else if (answer.batch) {
+                                var myEntry = answer.batch.find(function(entry) { return entry.user === userName; });
+                                if (myEntry && myEntry.answer) {
+                                    peer.pc.setRemoteDescription(new RTCSessionDescription(myEntry.answer));
+                                    for (var candidate of myEntry.iceCandidates || []) {
+                                        peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                    }
+                                    console.log('[WebRTC] Successfully processed batch answer for:', answer.hostUser);
+                                } else {
+                                    console.log('[WebRTC] No entry for user in batch answer:', userName, 'from:', answer.hostUser);
+                                }
+                            } else {
+                                console.log('[WebRTC] Answer has neither answer nor batch:', answer.hostUser);
                             }
-                            console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
                         } catch (e) {
                             console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
                         }
