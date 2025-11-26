@@ -1571,6 +1571,39 @@ async function acceptPendingOffers() {
                 }
             }, i.onconnectionstatechange = () => {
                 console.log('[WebRTC] Host connection state change for', e, ':', i.connectionState);
+                const peer = peers.get(e);
+                
+                // Handle successful connection
+                if (i.connectionState === 'connected') {
+                    if (peer && peer.isPendingConnection) {
+                        console.log('[WebRTC] Host connection established for', e);
+                        peer.isPendingConnection = false;
+                    }
+                }
+                
+                // Don't cleanup pending connections on connection failures
+                // Allow time for IPFS signaling to complete
+                if (i.connectionState === 'disconnected' || i.connectionState === 'failed') {
+                    if (peer && peer.isPendingConnection) {
+                        const elapsedMs = Date.now() - peer.connectionStartTime;
+                        if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
+                            console.log('[WebRTC] Host connection', i.connectionState, 'for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
+                            // For failed state, try to restart the connection
+                            if (i.connectionState === 'failed' && typeof i.restartIce === 'function') {
+                                console.log('[WebRTC] Attempting ICE restart on connection failure for', e);
+                                i.restartIce();
+                            }
+                            return; // Don't let the browser cleanup the peer
+                        } else {
+                            console.log('[WebRTC] Host connection', i.connectionState, 'for', e, 'after timeout - cleaning up');
+                            // Clean up the refresh interval
+                            if (pendingConnectionRefreshIntervals.has(e)) {
+                                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                                pendingConnectionRefreshIntervals.delete(e);
+                            }
+                        }
+                    }
+                }
             }, await i.setRemoteDescription(new RTCSessionDescription(r.offer));
             for (const e of r.iceCandidates || []) await i.addIceCandidate(new RTCIceCandidate(e)).catch(console.error);
             s = await i.createAnswer(), await i.setLocalDescription(s), i.onicecandidate = e => {
