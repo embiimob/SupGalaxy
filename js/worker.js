@@ -1305,6 +1305,11 @@ self.onmessage = async function(e) {
             } else if (data.type === "answer_updates") {
                 console.log('[WebRTC] Received answer_updates for:', data.keyword, 'answers:', data.answers);
                 for (var answer of data.answers || []) {
+                    // Skip if we've already processed this transaction
+                    if (answer.transactionId && processedMessages.has(answer.transactionId)) {
+                        console.log('[WebRTC] Skipping already processed answer:', answer.transactionId);
+                        continue;
+                    }
                     // Construct a file-like object with the answer data and process it using handleMinimapFile
                     var answerData = {
                         world: worldName,
@@ -1319,12 +1324,17 @@ self.onmessage = async function(e) {
                     try {
                         await handleMinimapFile(mockFile);
                         console.log('[WebRTC] Successfully processed answer via handleMinimapFile for:', answer.hostUser);
+                        // Mark as processed after successful handling
+                        if (answer.transactionId) {
+                            processedMessages.add(answer.transactionId);
+                        }
                     } catch (e) {
                         console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
                     }
-                    if (data.processedIds) {
-                        data.processedIds.forEach(id => processedMessages.add(id));
-                    }
+                }
+                // Also add any processedIds from the worker
+                if (data.processedIds) {
+                    data.processedIds.forEach(id => processedMessages.add(id));
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {

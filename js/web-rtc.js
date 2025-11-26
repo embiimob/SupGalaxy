@@ -227,6 +227,11 @@ async function handleMinimapFile(e) {
             const e = o.user || "anonymous",
                 t = peers.get(e);
             if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3), void console.log("[WEBRTC] No peer connection for:", e);
+            // Check if connection is already established (stable state)
+            if (t.pc.signalingState === "stable") {
+                console.log("[WEBRTC] Connection already established with:", e, "skipping duplicate answer");
+                return;
+            }
             try {
                 await t.pc.setRemoteDescription(new RTCSessionDescription(o.answer));
                 for (const a of o.iceCandidates || []) try {
@@ -243,6 +248,11 @@ async function handleMinimapFile(e) {
             const e = o.user || "anonymous",
                 t = peers.get(e);
             if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3), void console.log("[WEBRTC] No peer connection for:", e);
+            // Check if connection is already established (stable state)
+            if (t.pc.signalingState === "stable") {
+                console.log("[WEBRTC] Connection already established with:", e, "skipping duplicate batch answer");
+                return;
+            }
             const a = o.batch.find((e => e.user === userName));
             if (!a) return addMessage("No answer for you in batch from " + e, 3e3), void console.log("[WEBRTC] No answer for user:", userName, "in batch from:", e);
             try {
