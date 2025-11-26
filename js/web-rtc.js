@@ -2,6 +2,8 @@ var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
 window.hasPolledHost = !1;
+// Timeout for IPFS-based signaling (30 minutes in milliseconds)
+const IPFS_SIGNALING_TIMEOUT_MS = 30 * 60 * 1000;
 var knownServers = [],
     isHost = !1,
     isConnecting = !1,
@@ -1504,13 +1506,39 @@ async function acceptPendingOffers() {
             }, peers.set(e, {
                 pc: i,
                 dc: null,
-                address: null
+                address: null,
+                isPendingConnection: true, // Mark as pending until data channel opens
+                connectionStartTime: Date.now()
             }), i.ondatachannel = t => {
                 console.log('[WebRTC] Host ondatachannel fired for:', e, 'channel:', t.channel.label);
                 const o = t.channel;
-                peers.get(e).dc = o, setupDataChannel(o, e)
+                const peer = peers.get(e);
+                if (peer) {
+                    peer.dc = o;
+                    peer.isPendingConnection = false; // Connection is now established
+                }
+                setupDataChannel(o, e)
             }, i.oniceconnectionstatechange = () => {
                 console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
+                const peer = peers.get(e);
+                // Don't cleanup pending connections on temporary ICE failures
+                // Allow time for IPFS signaling to complete
+                if (i.iceConnectionState === 'disconnected' || i.iceConnectionState === 'failed') {
+                    if (peer && peer.isPendingConnection) {
+                        const elapsedMs = Date.now() - peer.connectionStartTime;
+                        if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
+                            console.log('[WebRTC] Host ICE disconnected for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
+                            // Try to restart ICE if it failed and browser supports it
+                            if (i.iceConnectionState === 'failed' && typeof i.restartIce === 'function') {
+                                console.log('[WebRTC] Attempting ICE restart for', e);
+                                i.restartIce();
+                            }
+                            return; // Don't cleanup yet
+                        } else {
+                            console.log('[WebRTC] Host ICE failed for', e, 'after timeout - cleaning up');
+                        }
+                    }
+                }
             }, await i.setRemoteDescription(new RTCSessionDescription(r.offer));
             for (const e of r.iceCandidates || []) await i.addIceCandidate(new RTCIceCandidate(e)).catch(console.error);
             s = await i.createAnswer(), await i.setLocalDescription(s), i.onicecandidate = e => {
