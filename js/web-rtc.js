@@ -1853,7 +1853,12 @@ async function initServers() {
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
                 var parsedKeyword = parsePeerKeyword(v);
-                m = parsedKeyword ? parsedKeyword.username : v.split('@')[1];
+                if (parsedKeyword) {
+                    m = parsedKeyword.username;
+                } else {
+                    console.log('[SYSTEM] Could not parse keyword:', v, ', skipping connection request count update');
+                    continue;
+                }
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)

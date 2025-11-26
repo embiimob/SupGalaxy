@@ -1187,6 +1187,21 @@ self.onmessage = async function(e) {
         }
 };
         `], { type: 'application/javascript' })));
+
+        // Helper functions for peer keyword format: world@username (max 20 chars)
+        // These are defined here for use in triggerPoll and other main-thread functions
+        function sanitizePeerUsernameWorker(username) {
+            return (username || '').replace(/[^A-Za-z0-9_-]/g, '');
+        }
+
+        function makePeerKeywordWorker(world, username) {
+            var w = (world || '').slice(0, 8);
+            var maxUserLen = 20 - w.length - 1;
+            var sanitized = sanitizePeerUsernameWorker(username);
+            var truncated = sanitized.slice(0, Math.max(0, maxUserLen));
+            return w + '@' + truncated;
+        }
+
         worker.onmessage = function (e) {
             var data = e.data;
             if (data.type === "worlds_users") {
@@ -1405,12 +1420,12 @@ self.onmessage = async function(e) {
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
             var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? makePeerKeyword(worldName, userName) : null;
+            var offerKeyword = isHost ? makePeerKeywordWorker(worldName, userName) : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push(makePeerKeyword(worldName, userName));
+                    answerKeywords.push(makePeerKeywordWorker(worldName, userName));
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
