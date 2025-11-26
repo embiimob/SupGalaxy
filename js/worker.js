@@ -1405,13 +1405,13 @@ self.onmessage = async function(e) {
                 var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
-            var serverKeyword = makePeerKeyword(worldName, "s");
-            var offerKeyword = isHost ? makePeerKeyword(worldName, "c_" + userName) : null;
+            var serverKeyword = makePeerKeyword(worldName, userName);
+            var offerKeyword = isHost ? makePeerKeyword(worldName, userName) : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push(makePeerKeyword(worldName, "a_" + userName));
+                    answerKeywords.push(makePeerKeyword(worldName, userName));
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
