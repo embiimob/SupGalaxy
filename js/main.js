@@ -2771,6 +2771,9 @@ function switchWorld(newWorldName) {
             }));
         }
     }
+    
+    // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
+    initServers();
 }
 
 function updateAvatarAnimation(e, t) {
