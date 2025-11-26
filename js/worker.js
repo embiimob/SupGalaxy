@@ -1278,9 +1278,6 @@ self.onmessage = async function(e) {
                     addMessage('New connection request(s) received!', 5000);
                     updateHudButtons();
                     setupPendingModal();
-                    if (isHost) {
-                        document.getElementById('pendingModal').style.display = 'block';
-                    }
                 } else {
                     console.log('[WebRTC] No new offers received in offer_updates');
                 }
