@@ -1829,7 +1829,11 @@ async function initServers() {
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
                 var parsed = parsePeerKeyword(v);
-                m = parsed ? parsed.username.replace(/^c_/, "") : v;
+                if (!parsed) {
+                    console.log("[SYSTEM] Failed to parse keyword:", v);
+                    continue;
+                }
+                m = parsed.username.replace(/^c_/, "");
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
