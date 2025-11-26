@@ -19,6 +19,38 @@ var userPositions = {},
     partialIPFSUpdates = new Map,
     syncedWorlds = new Set;
 
+/**
+ * Creates a peer keyword in the format: world@username
+ * Max 20 characters total. World is up to 8 chars (not truncated).
+ * Username is sanitized to [A-Za-z0-9_-] and truncated to fit.
+ * @param {string} world - World name (up to 8 chars)
+ * @param {string} username - Username to encode
+ * @returns {string} The keyword in format world@username
+ */
+function makePeerKeyword(world, username) {
+    var w = (world || "").slice(0, 8);
+    var sanitized = (username || "").replace(/[^A-Za-z0-9_-]/g, "");
+    var maxUserLen = 20 - w.length - 1;
+    if (maxUserLen < 0) maxUserLen = 0;
+    var u = sanitized.slice(0, maxUserLen);
+    return w + "@" + u;
+}
+
+/**
+ * Parses a peer keyword in the format: world@username
+ * @param {string} keyword - The keyword to parse
+ * @returns {{world: string, username: string}|null} Parsed world and username, or null if invalid
+ */
+function parsePeerKeyword(keyword) {
+    if (!keyword || typeof keyword !== "string") return null;
+    var atIndex = keyword.indexOf("@");
+    if (atIndex === -1) return null;
+    return {
+        world: keyword.slice(0, atIndex),
+        username: keyword.slice(atIndex + 1)
+    };
+}
+
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -84,14 +116,14 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
-        var p = "MCConn@" + e + "@" + worldName,
+        var p = makePeerKeyword(worldName, "c_" + e),
             m = await GetPublicAddressByKeyword(p);
-        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
+        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation. Keyword: " + p, addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
-        var f = "MCAnswer@" + userName + "@" + worldName;
+        var f = makePeerKeyword(worldName, "a_" + userName);
         answerPollingIntervals.set(f, setInterval((function () {
             if (worker.postMessage({
                 type: "poll",
@@ -99,7 +131,7 @@ async function connectToServer(e, t, o) {
                 masterKey: MASTER_WORLD_KEY,
                 userAddress: userAddress,
                 worldName: worldName,
-                serverKeyword: "MCServerJoin@" + worldName,
+                serverKeyword: makePeerKeyword(worldName, "s"),
                 offerKeyword: null,
                 answerKeywords: [f],
                 userName: userName
@@ -110,7 +142,8 @@ async function connectToServer(e, t, o) {
             }
         }), 3e4))
     } catch (t) {
-        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+        var answerKey = makePeerKeyword(worldName, "a_" + userName);
+        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get(answerKey)), answerPollingIntervals.delete(answerKey)
     }
 }
 async function sendWorldStateAsync(peer, worldState, username) {
@@ -210,7 +243,7 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(makePeerKeyword(worldName, "a_" + userName))), answerPollingIntervals.delete(makePeerKeyword(worldName, "a_" + userName))
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -227,7 +260,7 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(makePeerKeyword(worldName, "a_" + userName))), answerPollingIntervals.delete(makePeerKeyword(worldName, "a_" + userName))
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -1531,9 +1564,9 @@ async function acceptPendingOffers() {
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
         const n = document.getElementById("joinScriptModal"),
-            i = "MCBatch@" + userName + "@" + worldName,
+            i = makePeerKeyword(worldName, "b_" + userName),
             c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Keyword: " + i, n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
@@ -1588,7 +1621,7 @@ function setupPendingModal() {
 function startOfferPolling() {
     if (isHost) {
         console.log("[SYSTEM] Starting offer polling for:", userName);
-        var e = "MCConn@" + userName + "@" + worldName,
+        var e = makePeerKeyword(worldName, "c_" + userName),
             t = setInterval((async function () {
                 try {
                     await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
@@ -1597,7 +1630,7 @@ function startOfferPolling() {
                         masterKey: MASTER_WORLD_KEY,
                         userAddress: userAddress,
                         worldName: worldName,
-                        serverKeyword: "MCServerJoin@" + worldName,
+                        serverKeyword: makePeerKeyword(worldName, "s"),
                         offerKeyword: e,
                         answerKeywords: [],
                         userName: userName
@@ -1611,7 +1644,7 @@ function startOfferPolling() {
 }
 
 function startAnswerPolling(e) {
-    var t = "MCAnswer@" + userName + "@" + worldName;
+    var t = makePeerKeyword(worldName, "a_" + userName);
     answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
         if (worker.postMessage({
             type: "poll",
@@ -1619,7 +1652,7 @@ function startAnswerPolling(e) {
             masterKey: MASTER_WORLD_KEY,
             userAddress: userAddress,
             worldName: worldName,
-            serverKeyword: "MCServerJoin@" + worldName,
+            serverKeyword: makePeerKeyword(worldName, "s"),
             offerKeyword: null,
             answerKeywords: [t],
             userName: userName
@@ -1633,8 +1666,9 @@ function startAnswerPolling(e) {
 async function pollServers() {
     if (isInitialLoad) console.log("[SYSTEM] Skipping poll, initial load not complete");
     else {
-        console.log("[SYSTEM] Polling server announcements for:", "MCServerJoin@" + worldName);
-        var e = "MCServerJoin@" + worldName,
+        var serverKw = makePeerKeyword(worldName, "s");
+        console.log("[SYSTEM] Polling server announcements for:", serverKw);
+        var e = serverKw,
             t = 0,
             o = 350;
         !async function a() {
@@ -1727,7 +1761,7 @@ async function pollServers() {
 }
 async function initServers() {
     console.log("[SYSTEM] Initializing servers for:", worldName);
-    var e, t = "MCServerJoin@" + worldName,
+    var e, t = makePeerKeyword(worldName, "s"),
         o = [];
     try {
         e = await GetPublicAddressByKeyword(t)
@@ -1793,7 +1827,7 @@ async function initServers() {
                     timestamp: l,
                     connectionRequestCount: 0,
                     latestRequestTime: null
-                }), o.push("MCConn@" + m + "@" + worldName)
+                }), o.push(makePeerKeyword(worldName, "c_" + m))
             } catch (e) {
                 console.error("[SYSTEM] Error processing initial server message:", c.TransactionId, e)
             }
@@ -1802,7 +1836,7 @@ async function initServers() {
         for (var w of knownServers) (!h.has(w.hostUser) || h.get(w.hostUser).timestamp < w.timestamp) && h.set(w.hostUser, w);
         for (var v of (knownServers = Array.from(h.values()).sort((function (e, t) {
             return t.timestamp - e.timestamp
-        })).slice(0, 10), isHost && o.push("MCConn@" + userName + "@" + worldName), o)) {
+        })).slice(0, 10), isHost && o.push(makePeerKeyword(worldName, "c_" + userName)), o)) {
             try {
                 await new Promise((e => setTimeout(e, n))), M = await GetPublicAddressByKeyword(v)
             } catch (e) {
@@ -1826,14 +1860,15 @@ async function initServers() {
                 }
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                m = v.match(/MCConn@(.+)@[^@]+$/)[1];
+                var parsed = parsePeerKeyword(v);
+                m = parsed ? parsed.username.replace(/^c_/, "") : v;
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
             }
         }
         if (isHost) {
-            var M, b = "MCConn@" + userName + "@" + worldName;
+            var M, b = makePeerKeyword(worldName, "c_" + userName);
             if (M = await GetPublicAddressByKeyword(b)) {
                 for (a = [], r = 0, s = 5e3; ;) try {
                     var C;

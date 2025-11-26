@@ -1187,6 +1187,24 @@ self.onmessage = async function(e) {
         }
 };
         `], { type: 'application/javascript' })));
+
+        /**
+         * Creates a peer keyword in the format: world@username
+         * Max 20 characters total. World is up to 8 chars (not truncated).
+         * Username is sanitized to [A-Za-z0-9_-] and truncated to fit.
+         * @param {string} world - World name (up to 8 chars)
+         * @param {string} username - Username to encode
+         * @returns {string} The keyword in format world@username
+         */
+        function makePeerKeyword(world, username) {
+            var w = (world || "").slice(0, 8);
+            var sanitized = (username || "").replace(/[^A-Za-z0-9_-]/g, "");
+            var maxUserLen = 20 - w.length - 1;
+            if (maxUserLen < 0) maxUserLen = 0;
+            var u = sanitized.slice(0, maxUserLen);
+            return w + "@" + u;
+        }
+
         worker.onmessage = function (e) {
             var data = e.data;
             if (data.type === "worlds_users") {
@@ -1404,13 +1422,13 @@ self.onmessage = async function(e) {
                 var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
-            var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            var serverKeyword = makePeerKeyword(worldName, "s");
+            var offerKeyword = isHost ? makePeerKeyword(worldName, "c_" + userName) : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                    answerKeywords.push(makePeerKeyword(worldName, "a_" + userName));
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);

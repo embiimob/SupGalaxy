@@ -3285,9 +3285,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
             else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
             else if (e && t) {
                 var o = e.slice(0, 8),
-                    a = (t.slice(0, 20), "MCServerJoin@" + o),
+                    a = (t.slice(0, 20), makePeerKeyword(o, "s")),
                     n = await GetPublicAddressByKeyword(a);
-                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.", addMessage("Prepare to announce server after starting", 3e3)
+                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server. Keyword: " + a, addMessage("Prepare to announce server after starting", 3e3)
             } else addMessage("Please enter a world and username", 3e3)
         })), o.addEventListener("click", (async function () {
             this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
