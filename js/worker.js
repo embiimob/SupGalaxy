@@ -1202,7 +1202,7 @@ self.onmessage = async function(e) {
             return w + '@' + truncated;
         }
 
-        worker.onmessage = function (e) {
+        worker.onmessage = async function (e) {
             var data = e.data;
             if (data.type === "worlds_users") {
                 console.log('[Users] Received worlds_users: worlds=', Object.keys(data.worlds || {}).length, 'users=', Object.keys(data.users || {}).length);
@@ -1310,9 +1310,9 @@ self.onmessage = async function(e) {
                         try {
                             // Handle regular answer
                             if (answer.answer) {
-                                peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
+                                await peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
                                 for (var candidate of answer.iceCandidates || []) {
-                                    peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                    await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
                                 }
                                 console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
                             } 
@@ -1320,9 +1320,9 @@ self.onmessage = async function(e) {
                             else if (answer.batch) {
                                 var myEntry = answer.batch.find(function(entry) { return entry.user === userName; });
                                 if (myEntry && myEntry.answer) {
-                                    peer.pc.setRemoteDescription(new RTCSessionDescription(myEntry.answer));
+                                    await peer.pc.setRemoteDescription(new RTCSessionDescription(myEntry.answer));
                                     for (var candidate of myEntry.iceCandidates || []) {
-                                        peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                        await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
                                     }
                                     console.log('[WebRTC] Successfully processed batch answer for:', answer.hostUser);
                                 } else {
