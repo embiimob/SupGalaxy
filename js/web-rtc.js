@@ -84,14 +84,16 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
-        var p = "MCConn@" + e + "@" + worldName,
+        // Use uniform keyword format: world@friendUsername (target's thread)
+        var p = worldName + "@" + e,
             m = await GetPublicAddressByKeyword(p);
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
-        var f = "MCAnswer@" + userName + "@" + worldName;
+        // Monitor own thread for answers: world@username
+        var f = worldName + "@" + userName;
         answerPollingIntervals.set(f, setInterval((function () {
             if (worker.postMessage({
                 type: "poll",
@@ -110,7 +112,9 @@ async function connectToServer(e, t, o) {
             }
         }), 3e4))
     } catch (t) {
-        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e);
+        var userKeyword = worldName + "@" + userName;
+        clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
     }
 }
 async function sendWorldStateAsync(peer, worldState, username) {
@@ -210,7 +214,9 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                // Use uniform keyword format: world@username
+            var userKeyword = worldName + "@" + userName;
+            console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -227,7 +233,9 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                    // Use uniform keyword format: world@username
+                var userKeyword = worldName + "@" + userName;
+                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -1530,10 +1538,16 @@ async function acceptPendingOffers() {
             r = URL.createObjectURL(a),
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
-        const n = document.getElementById("joinScriptModal"),
-            i = "MCBatch@" + userName + "@" + worldName,
-            c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        const n = document.getElementById("joinScriptModal");
+        // Generate list of addresses for each recipient using uniform keyword format: world@recipientUsername
+        const recipientAddresses = [];
+        for (const answer of t) {
+            const recipientKeyword = worldName + "@" + answer.user;
+            const recipientAddr = await GetPublicAddressByKeyword(recipientKeyword);
+            recipientAddresses.push(recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword);
+        }
+        const c = recipientAddresses.join(",");
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Each recipient will receive on their own thread.", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
@@ -1588,7 +1602,8 @@ function setupPendingModal() {
 function startOfferPolling() {
     if (isHost) {
         console.log("[SYSTEM] Starting offer polling for:", userName);
-        var e = "MCConn@" + userName + "@" + worldName,
+        // Use uniform keyword format: world@username (monitoring own thread for offers)
+        var e = worldName + "@" + userName,
             t = setInterval((async function () {
                 try {
                     await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
@@ -1611,7 +1626,8 @@ function startOfferPolling() {
 }
 
 function startAnswerPolling(e) {
-    var t = "MCAnswer@" + userName + "@" + worldName;
+    // Use uniform keyword format: world@username (monitoring own thread for answers)
+    var t = worldName + "@" + userName;
     answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
         if (worker.postMessage({
             type: "poll",
@@ -1784,6 +1800,7 @@ async function initServers() {
                         console.error("[SYSTEM] Failed to fetch IPFS for hash:", y, "error:", e, "transactionId:", c.TransactionId)
                     }
                 }
+                    // Use uniform keyword format: world@username for each server's thread
                 knownServers.some((e => e.hostUser === m && e.transactionId === c.TransactionId)) || knownServers.push({
                     hostUser: m,
                     spawn: f,
@@ -1793,7 +1810,7 @@ async function initServers() {
                     timestamp: l,
                     connectionRequestCount: 0,
                     latestRequestTime: null
-                }), o.push("MCConn@" + m + "@" + worldName)
+                }), o.push(worldName + "@" + m)
             } catch (e) {
                 console.error("[SYSTEM] Error processing initial server message:", c.TransactionId, e)
             }
@@ -1802,7 +1819,7 @@ async function initServers() {
         for (var w of knownServers) (!h.has(w.hostUser) || h.get(w.hostUser).timestamp < w.timestamp) && h.set(w.hostUser, w);
         for (var v of (knownServers = Array.from(h.values()).sort((function (e, t) {
             return t.timestamp - e.timestamp
-        })).slice(0, 10), isHost && o.push("MCConn@" + userName + "@" + worldName), o)) {
+        })).slice(0, 10), isHost && o.push(worldName + "@" + userName), o)) {
             try {
                 await new Promise((e => setTimeout(e, n))), M = await GetPublicAddressByKeyword(v)
             } catch (e) {
@@ -1826,14 +1843,17 @@ async function initServers() {
                 }
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                m = v.match(/MCConn@(.+)@[^@]+$/)[1];
+                // Extract username from uniform keyword format: world@username
+                var keywordParts = v.split("@");
+                m = keywordParts.length >= 2 ? keywordParts[1] : v;
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
             }
         }
         if (isHost) {
-            var M, b = "MCConn@" + userName + "@" + worldName;
+            // Use uniform keyword format: world@username (monitoring own thread)
+            var M, b = worldName + "@" + userName;
             if (M = await GetPublicAddressByKeyword(b)) {
                 for (a = [], r = 0, s = 5e3; ;) try {
                     var C;
@@ -1899,6 +1919,30 @@ async function initServers() {
                 }
                 I.length > 0 && (pendingOffers.push(...I), setupPendingModal())
             }
+        }
+        // Cache user's own world@username thread at world load to prevent processing old messages
+        var userThreadKeyword = worldName + "@" + userName;
+        console.log("[SYSTEM] Caching user's own thread:", userThreadKeyword);
+        try {
+            var userThreadAddr = await GetPublicAddressByKeyword(userThreadKeyword);
+            if (userThreadAddr) {
+                for (a = [], r = 0, s = 5e3; ;) try {
+                    if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
+                    if (a = a.concat(C), C.length < s) break;
+                    r += s
+                } catch (e) {
+                    console.error("[SYSTEM] Failed to fetch user thread messages for caching:", userThreadKeyword, "skip:", r, "error:", e);
+                    break
+                }
+                console.log("[SYSTEM] Caching", a.length, "messages from user's thread:", userThreadKeyword);
+                for (var c of a) {
+                    if (c.TransactionId) {
+                        processedMessages.add(c.TransactionId);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("[SYSTEM] Failed to cache user's thread:", userThreadKeyword, e)
         }
         console.log("[SYSTEM] Initial load complete."), worker.postMessage({
             type: "sync_processed",

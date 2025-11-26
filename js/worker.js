@@ -1405,12 +1405,14 @@ self.onmessage = async function(e) {
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
             var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            // Use uniform keyword format: world@username for monitoring own thread
+            var offerKeyword = isHost ? worldName + '@' + userName : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                    // Monitor own thread for answers: world@username
+                    answerKeywords.push(worldName + '@' + userName);
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
