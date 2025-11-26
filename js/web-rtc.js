@@ -4,11 +4,15 @@ var peers = new Map,
 window.hasPolledHost = !1;
 // Timeout for IPFS-based signaling (30 minutes in milliseconds)
 const IPFS_SIGNALING_TIMEOUT_MS = 30 * 60 * 1000;
+// Interval for refreshing ICE candidates for pending connections (5 minutes)
+// TURN allocations typically expire after 5-10 minutes
+const ICE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 var knownServers = [],
     isHost = !1,
     isConnecting = !1,
     answerPollingIntervals = new Map,
     offerPollingIntervals = new Map,
+    pendingConnectionRefreshIntervals = new Map,
     localAudioStream = null,
     userAudioStreams = new Map,
     localVideoStream = null,
@@ -1517,6 +1521,12 @@ async function acceptPendingOffers() {
                     peer.dc = o;
                     peer.isPendingConnection = false; // Connection is now established
                 }
+                // Clear the ICE refresh interval since connection is established
+                if (pendingConnectionRefreshIntervals.has(e)) {
+                    clearInterval(pendingConnectionRefreshIntervals.get(e));
+                    pendingConnectionRefreshIntervals.delete(e);
+                    console.log('[WebRTC] Cleared ICE refresh interval for:', e);
+                }
                 setupDataChannel(o, e)
             }, i.oniceconnectionstatechange = () => {
                 console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
@@ -1527,6 +1537,12 @@ async function acceptPendingOffers() {
                     if (peer && peer.isPendingConnection) {
                         console.log('[WebRTC] Host ICE connected for', e, '- connection established!');
                         peer.isPendingConnection = false;
+                    }
+                    // Clear the ICE refresh interval since connection is established
+                    if (pendingConnectionRefreshIntervals.has(e)) {
+                        clearInterval(pendingConnectionRefreshIntervals.get(e));
+                        pendingConnectionRefreshIntervals.delete(e);
+                        console.log('[WebRTC] Cleared ICE refresh interval for:', e);
                     }
                 }
                 
@@ -1545,6 +1561,11 @@ async function acceptPendingOffers() {
                             return; // Don't cleanup yet
                         } else {
                             console.log('[WebRTC] Host ICE failed for', e, 'after timeout - cleaning up');
+                            // Clean up the refresh interval
+                            if (pendingConnectionRefreshIntervals.has(e)) {
+                                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                                pendingConnectionRefreshIntervals.delete(e);
+                            }
                         }
                     }
                 }
@@ -1562,9 +1583,44 @@ async function acceptPendingOffers() {
                 user: e,
                 answer: s,
                 iceCandidates: n
-            }), o.push(e), console.log(`[FIXED] Created answer for ${e} - NO TIMEOUT`)
+            }), o.push(e), console.log(`[FIXED] Created answer for ${e} - NO TIMEOUT`);
+            
+            // Start periodic ICE refresh for pending connections
+            // This keeps TURN allocations fresh while waiting for IPFS signaling
+            const peerUser = e;
+            const peerConnection = i;
+            const refreshInterval = setInterval(() => {
+                const peer = peers.get(peerUser);
+                if (!peer || !peer.isPendingConnection) {
+                    // Connection established or peer removed, stop refreshing
+                    clearInterval(refreshInterval);
+                    pendingConnectionRefreshIntervals.delete(peerUser);
+                    console.log('[WebRTC] Stopped ICE refresh - connection established or removed:', peerUser);
+                    return;
+                }
+                const elapsedMs = Date.now() - peer.connectionStartTime;
+                if (elapsedMs >= IPFS_SIGNALING_TIMEOUT_MS) {
+                    // Timeout reached, stop refreshing
+                    clearInterval(refreshInterval);
+                    pendingConnectionRefreshIntervals.delete(peerUser);
+                    console.log('[WebRTC] Stopped ICE refresh - timeout reached:', peerUser);
+                    return;
+                }
+                // Restart ICE to get fresh TURN allocations
+                if (typeof peerConnection.restartIce === 'function') {
+                    console.log('[WebRTC] Periodic ICE refresh for pending connection:', peerUser, '(', Math.round(elapsedMs / 60000), 'min elapsed)');
+                    peerConnection.restartIce();
+                }
+            }, ICE_REFRESH_INTERVAL_MS);
+            pendingConnectionRefreshIntervals.set(e, refreshInterval);
+            console.log('[WebRTC] Started periodic ICE refresh for:', e, '(every', ICE_REFRESH_INTERVAL_MS / 60000, 'min)');
         } catch (t) {
             console.error(`[ERROR] Failed ${e}:`, t), i && i.close();
+            // Clean up refresh interval if it was set before the error
+            if (pendingConnectionRefreshIntervals.has(e)) {
+                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                pendingConnectionRefreshIntervals.delete(e);
+            }
             continue
         }
     }
@@ -2084,6 +2140,11 @@ function cleanupPeer(e) {
     if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
         const t = playerAvatars.get(e);
         scene.remove(t), disposeObject(t), playerAvatars.delete(e)
+    }
+    // Clean up pending connection refresh interval
+    if (pendingConnectionRefreshIntervals.has(e)) {
+        clearInterval(pendingConnectionRefreshIntervals.get(e));
+        pendingConnectionRefreshIntervals.delete(e);
     }
     if (userAudioStreams.has(e)) {
         const t = userAudioStreams.get(e);
