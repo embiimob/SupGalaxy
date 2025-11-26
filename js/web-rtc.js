@@ -2,8 +2,8 @@ var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
 window.hasPolledHost = !1;
-// Timeout for IPFS-based signaling (30 minutes in milliseconds)
-const IPFS_SIGNALING_TIMEOUT_MS = 30 * 60 * 1000;
+// Timeout for IPFS-based signaling (60 minutes in milliseconds)
+const IPFS_SIGNALING_TIMEOUT_MS = 60 * 60 * 1000;
 // Interval for refreshing ICE candidates for pending connections (5 minutes)
 // TURN allocations typically expire after 5-10 minutes
 const ICE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -111,8 +111,8 @@ async function connectToServer(e, t, o) {
                 offerKeyword: null,
                 answerKeywords: [f],
                 userName: userName
-            }), Date.now() - connectionAttempts.get(e) > 18e5) {
-                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
+            }), Date.now() - connectionAttempts.get(e) > 36e5) {
+                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
                 var t = peers.get(e);
                 t && t.pc && t.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
             }
@@ -1789,8 +1789,8 @@ function startAnswerPolling(e) {
             offerKeyword: null,
             answerKeywords: [t],
             userName: userName
-        }), Date.now() - connectionAttempts.get(e) > 18e5) {
-            console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
+        }), Date.now() - connectionAttempts.get(e) > 36e5) {
+            console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
             var o = peers.get(e);
             o && o.pc && o.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
         }
