@@ -1302,9 +1302,9 @@ self.onmessage = async function(e) {
                             if (batchEntry) {
                                 answerSdp = batchEntry.answer;
                                 iceCandidates = batchEntry.iceCandidates || [];
-                                console.log('[WebRTC] Found batch answer for user:', userName);
+                                console.log('[WebRTC] Found batch answer for user:', userName, 'from batch with', answer.batch.length, 'entries');
                             } else {
-                                console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser);
+                                console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser, 'batch users:', (answer.batch || []).map(function(b) { return b.user; }));
                                 continue;
                             }
                         }
@@ -1314,15 +1314,29 @@ self.onmessage = async function(e) {
                             continue;
                         }
                         
+                        // Log the SDP type for debugging
+                        console.log('[WebRTC] Answer SDP type:', answerSdp.type, 'for host:', answer.hostUser);
+                        
                         // Process the answer asynchronously with proper awaiting
                         (async function(peerObj, sdp, candidates, hostUser) {
                             try {
+                                console.log('[WebRTC] Setting remote description for:', hostUser, 'current signaling state:', peerObj.pc.signalingState);
                                 await peerObj.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-                                console.log('[WebRTC] Remote description set for:', hostUser);
+                                console.log('[WebRTC] Remote description set for:', hostUser, 'new signaling state:', peerObj.pc.signalingState);
+                                
                                 for (var candidate of candidates) {
                                     await peerObj.pc.addIceCandidate(new RTCIceCandidate(candidate));
                                 }
                                 console.log('[WebRTC] Successfully processed answer for:', hostUser, 'ICE candidates:', candidates.length);
+                                console.log('[WebRTC] ICE connection state:', peerObj.pc.iceConnectionState, 'connection state:', peerObj.pc.connectionState);
+                                
+                                // Clear the answer polling interval since we got our answer
+                                var userKeyword = worldName + "@" + userName;
+                                if (answerPollingIntervals.has(userKeyword)) {
+                                    clearInterval(answerPollingIntervals.get(userKeyword));
+                                    answerPollingIntervals.delete(userKeyword);
+                                    console.log('[WebRTC] Cleared answer polling interval for:', userKeyword);
+                                }
                             } catch (e) {
                                 console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
                             }
