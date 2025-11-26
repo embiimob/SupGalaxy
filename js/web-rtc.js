@@ -1506,8 +1506,11 @@ async function acceptPendingOffers() {
                 dc: null,
                 address: null
             }), i.ondatachannel = t => {
+                console.log('[WebRTC] Host ondatachannel fired for:', e, 'channel:', t.channel.label);
                 const o = t.channel;
                 peers.get(e).dc = o, setupDataChannel(o, e)
+            }, i.oniceconnectionstatechange = () => {
+                console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
             }, await i.setRemoteDescription(new RTCSessionDescription(r.offer));
             for (const e of r.iceCandidates || []) await i.addIceCandidate(new RTCIceCandidate(e)).catch(console.error);
             s = await i.createAnswer(), await i.setLocalDescription(s), i.onicecandidate = e => {
