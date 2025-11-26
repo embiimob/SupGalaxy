@@ -1292,43 +1292,48 @@ self.onmessage = async function(e) {
                 for (var answer of data.answers || []) {
                     var peer = peers.get(answer.hostUser);
                     if (peer && peer.pc) {
-                        try {
-                            // Handle both direct answer and batch answer formats
-                            var answerSdp = answer.answer;
-                            var iceCandidates = answer.iceCandidates || [];
-                            
-                            // If this is a batch answer (no direct answer but has batch array), find the answer for the current user
-                            if (answer.answer === undefined && Array.isArray(answer.batch)) {
-                                var batchEntry = answer.batch.find(function(b) { return b.user === userName; });
-                                if (batchEntry) {
-                                    answerSdp = batchEntry.answer;
-                                    iceCandidates = batchEntry.iceCandidates || [];
-                                    console.log('[WebRTC] Found batch answer for user:', userName);
-                                } else {
-                                    console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser);
-                                    continue;
-                                }
-                            }
-                            
-                            if (!answerSdp) {
-                                console.log('[WebRTC] No valid answer SDP for:', answer.hostUser);
+                        // Handle both direct answer and batch answer formats
+                        var answerSdp = answer.answer;
+                        var iceCandidates = answer.iceCandidates || [];
+                        
+                        // If this is a batch answer (no direct answer but has batch array), find the answer for the current user
+                        if (answer.answer === undefined && Array.isArray(answer.batch)) {
+                            var batchEntry = answer.batch.find(function(b) { return b.user === userName; });
+                            if (batchEntry) {
+                                answerSdp = batchEntry.answer;
+                                iceCandidates = batchEntry.iceCandidates || [];
+                                console.log('[WebRTC] Found batch answer for user:', userName);
+                            } else {
+                                console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser);
                                 continue;
                             }
-                            
-                            peer.pc.setRemoteDescription(new RTCSessionDescription(answerSdp));
-                            for (var candidate of iceCandidates) {
-                                peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
-                            }
-                            console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
-                        } catch (e) {
-                            console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
                         }
+                        
+                        if (!answerSdp) {
+                            console.log('[WebRTC] No valid answer SDP for:', answer.hostUser);
+                            continue;
+                        }
+                        
+                        // Process the answer asynchronously with proper awaiting
+                        (async function(peerObj, sdp, candidates, hostUser) {
+                            try {
+                                await peerObj.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                                console.log('[WebRTC] Remote description set for:', hostUser);
+                                for (var candidate of candidates) {
+                                    await peerObj.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
+                                console.log('[WebRTC] Successfully processed answer for:', hostUser, 'ICE candidates:', candidates.length);
+                            } catch (e) {
+                                console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
+                            }
+                        })(peer, answerSdp, iceCandidates, answer.hostUser);
                     } else {
                         console.log('[WebRTC] No peer connection found for:', answer.hostUser);
                     }
-                    if (data.processedIds) {
-                        data.processedIds.forEach(id => processedMessages.add(id));
-                    }
+                }
+                // Process IDs once per answer_updates message, not for each answer
+                if (data.processedIds) {
+                    data.processedIds.forEach(id => processedMessages.add(id));
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {
