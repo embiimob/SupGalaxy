@@ -3268,32 +3268,19 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var t = document.getElementById("announceLoginBtn"),
-            o = document.getElementById("newUserJoinScriptBtn"),
+        var o = document.getElementById("newUserJoinScriptBtn"),
             a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
-        if (!(e && t && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), t.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Announce Server button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = (t.slice(0, 20), "MCServerJoin@" + o),
-                    n = await GetPublicAddressByKeyword(a);
-                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.", addMessage("Prepare to announce server after starting", 3e3)
-            } else addMessage("Please enter a world and username", 3e3)
-        })), o.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
+            this.blur(), console.log("[LOGIN] Join World button clicked"), isPromptOpen = !0;
             var e = document.getElementById("worldNameInput").value,
                 t = document.getElementById("userInput").value;
             if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
@@ -3301,7 +3288,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             else if (e && t) {
                 var o = e.slice(0, 8),
                     a = t.slice(0, 20),
-                    n = a + "@" + o,
+                    n = o + "@" + a,
                     r = knownWorlds.get(o);
                 if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
                 else {
@@ -3336,12 +3323,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
-            this.blur(), isPromptOpen = !0, document.getElementById("teleportX").value = "", document.getElementById("teleportY").value = "", document.getElementById("teleportZ").value = ""
-        })), document.getElementById("saveChangesBtn").addEventListener("click", downloadSession), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
-            isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
+            this.blur(), isPromptOpen = !0;
+            var e = await GetPublicAddressByKeyword(worldName + "@" + userName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                o = [e || worldName + "@" + userName, t || MASTER_WORLD_KEY].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
             document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
