@@ -2,8 +2,8 @@ var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
 window.hasPolledHost = !1;
-// Timeout for IPFS-based signaling (30 minutes in milliseconds)
-const IPFS_SIGNALING_TIMEOUT_MS = 30 * 60 * 1000;
+// Timeout for IPFS-based signaling (60 minutes in milliseconds)
+const IPFS_SIGNALING_TIMEOUT_MS = 60 * 60 * 1000;
 // Interval for refreshing ICE candidates for pending connections (5 minutes)
 // TURN allocations typically expire after 5-10 minutes
 const ICE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -111,8 +111,8 @@ async function connectToServer(e, t, o) {
                 offerKeyword: null,
                 answerKeywords: [f],
                 userName: userName
-            }), Date.now() - connectionAttempts.get(e) > 18e5) {
-                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
+            }), Date.now() - connectionAttempts.get(e) > 36e5) {
+                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
                 var t = peers.get(e);
                 t && t.pc && t.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
             }
@@ -1449,7 +1449,7 @@ function updatePendingModal() {
         var s = document.createElement("input");
         s.type = "checkbox", s.className = "selectOffer", s.dataset.user = o.clientUser, a.appendChild(r), a.appendChild(s), t.appendChild(a)
     }
-    e.style.display = isHost && pendingOffers.length > 0 ? "block" : "none"
+    e.style.display = pendingOffers.length > 0 ? "block" : "none"
 }
 
 function activateHost() {
@@ -1692,7 +1692,7 @@ function setupPendingModal() {
     const e = document.getElementById("pendingModal");
     e && (e.remove(), console.log("[MODAL] Removed existing pendingModal"));
     const t = document.createElement("div");
-    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = isHost && pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] pendingModal added to DOM");
+    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] pendingModal added to DOM");
     const o = t.querySelector("#pendingList");
     o.style.maxHeight = "calc(80vh - 100px)", o.style.overflow = "auto", o.innerHTML = "";
     let a = !1;
@@ -1789,8 +1789,8 @@ function startAnswerPolling(e) {
             offerKeyword: null,
             answerKeywords: [t],
             userName: userName
-        }), Date.now() - connectionAttempts.get(e) > 18e5) {
-            console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 30 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
+        }), Date.now() - connectionAttempts.get(e) > 36e5) {
+            console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
             var o = peers.get(e);
             o && o.pc && o.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
         }
