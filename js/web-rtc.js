@@ -1521,6 +1521,15 @@ async function acceptPendingOffers() {
             }, i.oniceconnectionstatechange = () => {
                 console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
                 const peer = peers.get(e);
+                
+                // Handle successful connection
+                if (i.iceConnectionState === 'connected' || i.iceConnectionState === 'completed') {
+                    if (peer && peer.isPendingConnection) {
+                        console.log('[WebRTC] Host ICE connected for', e, '- connection established!');
+                        peer.isPendingConnection = false;
+                    }
+                }
+                
                 // Don't cleanup pending connections on temporary ICE failures
                 // Allow time for IPFS signaling to complete
                 if (i.iceConnectionState === 'disconnected' || i.iceConnectionState === 'failed') {
@@ -1539,6 +1548,8 @@ async function acceptPendingOffers() {
                         }
                     }
                 }
+            }, i.onconnectionstatechange = () => {
+                console.log('[WebRTC] Host connection state change for', e, ':', i.connectionState);
             }, await i.setRemoteDescription(new RTCSessionDescription(r.offer));
             for (const e of r.iceCandidates || []) await i.addIceCandidate(new RTCIceCandidate(e)).catch(console.error);
             s = await i.createAnswer(), await i.setLocalDescription(s), i.onicecandidate = e => {
