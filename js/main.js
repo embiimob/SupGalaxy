@@ -8,6 +8,93 @@ function getCurrentWorldState() {
     return WORLD_STATES.get(worldName);
 }
 
+/**
+ * Renders the Known Worlds historical view
+ * @param {Array} worldActivity - Array of world activity objects from getKnownWorldsActivity
+ * @param {Element} container - DOM element to render into
+ */
+function renderKnownWorldsView(worldActivity, container) {
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (!worldActivity || worldActivity.length === 0) {
+        container.innerHTML = '<div style="font-size: 11px; opacity: 0.6;">No world activity found yet.</div>';
+        return;
+    }
+    
+    for (var i = 0; i < Math.min(worldActivity.length, 5); i++) {
+        var world = worldActivity[i];
+        var worldDiv = document.createElement('div');
+        worldDiv.style.cssText = 'margin-bottom: 12px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px;';
+        
+        // World header
+        var worldHeader = document.createElement('div');
+        worldHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;';
+        worldHeader.innerHTML = '<span style="font-weight: bold; color: var(--accent);">🌍 ' + escapeHtml(world.world) + '</span>' +
+            '<span style="font-size: 10px; opacity: 0.7;">' + world.userCount + ' user(s), ' + world.totalAttempts + ' attempts</span>';
+        worldDiv.appendChild(worldHeader);
+        
+        // Users list
+        var usersDiv = document.createElement('div');
+        usersDiv.style.cssText = 'font-size: 11px;';
+        
+        for (var j = 0; j < Math.min(world.users.length, 3); j++) {
+            var user = world.users[j];
+            var userRow = document.createElement('div');
+            userRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.05);';
+            
+            var userInfo = document.createElement('span');
+            userInfo.style.cssText = 'flex-grow: 1;';
+            var lastAttemptStr = user.lastAttempt ? new Date(user.lastAttempt).toLocaleDateString() : 'Unknown';
+            userInfo.textContent = user.name + ' (' + user.attempts + ' attempts, last: ' + lastAttemptStr + ')';
+            userRow.appendChild(userInfo);
+            
+            // Connect to home spawn button
+            var connectBtn = document.createElement('button');
+            connectBtn.textContent = '🏠 Connect';
+            connectBtn.style.cssText = 'padding: 2px 6px; font-size: 10px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 4px; cursor: pointer; margin-left: 4px;';
+            connectBtn.dataset.world = world.world;
+            connectBtn.dataset.user = user.name;
+            connectBtn.onclick = function() {
+                var w = this.dataset.world;
+                var u = this.dataset.user;
+                document.getElementById('worldNameInput').value = w;
+                document.getElementById('userInput').value = u;
+                addMessage('Set world: ' + w + ', user: ' + u, 2000);
+            };
+            userRow.appendChild(connectBtn);
+            
+            usersDiv.appendChild(userRow);
+        }
+        
+        if (world.users.length > 3) {
+            var moreDiv = document.createElement('div');
+            moreDiv.style.cssText = 'font-size: 10px; opacity: 0.6; margin-top: 4px;';
+            moreDiv.textContent = '... and ' + (world.users.length - 3) + ' more user(s)';
+            usersDiv.appendChild(moreDiv);
+        }
+        
+        worldDiv.appendChild(usersDiv);
+        container.appendChild(worldDiv);
+    }
+    
+    if (worldActivity.length > 5) {
+        var moreWorldsDiv = document.createElement('div');
+        moreWorldsDiv.style.cssText = 'font-size: 11px; opacity: 0.6; text-align: center; margin-top: 8px;';
+        moreWorldsDiv.textContent = '... and ' + (worldActivity.length - 5) + ' more world(s)';
+        container.appendChild(moreWorldsDiv);
+    }
+}
+
+/**
+ * Helper to escape HTML entities
+ */
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function simpleHash(e) {
     let t = 0;
     for (let o = 0; o < e.length; o++) {
@@ -122,7 +209,8 @@ async function applySaveFile(e, t, o) {
                     s = Math.max(.1, Math.min(.5, a.l + .2 * (c() - .5)));
                 o.setHSL(n, r, s), t.color = "#" + o.getHexString()
             } document.getElementById("worldNameInput").value = worldName, document.getElementById("userInput").value = userName;
-        var a, n = userName + "@" + worldName;
+        // Use normalized world@user format
+        var a, n = worldName + "@" + userName;
         try {
             a = await GetProfileByURN(userName)
         } catch (e) {
@@ -2471,7 +2559,9 @@ async function startGame() {
                 s = Math.max(.4, Math.min(.9, n.s + .2 * (a() - .5))),
                 i = Math.max(.1, Math.min(.5, n.l + .2 * (a() - .5)));
             o.setHSL(r, s, i), t.color = "#" + o.getHexString()
-        } var n, r = userName + "@" + worldName;
+        } 
+        // Use normalized world@user format
+        var n, r = worldName + "@" + userName;
     try {
         n = await GetProfileByURN(userName)
     } catch (e) {
@@ -3268,31 +3358,44 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var t = document.getElementById("announceLoginBtn"),
-            o = document.getElementById("newUserJoinScriptBtn"),
+        var o = document.getElementById("newUserJoinScriptBtn"),
             a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
-        if (!(e && t && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        
+        // Run initialization and show progress
+        var initProgress = document.getElementById("initProgress");
+        var initProgressBar = document.getElementById("initProgressBar");
+        var knownWorldsView = document.getElementById("knownWorldsView");
+        var knownWorldsList = document.getElementById("knownWorldsList");
+        
+        if (initProgress && typeof runInitialization === 'function') {
+            initProgress.style.display = "block";
+            runInitialization(function(progress) {
+                if (initProgressBar) {
+                    initProgressBar.style.width = progress + "%";
+                }
+            }).then(function() {
+                initProgress.style.display = "none";
+                // Show Known Worlds view if we have activity data
+                if (knownWorldsView && knownWorldsList && typeof getKnownWorldsActivity === 'function') {
+                    var worldActivity = getKnownWorldsActivity();
+                    if (worldActivity.length > 0) {
+                        knownWorldsView.style.display = "block";
+                        renderKnownWorldsView(worldActivity, knownWorldsList);
+                    }
+                }
+            });
+        }
+        
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), t.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Announce Server button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = (t.slice(0, 20), "MCServerJoin@" + o),
-                    n = await GetPublicAddressByKeyword(a);
-                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.", addMessage("Prepare to announce server after starting", 3e3)
-            } else addMessage("Please enter a world and username", 3e3)
-        })), o.addEventListener("click", (async function () {
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
             this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
             var e = document.getElementById("worldNameInput").value,
                 t = document.getElementById("userInput").value;
@@ -3301,7 +3404,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             else if (e && t) {
                 var o = e.slice(0, 8),
                     a = t.slice(0, 20),
-                    n = a + "@" + o,
+                    // Use normalized world@user format
+                    n = o + "@" + a,
                     r = knownWorlds.get(o);
                 if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
                 else {
@@ -3310,7 +3414,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         l = [s ? s.trim() : n, i ? i.trim() : MASTER_WORLD_KEY].filter((function (e) {
                             return e
                         })).join(",").replace(/["']/g, "");
-                    document.getElementById("joinScriptText").value = l, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.", addMessage("Join script ready to share", 3e3)
+                    document.getElementById("joinScriptText").value = l, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address (world@user format) and paste it into a Sup!? message To: field and click 📢 to join the world.", addMessage("Join script ready to share", 3e3)
                 }
             } else addMessage("Please enter a world and username", 3e3)
         })), document.getElementById("homeIcon").addEventListener("click", (function () {
@@ -3339,9 +3443,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
             this.blur(), isPromptOpen = !0, document.getElementById("teleportX").value = "", document.getElementById("teleportY").value = "", document.getElementById("teleportZ").value = ""
         })), document.getElementById("saveChangesBtn").addEventListener("click", downloadSession), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
             isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
+            // Use normalized world@user format
+            var e = await GetPublicAddressByKeyword(worldName + "@" + userName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                o = [e || worldName + "@" + userName, t || MASTER_WORLD_KEY].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
             document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"

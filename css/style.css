@@ -869,3 +869,32 @@
                 box-shadow: 0 0 10px 3px rgba(255, 209, 102, 0.7);
             }
         }
+
+        /* Known Worlds View styles */
+        #knownWorldsView {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+
+        #knownWorldsView::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #knownWorldsView::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #knownWorldsView::-webkit-scrollbar-thumb {
+            background-color: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+
+        /* Init progress styles */
+        #initProgress {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }

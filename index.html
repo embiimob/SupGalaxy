@@ -30,7 +30,7 @@
         <div id="loginCard">
             <label>World name</label>
             <div class="inputContainer autocomplete">
-                <input id="worldNameInput" placeholder="Type world name" autocomplete="off" />
+                <input id="worldNameInput" placeholder="Type world name (e.g., KANYE)" autocomplete="off" />
                 <button id="emojiBtn" class="emojiBtn">😀</button>
                 <div id="worldSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
             </div><br>
@@ -41,9 +41,20 @@
                 <div id="userSuggestions" class="autocomplete-suggestions" style="display:none;"></div>
             </div><br>
             <button id="startBtn">Spawn World</button>
-            <button id="announceLoginBtn" style="margin-top: 20px;">Announce Server</button>
             <button id="newUserJoinScriptBtn" style="margin-top: 20px;">Join Script</button>
             <small style="display:block;margin-top:8px;opacity:0.78;">Enter a world name (8 characters, case-sensitive) and a username (max 20 chars).</small>
+            <small style="display:block;margin-top:4px;opacity:0.65;">Join format: world@user (e.g., KANYE@player1)</small>
+            <div id="initProgress" style="display:none; margin-top: 12px; text-align: center;">
+                <div style="font-size: 12px; opacity: 0.8; margin-bottom: 6px;">Initializing...</div>
+                <div style="width: 100%; background: #1a2632; border-radius: 4px; height: 8px;">
+                    <div id="initProgressBar" style="width: 0%; background: var(--accent); border-radius: 4px; height: 100%; transition: width 0.3s;"></div>
+                </div>
+                <div id="initProgressText" style="font-size: 10px; opacity: 0.6; margin-top: 4px;">...this calculation will take place as your cache all the old transaction on the thread to prevent new answers and offers to be acted upon.</div>
+            </div>
+            <div id="knownWorldsView" style="display:none; margin-top: 16px; max-height: 200px; overflow-y: auto;">
+                <div style="font-size: 12px; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">🌍 Known Worlds Activity</div>
+                <div id="knownWorldsList"></div>
+            </div>
             <div style="text-align: center; margin-top: 20px;">
                 <a href="https://github.com/embiimob/SupGalaxy" target="_blank" title="Contribute on GitHub">
                     <img src="https://brand.github.com/_next/static/media/logo-04.9a1517f0.png" alt="GitHub" style="height: 32px; filter: invert(1);">
@@ -429,6 +440,8 @@
         </div>
     </div>
     <script src="js/declare.js"></script>
+    <script src="js/joinParser.js"></script>
+    <script src="js/initialization.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
     <script src="js/video-player.js"></script>
