@@ -1540,12 +1540,13 @@ async function acceptPendingOffers() {
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
         const n = document.getElementById("joinScriptModal");
         // Generate list of addresses for each recipient using uniform keyword format: world@recipientUsername
-        const recipientAddresses = [];
-        for (const answer of t) {
+        // Use Promise.all for concurrent lookups for better performance
+        const addressPromises = t.map(async (answer) => {
             const recipientKeyword = worldName + "@" + answer.user;
             const recipientAddr = await GetPublicAddressByKeyword(recipientKeyword);
-            recipientAddresses.push(recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword);
-        }
+            return recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword;
+        });
+        const recipientAddresses = await Promise.all(addressPromises);
         const c = recipientAddresses.join(",");
         n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Each recipient will receive on their own thread.", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
@@ -1843,9 +1844,17 @@ async function initServers() {
                 }
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                // Extract username from uniform keyword format: world@username
+                // Extract username from keyword format - handle both old (MCConn@user@world) and new (world@username)
                 var keywordParts = v.split("@");
-                m = keywordParts.length >= 2 ? keywordParts[1] : v;
+                if (keywordParts[0] === "MCConn" && keywordParts.length >= 3) {
+                    // Old format: MCConn@user@world
+                    m = keywordParts[1];
+                } else if (keywordParts.length >= 2) {
+                    // New format: world@username
+                    m = keywordParts[1];
+                } else {
+                    m = v;
+                }
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
