@@ -52,7 +52,7 @@ assert(htmlContent.includes('id="initProgressText"'), 'initProgressText should e
 
 // Test 5: Simplified calculation message should be present
 assert(
-    htmlContent.includes('this calculation will take place as your cache all the old transaction on the thread to prevent new answers and offers to be acted upon'),
+    htmlContent.includes('this calculation will take place as you cache all the old transactions on the thread to prevent new answers and offers to be acted upon'),
     'Simplified calculation message should be present'
 );
 
