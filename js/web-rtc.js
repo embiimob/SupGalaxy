@@ -28,7 +28,7 @@ function makePeerKeyword(world, username) {
     var w = (world || '').slice(0, 8);
     var maxUserLen = 20 - w.length - 1;
     var sanitized = sanitizePeerUsername(username);
-    var truncated = sanitized.slice(0, Math.max(0, maxUserLen));
+    var truncated = sanitized.slice(0, maxUserLen);
     return w + '@' + truncated;
 }
 

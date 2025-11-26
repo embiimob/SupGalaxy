@@ -1198,7 +1198,7 @@ self.onmessage = async function(e) {
             var w = (world || '').slice(0, 8);
             var maxUserLen = 20 - w.length - 1;
             var sanitized = sanitizePeerUsernameWorker(username);
-            var truncated = sanitized.slice(0, Math.max(0, maxUserLen));
+            var truncated = sanitized.slice(0, maxUserLen);
             return w + '@' + truncated;
         }
 
