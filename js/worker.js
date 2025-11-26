@@ -1187,6 +1187,23 @@ self.onmessage = async function(e) {
         }
 };
         `], { type: 'application/javascript' })));
+
+        /**
+         * Creates a peer keyword in the format world@username.
+         * World is kept as-is (max 8 chars), username is sanitized to [A-Za-z0-9_-]
+         * and truncated so that world.length + 1 + username.length <= 20.
+         * @param {string} world - The world name (max 8 chars)
+         * @param {string} username - The username to sanitize and truncate
+         * @returns {string} - Keyword in format "world@username"
+         */
+        function makePeerKeyword(world, username) {
+            var w = String(world || "").slice(0, 8);
+            var sanitized = String(username || "").replace(/[^A-Za-z0-9_-]/g, "");
+            var maxUserLen = 20 - w.length - 1;
+            var u = sanitized.slice(0, Math.max(0, maxUserLen));
+            return w + "@" + u;
+        }
+
         worker.onmessage = function (e) {
             var data = e.data;
             if (data.type === "worlds_users") {
