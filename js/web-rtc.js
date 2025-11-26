@@ -2,11 +2,17 @@ var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
 window.hasPolledHost = !1;
+// Timeout for IPFS-based signaling (30 minutes in milliseconds)
+const IPFS_SIGNALING_TIMEOUT_MS = 30 * 60 * 1000;
+// Interval for refreshing ICE candidates for pending connections (5 minutes)
+// TURN allocations typically expire after 5-10 minutes
+const ICE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 var knownServers = [],
     isHost = !1,
     isConnecting = !1,
     answerPollingIntervals = new Map,
     offerPollingIntervals = new Map,
+    pendingConnectionRefreshIntervals = new Map,
     localAudioStream = null,
     userAudioStreams = new Map,
     localVideoStream = null,
@@ -84,14 +90,16 @@ async function connectToServer(e, t, o) {
             l = URL.createObjectURL(c),
             d = document.createElement("a");
         d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
-        var p = "MCConn@" + e + "@" + worldName,
+        // Use uniform keyword format: world@friendUsername (target's thread)
+        var p = worldName + "@" + e,
             m = await GetPublicAddressByKeyword(p);
         document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
-        var f = "MCAnswer@" + userName + "@" + worldName;
+        // Monitor own thread for answers: world@username
+        var f = worldName + "@" + userName;
         answerPollingIntervals.set(f, setInterval((function () {
             if (worker.postMessage({
                 type: "poll",
@@ -110,7 +118,9 @@ async function connectToServer(e, t, o) {
             }
         }), 3e4))
     } catch (t) {
-        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+        console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e);
+        var userKeyword = worldName + "@" + userName;
+        clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
     }
 }
 async function sendWorldStateAsync(peer, worldState, username) {
@@ -210,7 +220,9 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                // Use uniform keyword format: world@username
+            var userKeyword = worldName + "@" + userName;
+            console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -227,7 +239,9 @@ async function handleMinimapFile(e) {
                 } catch (t) {
                     console.error("[WEBRTC] Failed to add ICE candidate for:", e, "error:", t)
                 }
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get("MCAnswer@" + userName + "@" + worldName)), answerPollingIntervals.delete("MCAnswer@" + userName + "@" + worldName)
+                    // Use uniform keyword format: world@username
+                var userKeyword = worldName + "@" + userName;
+                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
@@ -245,6 +259,10 @@ function setupDataChannel(e, t) {
             WORLD_STATES.clear();
             console.log(`[WebRTC] Client cleared all world states to sync with host.`);
             switchWorld(worldName);
+            // Stop polling for offers when connected as a client
+            // (hosts should continue polling for offers from other players)
+            stopOfferPolling();
+            console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
@@ -1496,10 +1514,100 @@ async function acceptPendingOffers() {
             }, peers.set(e, {
                 pc: i,
                 dc: null,
-                address: null
+                address: null,
+                isPendingConnection: true, // Mark as pending until data channel opens
+                connectionStartTime: Date.now()
             }), i.ondatachannel = t => {
+                console.log('[WebRTC] Host ondatachannel fired for:', e, 'channel:', t.channel.label);
                 const o = t.channel;
-                peers.get(e).dc = o, setupDataChannel(o, e)
+                const peer = peers.get(e);
+                if (peer) {
+                    peer.dc = o;
+                    peer.isPendingConnection = false; // Connection is now established
+                }
+                // Clear the ICE refresh interval since connection is established
+                if (pendingConnectionRefreshIntervals.has(e)) {
+                    clearInterval(pendingConnectionRefreshIntervals.get(e));
+                    pendingConnectionRefreshIntervals.delete(e);
+                    console.log('[WebRTC] Cleared ICE refresh interval for:', e);
+                }
+                setupDataChannel(o, e)
+            }, i.oniceconnectionstatechange = () => {
+                console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
+                const peer = peers.get(e);
+                
+                // Handle successful connection
+                if (i.iceConnectionState === 'connected' || i.iceConnectionState === 'completed') {
+                    if (peer && peer.isPendingConnection) {
+                        console.log('[WebRTC] Host ICE connected for', e, '- connection established!');
+                        peer.isPendingConnection = false;
+                    }
+                    // Clear the ICE refresh interval since connection is established
+                    if (pendingConnectionRefreshIntervals.has(e)) {
+                        clearInterval(pendingConnectionRefreshIntervals.get(e));
+                        pendingConnectionRefreshIntervals.delete(e);
+                        console.log('[WebRTC] Cleared ICE refresh interval for:', e);
+                    }
+                }
+                
+                // Don't cleanup pending connections on temporary ICE failures
+                // Allow time for IPFS signaling to complete
+                if (i.iceConnectionState === 'disconnected' || i.iceConnectionState === 'failed') {
+                    if (peer && peer.isPendingConnection) {
+                        const elapsedMs = Date.now() - peer.connectionStartTime;
+                        if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
+                            console.log('[WebRTC] Host ICE disconnected for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
+                            // Try to restart ICE if it failed and browser supports it
+                            if (i.iceConnectionState === 'failed' && typeof i.restartIce === 'function') {
+                                console.log('[WebRTC] Attempting ICE restart for', e);
+                                i.restartIce();
+                            }
+                            return; // Don't cleanup yet
+                        } else {
+                            console.log('[WebRTC] Host ICE failed for', e, 'after timeout - cleaning up');
+                            // Clean up the refresh interval
+                            if (pendingConnectionRefreshIntervals.has(e)) {
+                                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                                pendingConnectionRefreshIntervals.delete(e);
+                            }
+                        }
+                    }
+                }
+            }, i.onconnectionstatechange = () => {
+                console.log('[WebRTC] Host connection state change for', e, ':', i.connectionState);
+                const peer = peers.get(e);
+                
+                // Handle successful connection
+                if (i.connectionState === 'connected') {
+                    if (peer && peer.isPendingConnection) {
+                        console.log('[WebRTC] Host connection established for', e);
+                        peer.isPendingConnection = false;
+                    }
+                }
+                
+                // Don't cleanup pending connections on connection failures
+                // Allow time for IPFS signaling to complete
+                if (i.connectionState === 'disconnected' || i.connectionState === 'failed') {
+                    if (peer && peer.isPendingConnection) {
+                        const elapsedMs = Date.now() - peer.connectionStartTime;
+                        if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
+                            console.log('[WebRTC] Host connection', i.connectionState, 'for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
+                            // For failed state, try to restart the connection
+                            if (i.connectionState === 'failed' && typeof i.restartIce === 'function') {
+                                console.log('[WebRTC] Attempting ICE restart on connection failure for', e);
+                                i.restartIce();
+                            }
+                            return; // Don't let the browser cleanup the peer
+                        } else {
+                            console.log('[WebRTC] Host connection', i.connectionState, 'for', e, 'after timeout - cleaning up');
+                            // Clean up the refresh interval
+                            if (pendingConnectionRefreshIntervals.has(e)) {
+                                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                                pendingConnectionRefreshIntervals.delete(e);
+                            }
+                        }
+                    }
+                }
             }, await i.setRemoteDescription(new RTCSessionDescription(r.offer));
             for (const e of r.iceCandidates || []) await i.addIceCandidate(new RTCIceCandidate(e)).catch(console.error);
             s = await i.createAnswer(), await i.setLocalDescription(s), i.onicecandidate = e => {
@@ -1512,9 +1620,44 @@ async function acceptPendingOffers() {
                 user: e,
                 answer: s,
                 iceCandidates: n
-            }), o.push(e), console.log(`[FIXED] Created answer for ${e} - NO TIMEOUT`)
+            }), o.push(e), console.log(`[FIXED] Created answer for ${e} - NO TIMEOUT`);
+            
+            // Start periodic ICE refresh for pending connections
+            // This keeps TURN allocations fresh while waiting for IPFS signaling
+            const peerUser = e;
+            const peerConnection = i;
+            const refreshInterval = setInterval(() => {
+                const peer = peers.get(peerUser);
+                if (!peer || !peer.isPendingConnection) {
+                    // Connection established or peer removed, stop refreshing
+                    clearInterval(refreshInterval);
+                    pendingConnectionRefreshIntervals.delete(peerUser);
+                    console.log('[WebRTC] Stopped ICE refresh - connection established or removed:', peerUser);
+                    return;
+                }
+                const elapsedMs = Date.now() - peer.connectionStartTime;
+                if (elapsedMs >= IPFS_SIGNALING_TIMEOUT_MS) {
+                    // Timeout reached, stop refreshing
+                    clearInterval(refreshInterval);
+                    pendingConnectionRefreshIntervals.delete(peerUser);
+                    console.log('[WebRTC] Stopped ICE refresh - timeout reached:', peerUser);
+                    return;
+                }
+                // Restart ICE to get fresh TURN allocations
+                if (typeof peerConnection.restartIce === 'function') {
+                    console.log('[WebRTC] Periodic ICE refresh for pending connection:', peerUser, '(', Math.round(elapsedMs / 60000), 'min elapsed)');
+                    peerConnection.restartIce();
+                }
+            }, ICE_REFRESH_INTERVAL_MS);
+            pendingConnectionRefreshIntervals.set(e, refreshInterval);
+            console.log('[WebRTC] Started periodic ICE refresh for:', e, '(every', ICE_REFRESH_INTERVAL_MS / 60000, 'min)');
         } catch (t) {
             console.error(`[ERROR] Failed ${e}:`, t), i && i.close();
+            // Clean up refresh interval if it was set before the error
+            if (pendingConnectionRefreshIntervals.has(e)) {
+                clearInterval(pendingConnectionRefreshIntervals.get(e));
+                pendingConnectionRefreshIntervals.delete(e);
+            }
             continue
         }
     }
@@ -1530,10 +1673,17 @@ async function acceptPendingOffers() {
             r = URL.createObjectURL(a),
             s = document.createElement("a");
         s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
-        const n = document.getElementById("joinScriptModal"),
-            i = "MCBatch@" + userName + "@" + worldName,
-            c = (await GetPublicAddressByKeyword(i))?.trim().replace(/"|'/g, "") || i;
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+        const n = document.getElementById("joinScriptModal");
+        // Generate list of addresses for each recipient using uniform keyword format: world@recipientUsername
+        // Use Promise.all for concurrent lookups for better performance
+        const addressPromises = t.map(async (answer) => {
+            const recipientKeyword = worldName + "@" + answer.user;
+            const recipientAddr = await GetPublicAddressByKeyword(recipientKeyword);
+            return recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword;
+        });
+        const recipientAddresses = await Promise.all(addressPromises);
+        const c = recipientAddresses.join(",");
+        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Each recipient will receive on their own thread.", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
     }
 }
 
@@ -1586,32 +1736,48 @@ function setupPendingModal() {
 }
 
 function startOfferPolling() {
-    if (isHost) {
-        console.log("[SYSTEM] Starting offer polling for:", userName);
-        var e = "MCConn@" + userName + "@" + worldName,
-            t = setInterval((async function () {
-                try {
-                    await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
-                        type: "poll",
-                        chunkKeys: [],
-                        masterKey: MASTER_WORLD_KEY,
-                        userAddress: userAddress,
-                        worldName: worldName,
-                        serverKeyword: "MCServerJoin@" + worldName,
-                        offerKeyword: e,
-                        answerKeywords: [],
-                        userName: userName
-                    })
-                } catch (e) {
-                    console.error("[SYSTEM] Error in offer polling:", e)
-                }
-            }), 3e4);
-        offerPollingIntervals.set(e, t)
-    } else console.log("[SYSTEM] Not hosting, skipping offer polling")
+    // All players should poll for offers at their own world@username thread
+    // (not just hosts). This enables IPFS-based signaling where anyone can receive offers.
+    console.log("[SYSTEM] Starting offer polling for:", userName);
+    // Use uniform keyword format: world@username (monitoring own thread for offers)
+    var e = worldName + "@" + userName;
+    if (offerPollingIntervals.has(e)) {
+        console.log("[SYSTEM] Offer polling already active for:", e);
+        return;
+    }
+    var t = setInterval((async function () {
+        try {
+            await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
+                type: "poll",
+                chunkKeys: [],
+                masterKey: MASTER_WORLD_KEY,
+                userAddress: userAddress,
+                worldName: worldName,
+                serverKeyword: "MCServerJoin@" + worldName,
+                offerKeyword: e,
+                answerKeywords: [],
+                userName: userName
+            })
+        } catch (e) {
+            console.error("[SYSTEM] Error in offer polling:", e)
+        }
+    }), 3e4);
+    offerPollingIntervals.set(e, t)
+}
+
+function stopOfferPolling() {
+    // Stop offer polling (called when client connects to a host)
+    var e = worldName + "@" + userName;
+    if (offerPollingIntervals.has(e)) {
+        console.log("[SYSTEM] Stopping offer polling for:", e);
+        clearInterval(offerPollingIntervals.get(e));
+        offerPollingIntervals.delete(e);
+    }
 }
 
 function startAnswerPolling(e) {
-    var t = "MCAnswer@" + userName + "@" + worldName;
+    // Use uniform keyword format: world@username (monitoring own thread for answers)
+    var t = worldName + "@" + userName;
     answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
         if (worker.postMessage({
             type: "poll",
@@ -1784,6 +1950,7 @@ async function initServers() {
                         console.error("[SYSTEM] Failed to fetch IPFS for hash:", y, "error:", e, "transactionId:", c.TransactionId)
                     }
                 }
+                    // Use uniform keyword format: world@username for each server's thread
                 knownServers.some((e => e.hostUser === m && e.transactionId === c.TransactionId)) || knownServers.push({
                     hostUser: m,
                     spawn: f,
@@ -1793,7 +1960,7 @@ async function initServers() {
                     timestamp: l,
                     connectionRequestCount: 0,
                     latestRequestTime: null
-                }), o.push("MCConn@" + m + "@" + worldName)
+                }), o.push(worldName + "@" + m)
             } catch (e) {
                 console.error("[SYSTEM] Error processing initial server message:", c.TransactionId, e)
             }
@@ -1802,7 +1969,7 @@ async function initServers() {
         for (var w of knownServers) (!h.has(w.hostUser) || h.get(w.hostUser).timestamp < w.timestamp) && h.set(w.hostUser, w);
         for (var v of (knownServers = Array.from(h.values()).sort((function (e, t) {
             return t.timestamp - e.timestamp
-        })).slice(0, 10), isHost && o.push("MCConn@" + userName + "@" + worldName), o)) {
+        })).slice(0, 10), isHost && o.push(worldName + "@" + userName), o)) {
             try {
                 await new Promise((e => setTimeout(e, n))), M = await GetPublicAddressByKeyword(v)
             } catch (e) {
@@ -1826,14 +1993,25 @@ async function initServers() {
                 }
                 var S = a.length,
                     T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                m = v.match(/MCConn@(.+)@[^@]+$/)[1];
+                // Extract username from keyword format - handle both old (MCConn@user@world) and new (world@username)
+                var keywordParts = v.split("@");
+                if (keywordParts[0] === "MCConn" && keywordParts.length >= 3) {
+                    // Old format: MCConn@user@world
+                    m = keywordParts[1];
+                } else if (keywordParts.length >= 2) {
+                    // New format: world@username
+                    m = keywordParts[1];
+                } else {
+                    m = v;
+                }
                 (w = knownServers.find((function (e) {
                     return e.hostUser === m
                 }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
             }
         }
         if (isHost) {
-            var M, b = "MCConn@" + userName + "@" + worldName;
+            // Use uniform keyword format: world@username (monitoring own thread)
+            var M, b = worldName + "@" + userName;
             if (M = await GetPublicAddressByKeyword(b)) {
                 for (a = [], r = 0, s = 5e3; ;) try {
                     var C;
@@ -1900,10 +2078,37 @@ async function initServers() {
                 I.length > 0 && (pendingOffers.push(...I), setupPendingModal())
             }
         }
+        // Cache user's own world@username thread at world load to prevent processing old messages
+        var userThreadKeyword = worldName + "@" + userName;
+        console.log("[SYSTEM] Caching user's own thread:", userThreadKeyword);
+        try {
+            var userThreadAddr = await GetPublicAddressByKeyword(userThreadKeyword);
+            if (userThreadAddr) {
+                for (a = [], r = 0, s = 5e3; ;) try {
+                    if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
+                    if (a = a.concat(C), C.length < s) break;
+                    r += s
+                } catch (e) {
+                    console.error("[SYSTEM] Failed to fetch user thread messages for caching:", userThreadKeyword, "skip:", r, "error:", e);
+                    break
+                }
+                console.log("[SYSTEM] Caching", a.length, "messages from user's thread:", userThreadKeyword);
+                for (var c of a) {
+                    if (c.TransactionId) {
+                        processedMessages.add(c.TransactionId);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("[SYSTEM] Failed to cache user's thread:", userThreadKeyword, e)
+        }
         console.log("[SYSTEM] Initial load complete."), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
-        }), isInitialLoad = !1
+        }), isInitialLoad = !1;
+        // Start offer polling for all players at their own world@username thread
+        // This enables receiving offers via IPFS signaling
+        startOfferPolling();
     } else console.error("[SYSTEM] No server address for:", t)
 }
 
@@ -1989,6 +2194,11 @@ function cleanupPeer(e) {
     if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
         const t = playerAvatars.get(e);
         scene.remove(t), disposeObject(t), playerAvatars.delete(e)
+    }
+    // Clean up pending connection refresh interval
+    if (pendingConnectionRefreshIntervals.has(e)) {
+        clearInterval(pendingConnectionRefreshIntervals.get(e));
+        pendingConnectionRefreshIntervals.delete(e);
     }
     if (userAudioStreams.has(e)) {
         const t = userAudioStreams.get(e);

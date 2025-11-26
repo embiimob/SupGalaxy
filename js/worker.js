@@ -1292,21 +1292,68 @@ self.onmessage = async function(e) {
                 for (var answer of data.answers || []) {
                     var peer = peers.get(answer.hostUser);
                     if (peer && peer.pc) {
-                        try {
-                            peer.pc.setRemoteDescription(new RTCSessionDescription(answer.answer));
-                            for (var candidate of answer.iceCandidates || []) {
-                                peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        // Handle both direct answer and batch answer formats
+                        var answerSdp = answer.answer;
+                        var iceCandidates = answer.iceCandidates || [];
+                        
+                        // If this is a batch answer (no direct answer but has batch array), find the answer for the current user
+                        if (answer.answer === undefined && Array.isArray(answer.batch)) {
+                            var batchEntry = answer.batch.find(function(b) { return b.user === userName; });
+                            if (batchEntry) {
+                                answerSdp = batchEntry.answer;
+                                iceCandidates = batchEntry.iceCandidates || [];
+                                console.log('[WebRTC] Found batch answer for user:', userName, 'from batch with', answer.batch.length, 'entries');
+                            } else {
+                                console.log('[WebRTC] No batch entry found for user:', userName, 'in batch from:', answer.hostUser, 'batch users:', (answer.batch || []).map(function(b) { return b.user; }));
+                                continue;
                             }
-                            console.log('[WebRTC] Successfully processed answer for:', answer.hostUser);
-                        } catch (e) {
-                            console.error('[WebRTC] Failed to process answer for:', answer.hostUser, 'error:', e);
                         }
+                        
+                        if (!answerSdp) {
+                            console.log('[WebRTC] No valid answer SDP for:', answer.hostUser);
+                            continue;
+                        }
+                        
+                        // Log the SDP type for debugging
+                        console.log('[WebRTC] Answer SDP type:', answerSdp.type, 'for host:', answer.hostUser);
+                        
+                        // Process the answer asynchronously with proper awaiting
+                        (async function(peerObj, sdp, candidates, hostUser) {
+                            try {
+                                console.log('[WebRTC] Setting remote description for:', hostUser, 'current signaling state:', peerObj.pc.signalingState);
+                                await peerObj.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                                console.log('[WebRTC] Remote description set for:', hostUser, 'new signaling state:', peerObj.pc.signalingState);
+                                
+                                for (var candidate of candidates) {
+                                    await peerObj.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
+                                console.log('[WebRTC] Successfully processed answer for:', hostUser, 'ICE candidates:', candidates.length);
+                                console.log('[WebRTC] ICE connection state:', peerObj.pc.iceConnectionState, 'connection state:', peerObj.pc.connectionState);
+                                console.log('[WebRTC] Data channel state:', peerObj.dc ? peerObj.dc.readyState : 'no data channel');
+                                
+                                // Provide user feedback and update UI (matching handleMinimapFile behavior)
+                                addMessage('Connected to ' + hostUser + ' via IPFS', 5000);
+                                updateHudButtons();
+                                
+                                // Clear the answer polling interval since we got our answer
+                                var userKeyword = worldName + "@" + userName;
+                                if (answerPollingIntervals.has(userKeyword)) {
+                                    clearInterval(answerPollingIntervals.get(userKeyword));
+                                    answerPollingIntervals.delete(userKeyword);
+                                    console.log('[WebRTC] Cleared answer polling interval for:', userKeyword);
+                                }
+                            } catch (e) {
+                                console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
+                                addMessage('Failed to connect to ' + hostUser, 3000);
+                            }
+                        })(peer, answerSdp, iceCandidates, answer.hostUser);
                     } else {
                         console.log('[WebRTC] No peer connection found for:', answer.hostUser);
                     }
-                    if (data.processedIds) {
-                        data.processedIds.forEach(id => processedMessages.add(id));
-                    }
+                }
+                // Process IDs once per answer_updates message, not for each answer
+                if (data.processedIds) {
+                    data.processedIds.forEach(id => processedMessages.add(id));
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {
@@ -1405,12 +1452,14 @@ self.onmessage = async function(e) {
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
             var serverKeyword = 'MCServerJoin@' + worldName;
-            var offerKeyword = isHost ? 'MCConn@' + userName + '@' + worldName : null;
+            // Use uniform keyword format: world@username for monitoring own thread
+            var offerKeyword = isHost ? worldName + '@' + userName : null;
             var answerKeywords = [];
             for (var peer of peers) {
                 var peerUser = peer[0];
                 if (peerUser !== userName) {
-                    answerKeywords.push('MCAnswer@' + userName + '@' + worldName);
+                    // Monitor own thread for answers: world@username
+                    answerKeywords.push(worldName + '@' + userName);
                 }
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
