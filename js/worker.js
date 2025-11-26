@@ -1422,11 +1422,16 @@ self.onmessage = async function(e) {
             var serverKeyword = 'MCServerJoin@' + worldName;
             var offerKeyword = isHost ? makePeerKeywordWorker(worldName, userName) : null;
             var answerKeywords = [];
+            // If there are any peers (other than self), poll for answers addressed to this user
+            var hasPeers = false;
             for (var peer of peers) {
-                var peerUser = peer[0];
-                if (peerUser !== userName) {
-                    answerKeywords.push(makePeerKeywordWorker(worldName, userName));
+                if (peer[0] !== userName) {
+                    hasPeers = true;
+                    break;
                 }
+            }
+            if (hasPeers) {
+                answerKeywords.push(makePeerKeywordWorker(worldName, userName));
             }
             console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
             worker.postMessage({
