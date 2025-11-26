@@ -1330,6 +1330,10 @@ self.onmessage = async function(e) {
                                 console.log('[WebRTC] Successfully processed answer for:', hostUser, 'ICE candidates:', candidates.length);
                                 console.log('[WebRTC] ICE connection state:', peerObj.pc.iceConnectionState, 'connection state:', peerObj.pc.connectionState);
                                 
+                                // Provide user feedback and update UI (matching handleMinimapFile behavior)
+                                addMessage('Connected to ' + hostUser + ' via IPFS', 5000);
+                                updateHudButtons();
+                                
                                 // Clear the answer polling interval since we got our answer
                                 var userKeyword = worldName + "@" + userName;
                                 if (answerPollingIntervals.has(userKeyword)) {
@@ -1339,6 +1343,7 @@ self.onmessage = async function(e) {
                                 }
                             } catch (e) {
                                 console.error('[WebRTC] Failed to process answer for:', hostUser, 'error:', e);
+                                addMessage('Failed to connect to ' + hostUser, 3000);
                             }
                         })(peer, answerSdp, iceCandidates, answer.hostUser);
                     } else {
