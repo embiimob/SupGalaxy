@@ -522,7 +522,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 if (profile && profile.URN) {
                     const urnProfile = await GetProfileByURN(profile.URN);
                     if (urnProfile && urnProfile.Creators && urnProfile.Creators.includes(t)) {
-                        ownerUsername = profile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                        ownerUsername = profile.URN;
                     }
                 }
             } catch (err) {

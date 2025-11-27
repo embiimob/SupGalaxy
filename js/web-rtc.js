@@ -1775,6 +1775,14 @@ function stopOfferPolling() {
     }
 }
 
+function stopAllPolling() {
+    console.log("[SYSTEM] Stopping all polling intervals");
+    offerPollingIntervals.forEach(clearInterval);
+    offerPollingIntervals.clear();
+    answerPollingIntervals.forEach(clearInterval);
+    answerPollingIntervals.clear();
+}
+
 function startAnswerPolling(e) {
     // Use uniform keyword format: world@username (monitoring own thread for answers)
     var t = worldName + "@" + userName;
@@ -1796,320 +1804,42 @@ function startAnswerPolling(e) {
         }
     }), 3e4)))
 }
-async function pollServers() {
-    if (isInitialLoad) console.log("[SYSTEM] Skipping poll, initial load not complete");
-    else {
-        console.log("[SYSTEM] Polling server announcements for:", "MCServerJoin@" + worldName);
-        var e = "MCServerJoin@" + worldName,
-            t = 0,
-            o = 350;
-        !async function a() {
-            var r;
-            try {
-                await new Promise((e => setTimeout(e, o))), r = await GetPublicAddressByKeyword(e)
-            } catch (e) {
-                console.error("[SYSTEM] Failed to fetch server address:", e)
-            }
-            if (r) {
-                for (var s = [], n = 0, i = 5e3; ;) try {
-                    await new Promise((e => setTimeout(e, o)));
-                    var c = await GetPublicMessagesByAddress(r, n, i);
-                    if (!c || 0 === c.length) break;
-                    if (s = s.concat(c), c.length < i) break;
-                    n += i
-                } catch (e) {
-                    console.error("[SYSTEM] Failed to fetch server messages, skip:", n, "error:", e);
-                    break
-                }
-                var l = [],
-                    d = [],
-                    p = new Map;
-                for (var m of s)
-                    if (m.TransactionId && !processedMessages.has(m.TransactionId)) {
-                        d.push(m.TransactionId);
-                        var f = m.FromAddress,
-                            u = Date.parse(m.BlockDate) || Date.now(),
-                            g = p.get(f);
-                        (!g || g.timestamp < u) && p.set(f, {
-                            msg: m,
-                            timestamp: u
-                        })
-                    } else if (m.TransactionId) break;
-                for (var y of p) {
-                    m = y[1].msg, u = y[1].timestamp;
-                    try {
-                        await new Promise((e => setTimeout(e, o)));
-                        var h = await GetProfileByAddress(m.FromAddress);
-                        if (!h || !h.URN) {
-                            console.log("[USERS] Skipping server message, no URN for address:", m.FromAddress, "transactionId:", m.TransactionId);
-                            continue
-                        }
-                        var w = h.URN.replace(/[^a-zA-Z0-9]/g, "");
-                        await new Promise((e => setTimeout(e, o)));
-                        var v = await GetProfileByURN(w);
-                        if (v) {
-                            if (!v.Creators || !v.Creators.includes(m.FromAddress)) {
-                                console.log("[USERS] Skipping server message, invalid creators for user:", w, "transactionId:", m.TransactionId);
-                                continue
-                            }
-                        } else console.log("[USERS] No profile for user:", w, "transactionId:", m.TransactionId);
-                        var S = calculateSpawnPoint(w + "@" + worldName),
-                            T = null,
-                            M = [],
-                            b = m.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                        if (b) {
-                            var C = b[1];
-                            if (/^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/.test(C)) try {
-                                await new Promise((e => setTimeout(e, o)));
-                                var I = await fetchIPFS(C);
-                                I && I.offer && I.world === worldName && (T = I.offer, M = I.iceCandidates || [])
-                            } catch (e) {
-                                console.error("[SYSTEM] Failed to fetch IPFS for hash:", C, "error:", e, "transactionId:", m.TransactionId)
-                            }
-                        }
-                        knownServers.some((e => e.hostUser === w && e.transactionId === m.TransactionId)) || (l.push({
-                            hostUser: w,
-                            spawn: S,
-                            offer: T,
-                            iceCandidates: M,
-                            transactionId: m.TransactionId,
-                            timestamp: u,
-                            connectionRequestCount: 0,
-                            latestRequestTime: null
-                        }), processedMessages.add(m.TransactionId))
-                    } catch (e) {
-                        console.error("[SYSTEM] Error processing server message:", m.TransactionId, e)
-                    }
-                }
-                console.log("[SYSTEM] New server announcements found:", l.length);
-                var k = new Map;
-                for (var A of knownServers.concat(l)) (!k.has(A.hostUser) || k.get(A.hostUser).timestamp < A.timestamp) && k.set(A.hostUser, A);
-                knownServers = Array.from(k.values()).sort((function (e, t) {
-                    return t.timestamp - e.timestamp
-                })).slice(0, 10), l.length > 0 && (addMessage("New player(s) available to connect!", 3e3), updateHudButtons())
-            } else t < 3 ? (t++, setTimeout(a, 5e3 * Math.pow(2, t))) : (addMessage("Failed to fetch server announcements", 3e3), console.error("[SYSTEM] Max retries reached for server announcements"))
-        }()
-    }
-}
 async function initServers() {
     console.log("[SYSTEM] Initializing servers for:", worldName);
-    var e, t = "MCServerJoin@" + worldName,
-        o = [];
+    var n = 350;
+    var a, r, s;
+
+    // Cache user's own world@username thread at world load to prevent processing old messages
+    var userThreadKeyword = worldName + "@" + userName;
+    console.log("[SYSTEM] Caching user's own thread:", userThreadKeyword);
     try {
-        e = await GetPublicAddressByKeyword(t)
-    } catch (e) {
-        console.error("[SYSTEM] Failed to fetch initial server address:", e)
-    }
-    if (e) {
-        console.log("[SYSTEM] Fetching initial server announcements for:", t);
-        for (var a = [], r = 0, s = 5e3, n = 350; ;) try {
-            if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(e, r, s)) || 0 === C.length) break;
-            if (a = a.concat(C), C.length < s) break;
-            r += s
-        } catch (e) {
-            console.error("[SYSTEM] Failed to fetch initial server messages, skip:", r, "error:", e);
-            break
-        }
-        console.log("[SYSTEM] Initial poll: Found", a.length, "server announcements");
-        var i = new Map;
-        for (var c of a)
-            if (c.TransactionId && !processedMessages.has(c.TransactionId)) {
-                processedMessages.add(c.TransactionId);
-                var l = Date.parse(c.BlockDate) || Date.now(),
-                    d = i.get(c.FromAddress);
-                (!d || d.timestamp < l) && i.set(c.FromAddress, {
-                    msg: c,
-                    timestamp: l
-                })
-            } else if (c.TransactionId) {
-                console.log("[SYSTEM] Stopping server message processing at cached ID:", c.TransactionId);
+        var userThreadAddr = await GetPublicAddressByKeyword(userThreadKeyword);
+        if (userThreadAddr) {
+            for (a = [], r = 0, s = 5e3; ;) try {
+                if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
+                if (a = a.concat(C), C.length < s) break;
+                r += s
+            } catch (e) {
+                console.error("[SYSTEM] Failed to fetch user thread messages for caching:", userThreadKeyword, "skip:", r, "error:", e);
                 break
             }
-        for (var p of i) {
-            c = p[1].msg, l = p[1].timestamp;
-            try {
-                if (await new Promise((e => setTimeout(e, n))), !(k = await GetProfileByAddress(c.FromAddress)) || !k.URN) {
-                    console.log("[USERS] Skipping initial server message, no URN for address:", c.FromAddress, "transactionId:", c.TransactionId);
-                    continue
+            console.log("[SYSTEM] Caching", a.length, "messages from user's thread:", userThreadKeyword);
+            for (var c of a) {
+                if (c.TransactionId) {
+                    processedMessages.add(c.TransactionId);
                 }
-                var m = k.URN.replace(/[^a-zA-Z0-9]/g, "");
-                if (await new Promise((e => setTimeout(e, n))), A = await GetProfileByURN(m)) {
-                    if (!A.Creators || !A.Creators.includes(c.FromAddress)) {
-                        console.log("[USERS] Skipping initial server message, invalid creators for user:", m, "transactionId:", c.TransactionId);
-                        continue
-                    }
-                } else console.log("[USERS] No profile for user:", m, "transactionId:", c.TransactionId);
-                var f = calculateSpawnPoint(m + "@" + worldName),
-                    u = null,
-                    g = [];
-                if (E = c.Message.match(/IPFS:([a-zA-Z0-9]+)/)) {
-                    var y = E[1];
-                    if (/^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/.test(y)) try {
-                        await new Promise((e => setTimeout(e, n))), (x = await fetchIPFS(y)) && x.offer && x.world === worldName && (u = x.offer, g = x.iceCandidates || [])
-                    } catch (e) {
-                        console.error("[SYSTEM] Failed to fetch IPFS for hash:", y, "error:", e, "transactionId:", c.TransactionId)
-                    }
-                }
-                    // Use uniform keyword format: world@username for each server's thread
-                knownServers.some((e => e.hostUser === m && e.transactionId === c.TransactionId)) || knownServers.push({
-                    hostUser: m,
-                    spawn: f,
-                    offer: u,
-                    iceCandidates: g,
-                    transactionId: c.TransactionId,
-                    timestamp: l,
-                    connectionRequestCount: 0,
-                    latestRequestTime: null
-                }), o.push(worldName + "@" + m)
-            } catch (e) {
-                console.error("[SYSTEM] Error processing initial server message:", c.TransactionId, e)
             }
         }
-        var h = new Map;
-        for (var w of knownServers) (!h.has(w.hostUser) || h.get(w.hostUser).timestamp < w.timestamp) && h.set(w.hostUser, w);
-        for (var v of (knownServers = Array.from(h.values()).sort((function (e, t) {
-            return t.timestamp - e.timestamp
-        })).slice(0, 10), isHost && o.push(worldName + "@" + userName), o)) {
-            try {
-                await new Promise((e => setTimeout(e, n))), M = await GetPublicAddressByKeyword(v)
-            } catch (e) {
-                console.error("[SYSTEM] Failed to fetch initial response address for:", v, e)
-            }
-            if (M) {
-                for (a = [], r = 0, s = 5e3; ;) try {
-                    if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(M, r, s)) || 0 === C.length) break;
-                    if (a = a.concat(C), C.length < s) break;
-                    r += s
-                } catch (e) {
-                    console.error("[SYSTEM] Failed to fetch initial response messages for:", v, "skip:", r, "error:", e);
-                    break
-                }
-                for (var c of (console.log("[SYSTEM] Initial poll: Found", a.length, "existing responses for:", v), a)) {
-                    if (c.TransactionId && processedMessages.has(c.TransactionId)) {
-                        console.log("[SYSTEM] Stopping response message processing at cached ID:", c.TransactionId);
-                        break
-                    }
-                    c.TransactionId && processedMessages.add(c.TransactionId)
-                }
-                var S = a.length,
-                    T = a.length > 0 ? Date.parse(a[0].BlockDate) || Date.now() : null;
-                // Extract username from keyword format - handle both old (MCConn@user@world) and new (world@username)
-                var keywordParts = v.split("@");
-                if (keywordParts[0] === "MCConn" && keywordParts.length >= 3) {
-                    // Old format: MCConn@user@world
-                    m = keywordParts[1];
-                } else if (keywordParts.length >= 2) {
-                    // New format: world@username
-                    m = keywordParts[1];
-                } else {
-                    m = v;
-                }
-                (w = knownServers.find((function (e) {
-                    return e.hostUser === m
-                }))) && (w.connectionRequestCount = S, w.latestRequestTime = T)
-            }
-        }
-        if (isHost) {
-            // Use uniform keyword format: world@username (monitoring own thread)
-            var M, b = worldName + "@" + userName;
-            if (M = await GetPublicAddressByKeyword(b)) {
-                for (a = [], r = 0, s = 5e3; ;) try {
-                    var C;
-                    if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(M, r, s)) || 0 === C.length) break;
-                    if (a = a.concat(C), C.length < s) break;
-                    r += s
-                } catch (e) {
-                    console.error("[SYSTEM] Failed to fetch initial host offer messages for:", b, "skip:", r, "error:", e);
-                    break
-                }
-                var I = [];
-                for (var c of a) {
-                    if (c.TransactionId && processedMessages.has(c.TransactionId)) {
-                        console.log("[SYSTEM] Stopping host offer processing at cached ID:", c.TransactionId);
-                        break
-                    }
-                    if (c.TransactionId) {
-                        processedMessages.add(c.TransactionId);
-                        try {
-                            var k;
-                            if (!(k = await GetProfileByAddress(c.FromAddress)) || !k.URN) {
-                                console.log("[USERS] Skipping initial offer message, no URN for address:", c.FromAddress, "txId:", c.TransactionId);
-                                continue
-                            }
-                            var A, E, P = k.URN.replace(/[^a-zA-Z0-9]/g, "");
-                            if (!(A = await GetProfileByURN(P))) {
-                                console.log("[USERS] No profile for user:", P, "txId:", c.TransactionId);
-                                continue
-                            }
-                            if (!A.Creators || !A.Creators.includes(c.FromAddress)) {
-                                console.log("[USERS] Skipping initial offer message, invalid creators for user:", P, "txId:", c.TransactionId);
-                                continue
-                            }
-                            if (!(E = c.Message.match(/IPFS:([a-zA-Z0-9]+)/))) {
-                                console.log("[SYSTEM] No IPFS hash in initial offer message:", c.Message, "txId:", c.TransactionId);
-                                continue
-                            }
-                            y = E[1];
-                            if (!/^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/.test(y)) {
-                                console.log("[SYSTEM] Invalid CID in initial offer message:", y, "txId:", c.TransactionId);
-                                continue
-                            }
-                            try {
-                                var x;
-                                if (await new Promise((e => setTimeout(e, n))), !(x = await fetchIPFS(y)) || !x.world || x.world !== worldName) {
-                                    console.log("[SYSTEM] Invalid IPFS data for initial offer message:", y, "txId:", c.TransactionId);
-                                    continue
-                                } (x.offer || x.answer) && I.push({
-                                    clientUser: x.user || P,
-                                    offer: x.offer || x.answer,
-                                    iceCandidates: x.iceCandidates || [],
-                                    transactionId: c.TransactionId,
-                                    timestamp: Date.parse(c.BlockDate) || Date.now(),
-                                    profile: k
-                                })
-                            } catch (e) {
-                                console.error("[SYSTEM] Failed to fetch IPFS for initial offer hash:", y, "error:", e, "txId:", c.TransactionId)
-                            }
-                        } catch (e) {
-                            console.error("[SYSTEM] Error processing initial offer message:", c.TransactionId, e)
-                        }
-                    }
-                }
-                I.length > 0 && (pendingOffers.push(...I), setupPendingModal())
-            }
-        }
-        // Cache user's own world@username thread at world load to prevent processing old messages
-        var userThreadKeyword = worldName + "@" + userName;
-        console.log("[SYSTEM] Caching user's own thread:", userThreadKeyword);
-        try {
-            var userThreadAddr = await GetPublicAddressByKeyword(userThreadKeyword);
-            if (userThreadAddr) {
-                for (a = [], r = 0, s = 5e3; ;) try {
-                    if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
-                    if (a = a.concat(C), C.length < s) break;
-                    r += s
-                } catch (e) {
-                    console.error("[SYSTEM] Failed to fetch user thread messages for caching:", userThreadKeyword, "skip:", r, "error:", e);
-                    break
-                }
-                console.log("[SYSTEM] Caching", a.length, "messages from user's thread:", userThreadKeyword);
-                for (var c of a) {
-                    if (c.TransactionId) {
-                        processedMessages.add(c.TransactionId);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("[SYSTEM] Failed to cache user's thread:", userThreadKeyword, e)
-        }
-        console.log("[SYSTEM] Initial load complete."), worker.postMessage({
-            type: "sync_processed",
-            ids: Array.from(processedMessages)
-        }), isInitialLoad = !1;
-        // Start offer polling for all players at their own world@username thread
-        // This enables receiving offers via IPFS signaling
-        startOfferPolling();
-    } else console.error("[SYSTEM] No server address for:", t)
+    } catch (e) {
+        console.error("[SYSTEM] Failed to cache user's thread:", userThreadKeyword, e)
+    }
+    console.log("[SYSTEM] Initial load complete."), worker.postMessage({
+        type: "sync_processed",
+        ids: Array.from(processedMessages)
+    }), isInitialLoad = !1;
+    // Start offer polling for all players at their own world@username thread
+    // This enables receiving offers via IPFS signaling
+    startOfferPolling();
 }
 
 function openUsersModal() {
@@ -2117,7 +1847,8 @@ function openUsersModal() {
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
-    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = '\n            <h3>Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: Servers may be offline. Connection requires the host to be active.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     var a = !1,
@@ -2135,22 +1866,121 @@ function openUsersModal() {
                 }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
         }
     }
+
+    // Known Worlds Section
     var c = document.createElement("h4");
-    c.innerText = "Known Servers (Last 10)", o.appendChild(c);
-    var l = new Map;
-    for (var d of knownServers) (!l.has(d.hostUser) || l.get(d.hostUser).timestamp < d.timestamp) && l.set(d.hostUser, d);
-    var p = Array.from(l.values()).sort((function (e, t) {
-        return t.timestamp - e.timestamp
-    })).slice(0, 10);
-    for (var d of p) {
-        a = !0, console.log("[MODAL] Rendering server:", d.hostUser), (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px";
-        var m, f = document.createElement("div"),
-            u = connectionAttempts.get(d.hostUser);
-        if (f.innerText = d.hostUser + " at (" + Math.floor(d.spawn.x) + ", " + Math.floor(d.spawn.y) + ", " + Math.floor(d.spawn.z) + ")\nServer started: " + new Date(d.timestamp).toLocaleString() + "\nLast connect attempt: " + (u ? new Date(u).toLocaleString() : "Never") + "\nConnection requests: " + (d.connectionRequestCount || 0) + "\nLatest request: " + (d.latestRequestTime ? new Date(d.latestRequestTime).toLocaleString() : "None"), f.style.whiteSpace = "pre-line", !(peers.has(d.hostUser) || isHost && d.hostUser === userName)) (m = document.createElement("button")).innerText = "Try Connect", m.onclick = async function () {
-            console.log("[WEBRTC] Attempting to connect to server:", d.hostUser), addMessage("Finding a route to " + d.hostUser + "...", 5e3), await connectToServer(d.hostUser, d.offer, d.iceCandidates), t.style.display = "none", isPromptOpen = !1
-        }, h.appendChild(m);
-        h.appendChild(f), o.appendChild(h)
+    c.innerText = "Known Worlds", c.style.marginTop = "20px", o.appendChild(c);
+
+    // Sort known worlds, putting current world first, then by discovery time or user count
+    const sortedWorlds = Array.from(knownWorlds.entries()).sort((a, b) => {
+        if (a[0] === worldName) return -1;
+        if (b[0] === worldName) return 1;
+        return a[0].localeCompare(b[0]); // Alphabetical for now, could be timestamp
+    });
+
+    for (const [wName, wData] of sortedWorlds) {
+        const worldItem = document.createElement("div");
+        worldItem.style.border = "1px solid rgba(255,255,255,0.1)";
+        worldItem.style.borderRadius = "8px";
+        worldItem.style.padding = "10px";
+        worldItem.style.marginBottom = "10px";
+        worldItem.style.background = wName === worldName ? "rgba(255,255,255,0.05)" : "transparent";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.justifyContent = "space-between";
+        header.style.alignItems = "center";
+        header.innerHTML = `<strong>${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+
+        // Switch World Button (if not current)
+        if (wName !== worldName) {
+            const switchBtn = document.createElement("button");
+            switchBtn.innerText = "Switch to World";
+            switchBtn.style.fontSize = "0.8em";
+            switchBtn.style.padding = "4px 8px";
+            switchBtn.onclick = () => {
+                switchWorld(wName);
+                t.remove();
+                isPromptOpen = false;
+            };
+            header.appendChild(switchBtn);
+        }
+        worldItem.appendChild(header);
+
+        // Users List in World
+        if (wData.users && wData.users.size > 0) {
+            const usersContainer = document.createElement("div");
+            usersContainer.style.marginTop = "8px";
+            usersContainer.style.fontSize = "0.9em";
+
+            wData.users.forEach((userData, uName) => {
+                const userRow = document.createElement("div");
+                userRow.style.display = "flex";
+                userRow.style.justifyContent = "space-between";
+                userRow.style.alignItems = "center";
+                userRow.style.padding = "4px 0";
+                userRow.style.borderTop = "1px solid rgba(255,255,255,0.05)";
+
+                // Determine correct timestamp display
+                let timeDisplay = "Unknown time";
+                if (userData && userData.timestamp) {
+                    timeDisplay = new Date(userData.timestamp).toLocaleString();
+                } else if (wData.discoverer === uName) {
+                     // Fallback for discoverer if stored differently in legacy
+                     timeDisplay = "Discoverer";
+                }
+
+                userRow.innerHTML = `<span>${uName}</span> <span style="font-size:0.8em; opacity:0.6;">${timeDisplay}</span>`;
+
+                // Teleport Button
+                const teleportBtn = document.createElement("button");
+                teleportBtn.innerText = "Spawn";
+                teleportBtn.style.fontSize = "0.7em";
+                teleportBtn.style.marginLeft = "10px";
+                teleportBtn.onclick = () => {
+                    // Ensure we are in the correct world first
+                    if (worldName !== wName) {
+                        if(confirm(`Switch to ${wName} to teleport?`)) {
+                             switchWorld(wName);
+                             // After switch, teleport logic needs to wait or be handled.
+                             // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
+                             // For now, we just switch. The user asked to "teleport to the spawns right from the report".
+                             // But respawnPlayer relies on chunk generation of current world.
+                             // We can calculate spawn coordinate.
+                             const spawn = calculateSpawnPoint(wName + "@" + uName);
+                             // Setting player position immediately after switch might be unsafe if chunks aren't ready.
+                             // But switchWorld resets player to their own spawn.
+                             // Let's try setting a target.
+                             setTimeout(() => {
+                                 respawnPlayer(spawn.x, spawn.y, spawn.z);
+                             }, 1000); // Slight delay to allow switchWorld to settle
+                             t.remove();
+                             isPromptOpen = false;
+                        }
+                    } else {
+                        const spawn = calculateSpawnPoint(wName + "@" + uName);
+                        respawnPlayer(spawn.x, spawn.y, spawn.z);
+                        t.remove();
+                        isPromptOpen = false;
+                    }
+                };
+
+                userRow.appendChild(teleportBtn);
+                usersContainer.appendChild(userRow);
+            });
+            worldItem.appendChild(usersContainer);
+        } else {
+            const noUsers = document.createElement("div");
+            noUsers.innerText = "No known users.";
+            noUsers.style.fontSize = "0.8em";
+            noUsers.style.opacity = "0.6";
+            worldItem.appendChild(noUsers);
+        }
+
+        o.appendChild(worldItem);
+        a = true;
     }
+
     if (isHost) {
         var g = document.createElement("h4");
         for (var y of (g.innerText = "Pending Connections", o.appendChild(g), pendingOffers)) {
