@@ -1877,12 +1877,30 @@ function openUsersModal() {
             var spawnKey = n + "@" + worldName;
             var cachedSpawn = spawnChunks.get(spawnKey);
             var i = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
-            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
-                function (e, o) {
-                    m.onclick = function () {
-                        console.log("[MODAL] Teleporting to spawn of:", e), respawnPlayer(o.x, 100, o.z), t.style.display = "none", isPromptOpen = !1
-                    }
-                }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
+            var h = document.createElement("div");
+            h.style.display = "flex";
+            h.style.gap = "8px";
+            h.style.alignItems = "center";
+            h.style.marginTop = "8px";
+
+            var f = document.createElement("div");
+            f.innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")";
+
+            var m = document.createElement("button");
+            m.innerText = "Visit Spawn";
+
+            (function (e, o) {
+                m.onclick = function () {
+                    console.log("[MODAL] Teleporting to connected spawn of:", e);
+                    respawnPlayer(o.x, 100, o.z);
+                    t.remove();
+                    isPromptOpen = false;
+                }
+            })(n, i);
+
+            h.appendChild(f);
+            h.appendChild(m);
+            o.appendChild(h);
         }
     }
 
@@ -1956,26 +1974,32 @@ function openUsersModal() {
                 teleportBtn.innerText = "Spawn";
                 teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
-                teleportBtn.onclick = () => {
-                    // Use cached spawn from spawnChunks if available, otherwise calculate
-                    const spawnKey = uName + "@" + wName;
-                    const cachedSpawn = spawnChunks.get(spawnKey);
-                    const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
 
-                    // Ensure we are in the correct world first
-                    if (worldName !== wName) {
-                        if(confirm(`Switch to ${wName} to teleport?`)) {
-                             // Pass spawn directly to switchWorld to avoid double hop
-                             switchWorld(wName, spawn);
-                             t.remove();
-                             isPromptOpen = false;
+                // Explicitly capture variables to prevent scope issues
+                (function(targetUser, targetWorld) {
+                    teleportBtn.onclick = () => {
+                        console.log(`[MODAL] Teleporting to known spawn of: ${targetUser} in ${targetWorld}`);
+
+                        // Use cached spawn from spawnChunks if available, otherwise calculate
+                        const spawnKey = targetUser + "@" + targetWorld;
+                        const cachedSpawn = spawnChunks.get(spawnKey);
+                        const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
+
+                        // Ensure we are in the correct world first
+                        if (worldName !== targetWorld) {
+                            if(confirm(`Switch to ${targetWorld} to teleport?`)) {
+                                 // Pass spawn directly to switchWorld to avoid double hop
+                                 switchWorld(targetWorld, spawn);
+                                 t.remove();
+                                 isPromptOpen = false;
+                            }
+                        } else {
+                            respawnPlayer(spawn.x, spawn.y, spawn.z);
+                            t.remove();
+                            isPromptOpen = false;
                         }
-                    } else {
-                        respawnPlayer(spawn.x, spawn.y, spawn.z);
-                        t.remove();
-                        isPromptOpen = false;
-                    }
-                };
+                    };
+                })(uName, wName);
 
                 userRow.appendChild(teleportBtn);
                 usersContainer.appendChild(userRow);
