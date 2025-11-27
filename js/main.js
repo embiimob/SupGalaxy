@@ -4036,3 +4036,60 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     isPromptOpen = false;
     calligraphyStonePlacement = null;
 });
+
+function getOrCalculateSpawn(username, targetWorldName) {
+    const spawnKey = username + "@" + targetWorldName;
+    if (spawnChunks.has(spawnKey)) {
+        return spawnChunks.get(spawnKey).spawn;
+    }
+
+    let spawn = calculateSpawnPoint(spawnKey);
+    let chunkX = Math.floor(spawn.x / CHUNK_SIZE);
+    let chunkZ = Math.floor(spawn.z / CHUNK_SIZE);
+    let chunkKey = makeChunkKey(targetWorldName, chunkX, chunkZ);
+
+    const existing = OWNED_CHUNKS.get(chunkKey);
+
+    // If there's a collision with another user's home
+    if (existing && existing.type === 'home' && existing.username !== username) {
+        console.log(`[Spawn] Resolving home spawn collision for ${username} in ${targetWorldName}`);
+        // Spiral search for free chunk
+        let spiralRadius = 1;
+        let foundFree = false;
+
+        while (spiralRadius <= 10 && !foundFree) {
+            for (let dx = -spiralRadius; dx <= spiralRadius && !foundFree; dx++) {
+                for (let dz = -spiralRadius; dz <= spiralRadius && !foundFree; dz++) {
+                    if (Math.abs(dx) === spiralRadius || Math.abs(dz) === spiralRadius) {
+                        const testCx = chunkX + dx;
+                        const testCz = chunkZ + dz;
+                        const testKey = makeChunkKey(targetWorldName, testCx, testCz);
+                        const testOwner = OWNED_CHUNKS.get(testKey);
+
+                        if (!testOwner || testOwner.type !== 'home') {
+                            // Found free chunk
+                            const newX = testCx * CHUNK_SIZE + CHUNK_SIZE / 2;
+                            const newZ = testCz * CHUNK_SIZE + CHUNK_SIZE / 2;
+                            // Use safe Y (100) as we might not have the correct chunkManager loaded
+                            // Physics will drop the player to the ground upon arrival
+                            spawn = { x: newX, y: 100, z: newZ };
+                            foundFree = true;
+                        }
+                    }
+                }
+            }
+            spiralRadius++;
+        }
+    }
+
+    // Cache the result to avoid re-calculation
+    spawnChunks.set(spawnKey, {
+        cx: Math.floor(spawn.x / CHUNK_SIZE),
+        cz: Math.floor(spawn.z / CHUNK_SIZE),
+        username: username,
+        world: targetWorldName,
+        spawn: spawn
+    });
+
+    return spawn;
+}

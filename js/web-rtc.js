@@ -1873,10 +1873,8 @@ function openUsersModal() {
         var n = s[0];
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
-            // Use cached spawn from spawnChunks if available, otherwise calculate
-            var spawnKey = n + "@" + worldName;
-            var cachedSpawn = spawnChunks.get(spawnKey);
-            var i = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
+            // Use resolved spawn to handle potential collisions
+            var i = getOrCalculateSpawn(n, worldName);
             (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
                 function (e, o) {
                     m.onclick = function () {
@@ -1957,10 +1955,8 @@ function openUsersModal() {
                 teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
                 teleportBtn.onclick = () => {
-                    // Use cached spawn from spawnChunks if available, otherwise calculate
-                    const spawnKey = uName + "@" + wName;
-                    const cachedSpawn = spawnChunks.get(spawnKey);
-                    const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
+                    // Use getOrCalculateSpawn to resolve potential home spawn collisions
+                    const spawn = getOrCalculateSpawn(uName, wName);
 
                     // Ensure we are in the correct world first
                     if (worldName !== wName) {
