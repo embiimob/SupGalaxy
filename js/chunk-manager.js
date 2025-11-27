@@ -687,9 +687,9 @@ function isChunkMutationAllowed(chunkKey, username) {
     // Debug: Log incoming check
     console.log(`[isChunkMutationAllowed] Checking chunk ${normalized} for user ${username} (normalized: ${normalizedUsername})`);
     
-    // Parse chunk key for validation
-    const parsedCheck = parseChunkKey(normalized);
-    if (!parsedCheck) {
+    // Parse chunk key for validation (do this once)
+    const parsed = parseChunkKey(normalized);
+    if (!parsed) {
         console.warn(`[isChunkMutationAllowed] Failed to parse chunkKey: ${normalized} - allowing mutation (parse failure)`);
         return true; // Allow if we can't parse (shouldn't happen in normal flow)
     }
@@ -697,11 +697,6 @@ function isChunkMutationAllowed(chunkKey, username) {
     // Check home spawn ownership
     if (spawnChunks.size > 0) {
         for (const [spawnUser, spawnData] of spawnChunks) {
-            const parsed = parseChunkKey(normalized);
-            if (!parsed) {
-                console.warn(`[isChunkMutationAllowed] parseChunkKey returned null for: ${normalized}`);
-                continue;
-            }
             // Check if this is a spawn chunk AND the world matches
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                 // This chunk is a home spawn chunk in this world

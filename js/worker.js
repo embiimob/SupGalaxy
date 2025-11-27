@@ -1382,20 +1382,27 @@ self.onmessage = async function(e) {
                     if (normalizedUsername) {
                         // Calculate spawn point for this user in this world
                         const spawnPoint = calculateSpawnPoint(normalizedUsername + "@" + parsed.world);
+                        // Use calculated spawn coordinates, not the ownership chunk coordinates
+                        const spawnCx = Math.floor(spawnPoint.x / CHUNK_SIZE);
+                        const spawnCz = Math.floor(spawnPoint.z / CHUNK_SIZE);
                         
                         // Update spawnChunks with this user's spawn data
                         spawnChunks.set(normalizedUsername, {
-                            cx: parsed.cx,
-                            cz: parsed.cz,
+                            cx: spawnCx,
+                            cz: spawnCz,
                             username: normalizedUsername,
                             world: parsed.world,
                             spawn: spawnPoint
                         });
                         
-                        // Update chunk ownership
+                        // Update chunk ownership for the spawn chunk as home
+                        const homeChunkKey = makeChunkKey(parsed.world, spawnCx, spawnCz);
+                        updateChunkOwnership(homeChunkKey, normalizedUsername, data.timestamp, 'home');
+                        
+                        // Also update the original chunk_ownership as IPFS ownership
                         updateChunkOwnership(rawChunkKey, normalizedUsername, data.timestamp, 'ipfs', data.timestamp);
                         
-                        console.log(`[chunk_ownership] Registered spawn for ${normalizedUsername} in world ${parsed.world} at chunk (${parsed.cx}, ${parsed.cz})`);
+                        console.log(`[chunk_ownership] Registered spawn for ${normalizedUsername} in world ${parsed.world} at chunk (${spawnCx}, ${spawnCz})`);
                         
                         // Trigger full spawn population to ensure all users are processed
                         populateSpawnChunks();
