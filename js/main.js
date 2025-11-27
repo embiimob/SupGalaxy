@@ -3459,11 +3459,13 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             }
                         }
                         
+                        // Store spawn data - will be calculated when game starts
                         spawnChunks.set(userFromKeyword, {
                             cx: null,
                             cz: null,
                             username: userFromKeyword,
-                            world: worldFromKeyword
+                            world: worldFromKeyword,
+                            keyword: worldFromKeyword + "@" + userFromKeyword
                         });
                         processedMessages.add(o.TransactionId);
                     }
