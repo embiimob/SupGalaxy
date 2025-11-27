@@ -3710,18 +3710,34 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Adding user:", n, "(normalized:", normalizedUserName, ") to world:", worldNameFromKey);
                             if (!knownWorlds.has(worldNameFromKey)) {
                                 knownWorlds.set(worldNameFromKey, {
-                                    discoverer: normalizedUserName,
+                                    discoverer: n, // Keep original display name
                                     users: new Map(), // Store user details (timestamp, etc.)
                                     toAddress: o.ToAddress
                                 });
                             }
 
                             var worldData = knownWorlds.get(worldNameFromKey);
-                            // Store user with timestamp using normalized name
-                            worldData.users.set(normalizedUserName, {
-                                timestamp: Date.parse(o.BlockDate) || Date.now(),
-                                address: o.FromAddress
-                            });
+                            // Store user with timestamp using normalized name as key, but keep display name
+                            var existingUser = worldData.users.get(normalizedUserName);
+                            var currentTimestamp = Date.parse(o.BlockDate) || Date.now();
+                            
+                            if (existingUser) {
+                                // Update connection count and latest timestamp
+                                worldData.users.set(normalizedUserName, {
+                                    displayName: n, // Original name with emojis
+                                    timestamp: Math.max(existingUser.timestamp, currentTimestamp),
+                                    address: o.FromAddress,
+                                    connectionCount: (existingUser.connectionCount || 1) + 1
+                                });
+                            } else {
+                                // First connection for this user
+                                worldData.users.set(normalizedUserName, {
+                                    displayName: n, // Original name with emojis
+                                    timestamp: currentTimestamp,
+                                    address: o.FromAddress,
+                                    connectionCount: 1
+                                });
+                            }
 
                             knownUsers.has(normalizedUserName) || knownUsers.set(normalizedUserName, o.FromAddress);
 
