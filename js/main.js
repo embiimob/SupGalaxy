@@ -2707,11 +2707,29 @@ async function startGame() {
         count: 1
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var s = calculateSpawnPoint(r);
-    player.x = s.x, player.y = chunkManager.getSurfaceY(s.x, s.z) + 1, player.z = s.z, spawnPoint = {
+
+    // Check for initial teleport location to avoid double-hop
+    if (initialTeleportLocation) {
+        console.log("[LOGIN] Using initial teleport location:", initialTeleportLocation);
+        s = { x: initialTeleportLocation.x, y: initialTeleportLocation.y, z: initialTeleportLocation.z };
+    }
+
+    player.x = s.x, player.z = s.z;
+
+    if (initialTeleportLocation && initialTeleportLocation.y !== undefined) {
+         player.y = initialTeleportLocation.y;
+    } else {
+         player.y = chunkManager.getSurfaceY(s.x, s.z) + 1;
+    }
+
+    spawnPoint = {
         x: player.x,
         y: player.y,
         z: player.z
     }, player.vy = 0, player.onGround = !0;
+
+    initialTeleportLocation = null;
+
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
@@ -2745,7 +2763,7 @@ async function startGame() {
     c && (c.innerText = player.score), await initServers(), worker.postMessage({
         type: "sync_processed",
         ids: Array.from(processedMessages)
-    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
+    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3)
 }
 
 function scanExpiredOwnership() {
@@ -2919,7 +2937,7 @@ function updateProximityVideo() {
     o.srcObject !== l && (a.innerText = i, o.srcObject = l)
 }
 
-function switchWorld(newWorldName) {
+function switchWorld(newWorldName, targetSpawn) {
     worldArchetype = null;
     const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
@@ -2950,7 +2968,14 @@ function switchWorld(newWorldName) {
     torchParticles.clear();
 
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
-    const t = calculateSpawnPoint(userName + "@" + worldName);
+
+    let t;
+    if (targetSpawn) {
+        t = targetSpawn;
+    } else {
+        t = calculateSpawnPoint(userName + "@" + worldName);
+    }
+
     player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
         x: player.x,
         y: player.y,

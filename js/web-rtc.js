@@ -1957,32 +1957,20 @@ function openUsersModal() {
                 teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
                 teleportBtn.onclick = () => {
+                    // Use cached spawn from spawnChunks if available, otherwise calculate
+                    const spawnKey = uName + "@" + wName;
+                    const cachedSpawn = spawnChunks.get(spawnKey);
+                    const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
+
                     // Ensure we are in the correct world first
                     if (worldName !== wName) {
                         if(confirm(`Switch to ${wName} to teleport?`)) {
-                             switchWorld(wName);
-                             // After switch, teleport logic needs to wait or be handled.
-                             // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
-                             // For now, we just switch. The user asked to "teleport to the spawns right from the report".
-                             // But respawnPlayer relies on chunk generation of current world.
-                             // Use cached spawn from spawnChunks if available, otherwise calculate
-                             const spawnKey = uName + "@" + wName;
-                             const cachedSpawn = spawnChunks.get(spawnKey);
-                             const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
-                             // Setting player position immediately after switch might be unsafe if chunks aren't ready.
-                             // But switchWorld resets player to their own spawn.
-                             // Let's try setting a target.
-                             setTimeout(() => {
-                                 respawnPlayer(spawn.x, spawn.y, spawn.z);
-                             }, 1000); // Slight delay to allow switchWorld to settle
+                             // Pass spawn directly to switchWorld to avoid double hop
+                             switchWorld(wName, spawn);
                              t.remove();
                              isPromptOpen = false;
                         }
                     } else {
-                        // Use cached spawn from spawnChunks if available, otherwise calculate
-                        const spawnKey = uName + "@" + wName;
-                        const cachedSpawn = spawnChunks.get(spawnKey);
-                        const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
                         isPromptOpen = false;
