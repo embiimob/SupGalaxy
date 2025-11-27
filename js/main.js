@@ -2586,7 +2586,8 @@ async function populateSpawnChunks() {
     for (var e of spawnChunks) {
         var spawnKey = e[0],
             spawnData = e[1],
-            spawn = calculateSpawnPoint(spawnData.username + "@" + spawnData.world);
+            // Use existing spawn if available, otherwise calculate
+            spawn = spawnData.spawn || calculateSpawnPoint(spawnData.username + "@" + spawnData.world);
         const chunkX = Math.floor(spawn.x / CHUNK_SIZE);
         const chunkZ = Math.floor(spawn.z / CHUNK_SIZE);
         const chunkKey = makeChunkKey(spawnData.world, chunkX, chunkZ);
