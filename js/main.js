@@ -764,17 +764,6 @@ function openCrafting() {
 }
 
 
-function handleMobHit(e) {
-    if (isHost || 0 === peers.size) e.hurt(4, userName);
-    else
-        for (const [t, o] of peers.entries()) o.dc && "open" === o.dc.readyState && (console.log(`[WebRTC] Sending mob_hit to host ${t}`), o.dc.send(JSON.stringify({
-            type: "mob_hit",
-            id: e.id,
-            damage: 4,
-            username: userName
-        })));
-    safePlayAudio(soundHit), addMessage("Hit mob!", 800)
-}
 
 function toggleInventory() {
     var e = document.getElementById("inventoryModal"),
