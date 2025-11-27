@@ -2585,9 +2585,13 @@ async function populateSpawnChunks() {
     // spawnChunks is keyed by username@worldname to avoid conflicts between worlds
     for (var e of spawnChunks) {
         var spawnKey = e[0],
-            spawnData = e[1],
-            // Use existing spawn if available, otherwise calculate
-            spawn = spawnData.spawn || calculateSpawnPoint(spawnData.username + "@" + spawnData.world);
+            spawnData = e[1];
+
+        // Only process spawn chunks for the current world to prevent cross-world corruption
+        if (spawnData.world !== worldName) continue;
+
+        // Use existing spawn if available, otherwise calculate
+        var spawn = spawnData.spawn || calculateSpawnPoint(spawnData.username + "@" + spawnData.world);
         const chunkX = Math.floor(spawn.x / CHUNK_SIZE);
         const chunkZ = Math.floor(spawn.z / CHUNK_SIZE);
         const chunkKey = makeChunkKey(spawnData.world, chunkX, chunkZ);
@@ -2976,11 +2980,22 @@ function switchWorld(newWorldName, targetSpawn) {
         t = calculateSpawnPoint(userName + "@" + worldName);
     }
 
-    player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
+    chunkManager = new ChunkManager(worldSeed);
+    initSky();
+
+    // Ensure safe spawn Y on the new world surface to prevent getting stuck
+    // if the targetSpawn Y was calculated using a different world's terrain
+    const safeY = chunkManager.getSurfaceY(t.x, t.z) + 1;
+
+    player.x = t.x;
+    player.y = safeY;
+    player.z = t.z;
+
+    spawnPoint = {
         x: player.x,
         y: player.y,
         z: player.z
-    }, chunkManager = new ChunkManager(worldSeed), initSky();
+    };
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
     
