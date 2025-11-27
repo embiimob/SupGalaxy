@@ -109,6 +109,18 @@ async function applySaveFile(e, t, o) {
         const t = e.playerData,
             o = e.hash;
         if (simpleHash(JSON.stringify(t)) !== o) return void addMessage("Sorry, file malformed and does not login.", 3e3);
+
+        // Migration: Convert legacy Set users to Map for all known worlds
+        if (knownWorlds.size > 0) {
+            for (let [wName, wData] of knownWorlds) {
+                if (wData.users instanceof Set) {
+                    const newMap = new Map();
+                    wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+                    wData.users = newMap;
+                }
+            }
+        }
+
         addMessage("Session file verified. Loading player...", 2e3), worldName = t.world, userName = t.user;
         const c = makeSeededRandom((worldSeed = t.seed) + "_colors");
         for (const e in BLOCKS)
@@ -128,11 +140,54 @@ async function applySaveFile(e, t, o) {
         } catch (e) {
             console.error("Failed to get profile by URN", e), a = null
         }
-        if (userAddress = a && a.Creators ? a.Creators[0] : "anonymous", knownUsers.has(userName) || knownUsers.set(userName, userAddress), knownWorlds.has(worldName) ? knownWorlds.get(worldName).users.add(userName) : knownWorlds.set(worldName, {
-            discoverer: userName,
-            users: new Set([userName]),
-            toAddress: userAddress
-        }), keywordCache.set(userAddress, n), document.getElementById("loginOverlay").style.display = "none", document.getElementById("hud").style.display = "block", document.getElementById("hotbar").style.display = "flex", document.getElementById("rightPanel").style.display = "flex", document.getElementById("worldLabel").textContent = worldName, document.getElementById("seedLabel").textContent = "User " + userName, updateHudButtons(), console.log("[LOGIN] Initializing Three.js from session"), await initAudio(), initThree(), initMusicPlayer(), initVideoPlayer(), player.x = t.profile.x, player.y = t.profile.y, player.z = t.profile.z, player.health = t.profile.health, player.score = t.profile.score, INVENTORY = t.profile.inventory, musicPlaylist = t.musicPlaylist || [], videoPlaylist = t.videoPlaylist || [], selectedHotIndex = 0, selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager from session"), chunkManager = new ChunkManager(worldSeed), t.deltas)
+        userAddress = a && a.Creators ? a.Creators[0] : "anonymous";
+        if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+
+        if (knownWorlds.has(worldName)) {
+            let wData = knownWorlds.get(worldName);
+            // Defensive coding: convert deprecated Set to Map if necessary
+            if (wData.users instanceof Set) {
+                const newMap = new Map();
+                wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+                wData.users = newMap;
+            }
+            wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
+        } else {
+            knownWorlds.set(worldName, {
+                discoverer: userName,
+                users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
+                toAddress: userAddress
+            });
+        }
+
+        keywordCache.set(userAddress, n);
+        document.getElementById("loginOverlay").style.display = "none";
+        document.getElementById("hud").style.display = "block";
+        document.getElementById("hotbar").style.display = "flex";
+        document.getElementById("rightPanel").style.display = "flex";
+        document.getElementById("worldLabel").textContent = worldName;
+        document.getElementById("seedLabel").textContent = "User " + userName;
+        updateHudButtons();
+        console.log("[LOGIN] Initializing Three.js from session");
+        await initAudio();
+        initThree();
+        initMusicPlayer();
+        initVideoPlayer();
+        player.x = t.profile.x;
+        player.y = t.profile.y;
+        player.z = t.profile.z;
+        player.health = t.profile.health;
+        player.score = t.profile.score;
+        INVENTORY = t.profile.inventory;
+        musicPlaylist = t.musicPlaylist || [];
+        videoPlaylist = t.videoPlaylist || [];
+        selectedHotIndex = 0;
+        selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
+        initHotbar();
+        updateHotbarUI();
+        console.log("[LOGIN] Creating ChunkManager from session");
+        chunkManager = new ChunkManager(worldSeed);
+        if (t.deltas)
             for (var r of t.deltas) {
                 var s = r.chunk.replace(/^#/, ""),
                     i = r.changes;
@@ -204,11 +259,11 @@ async function applySaveFile(e, t, o) {
         return console.log("[LOGIN] Starting game loop from session"), requestAnimationFrame(gameLoop), addMessage("Loaded session for " + userName + " in " + worldName, 3e3), updateHud(), initServers(), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
-        }), startWorker(), void setInterval(pollServers, POLL_INTERVAL)
+        }), startWorker()
     }
     if (e && (e.foreignBlockOrigins && (getCurrentWorldState().foreignBlockOrigins = new Map(e.foreignBlockOrigins)), addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3), e.deltas)) {
         var c = await GetProfileByAddress(t),
-            u = c && c.URN ? c.URN.replace(/[^a-zA-Z0-9]/g, "") : "anonymous",
+            u = c && c.URN ? c.URN : "anonymous",
             p = Date.now();
         const blockDate = new Date(o).getTime();
         const blockAge = p - blockDate;
@@ -2608,11 +2663,34 @@ async function startGame() {
     } catch (e) {
         console.error("Failed to get profile by URN", e), n = null
     }
-    userAddress = n && n.Creators ? n.Creators[0] : "anonymous", knownUsers.has(userName) || knownUsers.set(userName, userAddress), knownWorlds.has(worldName) ? knownWorlds.get(worldName).users.add(userName) : knownWorlds.set(worldName, {
-        discoverer: userName,
-        users: new Set([userName]),
-        toAddress: userAddress
-    }), keywordCache.set(userAddress, r), document.getElementById("loginOverlay").style.display = "none", document.getElementById("hud").style.display = "block", document.getElementById("hotbar").style.display = "flex", document.getElementById("rightPanel").style.display = "flex", document.getElementById("worldLabel").textContent = worldName, document.getElementById("seedLabel").textContent = "User " + userName, updateHudButtons(), console.log("[LOGIN] Initializing Three.js");
+    userAddress = n && n.Creators ? n.Creators[0] : "anonymous";
+    if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
+
+    if (knownWorlds.has(worldName)) {
+        let wData = knownWorlds.get(worldName);
+        // Defensive coding: convert deprecated Set to Map if necessary
+        if (wData.users instanceof Set) {
+            const newMap = new Map();
+            wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+            wData.users = newMap;
+        }
+        wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
+    } else {
+        knownWorlds.set(worldName, {
+            discoverer: userName,
+            users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
+            toAddress: userAddress
+        });
+    }
+    keywordCache.set(userAddress, r);
+    document.getElementById("loginOverlay").style.display = "none";
+    document.getElementById("hud").style.display = "block";
+    document.getElementById("hotbar").style.display = "flex";
+    document.getElementById("rightPanel").style.display = "flex";
+    document.getElementById("worldLabel").textContent = worldName;
+    document.getElementById("seedLabel").textContent = "User " + userName;
+    updateHudButtons();
+    console.log("[LOGIN] Initializing Three.js");
     try {
         await initAudio()
     } catch (e) {
@@ -2660,10 +2738,10 @@ async function startGame() {
     var d = document.getElementById("health");
     d && (d.innerText = player.health);
     var c = document.getElementById("score");
-    c && (c.innerText = player.score), initServers(), worker.postMessage({
+    c && (c.innerText = player.score), await initServers(), worker.postMessage({
         type: "sync_processed",
         ids: Array.from(processedMessages)
-    }), startWorker(), setInterval(pollServers, POLL_INTERVAL), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
+    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3), initialTeleportLocation && (respawnPlayer(initialTeleportLocation.x, initialTeleportLocation.y, initialTeleportLocation.z), initialTeleportLocation = null)
 }
 
 function scanExpiredOwnership() {
@@ -2903,6 +2981,12 @@ function switchWorld(newWorldName) {
         }
     }
     
+    // Refresh ownership for all known users in this world
+    populateSpawnChunks();
+
+    // Stop polling for the old world before initializing new one
+    stopAllPolling();
+
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
     initServers();
 }
@@ -3421,31 +3505,18 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var t = document.getElementById("announceLoginBtn"),
-            o = document.getElementById("newUserJoinScriptBtn"),
+        var o = document.getElementById("newUserJoinScriptBtn"),
             a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
-        if (!(e && t && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), t.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Announce Server button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = (t.slice(0, 20), "MCServerJoin@" + o),
-                    n = await GetPublicAddressByKeyword(a);
-                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.", addMessage("Prepare to announce server after starting", 3e3)
-            } else addMessage("Please enter a world and username", 3e3)
-        })), o.addEventListener("click", (async function () {
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
             this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
             var e = document.getElementById("worldNameInput").value,
                 t = document.getElementById("userInput").value;
@@ -3454,7 +3525,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             else if (e && t) {
                 var o = e.slice(0, 8),
                     a = t.slice(0, 20),
-                    n = a + "@" + o,
+                    n = o + "@" + a,
                     r = knownWorlds.get(o);
                 if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
                 else {
@@ -3534,7 +3605,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: No valid URN for address:", o.FromAddress);
                             continue
                         }
-                        var n = a.URN.replace(/[^a-zA-Z0-9]/g, ""),
+                        var n = a.URN,
                             r = await GetProfileByURN(n);
                         if (!r || !r.Creators || !r.Creators.includes(o.FromAddress)) {
                             console.log("[USERS] Skipping message: Invalid profile for user:", n);
@@ -3546,21 +3617,69 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             continue
                         }
                         var i = s.replace(/^"|"$/g, "");
-                        if (!i.includes("MCUserJoin@")) {
-                            console.log("[USERS] Skipping message: Invalid keyword:", i);
-                            continue
+                        var worldNameFromKey = null;
+
+                        // Logic to handle MCUserJoin format (Discovery)
+                        if (i.includes("MCUserJoin@")) {
+                            var joinParts = i.split("@");
+                            if (joinParts.length >= 2) {
+                                worldNameFromKey = joinParts[1];
+                            }
+                        } else {
+                            // Logic to handle world@user format (Direct/Legacy)
+                            var parts = i.split("@");
+                            if (parts.length >= 2) {
+                                var potentialWorld = parts[0];
+                                var potentialUser = parts.slice(1).join("@");
+                                // Verify user match only if we are parsing user from key
+                                if (n.startsWith(potentialUser)) {
+                                    worldNameFromKey = potentialWorld;
+                                }
+                            }
                         }
-                        var l = i.split("@")[1].replace(/[^a-zA-Z0-9]/g, "");
-                        n && l && (console.log("[USERS] Adding user:", n, "to world:", l), knownWorlds.has(l) ? knownWorlds.get(l).users.add(n) : knownWorlds.set(l, {
-                            discoverer: n,
-                            users: new Set([n]),
-                            toAddress: o.ToAddress
-                        }), knownUsers.has(n) || knownUsers.set(n, o.FromAddress), spawnChunks.set(n, {
-                            cx: null,
-                            cz: null,
-                            username: n,
-                            world: l
-                        }), processedMessages.add(o.TransactionId))
+
+                        if (n && worldNameFromKey) {
+                            // Ensure n (profile URN) is used as the username
+                            // Previously n was stripped. Now n comes from a.URN directly (see below change).
+                            // Wait, I need to change where 'n' is defined too.
+
+                            console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
+                            if (!knownWorlds.has(worldNameFromKey)) {
+                                knownWorlds.set(worldNameFromKey, {
+                                    discoverer: n,
+                                    users: new Map(), // Store user details (timestamp, etc.)
+                                    toAddress: o.ToAddress
+                                });
+                            }
+
+                            var worldData = knownWorlds.get(worldNameFromKey);
+                            // Store user with timestamp
+                            worldData.users.set(n, {
+                                timestamp: Date.parse(o.BlockDate) || Date.now(),
+                                address: o.FromAddress
+                            });
+
+                            knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
+
+                            // Calculate spawn point for known user to enforce ownership
+                            var spawn = calculateSpawnPoint(n + "@" + worldNameFromKey);
+                            var cx = Math.floor(spawn.x / CHUNK_SIZE);
+                            var cz = Math.floor(spawn.z / CHUNK_SIZE);
+
+                            spawnChunks.set(n, {
+                                cx: cx,
+                                cz: cz,
+                                username: n,
+                                world: worldNameFromKey,
+                                spawn: spawn
+                            });
+
+                            // Immediately protect home chunk for known users
+                            var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
+                            updateChunkOwnership(chunkKey, n, Date.now(), 'home');
+
+                            processedMessages.add(o.TransactionId);
+                        }
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
                 console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }

@@ -54,16 +54,27 @@ function hashSeed(e) {
 function calculateSpawnPoint(e) {
     var t = makeSeededRandom(e),
         o = Math.floor(t() * MAP_SIZE),
-        a = Math.floor(t() * MAP_SIZE),
-        n = Math.floor(o / CHUNK_SIZE),
-        r = Math.floor(a / CHUNK_SIZE),
-        s = chunkManager.getChunk(n, r);
-    s.generated || chunkManager.generateChunk(s);
-    for (var i = MAX_HEIGHT - 1; i > 0 && s.get(o % CHUNK_SIZE, i, a % CHUNK_SIZE) === BLOCK_AIR;) i--;
-    return {
-        x: o,
-        y: i += 2,
-        z: a
+        a = Math.floor(t() * MAP_SIZE);
+
+    if (typeof chunkManager !== 'undefined' && chunkManager) {
+        var n = Math.floor(o / CHUNK_SIZE),
+            r = Math.floor(a / CHUNK_SIZE),
+            s = chunkManager.getChunk(n, r);
+        s.generated || chunkManager.generateChunk(s);
+        for (var i = MAX_HEIGHT - 1; i > 0 && s.get(o % CHUNK_SIZE, i, a % CHUNK_SIZE) === BLOCK_AIR;) i--;
+        return {
+            x: o,
+            y: i += 2,
+            z: a
+        };
+    } else {
+        // Fallback if chunkManager is not yet initialized (e.g., discovery phase)
+        // Return a safe default height. Teleport logic will correct it later.
+        return {
+            x: o,
+            y: 100,
+            z: a
+        };
     }
 }
 

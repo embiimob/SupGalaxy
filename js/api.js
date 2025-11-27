@@ -13,7 +13,7 @@ async function GetPublicAddressByKeyword(keyword) {
             return null;
         }
         var address = await response.text();
-        var cleanAddress = address ? address.trim() : null;
+        var cleanAddress = address ? address.trim().replace(/^"|"$/g, '') : null;
         if (cleanAddress) addressByKeywordCache.set(keyword, cleanAddress);
         return cleanAddress;
     } catch (e) {
@@ -37,7 +37,7 @@ async function resolveIPFS(url) {
 }
 async function GetPublicMessagesByAddress(address, skip, qty) {
     try {
-        var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ''));
+        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
         var response = await fetch('https://p2fk.io/GetPublicMessagesByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
         if (!response.ok) {
@@ -55,7 +55,7 @@ async function GetProfileByURN(urn) {
     if (!urn || urn.trim() === '') return null;
     try {
         if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
-        var cleanUrn = encodeURIComponent(urn.trim().replace(/[^a-zA-Z0-9]/g, ''));
+        var cleanUrn = encodeURIComponent(urn.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
         var response = await fetch('https://p2fk.io/GetProfileByURN/' + cleanUrn + '?mainnet=false');
         if (!response.ok) return null;
@@ -69,7 +69,7 @@ async function GetProfileByURN(urn) {
 async function GetProfileByAddress(address) {
     try {
         if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
-        var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ''));
+        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
         var response = await fetch('https://p2fk.io/GetProfileByAddress/' + cleanAddress + '?mainnet=false');
         if (!response.ok) return null;
@@ -83,7 +83,7 @@ async function GetProfileByAddress(address) {
 async function GetKeywordByPublicAddress(address) {
     try {
         if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-        var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ''));
+        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
         var response = await fetch('https://p2fk.io/GetKeywordByPublicAddress/' + cleanAddress + '?mainnet=false');
         if (!response.ok) {
@@ -91,7 +91,7 @@ async function GetKeywordByPublicAddress(address) {
             return null;
         }
         var keyword = await response.text();
-        var cleanKeyword = keyword ? keyword.trim() : null;
+        var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, '') : null;
         if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
         return cleanKeyword;
     } catch (e) {

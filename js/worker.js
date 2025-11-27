@@ -510,7 +510,7 @@ async function getPublicAddressByKeyword(keyword) {
                 return null;
             }
             var address = await response.text();
-            var cleanAddress = address ? address.replace(/"|'/g, "").trim() : null;
+            var cleanAddress = address ? address.replace(/^"|"$/g, "").trim() : null;
             if (cleanAddress) addressByKeywordCache.set(keyword, cleanAddress);
             return cleanAddress;
         } catch (e) {
@@ -520,7 +520,8 @@ async function getPublicAddressByKeyword(keyword) {
 }
 async function getPublicMessagesByAddress(address, skip, qty) {
         try {
-            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            // Address should be alphanumeric, but we use strict quote stripping just in case
+            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
             var response = await fetch("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
             if (!response.ok) {
@@ -538,7 +539,8 @@ async function getProfileByURN(urn) {
         if (!urn || urn.trim() === "") return null;
         try {
             if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
-            var cleanUrn = encodeURIComponent(urn.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            // Relaxed sanitization for URNs to support emojis
+            var cleanUrn = encodeURIComponent(urn.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
             var response = await fetch("https://p2fk.io/GetProfileByURN/" + cleanUrn + "?mainnet=false");
             if (!response.ok) {
@@ -556,7 +558,7 @@ async function getProfileByURN(urn) {
 async function getProfileByAddress(address) {
         try {
             if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
-            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
             var response = await fetch("https://p2fk.io/GetProfileByAddress/" + cleanAddress + "?mainnet=false");
             if (!response.ok) {
@@ -574,7 +576,7 @@ async function getProfileByAddress(address) {
 async function getKeywordByPublicAddress(address) {
         try {
             if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-            var cleanAddress = encodeURIComponent(address.trim().replace(/[^a-zA-Z0-9]/g, ""));
+            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
             var response = await fetch("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
             if (!response.ok) {
@@ -582,7 +584,7 @@ async function getKeywordByPublicAddress(address) {
                 return null;
             }
             var keyword = await response.text();
-            var cleanKeyword = keyword ? keyword.trim() : null;
+            var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, "") : null;
             if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
             return cleanKeyword;
         } catch (e) {
@@ -652,7 +654,7 @@ self.onmessage = async function(e) {
                             console.log('[Worker] Skipping worlds_users message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
                             continue;
                         }
-                        var user = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                        var user = fromProfile.URN.replace(/^"|"$/g, "").trim();
                         var userProfile = await getProfileByURN(user);
                         if (!userProfile) {
                             console.log('[Worker] No profile for user:', user, 'txId:', msg.TransactionId);
@@ -669,16 +671,28 @@ self.onmessage = async function(e) {
                             console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
                             continue;
                         }
-                        var toKeyword = toKeywordRaw.replace(/"|'/g, "");
-                        if (!toKeyword.includes("MCUserJoin@")) {
-                            console.log('[Worker] Skipping worlds_users message, invalid keyword:', toKeyword, 'txId:', msg.TransactionId);
+                        var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
+
+                        // Parse world@user format
+                        var parts = toKeyword.split("@");
+                        if (parts.length < 2) {
+                            console.log('[Worker] Skipping worlds_users message, invalid keyword format (not world@user):', toKeyword, 'txId:', msg.TransactionId);
                             continue;
                         }
-                        var world = toKeyword.split("@")[1].replace(/[^a-zA-Z0-9]/g, "");
-                        if (user && world) {
-                            if (!worlds.has(world)) worlds.set(world, msg.ToAddress);
+
+                        var worldNameFromKey = parts[0];
+                        var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
+
+                        // Verify user match - check if userFromKey matches the beginning of the actual profile name
+                        if (!user.startsWith(userFromKey)) {
+                            console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+
+                        if (user && worldNameFromKey) {
+                            if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, msg.ToAddress);
                             if (!users.has(user)) users.set(user, msg.FromAddress);
-                            joinData.push({ user: user, world: world, username: user, transactionId: msg.TransactionId });
+                            joinData.push({ user: user, world: worldNameFromKey, username: user, transactionId: msg.TransactionId });
                             processedMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
                         }
@@ -796,7 +810,7 @@ self.onmessage = async function(e) {
                                     if (!ownershipByChunk.has(chunk)) {
                                         var fromProfile = await getProfileByAddress(msg.FromAddress);
                                         if (fromProfile && fromProfile.URN) {
-                                            var username = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                        var username = fromProfile.URN.replace(/^"|"$/g, "").trim();
                                             ownershipByChunk.set(chunk, {
                                                 chunkKey: chunk,
                                                 username: username,
@@ -906,7 +920,7 @@ self.onmessage = async function(e) {
                             console.log('[Worker] Skipping server message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
                             continue;
                         }
-                        var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                        var hostUser = fromProfile.URN.replace(/^"|"$/g, "").trim();
                         var userProfile = await getProfileByURN(hostUser);
                         if (!userProfile) {
                             console.log('[Worker] Skipping server message, no profile for user:', hostUser, 'txId:', msg.TransactionId);
@@ -986,7 +1000,7 @@ self.onmessage = async function(e) {
                                     if (cidRegex.test(hash)) {
                                         data = await fetchIPFS(hash);
                                         if (data && data.user) {
-                                            clientUser = data.user.replace(/[^a-zA-Z0-9]/g, "");
+                                            clientUser = data.user.replace(/^"|"$/g, "").trim();
                                         }
                                     } else {
                                         console.log('[Worker] Invalid CID in offer message:', hash, 'txId:', msg.TransactionId);
@@ -995,7 +1009,7 @@ self.onmessage = async function(e) {
                                 }
 
                                 if (clientUser === 'anonymous' && fromProfile && fromProfile.URN) {
-                                    clientUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                    clientUser = fromProfile.URN.replace(/^"|"$/g, "").trim();
                                 }
 
                                 if (clientUser === userName) {
@@ -1105,7 +1119,7 @@ self.onmessage = async function(e) {
                                     console.log('[Worker] Skipping answer message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
                                     continue;
                                 }
-                                var hostUser = fromProfile.URN.replace(/[^a-zA-Z0-9]/g, "");
+                                var hostUser = fromProfile.URN.replace(/^"|"$/g, "").trim();
                                 var userProfile = await getProfileByURN(hostUser);
                                 if (!userProfile) {
                                     console.log('[Worker] No profile for user:', hostUser, 'txId:', msg.TransactionId);
