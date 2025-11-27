@@ -3704,59 +3704,57 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         }
 
                         if (n && worldNameFromKey) {
-                            // Normalize username for consistent matching
-                            var normalizedUserName = normalizePlayerName(n);
+                            // Use original username (trimmed) for all operations
+                            var userName = normalizePlayerName(n);
 
-                            console.log("[USERS] Adding user:", n, "(normalized:", normalizedUserName, ") to world:", worldNameFromKey);
+                            console.log("[USERS] Adding user:", userName, "to world:", worldNameFromKey);
                             if (!knownWorlds.has(worldNameFromKey)) {
                                 knownWorlds.set(worldNameFromKey, {
-                                    discoverer: n, // Keep original display name
+                                    discoverer: userName,
                                     users: new Map(), // Store user details (timestamp, etc.)
                                     toAddress: o.ToAddress
                                 });
                             }
 
                             var worldData = knownWorlds.get(worldNameFromKey);
-                            // Store user with timestamp using normalized name as key, but keep display name
-                            var existingUser = worldData.users.get(normalizedUserName);
+                            // Store user with timestamp using username as key
+                            var existingUser = worldData.users.get(userName);
                             var currentTimestamp = Date.parse(o.BlockDate) || Date.now();
                             
                             if (existingUser) {
                                 // Update connection count and latest timestamp
-                                worldData.users.set(normalizedUserName, {
-                                    displayName: n, // Original name with emojis
+                                worldData.users.set(userName, {
                                     timestamp: Math.max(existingUser.timestamp, currentTimestamp),
                                     address: o.FromAddress,
                                     connectionCount: (existingUser.connectionCount || 1) + 1
                                 });
                             } else {
                                 // First connection for this user
-                                worldData.users.set(normalizedUserName, {
-                                    displayName: n, // Original name with emojis
+                                worldData.users.set(userName, {
                                     timestamp: currentTimestamp,
                                     address: o.FromAddress,
                                     connectionCount: 1
                                 });
                             }
 
-                            knownUsers.has(normalizedUserName) || knownUsers.set(normalizedUserName, o.FromAddress);
+                            knownUsers.has(userName) || knownUsers.set(userName, o.FromAddress);
 
                             // Calculate spawn point for known user to enforce ownership
-                            var spawn = calculateSpawnPoint(normalizedUserName + "@" + worldNameFromKey);
+                            var spawn = calculateSpawnPoint(userName + "@" + worldNameFromKey);
                             var cx = Math.floor(spawn.x / CHUNK_SIZE);
                             var cz = Math.floor(spawn.z / CHUNK_SIZE);
 
-                            spawnChunks.set(normalizedUserName, {
+                            spawnChunks.set(userName, {
                                 cx: cx,
                                 cz: cz,
-                                username: normalizedUserName,
+                                username: userName,
                                 world: worldNameFromKey,
                                 spawn: spawn
                             });
 
                             // Immediately protect home chunk for known users
                             var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
-                            updateChunkOwnership(chunkKey, normalizedUserName, Date.now(), 'home');
+                            updateChunkOwnership(chunkKey, userName, Date.now(), 'home');
 
                             processedMessages.add(o.TransactionId);
                         }

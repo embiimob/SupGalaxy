@@ -693,9 +693,9 @@ const lightManager = {
 };
 
 /**
- * Normalizes a player name by removing all non-alphanumeric characters.
- * Used for consistent username matching across discovery, ownership, and spawn calculations.
- * @param {string} name - The player name to normalize
+ * Sanitizes a player name for consistent matching.
+ * Only trims whitespace - preserves special characters and emojis.
+ * @param {string} name - The player name to sanitize
  * @returns {string} - The sanitized player name
  */
 function normalizePlayerName(name) {
@@ -703,6 +703,6 @@ function normalizePlayerName(name) {
         console.warn('[normalizePlayerName] Invalid input:', name);
         return '';
     }
-    return name.replace(/[^a-zA-Z0-9]/g, '');
+    return name.trim();
 }
 

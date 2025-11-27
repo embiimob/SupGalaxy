@@ -1923,7 +1923,7 @@ function openUsersModal() {
             usersContainer.style.marginTop = "8px";
             usersContainer.style.fontSize = "0.9em";
 
-            wData.users.forEach((userData, normalizedName) => {
+            wData.users.forEach((userData, uName) => {
                 const userRow = document.createElement("div");
                 userRow.style.display = "flex";
                 userRow.style.justifyContent = "space-between";
@@ -1931,14 +1931,11 @@ function openUsersModal() {
                 userRow.style.padding = "4px 0";
                 userRow.style.borderTop = "1px solid rgba(255,255,255,0.05)";
 
-                // Use displayName for UI, fallback to normalized name
-                const displayName = (userData && userData.displayName) ? userData.displayName : normalizedName;
-                
                 // Determine correct timestamp and connection count display
                 let timeDisplay = "Unknown time";
                 if (userData && userData.timestamp) {
                     timeDisplay = new Date(userData.timestamp).toLocaleString();
-                } else if (wData.discoverer === displayName || wData.discoverer === normalizedName) {
+                } else if (wData.discoverer === uName) {
                      // Fallback for discoverer if stored differently in legacy
                      timeDisplay = "Discoverer";
                 }
@@ -1947,7 +1944,7 @@ function openUsersModal() {
                 const connectionCount = (userData && userData.connectionCount) ? userData.connectionCount : 1;
                 const countDisplay = connectionCount > 1 ? ` (${connectionCount})` : '';
 
-                userRow.innerHTML = `<span>${displayName}</span> <span style="font-size:0.8em; opacity:0.6;">${timeDisplay}${countDisplay}</span>`;
+                userRow.innerHTML = `<span>${uName}</span> <span style="font-size:0.8em; opacity:0.6;">${timeDisplay}${countDisplay}</span>`;
 
                 // Teleport Button
                 const teleportBtn = document.createElement("button");
@@ -1959,15 +1956,15 @@ function openUsersModal() {
                     if (worldName !== wName) {
                         if(confirm(`Switch to ${wName} to teleport?`)) {
                              switchWorld(wName);
-                             // Use normalizedName for spawn lookup
-                             const spawnData = spawnChunks.get(normalizedName);
+                             // Use username for spawn lookup
+                             const spawnData = spawnChunks.get(uName);
                              let spawn;
                              if (spawnData && spawnData.spawn && spawnData.world === wName) {
                                  spawn = spawnData.spawn;
-                                 console.log("[MODAL] Using stored spawn for:", displayName, "from spawnChunks");
+                                 console.log("[MODAL] Using stored spawn for:", uName, "from spawnChunks");
                              } else {
-                                 spawn = calculateSpawnPoint(normalizedName + "@" + wName);
-                                 console.log("[MODAL] Fallback: calculating spawn for:", displayName, "(not in spawnChunks or different world)");
+                                 spawn = calculateSpawnPoint(uName + "@" + wName);
+                                 console.log("[MODAL] Fallback: calculating spawn for:", uName, "(not in spawnChunks or different world)");
                              }
                              // Setting player position immediately after switch might be unsafe if chunks aren't ready.
                              // Let's try setting a target.
@@ -1978,15 +1975,15 @@ function openUsersModal() {
                              isPromptOpen = false;
                         }
                     } else {
-                        // Use normalizedName for spawn lookup
-                        const spawnData = spawnChunks.get(normalizedName);
+                        // Use username for spawn lookup
+                        const spawnData = spawnChunks.get(uName);
                         let spawn;
                         if (spawnData && spawnData.spawn && spawnData.world === wName) {
                             spawn = spawnData.spawn;
-                            console.log("[MODAL] Using stored spawn for:", displayName, "from spawnChunks");
+                            console.log("[MODAL] Using stored spawn for:", uName, "from spawnChunks");
                         } else {
-                            spawn = calculateSpawnPoint(normalizedName + "@" + wName);
-                            console.log("[MODAL] Fallback: calculating spawn for:", displayName, "(not in spawnChunks or different world)");
+                            spawn = calculateSpawnPoint(uName + "@" + wName);
+                            console.log("[MODAL] Fallback: calculating spawn for:", uName, "(not in spawnChunks or different world)");
                         }
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
