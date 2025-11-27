@@ -684,15 +684,16 @@ function isChunkMutationAllowed(chunkKey, username) {
     const normalized = chunkKey.replace(/^#/, "");
     
     // Check home spawn ownership
+    // spawnChunks is keyed by username@worldname
     if (spawnChunks.size > 0) {
-        for (const [spawnUser, spawnData] of spawnChunks) {
+        for (const [spawnKey, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
             if (!parsed) continue;
             // Check if this is a spawn chunk AND the world matches
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                 // This chunk is a home spawn chunk in this world
-                if (spawnUser !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser} in world ${parsed.world}`);
+                if (spawnData.username !== username) {
+                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnData.username} in world ${parsed.world}`);
                     return false;
                 }
                 return true; // Own home spawn

@@ -348,7 +348,9 @@ function setupDataChannel(e, t) {
                     const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                     const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                     
-                    spawnChunks.set(peerName, {
+                    // Use key format: username@worldname
+                    const spawnKey = peerName + "@" + worldName;
+                    spawnChunks.set(spawnKey, {
                         cx: spawnCx,
                         cz: spawnCz,
                         username: peerName,
@@ -364,7 +366,9 @@ function setupDataChannel(e, t) {
                 const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                 const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                 
-                spawnChunks.set(userName, {
+                // Use key format: username@worldname
+                const hostSpawnKey = userName + "@" + worldName;
+                spawnChunks.set(hostSpawnKey, {
                     cx: hostSpawnCx,
                     cz: hostSpawnCz,
                     username: userName,
@@ -432,7 +436,9 @@ function setupDataChannel(e, t) {
                         const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                         const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                         
-                        spawnChunks.set(i, {
+                        // Use key format: username@worldname
+                        const spawnKey = i + "@" + worldName;
+                        spawnChunks.set(spawnKey, {
                             cx: spawnCx,
                             cz: spawnCz,
                             username: i,
@@ -1006,7 +1012,9 @@ function setupDataChannel(e, t) {
                             const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                             const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(peerName, {
+                            // Use key format: username@worldname
+                            const peerSpawnKey = peerName + "@" + s.world;
+                            spawnChunks.set(peerSpawnKey, {
                                 cx: peerSpawnCx,
                                 cz: peerSpawnCz,
                                 username: peerName,
@@ -1022,7 +1030,9 @@ function setupDataChannel(e, t) {
                         const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                         const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                         
-                        spawnChunks.set(userName, {
+                        // Use key format: username@worldname
+                        const hostSpawnKey = userName + "@" + s.world;
+                        spawnChunks.set(hostSpawnKey, {
                             cx: hostSpawnCx,
                             cz: hostSpawnCz,
                             username: userName,
@@ -1058,7 +1068,9 @@ function setupDataChannel(e, t) {
                             const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                             const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(s.username, {
+                            // Use key format: username@worldname
+                            const playerSpawnKey = s.username + "@" + clientWorld;
+                            spawnChunks.set(playerSpawnKey, {
                                 cx: spawnCx,
                                 cz: spawnCz,
                                 username: s.username,
@@ -1079,7 +1091,9 @@ function setupDataChannel(e, t) {
                                 const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                                 const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
                                 
-                                spawnChunks.set(peerName, {
+                                // Use key format: username@worldname
+                                const peerSpawnKey = peerName + "@" + clientWorld;
+                                spawnChunks.set(peerSpawnKey, {
                                     cx: peerSpawnCx,
                                     cz: peerSpawnCz,
                                     username: peerName,
@@ -1095,7 +1109,9 @@ function setupDataChannel(e, t) {
                             const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                             const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(userName, {
+                            // Use key format: username@worldname
+                            const hostSpawnKey = userName + "@" + clientWorld;
+                            spawnChunks.set(hostSpawnKey, {
                                 cx: hostSpawnCx,
                                 cz: hostSpawnCz,
                                 username: userName,
@@ -1136,7 +1152,7 @@ function setupDataChannel(e, t) {
                                 const parsed = parseChunkKey(normalized);
                                 let isHomeSpawn = false;
                                 if (parsed && spawnChunks.size > 0) {
-                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                    for (const [spawnKey, spawnData] of spawnChunks) {
                                         if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                                             isHomeSpawn = true;
                                             break;
@@ -1190,9 +1206,9 @@ function setupDataChannel(e, t) {
                             // Check if it's a spawn chunk
                             const parsed = parseChunkKey(placeChunkKey);
                             if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                for (const [spawnKey, spawnData] of spawnChunks) {
                                     if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
                                         break;
                                     }
                                 }
@@ -1253,7 +1269,7 @@ function setupDataChannel(e, t) {
                                 const parsed = parseChunkKey(normalized);
                                 let isHomeSpawn = false;
                                 if (parsed && spawnChunks.size > 0) {
-                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                    for (const [spawnKey, spawnData] of spawnChunks) {
                                         if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                                             isHomeSpawn = true;
                                             break;
@@ -1317,9 +1333,9 @@ function setupDataChannel(e, t) {
                             // Check if it's a spawn chunk
                             const parsed = parseChunkKey(breakChunkKey);
                             if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                for (const [spawnKey, spawnData] of spawnChunks) {
                                     if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
                                         break;
                                     }
                                 }
@@ -1857,7 +1873,10 @@ function openUsersModal() {
         var n = s[0];
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
-            var i = calculateSpawnPoint(n + "@" + worldName);
+            // Use cached spawn from spawnChunks if available, otherwise calculate
+            var spawnKey = n + "@" + worldName;
+            var cachedSpawn = spawnChunks.get(spawnKey);
+            var i = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
             (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
                 function (e, o) {
                     m.onclick = function () {
@@ -1946,8 +1965,10 @@ function openUsersModal() {
                              // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
                              // For now, we just switch. The user asked to "teleport to the spawns right from the report".
                              // But respawnPlayer relies on chunk generation of current world.
-                             // We can calculate spawn coordinate.
-                             const spawn = calculateSpawnPoint(wName + "@" + uName);
+                             // Use cached spawn from spawnChunks if available, otherwise calculate
+                             const spawnKey = uName + "@" + wName;
+                             const cachedSpawn = spawnChunks.get(spawnKey);
+                             const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
                              // Setting player position immediately after switch might be unsafe if chunks aren't ready.
                              // But switchWorld resets player to their own spawn.
                              // Let's try setting a target.
@@ -1958,7 +1979,10 @@ function openUsersModal() {
                              isPromptOpen = false;
                         }
                     } else {
-                        const spawn = calculateSpawnPoint(wName + "@" + uName);
+                        // Use cached spawn from spawnChunks if available, otherwise calculate
+                        const spawnKey = uName + "@" + wName;
+                        const cachedSpawn = spawnChunks.get(spawnKey);
+                        const spawn = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
                         isPromptOpen = false;
