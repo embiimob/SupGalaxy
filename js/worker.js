@@ -1373,7 +1373,40 @@ self.onmessage = async function(e) {
                     applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
                 }
             } else if (data.type === "chunk_ownership") {
-               updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
+                // Parse chunkKey and normalize username for consistent matching
+                const rawChunkKey = data.chunkKey ? data.chunkKey.replace(/^#/, "") : null;
+                const parsed = rawChunkKey ? parseChunkKey(rawChunkKey) : null;
+                
+                if (parsed) {
+                    const normalizedUsername = normalizePlayerName(data.username);
+                    if (normalizedUsername) {
+                        // Calculate spawn point for this user in this world
+                        const spawnPoint = calculateSpawnPoint(normalizedUsername + "@" + parsed.world);
+                        
+                        // Update spawnChunks with this user's spawn data
+                        spawnChunks.set(normalizedUsername, {
+                            cx: parsed.cx,
+                            cz: parsed.cz,
+                            username: normalizedUsername,
+                            world: parsed.world,
+                            spawn: spawnPoint
+                        });
+                        
+                        // Update chunk ownership
+                        updateChunkOwnership(rawChunkKey, normalizedUsername, data.timestamp, 'ipfs', data.timestamp);
+                        
+                        console.log(`[chunk_ownership] Registered spawn for ${normalizedUsername} in world ${parsed.world} at chunk (${parsed.cx}, ${parsed.cz})`);
+                        
+                        // Trigger full spawn population to ensure all users are processed
+                        populateSpawnChunks();
+                    } else {
+                        console.warn('[chunk_ownership] Failed to normalize username:', data.username);
+                    }
+                } else {
+                    console.warn('[chunk_ownership] Failed to parse chunkKey:', data.chunkKey);
+                    // Fallback to original behavior
+                    updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
+                }
             } else if (data.type === 'magician_stones_update') {
                 if (data.stones) {
                     for (const key in data.stones) {

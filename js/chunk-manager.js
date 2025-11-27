@@ -682,27 +682,46 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
 function isChunkMutationAllowed(chunkKey, username) {
     const normalized = chunkKey.replace(/^#/, "");
+    const normalizedUsername = normalizePlayerName(username);
+    
+    // Debug: Log incoming check
+    console.log(`[isChunkMutationAllowed] Checking chunk ${normalized} for user ${username} (normalized: ${normalizedUsername})`);
+    
+    // Parse chunk key for validation
+    const parsedCheck = parseChunkKey(normalized);
+    if (!parsedCheck) {
+        console.warn(`[isChunkMutationAllowed] Failed to parse chunkKey: ${normalized} - allowing mutation (parse failure)`);
+        return true; // Allow if we can't parse (shouldn't happen in normal flow)
+    }
     
     // Check home spawn ownership
     if (spawnChunks.size > 0) {
         for (const [spawnUser, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
-            if (!parsed) continue;
+            if (!parsed) {
+                console.warn(`[isChunkMutationAllowed] parseChunkKey returned null for: ${normalized}`);
+                continue;
+            }
             // Check if this is a spawn chunk AND the world matches
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                 // This chunk is a home spawn chunk in this world
-                if (spawnUser !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnUser} in world ${parsed.world}`);
+                const normalizedSpawnUser = normalizePlayerName(spawnUser);
+                if (normalizedSpawnUser !== normalizedUsername) {
+                    console.log(`[isChunkMutationAllowed] Chunk ${normalized} denied: home spawn of ${spawnUser} in world ${parsed.world} (user: ${username})`);
                     return false;
                 }
+                console.log(`[isChunkMutationAllowed] Chunk ${normalized} allowed: user ${username} owns this home spawn`);
                 return true; // Own home spawn
             }
         }
+    } else {
+        console.log(`[isChunkMutationAllowed] spawnChunks is empty - no spawn protection active`);
     }
     
     // Check OWNED_CHUNKS ownership
     const ownership = OWNED_CHUNKS.get(normalized);
     if (!ownership) {
+        console.log(`[isChunkMutationAllowed] Chunk ${normalized} allowed: no ownership entry in OWNED_CHUNKS`);
         return true; // No ownership, free to edit
     }
     
@@ -710,23 +729,25 @@ function isChunkMutationAllowed(chunkKey, username) {
     
     // Check if ownership is pending (immature IPFS claim < 30 days)
     if (ownership.pending) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
+        console.log(`[isChunkMutationAllowed] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
         return true; // Pending chunks are editable by anyone
     }
     
     // Check if ownership has expired (> 1 year)
     if (ownership.expiryDate && now > ownership.expiryDate) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
+        console.log(`[isChunkMutationAllowed] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
         return true; // Expired chunks are editable by anyone
     }
     
     // Check if owned by different user (mature ownership 30d-1y)
-    if (ownership.username !== username) {
-        console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
+    const normalizedOwner = normalizePlayerName(ownership.username);
+    if (normalizedOwner !== normalizedUsername) {
+        console.log(`[isChunkMutationAllowed] Chunk ${normalized} denied: owned by ${ownership.username} (normalized: ${normalizedOwner}), requester: ${username} (normalized: ${normalizedUsername})`);
         return false;
     }
     
     // User owns the chunk
+    console.log(`[isChunkMutationAllowed] Chunk ${normalized} allowed: user ${username} is the owner`);
     return true;
 }
 

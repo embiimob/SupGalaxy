@@ -1857,7 +1857,17 @@ function openUsersModal() {
         var n = s[0];
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
-            var i = calculateSpawnPoint(n + "@" + worldName);
+            // Prefer spawnChunks entry if available, fallback to calculateSpawnPoint
+            var normalizedPeerName = normalizePlayerName(n);
+            var spawnData = spawnChunks.get(normalizedPeerName);
+            var i;
+            if (spawnData && spawnData.spawn && spawnData.world === worldName) {
+                i = spawnData.spawn;
+                console.log("[MODAL] Using stored spawn for:", n, "from spawnChunks");
+            } else {
+                i = calculateSpawnPoint(n + "@" + worldName);
+                console.log("[MODAL] Fallback: calculating spawn for:", n, "(not in spawnChunks or different world)");
+            }
             (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
                 function (e, o) {
                     m.onclick = function () {
@@ -1942,14 +1952,18 @@ function openUsersModal() {
                     if (worldName !== wName) {
                         if(confirm(`Switch to ${wName} to teleport?`)) {
                              switchWorld(wName);
-                             // After switch, teleport logic needs to wait or be handled.
-                             // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
-                             // For now, we just switch. The user asked to "teleport to the spawns right from the report".
-                             // But respawnPlayer relies on chunk generation of current world.
-                             // We can calculate spawn coordinate.
-                             const spawn = calculateSpawnPoint(wName + "@" + uName);
+                             // Prefer spawnChunks entry if available, fallback to calculateSpawnPoint
+                             const normalizedUName = normalizePlayerName(uName);
+                             const spawnData = spawnChunks.get(normalizedUName);
+                             let spawn;
+                             if (spawnData && spawnData.spawn && spawnData.world === wName) {
+                                 spawn = spawnData.spawn;
+                                 console.log("[MODAL] Using stored spawn for:", uName, "from spawnChunks");
+                             } else {
+                                 spawn = calculateSpawnPoint(uName + "@" + wName);
+                                 console.log("[MODAL] Fallback: calculating spawn for:", uName, "(not in spawnChunks or different world)");
+                             }
                              // Setting player position immediately after switch might be unsafe if chunks aren't ready.
-                             // But switchWorld resets player to their own spawn.
                              // Let's try setting a target.
                              setTimeout(() => {
                                  respawnPlayer(spawn.x, spawn.y, spawn.z);
@@ -1958,7 +1972,17 @@ function openUsersModal() {
                              isPromptOpen = false;
                         }
                     } else {
-                        const spawn = calculateSpawnPoint(wName + "@" + uName);
+                        // Prefer spawnChunks entry if available, fallback to calculateSpawnPoint
+                        const normalizedUName = normalizePlayerName(uName);
+                        const spawnData = spawnChunks.get(normalizedUName);
+                        let spawn;
+                        if (spawnData && spawnData.spawn && spawnData.world === wName) {
+                            spawn = spawnData.spawn;
+                            console.log("[MODAL] Using stored spawn for:", uName, "from spawnChunks");
+                        } else {
+                            spawn = calculateSpawnPoint(uName + "@" + wName);
+                            console.log("[MODAL] Fallback: calculating spawn for:", uName, "(not in spawnChunks or different world)");
+                        }
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
                         isPromptOpen = false;

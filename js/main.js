@@ -2581,60 +2581,125 @@ function updateLoginUI() {
         console.error("[Debug] Error in updateLoginUI:", i), addMessage("Failed to initialize login UI", 3e3)
     }
 }
+/**
+ * Populates spawnChunks and OWNED_CHUNKS by iterating knownWorlds (authoritative source).
+ * This ensures all discovered players have their home spawn chunks calculated and protected.
+ */
 async function populateSpawnChunks() {
-    for (var e of spawnChunks) {
-        var t = e[0],
-            o = e[1],
-            a = calculateSpawnPoint(t + "@" + o.world);
-        const chunkX = Math.floor(a.x / CHUNK_SIZE);
-        const chunkZ = Math.floor(a.z / CHUNK_SIZE);
-        const chunkKey = makeChunkKey(o.world, chunkX, chunkZ);
-        
-        // Check for home spawn collision
-        const existing = OWNED_CHUNKS.get(chunkKey);
-        if (existing && existing.type === 'home' && existing.username !== t) {
-            console.log(`[Ownership] Home spawn collision detected for ${t} at chunk ${chunkKey} (owned by ${existing.username})`);
-            // Spiral search for free chunk
-            let spiralRadius = 1;
-            let foundFree = false;
-            while (spiralRadius <= 10 && !foundFree) {
-                for (let dx = -spiralRadius; dx <= spiralRadius && !foundFree; dx++) {
-                    for (let dz = -spiralRadius; dz <= spiralRadius && !foundFree; dz++) {
-                        if (Math.abs(dx) === spiralRadius || Math.abs(dz) === spiralRadius) {
-                            const testCx = chunkX + dx;
-                            const testCz = chunkZ + dz;
-                            const testKey = makeChunkKey(o.world, testCx, testCz);
-                            const testOwner = OWNED_CHUNKS.get(testKey);
-                            if (!testOwner || testOwner.type !== 'home') {
-                                // Found free chunk, calculate new spawn
-                                const newX = testCx * CHUNK_SIZE + CHUNK_SIZE / 2;
-                                const newZ = testCz * CHUNK_SIZE + CHUNK_SIZE / 2;
-                                const newY = chunkManager.getSurfaceY(newX, newZ) + 2;
-                                a = { x: newX, y: newY, z: newZ };
-                                updateChunkOwnership(testKey, t, Date.now(), 'home');
-                                foundFree = true;
-                                console.log(`[Ownership] Reassigned ${t} home spawn to chunk ${testKey}`);
+    console.log('[populateSpawnChunks] Starting spawn calculation from knownWorlds...');
+    let usersProcessed = 0;
+    
+    try {
+        // Iterate knownWorlds as the authoritative source
+        for (const [wName, wData] of knownWorlds) {
+            if (!wData || !wData.users) {
+                console.warn(`[populateSpawnChunks] World ${wName} has no users data, skipping`);
+                continue;
+            }
+            
+            // Handle both Map and Set for users (legacy compatibility)
+            const usersIterable = wData.users instanceof Map ? wData.users.keys() : wData.users;
+            
+            for (const user of usersIterable) {
+                // Normalize username for consistent matching
+                const normalizedUser = normalizePlayerName(user);
+                if (!normalizedUser) {
+                    console.warn(`[populateSpawnChunks] Skipping empty username in world ${wName}`);
+                    continue;
+                }
+                
+                // Calculate spawn point using normalized username
+                let spawnPoint;
+                try {
+                    spawnPoint = calculateSpawnPoint(normalizedUser + "@" + wName);
+                } catch (err) {
+                    console.error(`[populateSpawnChunks] Error calculating spawn for ${normalizedUser}@${wName}:`, err);
+                    continue;
+                }
+                
+                const chunkX = Math.floor(spawnPoint.x / CHUNK_SIZE);
+                const chunkZ = Math.floor(spawnPoint.z / CHUNK_SIZE);
+                const chunkKey = makeChunkKey(wName, chunkX, chunkZ);
+                
+                // Check for home spawn collision
+                const existing = OWNED_CHUNKS.get(chunkKey);
+                if (existing && existing.type === 'home' && normalizePlayerName(existing.username) !== normalizedUser) {
+                    console.log(`[populateSpawnChunks] Home spawn collision detected for ${normalizedUser} at chunk ${chunkKey} (owned by ${existing.username})`);
+                    
+                    // Spiral search for free chunk
+                    let spiralRadius = 1;
+                    let foundFree = false;
+                    while (spiralRadius <= 10 && !foundFree) {
+                        for (let dx = -spiralRadius; dx <= spiralRadius && !foundFree; dx++) {
+                            for (let dz = -spiralRadius; dz <= spiralRadius && !foundFree; dz++) {
+                                if (Math.abs(dx) === spiralRadius || Math.abs(dz) === spiralRadius) {
+                                    const testCx = chunkX + dx;
+                                    const testCz = chunkZ + dz;
+                                    const testKey = makeChunkKey(wName, testCx, testCz);
+                                    const testOwner = OWNED_CHUNKS.get(testKey);
+                                    if (!testOwner || testOwner.type !== 'home') {
+                                        // Found free chunk, calculate new spawn
+                                        const newX = testCx * CHUNK_SIZE + CHUNK_SIZE / 2;
+                                        const newZ = testCz * CHUNK_SIZE + CHUNK_SIZE / 2;
+                                        // Fallback to 100 if chunkManager is unavailable
+                                        const newY = (typeof chunkManager !== 'undefined' && chunkManager) 
+                                            ? chunkManager.getSurfaceY(newX, newZ) + 2 
+                                            : 100;
+                                        spawnPoint = { x: newX, y: newY, z: newZ };
+                                        updateChunkOwnership(testKey, normalizedUser, Date.now(), 'home');
+                                        foundFree = true;
+                                        console.log(`[populateSpawnChunks] Reassigned ${normalizedUser} home spawn to chunk ${testKey}`);
+                                    }
+                                }
                             }
                         }
+                        spiralRadius++;
                     }
+                    if (!foundFree) {
+                        console.warn(`[populateSpawnChunks] Could not find free home spawn for ${normalizedUser} in world ${wName}`);
+                    }
+                } else {
+                    // No collision, assign ownership
+                    updateChunkOwnership(chunkKey, normalizedUser, Date.now(), 'home');
                 }
-                spiralRadius++;
+                
+                // Update spawnChunks map with spawn data
+                spawnChunks.set(normalizedUser, {
+                    cx: Math.floor(spawnPoint.x / CHUNK_SIZE),
+                    cz: Math.floor(spawnPoint.z / CHUNK_SIZE),
+                    username: normalizedUser,
+                    world: wName,
+                    spawn: spawnPoint
+                });
+                
+                usersProcessed++;
             }
-            if (!foundFree) {
-                addMessage(`Warning: Could not find free home spawn for ${t}`, 5000);
-            }
-        } else {
-            // No collision, assign ownership
-            updateChunkOwnership(chunkKey, t, Date.now(), 'home');
         }
         
-        spawnChunks.set(t, {
-            cx: Math.floor(a.x / CHUNK_SIZE),
-            cz: Math.floor(a.z / CHUNK_SIZE),
-            username: o.username,
-            world: o.world,
-            spawn: a
-        });
+        // Also ensure local user is in spawnChunks for current world
+        if (userName && worldName) {
+            const normalizedLocalUser = normalizePlayerName(userName);
+            if (normalizedLocalUser && !spawnChunks.has(normalizedLocalUser)) {
+                const localSpawn = calculateSpawnPoint(normalizedLocalUser + "@" + worldName);
+                const localCx = Math.floor(localSpawn.x / CHUNK_SIZE);
+                const localCz = Math.floor(localSpawn.z / CHUNK_SIZE);
+                const localChunkKey = makeChunkKey(worldName, localCx, localCz);
+                
+                spawnChunks.set(normalizedLocalUser, {
+                    cx: localCx,
+                    cz: localCz,
+                    username: normalizedLocalUser,
+                    world: worldName,
+                    spawn: localSpawn
+                });
+                updateChunkOwnership(localChunkKey, normalizedLocalUser, Date.now(), 'home');
+                usersProcessed++;
+            }
+        }
+        
+        console.log(`[populateSpawnChunks] Completed. Processed ${usersProcessed} users. spawnChunks size: ${spawnChunks.size}, OWNED_CHUNKS size: ${OWNED_CHUNKS.size}`);
+    } catch (err) {
+        console.error('[populateSpawnChunks] Error during spawn population:', err);
     }
 }
 async function startGame() {
@@ -3639,49 +3704,51 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         }
 
                         if (n && worldNameFromKey) {
-                            // Ensure n (profile URN) is used as the username
-                            // Previously n was stripped. Now n comes from a.URN directly (see below change).
-                            // Wait, I need to change where 'n' is defined too.
+                            // Normalize username for consistent matching
+                            var normalizedUserName = normalizePlayerName(n);
 
-                            console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
+                            console.log("[USERS] Adding user:", n, "(normalized:", normalizedUserName, ") to world:", worldNameFromKey);
                             if (!knownWorlds.has(worldNameFromKey)) {
                                 knownWorlds.set(worldNameFromKey, {
-                                    discoverer: n,
+                                    discoverer: normalizedUserName,
                                     users: new Map(), // Store user details (timestamp, etc.)
                                     toAddress: o.ToAddress
                                 });
                             }
 
                             var worldData = knownWorlds.get(worldNameFromKey);
-                            // Store user with timestamp
-                            worldData.users.set(n, {
+                            // Store user with timestamp using normalized name
+                            worldData.users.set(normalizedUserName, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
                                 address: o.FromAddress
                             });
 
-                            knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
+                            knownUsers.has(normalizedUserName) || knownUsers.set(normalizedUserName, o.FromAddress);
 
                             // Calculate spawn point for known user to enforce ownership
-                            var spawn = calculateSpawnPoint(n + "@" + worldNameFromKey);
+                            var spawn = calculateSpawnPoint(normalizedUserName + "@" + worldNameFromKey);
                             var cx = Math.floor(spawn.x / CHUNK_SIZE);
                             var cz = Math.floor(spawn.z / CHUNK_SIZE);
 
-                            spawnChunks.set(n, {
+                            spawnChunks.set(normalizedUserName, {
                                 cx: cx,
                                 cz: cz,
-                                username: n,
+                                username: normalizedUserName,
                                 world: worldNameFromKey,
                                 spawn: spawn
                             });
 
                             // Immediately protect home chunk for known users
                             var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
-                            updateChunkOwnership(chunkKey, n, Date.now(), 'home');
+                            updateChunkOwnership(chunkKey, normalizedUserName, Date.now(), 'home');
 
                             processedMessages.add(o.TransactionId);
                         }
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
-                console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
+                console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size);
+                // Call populateSpawnChunks to ensure all users from knownWorlds have their spawns calculated
+                console.log("[USERS] Calling populateSpawnChunks after initial discovery...");
+                populateSpawnChunks();
             }
         }(), updateLoginUI(), setupEmojiPicker();
         var s = document.getElementById("dropZone");
