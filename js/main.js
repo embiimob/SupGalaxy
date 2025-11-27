@@ -3630,19 +3630,14 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             var parts = i.split("@");
                             if (parts.length >= 2) {
                                 var potentialWorld = parts[0];
-                                var potentialUser = parts.slice(1).join("@");
-                                // Verify user match only if we are parsing user from key
-                                if (n.startsWith(potentialUser)) {
-                                    worldNameFromKey = potentialWorld;
-                                }
+                                // We don't validate user match here anymore because n (URN) is the authority
+                                // If the message format is world@user, we assume 'user' is just a label or partial
+                                // and trust the sender's URN 'n' as the actual user identity.
+                                worldNameFromKey = potentialWorld;
                             }
                         }
 
                         if (n && worldNameFromKey) {
-                            // Ensure n (profile URN) is used as the username
-                            // Previously n was stripped. Now n comes from a.URN directly (see below change).
-                            // Wait, I need to change where 'n' is defined too.
-
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
                             if (!knownWorlds.has(worldNameFromKey)) {
                                 knownWorlds.set(worldNameFromKey, {
@@ -3666,7 +3661,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             var cx = Math.floor(spawn.x / CHUNK_SIZE);
                             var cz = Math.floor(spawn.z / CHUNK_SIZE);
 
-                            spawnChunks.set(n, {
+                            // Use a unique key for spawnChunks to prevent overwriting when a user visits multiple worlds
+                            spawnChunks.set(n + "@" + worldNameFromKey, {
                                 cx: cx,
                                 cz: cz,
                                 username: n,

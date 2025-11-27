@@ -26,7 +26,7 @@ var userPositions = {},
     syncedWorlds = new Set;
 
 async function getTurnCredentials() {
-    return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
+    return [{
         urls: "stun:supturn.com:3478"
     }, {
         urls: ["turn:supturn.com:3478?transport=udp", "turn:supturn.com:3478?transport=tcp", "turn:supturn.com:443?transport=tcp"],
@@ -36,16 +36,16 @@ async function getTurnCredentials() {
     }]
 }
 async function connectToServer(e, t, o) {
-    if (peers.size >= MAX_PEERS) return addMessage("Cannot connect: too many peers.", 3e3), void console.log("[WebRTC] Connection failed: max peers reached");
+    if (peers.size >= MAX_PEERS) return addMessage("Cannot connect: too many peers.", 3e3);
     if (!knownServers.find((function (t) {
         return t.hostUser === e
-    }))) return addMessage("No server found for " + e, 3e3), void console.log("[WebRTC] No server found for:", e);
-    console.log("[WebRTC] Initiating connection to server:", e), connectionAttempts.set(e, Date.now());
+    }))) return addMessage("No server found for " + e, 3e3);
+    connectionAttempts.set(e, Date.now());
     const a = await getTurnCredentials();
     var r = new RTCPeerConnection({
         iceServers: a
     });
-    r.oniceconnectionstatechange = () => console.log(`[WebRTC] ICE state change for ${e}: ${r.iceConnectionState}`), localAudioStream && localAudioStream.getTracks().forEach((e => {
+    localAudioStream && localAudioStream.getTracks().forEach((e => {
         r.addTrack(e, localAudioStream)
     })), r.ontrack = t => {
         const o = e;
@@ -55,14 +55,14 @@ async function connectToServer(e, t, o) {
                 e.srcObject = t.streams[0], e.autoplay = !0, userAudioStreams.set(o, {
                     audio: e,
                     stream: t.streams[0]
-                }), console.log(`[WebRTC] Received audio stream from ${o}`)
+                })
             }
         } else if ("video" === t.track.kind && !userVideoStreams.has(o)) {
             const e = document.createElement("video");
             e.srcObject = t.streams[0], e.autoplay = !0, e.playsInline = !0, e.style.display = "none", document.body.appendChild(e), userVideoStreams.set(o, {
                 video: e,
                 stream: t.streams[0]
-            }), console.log(`[WebRTC] Received video stream from ${o}`)
+            })
         }
     };
     var s = r.createDataChannel("game");
@@ -112,7 +112,7 @@ async function connectToServer(e, t, o) {
                 answerKeywords: [f],
                 userName: userName
             }), Date.now() - connectionAttempts.get(e) > 36e5) {
-                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
+                addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
                 var t = peers.get(e);
                 t && t.pc && t.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
             }
@@ -125,7 +125,6 @@ async function connectToServer(e, t, o) {
 }
 async function sendWorldStateAsync(peer, worldState, username) {
     if (!peer || !peer.dc || peer.dc.readyState !== 'open') {
-        console.log(`[WebRTC] Cannot send world state to ${username}, data channel not open.`);
         return;
     }
 
@@ -156,7 +155,6 @@ async function sendWorldStateAsync(peer, worldState, username) {
     function sendChunk() {
         if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
             if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
             }
             return;
         }
@@ -193,10 +191,10 @@ async function handleMinimapFile(e) {
             return;
         }
         if (o.deltas && o.profile) return console.log("[MINIMAP] Save session file detected, applying..."), await applySaveFile(o, userAddress, (new Date).toISOString()), void addMessage("Save session loaded successfully!", 3e3);
-        if (!o.world || o.world !== worldName) return addMessage("Invalid file: wrong world", 3e3), void console.log("[MINIMAP] Invalid file: world mismatch, expected:", worldName, "got:", o.world);
+        if (!o.world || o.world !== worldName) return addMessage("Invalid file: wrong world", 3e3);
         if (o.offer) {
             const e = o.user || "anonymous";
-            if (e === userName) return addMessage("Cannot process offer from self", 3e3), void console.log("[WEBRTC] Skipping offer from self:", e);
+            if (e === userName) return addMessage("Cannot process offer from self", 3e3);
             const t = await GetProfileByURN(e);
             pendingOffers.push({
                 clientUser: e,
@@ -208,11 +206,11 @@ async function handleMinimapFile(e) {
                     URN: e,
                     Creators: [null]
                 }
-            }), console.log("[WEBRTC] Added local offer from:", e), addMessage(`Connection request from ${e} via file`, 5e3), setupPendingModal(), document.getElementById("pendingModal").style.display = "block", isPromptOpen = !0
+            }), addMessage(`Connection request from ${e} via file`, 5e3), setupPendingModal(), document.getElementById("pendingModal").style.display = "block", isPromptOpen = !0
         } else if (o.answer && !isHost) {
             const e = o.user || "anonymous",
                 t = peers.get(e);
-            if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3), void console.log("[WEBRTC] No peer connection for:", e);
+            if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3);
             try {
                 await t.pc.setRemoteDescription(new RTCSessionDescription(o.answer));
                 for (const a of o.iceCandidates || []) try {
@@ -222,16 +220,16 @@ async function handleMinimapFile(e) {
                 }
                 // Use uniform keyword format: world@username
             var userKeyword = worldName + "@" + userName;
-            console.log("[WEBRTC] Successfully processed answer for:", e), addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
+            addMessage("Connected to " + e + " via file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
         } else if (o.batch && !isHost) {
             const e = o.user || "anonymous",
                 t = peers.get(e);
-            if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3), void console.log("[WEBRTC] No peer connection for:", e);
+            if (!t || !t.pc) return addMessage("No active connection for " + e, 3e3);
             const a = o.batch.find((e => e.user === userName));
-            if (!a) return addMessage("No answer for you in batch from " + e, 3e3), void console.log("[WEBRTC] No answer for user:", userName, "in batch from:", e);
+            if (!a) return addMessage("No answer for you in batch from " + e, 3e3);
             try {
                 await t.pc.setRemoteDescription(new RTCSessionDescription(a.answer));
                 for (const o of a.iceCandidates || []) try {
@@ -241,30 +239,28 @@ async function handleMinimapFile(e) {
                 }
                     // Use uniform keyword format: world@username
                 var userKeyword = worldName + "@" + userName;
-                console.log("[WEBRTC] Successfully processed batch answer for:", e), addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
+                addMessage("Connected to " + e + " via batch file", 5e3), updateHudButtons(), clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
             } catch (t) {
                 console.error("[WEBRTC] Failed to process batch answer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3)
             }
-        } else addMessage("Invalid file format", 3e3), console.log("[MINIMAP] Invalid file: no offer, answer, or batch")
+        } else addMessage("Invalid file format", 3e3)
     } catch (e) {
         console.error("[MINIMAP] Error processing file:", e), addMessage("Failed to process file", 3e3)
     }
 }
 
 function setupDataChannel(e, t) {
-    console.log(`[FIXED] Setting up data channel for: ${t}`), e.onopen = () => {
+    e.onopen = () => {
         // As per user request, when a client connects, they drop their world mappings
         // and perform a switch to the same world, effectively syncing with the host.
         if (!isHost) {
             WORLD_STATES.clear();
-            console.log(`[WebRTC] Client cleared all world states to sync with host.`);
             switchWorld(worldName);
             // Stop polling for offers when connected as a client
             // (hosts should continue polling for offers from other players)
             stopOfferPolling();
-            console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
-        if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
+        if (addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
             world: worldName,
@@ -339,23 +335,22 @@ function setupDataChannel(e, t) {
                 }
                 e.send(JSON.stringify(calligraphyStonesSync));
             }
-            
+
             // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
             if (isHost) {
-                console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${worldName}`);
                 for (const [peerName, peer] of peers.entries()) {
                     const playerSpawn = calculateSpawnPoint(peerName + "@" + worldName);
                     const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                     const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
-                    
-                    spawnChunks.set(peerName, {
+
+                    spawnChunks.set(peerName + "@" + worldName, {
                         cx: spawnCx,
                         cz: spawnCz,
                         username: peerName,
                         world: worldName,
                         spawn: playerSpawn
                     });
-                    
+
                     const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
                     updateChunkOwnership(playerHomeChunkKey, peerName, Date.now(), 'home');
                 }
@@ -363,21 +358,19 @@ function setupDataChannel(e, t) {
                 const hostSpawn = calculateSpawnPoint(userName + "@" + worldName);
                 const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                 const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
-                
-                spawnChunks.set(userName, {
+
+                spawnChunks.set(userName + "@" + worldName, {
                     cx: hostSpawnCx,
                     cz: hostSpawnCz,
                     username: userName,
                     world: worldName,
                     spawn: hostSpawn
                 });
-                
+
                 const hostHomeChunkKey = makeChunkKey(worldName, hostSpawnCx, hostSpawnCz);
                 updateChunkOwnership(hostHomeChunkKey, userName, Date.now(), 'home');
-                console.log(`[Ownership] Host recalculated spawn chunks for all peers in world ${worldName}`);
             }
 
-            console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
             for (const t of mobs) e.send(JSON.stringify({
                 type: "mob_update",
                 id: t.id,
@@ -396,7 +389,6 @@ function setupDataChannel(e, t) {
         const n = peers.get(t);
         n && (n.keepaliveInterval = s), updateHudButtons()
     }, e.onmessage = e => {
-        console.log(`[WEBRTC] Message from ${t}`);
         try {
             const s = JSON.parse(e.data),
                 n = s.username || t;
@@ -411,13 +403,13 @@ function setupDataChannel(e, t) {
                 case "new_player":
                     const i = s.username;
                     if (i === userName || peers.has(i)) break;
-                    
+
                     addMessage(`${i} has joined!`);
-                    
+
                     if (!playerAvatars.has(i)) {
                         createAndSetupAvatar(i, !1);
                     }
-                    
+
                     if (!peers.has(i)) {
                         peers.set(i, {
                             pc: null,
@@ -425,32 +417,30 @@ function setupDataChannel(e, t) {
                             address: null
                         });
                     }
-                    
+
                     // If host, calculate and store new player's spawn point
                     if (isHost) {
                         const playerSpawn = calculateSpawnPoint(i + "@" + worldName);
                         const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                         const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
-                        
-                        spawnChunks.set(i, {
+
+                        spawnChunks.set(i + "@" + worldName, {
                             cx: spawnCx,
                             cz: spawnCz,
                             username: i,
                             world: worldName,
                             spawn: playerSpawn
                         });
-                        
+
                         // Assign home spawn ownership
                         const playerHomeChunkKey = makeChunkKey(worldName, spawnCx, spawnCz);
                         updateChunkOwnership(playerHomeChunkKey, i, Date.now(), 'home');
-                        console.log(`[Ownership] Host calculated and assigned home spawn chunk ${playerHomeChunkKey} to ${i}`);
                     }
-                    
+
                     updateHudButtons();
                     break;
                 case "world_sync":
                     if (!isHost) {
-                        console.log("[WEBRTC] Received world_sync");
                         if (s.chunkDeltas) {
                             const deltas = new Map(s.chunkDeltas);
                             for (const [chunkKey, changes] of deltas.entries()) {
@@ -573,7 +563,6 @@ function setupDataChannel(e, t) {
                     break;
                 case "block_change":
                     if (isHost) {
-                        console.log(`[WEBRTC] Host processing block change from ${n} for world ${s.world}`);
 
                         if (!WORLD_STATES.has(s.world)) {
                             WORLD_STATES.set(s.world, {
@@ -868,7 +857,6 @@ function setupDataChannel(e, t) {
                         try {
                             // Temporarily switch world context if the hit is in a different world
                             if (blockWorld !== originalWorldName) {
-                                console.log(`[WebRTC] Host switching context to world "${blockWorld}" to process block hit from ${s.username}`);
                                 worldName = blockWorld;
                                 worldSeed = blockWorld;
                             }
@@ -880,7 +868,6 @@ function setupDataChannel(e, t) {
                         } finally {
                             // Switch back to the original world context
                             if (worldName !== originalWorldName) {
-                                console.log(`[WebRTC] Host switching context back to world "${originalWorldName}"`);
                                 worldName = originalWorldName;
                                 worldSeed = originalWorldSeed;
                             }
@@ -996,24 +983,23 @@ function setupDataChannel(e, t) {
                                 sendWorldStateAsync(peer, worldState, s.username);
                             }
                         }
-                        
+
                         // Recalculate spawn chunks for ALL peers in the requested world
                         // This is important: we calculate spawn chunks for all known peers in this world,
                         // not just those currently in it, since spawn points are deterministic
-                        console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${s.world} (world sync request)`);
                         for (const [peerName, otherPeer] of peers.entries()) {
                             const peerSpawn = calculateSpawnPoint(peerName + "@" + s.world);
                             const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                             const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
-                            
-                            spawnChunks.set(peerName, {
+
+                            spawnChunks.set(peerName + "@" + s.world, {
                                 cx: peerSpawnCx,
                                 cz: peerSpawnCz,
                                 username: peerName,
                                 world: s.world,
                                 spawn: peerSpawn
                             });
-                            
+
                             const peerChunkKey = makeChunkKey(s.world, peerSpawnCx, peerSpawnCz);
                             updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
                         }
@@ -1021,15 +1007,15 @@ function setupDataChannel(e, t) {
                         const hostSpawn = calculateSpawnPoint(userName + "@" + s.world);
                         const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                         const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
-                        
-                        spawnChunks.set(userName, {
+
+                        spawnChunks.set(userName + "@" + s.world, {
                             cx: hostSpawnCx,
                             cz: hostSpawnCz,
                             username: userName,
                             world: s.world,
                             spawn: hostSpawn
                         });
-                        
+
                         const hostChunkKey = makeChunkKey(s.world, hostSpawnCx, hostSpawnCz);
                         updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
                     }
@@ -1052,41 +1038,39 @@ function setupDataChannel(e, t) {
                             if (userPositions[s.username]) {
                                 userPositions[s.username].world = clientWorld;
                             }
-                            
+
                             // Calculate and store player's spawn point for the new world
                             const playerSpawn = calculateSpawnPoint(s.username + "@" + clientWorld);
                             const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                             const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
-                            
-                            spawnChunks.set(s.username, {
+
+                            spawnChunks.set(s.username + "@" + clientWorld, {
                                 cx: spawnCx,
                                 cz: spawnCz,
                                 username: s.username,
                                 world: clientWorld,
                                 spawn: playerSpawn
                             });
-                            
+
                             // Assign home spawn ownership for new world
                             const playerHomeChunkKey = makeChunkKey(clientWorld, spawnCx, spawnCz);
                             updateChunkOwnership(playerHomeChunkKey, s.username, Date.now(), 'home');
-                            console.log(`[Ownership] Host calculated spawn for ${s.username} switching to world ${clientWorld}: chunk ${playerHomeChunkKey}`);
-                            
+
                             // Recalculate spawn chunks for ALL peers in this world
                             // Calculate for all known peers, not just those currently in the world
-                            console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${clientWorld}`);
                             for (const [peerName, otherPeer] of peers.entries()) {
                                 const peerSpawn = calculateSpawnPoint(peerName + "@" + clientWorld);
                                 const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                                 const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
-                                
-                                spawnChunks.set(peerName, {
+
+                                spawnChunks.set(peerName + "@" + clientWorld, {
                                     cx: peerSpawnCx,
                                     cz: peerSpawnCz,
                                     username: peerName,
                                     world: clientWorld,
                                     spawn: peerSpawn
                                 });
-                                
+
                                 const peerChunkKey = makeChunkKey(clientWorld, peerSpawnCx, peerSpawnCz);
                                 updateChunkOwnership(peerChunkKey, peerName, Date.now(), 'home');
                             }
@@ -1094,15 +1078,15 @@ function setupDataChannel(e, t) {
                             const hostSpawn = calculateSpawnPoint(userName + "@" + clientWorld);
                             const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                             const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
-                            
-                            spawnChunks.set(userName, {
+
+                            spawnChunks.set(userName + "@" + clientWorld, {
                                 cx: hostSpawnCx,
                                 cz: hostSpawnCz,
                                 username: userName,
                                 world: clientWorld,
                                 spawn: hostSpawn
                             });
-                            
+
                             const hostChunkKey = makeChunkKey(clientWorld, hostSpawnCx, hostSpawnCz);
                             updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
                         }
@@ -1110,61 +1094,56 @@ function setupDataChannel(e, t) {
                     break;
                 case 'request_block_place':
                     if (isHost) {
-                        console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
-                        
+
                         // Validate ownership
                         const placeChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkKey = makeChunkKey(s.world, placeChunkX, placeChunkZ);
-                        
+
                         if (isChunkMutationAllowed(placeChunkKey, s.username)) {
                             // Allowed: place block and broadcast
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed);
-                            
+
                             if (s.originSeed && s.originSeed !== worldSeed) {
                                 const blockKey = `${s.x},${s.y},${s.z}`;
                                 getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
                             }
-                            
+
                             // Renew or establish ownership on edit
                             const normalized = placeChunkKey.replace(/^#/, "");
                             const ownership = OWNED_CHUNKS.get(normalized);
                             const now = Date.now();
-                            
+
                             if (!ownership || ownership.type === 'ipfs') {
                                 // Check if this is not a home spawn chunk
                                 const parsed = parseChunkKey(normalized);
                                 let isHomeSpawn = false;
                                 if (parsed && spawnChunks.size > 0) {
-                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                    for (const [spawnKey, spawnData] of spawnChunks) {
                                         if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                                             isHomeSpawn = true;
                                             break;
                                         }
                                     }
                                 }
-                                
+
                                 if (!isHomeSpawn) {
                                     if (!ownership) {
                                         // No ownership exists - establish new ownership for 1 year
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.username === s.username) {
                                         // Owner is editing - renew for 1 year from now
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.expiryDate && now > ownership.expiryDate) {
                                         // Previous ownership expired - establish new ownership
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.pending) {
                                         // Pending ownership - anyone can claim by editing
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
                                     }
                                 }
                             }
-                            
+
                             // Broadcast to all clients
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
@@ -1181,23 +1160,22 @@ function setupDataChannel(e, t) {
                                     peer.dc.send(placeMsg);
                                 }
                             }
-                            console.log(`[Ownership] Block place allowed for ${s.username} at chunk ${placeChunkKey}`);
                         } else {
                             // Denied: send denial message
                             let reason = 'Unknown';
                             const ownership = OWNED_CHUNKS.get(placeChunkKey);
-                            
+
                             // Check if it's a spawn chunk
                             const parsed = parseChunkKey(placeChunkKey);
                             if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                for (const [spawnKey, spawnData] of spawnChunks) {
                                     if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
                                         break;
                                     }
                                 }
                             }
-                            
+
                             // If not spawn chunk, check OWNED_CHUNKS
                             if (reason === 'Unknown' && ownership) {
                                 if (ownership.pending) {
@@ -1208,7 +1186,7 @@ function setupDataChannel(e, t) {
                                     reason = `Chunk owned by ${ownership.username}`;
                                 }
                             }
-                            
+
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
                                 peer.dc.send(JSON.stringify({
@@ -1220,68 +1198,62 @@ function setupDataChannel(e, t) {
                                     chunkKey: placeChunkKey
                                 }));
                             }
-                            console.log(`[Ownership] Block place denied for ${s.username} at chunk ${placeChunkKey}: ${reason}`);
                         }
                     }
                     break;
                 case 'request_block_break':
                     if (isHost) {
-                        console.log(`[WebRTC] Host received block break request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
-                        
+
                         // Validate ownership
                         const breakChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkKey = makeChunkKey(s.world, breakChunkX, breakChunkZ);
-                        
+
                         if (isChunkMutationAllowed(breakChunkKey, s.username)) {
                             // Allowed: break block and broadcast
                             const blockKey = `${s.x},${s.y},${s.z}`;
                             const worldState = getCurrentWorldState();
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
                             const blockId = getBlockAt(s.x, s.y, s.z);
-                            
+
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
                             if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
-                            
+
                             // Renew or establish ownership on edit
                             const normalized = breakChunkKey.replace(/^#/, "");
                             const ownership = OWNED_CHUNKS.get(normalized);
                             const now = Date.now();
-                            
+
                             if (!ownership || ownership.type === 'ipfs') {
                                 // Check if this is not a home spawn chunk
                                 const parsed = parseChunkKey(normalized);
                                 let isHomeSpawn = false;
                                 if (parsed && spawnChunks.size > 0) {
-                                    for (const [spawnUser, spawnData] of spawnChunks) {
+                                    for (const [spawnKey, spawnData] of spawnChunks) {
                                         if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                                             isHomeSpawn = true;
                                             break;
                                         }
                                     }
                                 }
-                                
+
                                 if (!isHomeSpawn) {
                                     if (!ownership) {
                                         // No ownership exists - establish new ownership for 1 year
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.username === s.username) {
                                         // Owner is editing - renew for 1 year from now
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.expiryDate && now > ownership.expiryDate) {
                                         // Previous ownership expired - establish new ownership
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.pending) {
                                         // Pending ownership - anyone can claim by editing
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
                                     }
                                 }
                             }
-                            
+
                             // Send inventory update to the breaker
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1292,7 +1264,7 @@ function setupDataChannel(e, t) {
                                     originSeed: originSeed
                                 }));
                             }
-                            
+
                             // Broadcast to all clients
                             const breakMsg = JSON.stringify({
                                 type: 'block_break',
@@ -1308,23 +1280,22 @@ function setupDataChannel(e, t) {
                                     peer.dc.send(breakMsg);
                                 }
                             }
-                            console.log(`[Ownership] Block break allowed for ${s.username} at chunk ${breakChunkKey}`);
                         } else {
                             // Denied: send denial message
                             let reason = 'Unknown';
                             const ownership = OWNED_CHUNKS.get(breakChunkKey);
-                            
+
                             // Check if it's a spawn chunk
                             const parsed = parseChunkKey(breakChunkKey);
                             if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnUser, spawnData] of spawnChunks) {
+                                for (const [spawnKey, spawnData] of spawnChunks) {
                                     if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnUser} (home spawn)`;
+                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
                                         break;
                                     }
                                 }
                             }
-                            
+
                             // If not spawn chunk, check OWNED_CHUNKS
                             if (reason === 'Unknown' && ownership) {
                                 if (ownership.pending) {
@@ -1335,7 +1306,7 @@ function setupDataChannel(e, t) {
                                     reason = `Chunk owned by ${ownership.username}`;
                                 }
                             }
-                            
+
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
                                 peer.dc.send(JSON.stringify({
@@ -1347,76 +1318,6 @@ function setupDataChannel(e, t) {
                                     chunkKey: breakChunkKey
                                 }));
                             }
-                            console.log(`[Ownership] Block break denied for ${s.username} at chunk ${breakChunkKey}: ${reason}`);
-                        }
-                    }
-                    break;
-                case 'block_place':
-                    if (!isHost) {
-                        // Client receives authoritative block place from host
-                        console.log(`[WebRTC] Client received block place from host: (${s.x}, ${s.y}, ${s.z}) blockId: ${s.blockId}`);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, false, s.originSeed);
-                        
-                        if (s.originSeed && s.originSeed !== worldSeed) {
-                            const blockKey = `${s.x},${s.y},${s.z}`;
-                            getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
-                        }
-                        
-                        // Update inventory if this was our request
-                        if (s.username === userName) {
-                            const item = INVENTORY[selectedHotIndex];
-                            if (item && item.id === s.blockId) {
-                                item.count -= 1;
-                                if (item.count <= 0) {
-                                    INVENTORY[selectedHotIndex] = null;
-                                }
-                                updateHotbarUI();
-                                addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
-                            }
-                            // Play audio only for the initiating client
-                            safePlayAudio(soundPlace);
-                        }
-                        
-                        // Handle light blocks
-                        if (BLOCKS[s.blockId] && BLOCKS[s.blockId].light) {
-                            const blockKey = `${s.x},${s.y},${s.z}`;
-                            torchRegistry.set(blockKey, { x: s.x, y: s.y, z: s.z });
-                            const particles = createFlameParticles(s.x, s.y + 0.5, s.z);
-                            scene.add(particles);
-                            torchParticles.set(blockKey, particles);
-                        }
-                    }
-                    break;
-                case 'block_break':
-                    if (!isHost) {
-                        // Client receives authoritative block break from host
-                        console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
-                        const blockId = getBlockAt(s.x, s.y, s.z);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
-                        
-                        const blockKey = `${s.x},${s.y},${s.z}`;
-                        if (s.originSeed) {
-                            getCurrentWorldState().foreignBlockOrigins.delete(blockKey);
-                        }
-                        
-                        createBlockParticles(s.x, s.y, s.z, blockId);
-                        
-                        // Play audio only for the initiating client
-                        if (s.username === userName) {
-                            safePlayAudio(soundBreak);
-                        }
-                        
-                        // Handle light blocks
-                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
-                            torchRegistry.delete(blockKey);
-                            if (torchParticles.has(blockKey)) {
-                                const particles = torchParticles.get(blockKey);
-                                scene.remove(particles);
-                                particles.geometry.dispose();
-                                particles.material.dispose();
-                                torchParticles.delete(blockKey);
-                            }
-                            lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
                         }
                     }
                     break;
@@ -1424,7 +1325,6 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         // Client receives denial from host
                         addMessage(`Cannot edit: ${s.reason}`, 3000);
-                        console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
                     }
                     break;
             }
@@ -1432,7 +1332,6 @@ function setupDataChannel(e, t) {
             console.error(`[WEBRTC] Failed to process message from ${t}:`, e)
         }
     }, e.onclose = () => {
-        console.log(`[WebRTC] Data channel with ${t} closed.`), cleanupPeer(t)
     }, e.onerror = e => {
         console.error(`[WebRTC] Data channel error with ${t}:`, e), cleanupPeer(t)
     }
@@ -1462,7 +1361,6 @@ function activateHost() {
                 o = [];
             for (const [e, a] of peers.entries()) a.lastSeen && t - a.lastSeen > 3e4 && o.push(e);
             for (const t of o) {
-                console.log(`[WebRTC] Peer ${t} timed out.`), cleanupPeer(t);
                 const o = JSON.stringify({
                     type: "remove_peer",
                     username: t
@@ -1502,14 +1400,14 @@ async function acceptPendingOffers() {
                         e.srcObject = t.streams[0], e.autoplay = !0, userAudioStreams.set(o, {
                             audio: e,
                             stream: t.streams[0]
-                        }), console.log(`[WebRTC] Received audio stream from ${o}`)
+                        })
                     }
                 } else if ("video" === t.track.kind && !userVideoStreams.has(o)) {
                     const e = document.createElement("video");
                     e.srcObject = t.streams[0], e.autoplay = !0, e.playsInline = !0, e.style.display = "none", document.body.appendChild(e), userVideoStreams.set(o, {
                         video: e,
                         stream: t.streams[0]
-                    }), console.log(`[WebRTC] Received video stream from ${o}`)
+                    })
                 }
             }, peers.set(e, {
                 pc: i,
@@ -1518,7 +1416,6 @@ async function acceptPendingOffers() {
                 isPendingConnection: true, // Mark as pending until data channel opens
                 connectionStartTime: Date.now()
             }), i.ondatachannel = t => {
-                console.log('[WebRTC] Host ondatachannel fired for:', e, 'channel:', t.channel.label);
                 const o = t.channel;
                 const peer = peers.get(e);
                 if (peer) {
@@ -1529,42 +1426,35 @@ async function acceptPendingOffers() {
                 if (pendingConnectionRefreshIntervals.has(e)) {
                     clearInterval(pendingConnectionRefreshIntervals.get(e));
                     pendingConnectionRefreshIntervals.delete(e);
-                    console.log('[WebRTC] Cleared ICE refresh interval for:', e);
                 }
                 setupDataChannel(o, e)
             }, i.oniceconnectionstatechange = () => {
-                console.log('[WebRTC] Host ICE state change for', e, ':', i.iceConnectionState);
                 const peer = peers.get(e);
-                
+
                 // Handle successful connection
                 if (i.iceConnectionState === 'connected' || i.iceConnectionState === 'completed') {
                     if (peer && peer.isPendingConnection) {
-                        console.log('[WebRTC] Host ICE connected for', e, '- connection established!');
                         peer.isPendingConnection = false;
                     }
                     // Clear the ICE refresh interval since connection is established
                     if (pendingConnectionRefreshIntervals.has(e)) {
                         clearInterval(pendingConnectionRefreshIntervals.get(e));
                         pendingConnectionRefreshIntervals.delete(e);
-                        console.log('[WebRTC] Cleared ICE refresh interval for:', e);
                     }
                 }
-                
+
                 // Don't cleanup pending connections on temporary ICE failures
                 // Allow time for IPFS signaling to complete
                 if (i.iceConnectionState === 'disconnected' || i.iceConnectionState === 'failed') {
                     if (peer && peer.isPendingConnection) {
                         const elapsedMs = Date.now() - peer.connectionStartTime;
                         if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
-                            console.log('[WebRTC] Host ICE disconnected for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
                             // Try to restart ICE if it failed and browser supports it
                             if (i.iceConnectionState === 'failed' && typeof i.restartIce === 'function') {
-                                console.log('[WebRTC] Attempting ICE restart for', e);
                                 i.restartIce();
                             }
                             return; // Don't cleanup yet
                         } else {
-                            console.log('[WebRTC] Host ICE failed for', e, 'after timeout - cleaning up');
                             // Clean up the refresh interval
                             if (pendingConnectionRefreshIntervals.has(e)) {
                                 clearInterval(pendingConnectionRefreshIntervals.get(e));
@@ -1574,32 +1464,27 @@ async function acceptPendingOffers() {
                     }
                 }
             }, i.onconnectionstatechange = () => {
-                console.log('[WebRTC] Host connection state change for', e, ':', i.connectionState);
                 const peer = peers.get(e);
-                
+
                 // Handle successful connection
                 if (i.connectionState === 'connected') {
                     if (peer && peer.isPendingConnection) {
-                        console.log('[WebRTC] Host connection established for', e);
                         peer.isPendingConnection = false;
                     }
                 }
-                
+
                 // Don't cleanup pending connections on connection failures
                 // Allow time for IPFS signaling to complete
                 if (i.connectionState === 'disconnected' || i.connectionState === 'failed') {
                     if (peer && peer.isPendingConnection) {
                         const elapsedMs = Date.now() - peer.connectionStartTime;
                         if (elapsedMs < IPFS_SIGNALING_TIMEOUT_MS) {
-                            console.log('[WebRTC] Host connection', i.connectionState, 'for pending connection', e, '- keeping peer alive for IPFS signaling (', Math.round(elapsedMs / 60000), 'min elapsed)');
                             // For failed state, try to restart the connection
                             if (i.connectionState === 'failed' && typeof i.restartIce === 'function') {
-                                console.log('[WebRTC] Attempting ICE restart on connection failure for', e);
                                 i.restartIce();
                             }
                             return; // Don't let the browser cleanup the peer
                         } else {
-                            console.log('[WebRTC] Host connection', i.connectionState, 'for', e, 'after timeout - cleaning up');
                             // Clean up the refresh interval
                             if (pendingConnectionRefreshIntervals.has(e)) {
                                 clearInterval(pendingConnectionRefreshIntervals.get(e));
@@ -1621,7 +1506,7 @@ async function acceptPendingOffers() {
                 answer: s,
                 iceCandidates: n
             }), o.push(e), console.log(`[FIXED] Created answer for ${e} - NO TIMEOUT`);
-            
+
             // Start periodic ICE refresh for pending connections
             // This keeps TURN allocations fresh while waiting for IPFS signaling
             const peerUser = e;
@@ -1632,7 +1517,6 @@ async function acceptPendingOffers() {
                     // Connection established or peer removed, stop refreshing
                     clearInterval(refreshInterval);
                     pendingConnectionRefreshIntervals.delete(peerUser);
-                    console.log('[WebRTC] Stopped ICE refresh - connection established or removed:', peerUser);
                     return;
                 }
                 const elapsedMs = Date.now() - peer.connectionStartTime;
@@ -1640,17 +1524,14 @@ async function acceptPendingOffers() {
                     // Timeout reached, stop refreshing
                     clearInterval(refreshInterval);
                     pendingConnectionRefreshIntervals.delete(peerUser);
-                    console.log('[WebRTC] Stopped ICE refresh - timeout reached:', peerUser);
                     return;
                 }
                 // Restart ICE to get fresh TURN allocations
                 if (typeof peerConnection.restartIce === 'function') {
-                    console.log('[WebRTC] Periodic ICE refresh for pending connection:', peerUser, '(', Math.round(elapsedMs / 60000), 'min elapsed)');
                     peerConnection.restartIce();
                 }
             }, ICE_REFRESH_INTERVAL_MS);
             pendingConnectionRefreshIntervals.set(e, refreshInterval);
-            console.log('[WebRTC] Started periodic ICE refresh for:', e, '(every', ICE_REFRESH_INTERVAL_MS / 60000, 'min)');
         } catch (t) {
             console.error(`[ERROR] Failed ${e}:`, t), i && i.close();
             // Clean up refresh interval if it was set before the error
@@ -1688,19 +1569,17 @@ async function acceptPendingOffers() {
 }
 
 function setupPendingModal() {
-    console.log("[MODAL] Setting up pendingModal");
     const e = document.getElementById("pendingModal");
-    e && (e.remove(), console.log("[MODAL] Removed existing pendingModal"));
+    e && e.remove();
     const t = document.createElement("div");
-    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] pendingModal added to DOM");
+    t.id = "pendingModal", t.style.position = "fixed", t.style.right = "12px", t.style.bottom = "12px", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "300px", t.style.maxWidth = "400px", t.style.display = pendingOffers.length > 0 ? "block" : "none", t.innerHTML = '\n            <h3>Pending Connections</h3>\n            <div id="pendingList"></div>\n            <div class="actions">\n                <label><input type="checkbox" id="acceptAll"> Accept All</label>\n                <button id="acceptPending">Accept Selected</button>\n                <button id="closePending">Close</button>\n            </div>\n        ', document.body.appendChild(t);
     const o = t.querySelector("#pendingList");
     o.style.maxHeight = "calc(80vh - 100px)", o.style.overflow = "auto", o.innerHTML = "";
     let a = !1;
     const r = new Map;
-    for (const e of pendingOffers) e.clientUser !== userName ? r.has(e.clientUser) || r.set(e.clientUser, e) : console.log("[MODAL] Skipping offer from self:", e.clientUser);
+    for (const e of pendingOffers) e.clientUser !== userName ? r.has(e.clientUser) || r.set(e.clientUser, e) : null;
     const s = Array.from(r.values());
     for (const e of s) {
-        console.log("[MODAL] Rendering pending offer from:", e.clientUser);
         const t = document.createElement("div");
         t.className = "row", t.style.maxHeight = "80px", t.style.display = "flex", t.style.alignItems = "center", t.style.marginBottom = "8px";
         const r = document.createElement("div");
@@ -1717,7 +1596,6 @@ function setupPendingModal() {
         }, t.appendChild(r), t.appendChild(s), t.appendChild(n), t.appendChild(i), o.appendChild(t), a = !0
     }
     if (!a) {
-        console.log("[MODAL] No pending offers to render");
         const e = document.createElement("div");
         e.style.marginTop = "8px", e.innerText = "No pending connection requests", o.appendChild(e)
     }
@@ -1725,13 +1603,13 @@ function setupPendingModal() {
     n && n.addEventListener("change", (e => {
         document.querySelectorAll(".selectOffer").forEach((t => {
             t.checked = e.target.checked
-        })), console.log("[MODAL] Accept All checkbox changed")
+        }))
     }));
     const i = t.querySelector("#acceptPending");
     i && (i.onclick = async () => {
-        console.log("[MODAL] Accept Pending clicked"), await acceptPendingOffers()
+        await acceptPendingOffers()
     }), t.querySelector("#closePending").onclick = () => {
-        console.log("[MODAL] Closing pendingModal"), t.style.display = "none", isPromptOpen = !1
+        t.style.display = "none", isPromptOpen = !1
     }
 }
 
@@ -1938,27 +1816,24 @@ function openUsersModal() {
                 teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
                 teleportBtn.onclick = () => {
+                    // Calculate exact spawn using the specific user@world combination
+                    const spawnKey = uName + "@" + wName;
+                    const spawn = calculateSpawnPoint(spawnKey);
+
                     // Ensure we are in the correct world first
                     if (worldName !== wName) {
                         if(confirm(`Switch to ${wName} to teleport?`)) {
                              switchWorld(wName);
-                             // After switch, teleport logic needs to wait or be handled.
-                             // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
-                             // For now, we just switch. The user asked to "teleport to the spawns right from the report".
-                             // But respawnPlayer relies on chunk generation of current world.
-                             // We can calculate spawn coordinate.
-                             const spawn = calculateSpawnPoint(wName + "@" + uName);
                              // Setting player position immediately after switch might be unsafe if chunks aren't ready.
-                             // But switchWorld resets player to their own spawn.
-                             // Let's try setting a target.
+                             // Use global initialTeleportLocation to handle this gracefully on world load/switch if supported,
+                             // or just delay slightly.
                              setTimeout(() => {
                                  respawnPlayer(spawn.x, spawn.y, spawn.z);
-                             }, 1000); // Slight delay to allow switchWorld to settle
+                             }, 1000);
                              t.remove();
                              isPromptOpen = false;
                         }
                     } else {
-                        const spawn = calculateSpawnPoint(wName + "@" + uName);
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
                         isPromptOpen = false;
