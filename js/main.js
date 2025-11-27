@@ -2584,16 +2584,17 @@ function updateLoginUI() {
 async function populateSpawnChunks() {
     for (var e of spawnChunks) {
         var t = e[0],
+            user = e[1].username;
             o = e[1],
-            a = calculateSpawnPoint(t + "@" + o.world);
+            a = calculateSpawnPoint(user + "@" + o.world);
         const chunkX = Math.floor(a.x / CHUNK_SIZE);
         const chunkZ = Math.floor(a.z / CHUNK_SIZE);
         const chunkKey = makeChunkKey(o.world, chunkX, chunkZ);
         
         // Check for home spawn collision
         const existing = OWNED_CHUNKS.get(chunkKey);
-        if (existing && existing.type === 'home' && existing.username !== t) {
-            console.log(`[Ownership] Home spawn collision detected for ${t} at chunk ${chunkKey} (owned by ${existing.username})`);
+        if (existing && existing.type === 'home' && existing.username !== user) {
+            console.log(`[Ownership] Home spawn collision detected for ${user} at chunk ${chunkKey} (owned by ${existing.username})`);
             // Spiral search for free chunk
             let spiralRadius = 1;
             let foundFree = false;
@@ -2611,9 +2612,9 @@ async function populateSpawnChunks() {
                                 const newZ = testCz * CHUNK_SIZE + CHUNK_SIZE / 2;
                                 const newY = chunkManager.getSurfaceY(newX, newZ) + 2;
                                 a = { x: newX, y: newY, z: newZ };
-                                updateChunkOwnership(testKey, t, Date.now(), 'home');
+                                updateChunkOwnership(testKey, user, Date.now(), 'home');
                                 foundFree = true;
-                                console.log(`[Ownership] Reassigned ${t} home spawn to chunk ${testKey}`);
+                                console.log(`[Ownership] Reassigned ${user} home spawn to chunk ${testKey}`);
                             }
                         }
                     }
@@ -2621,11 +2622,11 @@ async function populateSpawnChunks() {
                 spiralRadius++;
             }
             if (!foundFree) {
-                addMessage(`Warning: Could not find free home spawn for ${t}`, 5000);
+                addMessage(`Warning: Could not find free home spawn for ${user}`, 5000);
             }
         } else {
             // No collision, assign ownership
-            updateChunkOwnership(chunkKey, t, Date.now(), 'home');
+            updateChunkOwnership(chunkKey, user, Date.now(), 'home');
         }
         
         spawnChunks.set(t, {
@@ -2719,7 +2720,7 @@ async function startGame() {
     console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName}`);
     
     // Update local spawnChunks map
-    spawnChunks.set(userName, {
+    spawnChunks.set(userName + "@" + worldName, {
         cx: i,
         cz: l,
         username: userName,
@@ -2961,7 +2962,7 @@ function switchWorld(newWorldName) {
     console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName} after world switch`);
     
     // Update spawnChunks map with new world data
-    spawnChunks.set(userName, {
+    spawnChunks.set(userName + "@" + worldName, {
         cx: o,
         cz: a,
         username: userName,
@@ -3666,7 +3667,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             var cx = Math.floor(spawn.x / CHUNK_SIZE);
                             var cz = Math.floor(spawn.z / CHUNK_SIZE);
 
-                            spawnChunks.set(n, {
+                            spawnChunks.set(n + "@" + worldNameFromKey, {
                                 cx: cx,
                                 cz: cz,
                                 username: n,

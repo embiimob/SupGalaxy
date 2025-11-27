@@ -348,7 +348,7 @@ function setupDataChannel(e, t) {
                     const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                     const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                     
-                    spawnChunks.set(peerName, {
+                    spawnChunks.set(peerName + "@" + worldName, {
                         cx: spawnCx,
                         cz: spawnCz,
                         username: peerName,
@@ -364,7 +364,7 @@ function setupDataChannel(e, t) {
                 const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                 const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                 
-                spawnChunks.set(userName, {
+                spawnChunks.set(userName + "@" + worldName, {
                     cx: hostSpawnCx,
                     cz: hostSpawnCz,
                     username: userName,
@@ -432,11 +432,11 @@ function setupDataChannel(e, t) {
                         const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                         const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                         
-                        spawnChunks.set(i, {
-                            cx: spawnCx,
-                            cz: spawnCz,
-                            username: i,
-                            world: worldName,
+                        spawnChunks.set(i + "@" + worldName, {
+                        cx: spawnCx,
+                        cz: spawnCz,
+                        username: i,
+                        world: worldName,
                             spawn: playerSpawn
                         });
                         
@@ -1006,7 +1006,7 @@ function setupDataChannel(e, t) {
                             const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                             const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(peerName, {
+                            spawnChunks.set(peerName + "@" + s.world, {
                                 cx: peerSpawnCx,
                                 cz: peerSpawnCz,
                                 username: peerName,
@@ -1022,11 +1022,11 @@ function setupDataChannel(e, t) {
                         const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                         const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                         
-                        spawnChunks.set(userName, {
-                            cx: hostSpawnCx,
-                            cz: hostSpawnCz,
-                            username: userName,
-                            world: s.world,
+                        spawnChunks.set(userName + "@" + s.world, {
+                        cx: hostSpawnCx,
+                        cz: hostSpawnCz,
+                        username: userName,
+                        world: s.world,
                             spawn: hostSpawn
                         });
                         
@@ -1058,7 +1058,7 @@ function setupDataChannel(e, t) {
                             const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                             const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(s.username, {
+                            spawnChunks.set(s.username + "@" + clientWorld, {
                                 cx: spawnCx,
                                 cz: spawnCz,
                                 username: s.username,
@@ -1079,7 +1079,7 @@ function setupDataChannel(e, t) {
                                 const peerSpawnCx = Math.floor(peerSpawn.x / CHUNK_SIZE);
                                 const peerSpawnCz = Math.floor(peerSpawn.z / CHUNK_SIZE);
                                 
-                                spawnChunks.set(peerName, {
+                                spawnChunks.set(peerName + "@" + clientWorld, {
                                     cx: peerSpawnCx,
                                     cz: peerSpawnCz,
                                     username: peerName,
@@ -1095,11 +1095,11 @@ function setupDataChannel(e, t) {
                             const hostSpawnCx = Math.floor(hostSpawn.x / CHUNK_SIZE);
                             const hostSpawnCz = Math.floor(hostSpawn.z / CHUNK_SIZE);
                             
-                            spawnChunks.set(userName, {
-                                cx: hostSpawnCx,
-                                cz: hostSpawnCz,
-                                username: userName,
-                                world: clientWorld,
+                            spawnChunks.set(userName + "@" + clientWorld, {
+                            cx: hostSpawnCx,
+                            cz: hostSpawnCz,
+                            username: userName,
+                            world: clientWorld,
                                 spawn: hostSpawn
                             });
                             
@@ -1947,7 +1947,7 @@ function openUsersModal() {
                              // For now, we just switch. The user asked to "teleport to the spawns right from the report".
                              // But respawnPlayer relies on chunk generation of current world.
                              // We can calculate spawn coordinate.
-                             const spawn = calculateSpawnPoint(wName + "@" + uName);
+                             const spawn = calculateSpawnPoint(uName + "@" + wName);
                              // Setting player position immediately after switch might be unsafe if chunks aren't ready.
                              // But switchWorld resets player to their own spawn.
                              // Let's try setting a target.
@@ -1958,7 +1958,7 @@ function openUsersModal() {
                              isPromptOpen = false;
                         }
                     } else {
-                        const spawn = calculateSpawnPoint(wName + "@" + uName);
+                        const spawn = calculateSpawnPoint(uName + "@" + wName);
                         respawnPlayer(spawn.x, spawn.y, spawn.z);
                         t.remove();
                         isPromptOpen = false;
