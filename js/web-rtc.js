@@ -2117,7 +2117,8 @@ function openUsersModal() {
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
-    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = '\n            <h3>Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: Servers may be offline. Connection requires the host to be active.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     var a = !1,
@@ -2135,22 +2136,121 @@ function openUsersModal() {
                 }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
         }
     }
+
+    // Known Worlds Section
     var c = document.createElement("h4");
-    c.innerText = "Known Servers (Last 10)", o.appendChild(c);
-    var l = new Map;
-    for (var d of knownServers) (!l.has(d.hostUser) || l.get(d.hostUser).timestamp < d.timestamp) && l.set(d.hostUser, d);
-    var p = Array.from(l.values()).sort((function (e, t) {
-        return t.timestamp - e.timestamp
-    })).slice(0, 10);
-    for (var d of p) {
-        a = !0, console.log("[MODAL] Rendering server:", d.hostUser), (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px";
-        var m, f = document.createElement("div"),
-            u = connectionAttempts.get(d.hostUser);
-        if (f.innerText = d.hostUser + " at (" + Math.floor(d.spawn.x) + ", " + Math.floor(d.spawn.y) + ", " + Math.floor(d.spawn.z) + ")\nServer started: " + new Date(d.timestamp).toLocaleString() + "\nLast connect attempt: " + (u ? new Date(u).toLocaleString() : "Never") + "\nConnection requests: " + (d.connectionRequestCount || 0) + "\nLatest request: " + (d.latestRequestTime ? new Date(d.latestRequestTime).toLocaleString() : "None"), f.style.whiteSpace = "pre-line", !(peers.has(d.hostUser) || isHost && d.hostUser === userName)) (m = document.createElement("button")).innerText = "Try Connect", m.onclick = async function () {
-            console.log("[WEBRTC] Attempting to connect to server:", d.hostUser), addMessage("Finding a route to " + d.hostUser + "...", 5e3), await connectToServer(d.hostUser, d.offer, d.iceCandidates), t.style.display = "none", isPromptOpen = !1
-        }, h.appendChild(m);
-        h.appendChild(f), o.appendChild(h)
+    c.innerText = "Known Worlds", c.style.marginTop = "20px", o.appendChild(c);
+
+    // Sort known worlds, putting current world first, then by discovery time or user count
+    const sortedWorlds = Array.from(knownWorlds.entries()).sort((a, b) => {
+        if (a[0] === worldName) return -1;
+        if (b[0] === worldName) return 1;
+        return a[0].localeCompare(b[0]); // Alphabetical for now, could be timestamp
+    });
+
+    for (const [wName, wData] of sortedWorlds) {
+        const worldItem = document.createElement("div");
+        worldItem.style.border = "1px solid rgba(255,255,255,0.1)";
+        worldItem.style.borderRadius = "8px";
+        worldItem.style.padding = "10px";
+        worldItem.style.marginBottom = "10px";
+        worldItem.style.background = wName === worldName ? "rgba(255,255,255,0.05)" : "transparent";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.justifyContent = "space-between";
+        header.style.alignItems = "center";
+        header.innerHTML = `<strong>${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+
+        // Switch World Button (if not current)
+        if (wName !== worldName) {
+            const switchBtn = document.createElement("button");
+            switchBtn.innerText = "Switch to World";
+            switchBtn.style.fontSize = "0.8em";
+            switchBtn.style.padding = "4px 8px";
+            switchBtn.onclick = () => {
+                switchWorld(wName);
+                t.remove();
+                isPromptOpen = false;
+            };
+            header.appendChild(switchBtn);
+        }
+        worldItem.appendChild(header);
+
+        // Users List in World
+        if (wData.users && wData.users.size > 0) {
+            const usersContainer = document.createElement("div");
+            usersContainer.style.marginTop = "8px";
+            usersContainer.style.fontSize = "0.9em";
+
+            wData.users.forEach((userData, uName) => {
+                const userRow = document.createElement("div");
+                userRow.style.display = "flex";
+                userRow.style.justifyContent = "space-between";
+                userRow.style.alignItems = "center";
+                userRow.style.padding = "4px 0";
+                userRow.style.borderTop = "1px solid rgba(255,255,255,0.05)";
+
+                // Determine correct timestamp display
+                let timeDisplay = "Unknown time";
+                if (userData && userData.timestamp) {
+                    timeDisplay = new Date(userData.timestamp).toLocaleString();
+                } else if (wData.discoverer === uName) {
+                     // Fallback for discoverer if stored differently in legacy
+                     timeDisplay = "Discoverer";
+                }
+
+                userRow.innerHTML = `<span>${uName}</span> <span style="font-size:0.8em; opacity:0.6;">${timeDisplay}</span>`;
+
+                // Teleport Button
+                const teleportBtn = document.createElement("button");
+                teleportBtn.innerText = "Spawn";
+                teleportBtn.style.fontSize = "0.7em";
+                teleportBtn.style.marginLeft = "10px";
+                teleportBtn.onclick = () => {
+                    // Ensure we are in the correct world first
+                    if (worldName !== wName) {
+                        if(confirm(`Switch to ${wName} to teleport?`)) {
+                             switchWorld(wName);
+                             // After switch, teleport logic needs to wait or be handled.
+                             // Simple approach: just switch. User can teleport manually or we rely on persistent state if implemented.
+                             // For now, we just switch. The user asked to "teleport to the spawns right from the report".
+                             // But respawnPlayer relies on chunk generation of current world.
+                             // We can calculate spawn coordinate.
+                             const spawn = calculateSpawnPoint(wName + "@" + uName);
+                             // Setting player position immediately after switch might be unsafe if chunks aren't ready.
+                             // But switchWorld resets player to their own spawn.
+                             // Let's try setting a target.
+                             setTimeout(() => {
+                                 respawnPlayer(spawn.x, null, spawn.z);
+                             }, 1000); // Slight delay to allow switchWorld to settle
+                             t.remove();
+                             isPromptOpen = false;
+                        }
+                    } else {
+                        const spawn = calculateSpawnPoint(wName + "@" + uName);
+                        respawnPlayer(spawn.x, null, spawn.z);
+                        t.remove();
+                        isPromptOpen = false;
+                    }
+                };
+
+                userRow.appendChild(teleportBtn);
+                usersContainer.appendChild(userRow);
+            });
+            worldItem.appendChild(usersContainer);
+        } else {
+            const noUsers = document.createElement("div");
+            noUsers.innerText = "No known users.";
+            noUsers.style.fontSize = "0.8em";
+            noUsers.style.opacity = "0.6";
+            worldItem.appendChild(noUsers);
+        }
+
+        o.appendChild(worldItem);
+        a = true;
     }
+
     if (isHost) {
         var g = document.createElement("h4");
         for (var y of (g.innerText = "Pending Connections", o.appendChild(g), pendingOffers)) {

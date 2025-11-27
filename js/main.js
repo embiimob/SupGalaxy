@@ -3268,31 +3268,18 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var t = document.getElementById("announceLoginBtn"),
-            o = document.getElementById("newUserJoinScriptBtn"),
+        var o = document.getElementById("newUserJoinScriptBtn"),
             a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
-        if (!(e && t && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), t.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Announce Server button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = (t.slice(0, 20), "MCServerJoin@" + o),
-                    n = await GetPublicAddressByKeyword(a);
-                document.getElementById("joinScriptText").value = n ? n.trim().replace(/^"|"$/g, "") : a, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Announce Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach a server JSON file after starting, and click 📢 to announce your server.", addMessage("Prepare to announce server after starting", 3e3)
-            } else addMessage("Please enter a world and username", 3e3)
-        })), o.addEventListener("click", (async function () {
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
             this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
             var e = document.getElementById("worldNameInput").value,
                 t = document.getElementById("userInput").value;
@@ -3301,7 +3288,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             else if (e && t) {
                 var o = e.slice(0, 8),
                     a = t.slice(0, 20),
-                    n = a + "@" + o,
+                    n = o + "@" + a,
                     r = knownWorlds.get(o);
                 if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
                 else {
@@ -3393,21 +3380,54 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             continue
                         }
                         var i = s.replace(/^"|"$/g, "");
-                        if (!i.includes("MCUserJoin@")) {
-                            console.log("[USERS] Skipping message: Invalid keyword:", i);
-                            continue
+                        var parts = i.split("@");
+                        if (parts.length < 2) {
+                            console.log("[USERS] Skipping message: Invalid keyword format (not world@user):", i);
+                            continue;
                         }
-                        var l = i.split("@")[1].replace(/[^a-zA-Z0-9]/g, "");
-                        n && l && (console.log("[USERS] Adding user:", n, "to world:", l), knownWorlds.has(l) ? knownWorlds.get(l).users.add(n) : knownWorlds.set(l, {
-                            discoverer: n,
-                            users: new Set([n]),
-                            toAddress: o.ToAddress
-                        }), knownUsers.has(n) || knownUsers.set(n, o.FromAddress), spawnChunks.set(n, {
-                            cx: null,
-                            cz: null,
-                            username: n,
-                            world: l
-                        }), processedMessages.add(o.TransactionId))
+
+                        var worldNameFromKey = parts[0].replace(/[^a-zA-Z0-9]/g, "");
+                        var userFromKey = parts[1].replace(/[^a-zA-Z0-9]/g, "");
+
+                        // Verify user match
+                        // URN 'n' is the full profile name
+                        // userFromKey is potentially truncated
+                        if (!n.startsWith(userFromKey)) {
+                            console.log("[USERS] Skipping message: User mismatch. Key:", userFromKey, "Profile:", n);
+                            continue;
+                        }
+
+                        if (n && worldNameFromKey) {
+                            console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
+                            if (!knownWorlds.has(worldNameFromKey)) {
+                                knownWorlds.set(worldNameFromKey, {
+                                    discoverer: n,
+                                    users: new Map(), // Store user details (timestamp, etc.)
+                                    toAddress: o.ToAddress
+                                });
+                            }
+
+                            var worldData = knownWorlds.get(worldNameFromKey);
+                            // Store user with timestamp
+                            worldData.users.set(n, {
+                                timestamp: Date.parse(o.BlockDate) || Date.now(),
+                                address: o.FromAddress
+                            });
+
+                            knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
+
+                            // Calculate spawn if not already set (implicit)
+                            // But spawnChunks is usually for active players or loaded logic
+                            // Keeping minimal logic here
+                            spawnChunks.set(n, {
+                                cx: null,
+                                cz: null,
+                                username: n,
+                                world: worldNameFromKey
+                            });
+
+                            processedMessages.add(o.TransactionId);
+                        }
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
                 console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }
