@@ -2117,281 +2117,76 @@ function openUsersModal() {
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
-    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "400px", t.style.maxWidth = "500px", t.style.maxHeight = "80vh", t.style.overflowY = "auto", t.style.display = "block", t.innerHTML = '\n            <h3>🌐 World & Player Report</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter world@user (e.g. KANYE@player)" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = '\n            <h3>Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
-    var hasContent = !1;
-    var connectedHeader = document.createElement("h4");
-    connectedHeader.innerText = "👥 Connected Players";
-    connectedHeader.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-    connectedHeader.style.paddingBottom = "6px";
-    o.appendChild(connectedHeader);
-    for (var s of peers) {
-        var peerName = s[0];
-        if (peerName !== userName) {
-            hasContent = !0;
-            var spawn = calculateSpawnPoint(peerName + "@" + worldName);
-            var cx = Math.floor(spawn.x / CHUNK_SIZE);
-            var cz = Math.floor(spawn.z / CHUNK_SIZE);
-            var row = document.createElement("div");
-            row.style.display = "flex", row.style.gap = "8px", row.style.alignItems = "center", row.style.marginTop = "8px", row.style.padding = "6px", row.style.background = "#0d1620", row.style.borderRadius = "6px";
-            var info = document.createElement("div");
-            info.style.flex = "1";
-            info.innerHTML = "<strong>" + worldName + "@" + peerName + "</strong> ✓<br><span style='font-size:11px;opacity:0.7;'>Spawn: (" + Math.floor(spawn.x) + ", " + Math.floor(spawn.y) + ", " + Math.floor(spawn.z) + ") | Chunk: " + cx + "," + cz + "</span>";
-            var btn = document.createElement("button");
-            btn.innerText = "Visit";
-            btn.style.padding = "4px 10px";
-            (function(spawnPos) { btn.onclick = function() { respawnPlayer(spawnPos.x, 100, spawnPos.z); t.style.display = "none"; isPromptOpen = !1; }; })(spawn);
-            row.appendChild(info);
-            row.appendChild(btn);
-            o.appendChild(row);
-        }
-    }
-    var worldsHeader = document.createElement("h4");
-    worldsHeader.innerText = "🌍 Known Worlds";
-    worldsHeader.style.marginTop = "16px";
-    worldsHeader.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-    worldsHeader.style.paddingBottom = "6px";
-    o.appendChild(worldsHeader);
-    if (knownWorlds.size > 0) {
-        for (var [world, worldData] of knownWorlds) {
-            hasContent = !0;
-            var worldDiv = document.createElement("div");
-            worldDiv.style.background = "#0d1620";
-            worldDiv.style.padding = "8px";
-            worldDiv.style.borderRadius = "6px";
-            worldDiv.style.marginTop = "8px";
-            var userCount = worldData.users ? worldData.users.size : 0;
-            var connCount = worldData.connections ? worldData.connections.length : 0;
-            var lastActivity = worldData.lastActivity ? new Date(worldData.lastActivity).toLocaleDateString() : "Unknown";
-            var worldHeader = document.createElement("div");
-            worldHeader.innerHTML = "<strong>🌍 " + world + "</strong><span style='font-size:11px;opacity:0.7;margin-left:8px;'>" + userCount + " users | " + connCount + " connections | Last: " + lastActivity + "</span>";
-            worldDiv.appendChild(worldHeader);
-            if (worldData.users && worldData.users.size > 0) {
-                var usersContainer = document.createElement("div");
-                usersContainer.style.marginTop = "6px";
-                usersContainer.style.paddingLeft = "12px";
-                usersContainer.style.borderLeft = "2px solid rgba(255,255,255,0.1)";
-                for (var user of worldData.users) {
-                    var userData = knownUsers.get(user);
-                    var isValid = userData && typeof userData === 'object' && userData.isValid;
-                    var lastSeen = userData && typeof userData === 'object' && userData.lastSeen ? new Date(userData.lastSeen).toLocaleDateString() : "";
-                    var userRow = document.createElement("div");
-                    userRow.style.display = "flex";
-                    userRow.style.alignItems = "center";
-                    userRow.style.gap = "8px";
-                    userRow.style.marginTop = "4px";
-                    userRow.style.fontSize = "12px";
-                    var userInfo = document.createElement("span");
-                    userInfo.style.flex = "1";
-                    userInfo.innerHTML = world + "@" + user + (isValid ? " <span style='color:#4f4;'>✓</span>" : "") + (lastSeen ? " <span style='opacity:0.6;'>(" + lastSeen + ")</span>" : "");
-                    var connectBtn = document.createElement("button");
-                    connectBtn.style.padding = "2px 8px";
-                    connectBtn.style.fontSize = "11px";
-                    if (peers.has(user)) { connectBtn.innerText = "Connected"; connectBtn.disabled = true; connectBtn.style.opacity = "0.5"; }
-                    else if (user === userName && world === worldName) { connectBtn.innerText = "You"; connectBtn.disabled = true; connectBtn.style.opacity = "0.5"; }
-                    else { connectBtn.innerText = "Connect"; (function(targetUser, targetWorld) { connectBtn.onclick = async function() { console.log("[WEBRTC] Connecting to:", targetWorld + "@" + targetUser); addMessage("Finding route to " + targetUser + "...", 5e3); var spawn = calculateSpawnPoint(targetUser + "@" + targetWorld); knownServers.push({ hostUser: targetUser, spawn: spawn, offer: null, iceCandidates: [], transactionId: "local_" + Date.now(), timestamp: Date.now(), connectionRequestCount: 0, latestRequestTime: null }); await connectToServer(targetUser, null, []); t.style.display = "none"; isPromptOpen = !1; }; })(user, world); }
-                    userRow.appendChild(userInfo);
-                    userRow.appendChild(connectBtn);
-                    usersContainer.appendChild(userRow);
-                }
-                worldDiv.appendChild(usersContainer);
-            }
-            o.appendChild(worldDiv);
-        }
-    } else {
-        var noWorlds = document.createElement("div");
-        noWorlds.style.opacity = "0.6";
-        noWorlds.style.marginTop = "8px";
-        noWorlds.innerText = "No known worlds yet. Join a world to discover others.";
-        o.appendChild(noWorlds);
-    }
-    if (isHost && pendingOffers.length > 0) {
-        var pendingHeader = document.createElement("h4");
-        pendingHeader.innerText = "⏳ Pending Connections";
-        pendingHeader.style.marginTop = "16px";
-        pendingHeader.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-        pendingHeader.style.paddingBottom = "6px";
-        o.appendChild(pendingHeader);
-        for (var pending of pendingOffers) {
-            hasContent = !0;
-            var pendingRow = document.createElement("div");
-            pendingRow.style.background = "#0d1620";
-            pendingRow.style.padding = "6px";
-            pendingRow.style.borderRadius = "6px";
-            pendingRow.style.marginTop = "6px";
-            pendingRow.style.fontSize = "12px";
-            pendingRow.innerHTML = worldName + "@" + pending.clientUser + " <span style='opacity:0.6;'>(" + new Date(pending.timestamp).toLocaleString() + ")</span>";
-            o.appendChild(pendingRow);
-        }
-    }
-    if (!hasContent) {
-        var noContent = document.createElement("div");
-        noContent.style.marginTop = "8px";
-        noContent.style.opacity = "0.6";
-        noContent.innerText = "No players or worlds discovered yet.";
-        o.appendChild(noContent);
-    }
-    t.querySelector("#closeUsers").onclick = function () { console.log("[MODAL] Closing users modal"), t.remove(), isPromptOpen = !1 };
-    t.querySelector("#friendHandle").addEventListener("keydown", (function (e) { e.stopPropagation() }));
-    t.querySelector("#connectFriend").onclick = function () {
-        isConnecting = !0;
-        var input = document.getElementById("friendHandle").value.trim();
-        var targetWorld = worldName;
-        var targetUser = input.replace(/[^a-zA-Z0-9@]/g, "");
-        if (targetUser.includes("@")) { var parts = targetUser.split("@"); if (parts.length === 2) { targetWorld = parts[0].slice(0, 8); targetUser = parts[1].slice(0, 20); } }
-        else { targetUser = targetUser.slice(0, 20); }
-        if (targetUser)
-            if (targetUser !== userName || targetWorld !== worldName) {
-                console.log("[WEBRTC] Connecting to friend:", targetWorld + "@" + targetUser);
-                var spawn = calculateSpawnPoint(targetUser + "@" + targetWorld);
-                knownServers.push({ hostUser: targetUser, spawn: spawn, offer: null, iceCandidates: [], transactionId: "local_" + Date.now(), timestamp: Date.now(), connectionRequestCount: 0, latestRequestTime: null });
-                connectToServer(targetUser, null, []);
-                t.style.display = "none";
-                isPromptOpen = !1;
-            } else addMessage("Cannot connect to yourself", 3e3);
-        else addMessage("Enter world@user (e.g. KANYE@player)", 3e3);
-    };
-}
-                for (var user of worldData.users) {
-                    var userData = knownUsers.get(user);
-                    var isValid = userData && typeof userData === \'object\' && userData.isValid;
-                    var lastSeen = userData && typeof userData === \'object\' && userData.lastSeen ? new Date(userData.lastSeen).toLocaleDateString() : "";
-                    
-                    var userRow = document.createElement("div");
-                    userRow.style.display = "flex";
-                    userRow.style.alignItems = "center";
-                    userRow.style.gap = "8px";
-                    userRow.style.marginTop = "4px";
-                    userRow.style.fontSize = "12px";
-                    
-                    var userInfo = document.createElement("span");
-                    userInfo.style.flex = "1";
-                    userInfo.innerHTML = world + "@" + user + (isValid ? " <span style=\'color:#4f4;\'>✓</span>" : "") + (lastSeen ? " <span style=\'opacity:0.6;\'>(" + lastSeen + ")</span>" : "");
-                    
-                    var connectBtn = document.createElement("button");
-                    connectBtn.style.padding = "2px 8px";
-                    connectBtn.style.fontSize = "11px";
-                    
-                    if (peers.has(user)) {
-                        connectBtn.innerText = "Connected";
-                        connectBtn.disabled = true;
-                        connectBtn.style.opacity = "0.5";
-                    } else if (user === userName && world === worldName) {
-                        connectBtn.innerText = "You";
-                        connectBtn.disabled = true;
-                        connectBtn.style.opacity = "0.5";
-                    } else {
-                        connectBtn.innerText = "Connect";
-                        (function(targetUser, targetWorld) {
-                            connectBtn.onclick = async function() {
-                                console.log("[WEBRTC] Connecting to:", targetWorld + "@" + targetUser);
-                                addMessage("Finding route to " + targetUser + "...", 5e3);
-                                var spawn = calculateSpawnPoint(targetUser + "@" + targetWorld);
-                                knownServers.push({
-                                    hostUser: targetUser,
-                                    spawn: spawn,
-                                    offer: null,
-                                    iceCandidates: [],
-                                    transactionId: "local_" + Date.now(),
-                                    timestamp: Date.now(),
-                                    connectionRequestCount: 0,
-                                    latestRequestTime: null
-                                });
-                                await connectToServer(targetUser, null, []);
-                                t.style.display = "none";
-                                isPromptOpen = !1;
-                            };
-                        })(user, world);
+    var a = !1,
+        r = document.createElement("h4");
+    for (var s of (r.innerText = "Connected Players", o.appendChild(r), peers)) {
+        var n = s[0];
+        if (n !== userName) {
+            a = !0, console.log("[MODAL] Rendering peer:", n);
+            var i = calculateSpawnPoint(n + "@" + worldName);
+            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
+                function (e, o) {
+                    m.onclick = function () {
+                        console.log("[MODAL] Teleporting to spawn of:", e), respawnPlayer(o.x, 100, o.z), t.style.display = "none", isPromptOpen = !1
                     }
-                    
-                    userRow.appendChild(userInfo);
-                    userRow.appendChild(connectBtn);
-                    usersContainer.appendChild(userRow);
-                }
-                worldDiv.appendChild(usersContainer);
-            }
-            o.appendChild(worldDiv);
-        }
-    } else {
-        var noWorlds = document.createElement("div");
-        noWorlds.style.opacity = "0.6";
-        noWorlds.style.marginTop = "8px";
-        noWorlds.innerText = "No known worlds yet. Join a world to discover others.";
-        o.appendChild(noWorlds);
-    }
-    
-    if (isHost && pendingOffers.length > 0) {
-        var pendingHeader = document.createElement("h4");
-        pendingHeader.innerText = "⏳ Pending Connections";
-        pendingHeader.style.marginTop = "16px";
-        pendingHeader.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-        pendingHeader.style.paddingBottom = "6px";
-        o.appendChild(pendingHeader);
-        
-        for (var pending of pendingOffers) {
-            hasContent = !0;
-            var pendingRow = document.createElement("div");
-            pendingRow.style.background = "#0d1620";
-            pendingRow.style.padding = "6px";
-            pendingRow.style.borderRadius = "6px";
-            pendingRow.style.marginTop = "6px";
-            pendingRow.style.fontSize = "12px";
-            pendingRow.innerHTML = worldName + "@" + pending.clientUser + " <span style=\'opacity:0.6;\'>(" + new Date(pending.timestamp).toLocaleString() + ")</span>";
-            o.appendChild(pendingRow);
+                }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
         }
     }
-    
-    if (!hasContent) {
-        var noContent = document.createElement("div");
-        noContent.style.marginTop = "8px";
-        noContent.style.opacity = "0.6";
-        noContent.innerText = "No players or worlds discovered yet.";
-        o.appendChild(noContent);
+    var c = document.createElement("h4");
+    c.innerText = "Known Servers (Last 10)", o.appendChild(c);
+    var l = new Map;
+    for (var d of knownServers) (!l.has(d.hostUser) || l.get(d.hostUser).timestamp < d.timestamp) && l.set(d.hostUser, d);
+    var p = Array.from(l.values()).sort((function (e, t) {
+        return t.timestamp - e.timestamp
+    })).slice(0, 10);
+    for (var d of p) {
+        a = !0, console.log("[MODAL] Rendering server:", d.hostUser), (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px";
+        var m, f = document.createElement("div"),
+            u = connectionAttempts.get(d.hostUser);
+        if (f.innerText = d.hostUser + " at (" + Math.floor(d.spawn.x) + ", " + Math.floor(d.spawn.y) + ", " + Math.floor(d.spawn.z) + ")\nServer started: " + new Date(d.timestamp).toLocaleString() + "\nLast connect attempt: " + (u ? new Date(u).toLocaleString() : "Never") + "\nConnection requests: " + (d.connectionRequestCount || 0) + "\nLatest request: " + (d.latestRequestTime ? new Date(d.latestRequestTime).toLocaleString() : "None"), f.style.whiteSpace = "pre-line", !(peers.has(d.hostUser) || isHost && d.hostUser === userName)) (m = document.createElement("button")).innerText = "Try Connect", m.onclick = async function () {
+            console.log("[WEBRTC] Attempting to connect to server:", d.hostUser), addMessage("Finding a route to " + d.hostUser + "...", 5e3), await connectToServer(d.hostUser, d.offer, d.iceCandidates), t.style.display = "none", isPromptOpen = !1
+        }, h.appendChild(m);
+        h.appendChild(f), o.appendChild(h)
     }
-    
+    if (isHost) {
+        var g = document.createElement("h4");
+        for (var y of (g.innerText = "Pending Connections", o.appendChild(g), pendingOffers)) {
+            var h;
+            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = y.clientUser + " at " + new Date(y.timestamp).toLocaleString() + "\nBio: " + (y.profile && y.profile.Bio ? y.profile.Bio : "No bio"), f.style.whiteSpace = "pre-line", h.appendChild(f), o.appendChild(h), a = !0
+        }
+    }
+    if (!a) {
+        console.log("[MODAL] No servers or peers to render in modal");
+        var w = document.createElement("div");
+        w.style.marginTop = "8px", w.innerText = "No players available", o.appendChild(w)
+    }
     t.querySelector("#closeUsers").onclick = function () {
         console.log("[MODAL] Closing users modal"), t.remove(), isPromptOpen = !1
-    };
-    t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
+    }, t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
         e.stopPropagation()
-    }));
-    t.querySelector("#connectFriend").onclick = function () {
+    })), t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
-        var input = document.getElementById("friendHandle").value.trim();
-        var targetWorld = worldName;
-        var targetUser = input.replace(/[^a-zA-Z0-9@]/g, "");
-        
-        if (targetUser.includes("@")) {
-            var parts = targetUser.split("@");
-            if (parts.length === 2) {
-                targetWorld = parts[0].slice(0, 8);
-                targetUser = parts[1].slice(0, 20);
-            }
-        } else {
-            targetUser = targetUser.slice(0, 20);
-        }
-        
-        if (targetUser)
-            if (targetUser !== userName || targetWorld !== worldName) {
-                console.log("[WEBRTC] Connecting to friend:", targetWorld + "@" + targetUser);
-                var spawn = calculateSpawnPoint(targetUser + "@" + targetWorld);
+        var e = document.getElementById("friendHandle").value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+        if (e)
+            if (e !== userName) {
+                console.log("[WEBRTC] Attempting to connect to friend:", e);
+                var o = calculateSpawnPoint(e + "@" + worldName);
                 knownServers.push({
-                    hostUser: targetUser,
-                    spawn: spawn,
+                    hostUser: e,
+                    spawn: o,
                     offer: null,
                     iceCandidates: [],
                     transactionId: "local_" + Date.now(),
                     timestamp: Date.now(),
                     connectionRequestCount: 0,
                     latestRequestTime: null
-                });
-                connectToServer(targetUser, null, []);
-                t.style.display = "none";
-                isPromptOpen = !1;
+                }), connectToServer(e, null, []), t.style.display = "none", isPromptOpen = !1
             } else addMessage("Cannot connect to yourself", 3e3);
-        else addMessage("Enter world@user (e.g. KANYE@player)", 3e3);
-    };
+        else addMessage("Please enter a friend’s handle", 3e3)
+    }
 }
 
 function cleanupPeer(e) {

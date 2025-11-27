@@ -2367,27 +2367,14 @@ function updateLoginUI() {
 
         function n() {
             var t = e.value.toLowerCase(),
-                worldList = Array.from(knownWorlds.entries()).filter(([key]) => key.toLowerCase().startsWith(t)).slice(0, 10);
-            o.innerHTML = worldList.map(([world, data]) => {
-                var userCount = data.users ? data.users.size : 0;
-                var connectionCount = data.connections ? data.connections.length : 0;
-                var lastActivity = data.lastActivity ? new Date(data.lastActivity).toLocaleDateString() : "";
-                return `<div data-value="${world}" title="${connectionCount} connections, last: ${lastActivity}">${world} <span style="opacity:0.6;font-size:11px;">(${userCount} users)</span></div>`;
-            }).join("");
-            o.style.display = worldList.length > 0 && t ? "block" : "none"
+                a = Array.from(knownWorlds.keys()).filter((e => e.toLowerCase().startsWith(t))).slice(0, 10);
+            o.innerHTML = a.map((e => `<div data-value="${e}">${e}</div>`)).join(""), o.style.display = a.length > 0 && t ? "block" : "none"
         }
 
         function r() {
-            var inputVal = t.value.toLowerCase(),
-                userList = Array.from(knownUsers.entries()).filter(([key]) => key.toLowerCase().startsWith(inputVal)).slice(0, 10);
-            a.innerHTML = userList.map(([user, data]) => {
-                var isValid = typeof data === 'object' && data.isValid;
-                var lastSeen = typeof data === 'object' && data.lastSeen ? new Date(data.lastSeen).toLocaleDateString() : "";
-                var validIndicator = isValid ? "✓" : "";
-                return `<div data-value="${user}" class="${isValid ? '' : 'greyed'}" title="Last seen: ${lastSeen}">${user} ${validIndicator}</div>`;
-            }).join("");
-            a.style.display = userList.length > 0 && inputVal ? "block" : "none";
-            console.log("[LoginUI] User suggestions updated:", userList.length)
+            var e = t.value.toLowerCase(),
+                o = Array.from(knownUsers.keys()).filter((t => t.toLowerCase().startsWith(e))).slice(0, 10);
+            a.innerHTML = o.map((e => `<div data-value="${e}">${e}</div>`)).join(""), a.style.display = o.length > 0 && e ? "block" : "none", console.log("[LoginUI] User suggestions updated:", o.length)
         }
 
         function s() {
@@ -2396,6 +2383,10 @@ function updateLoginUI() {
         e.addEventListener("input", n), t.addEventListener("input", r), setTimeout(s, 1e3), s(), o.addEventListener("click", (function (t) {
             t.target.dataset.value && (e.value = t.target.dataset.value, o.style.display = "none", console.log("[LoginUI] Selected world:", t.target.dataset.value))
         })), a.addEventListener("click", (function (e) {
+            e.target.dataset.value && (t.value = e.target.dataset.value, a.style.display = "none", console.log("[LoginUI] Selected user:", e.target.dataset.value))
+        })), document.addEventListener("click", (function (n) {
+            e.contains(n.target) || o.contains(n.target) || (o.style.display = "none"), t.contains(n.target) || a.contains(n.target) || (a.style.display = "none")
+        })), console.log("[Debug] updateLoginUI completed"), a.addEventListener("click", (function (e) {
             e.target.dataset.value && (t.value = e.target.dataset.value, a.style.display = "none", console.log("[LoginUI] Selected user:", e.target.dataset.value))
         })), document.addEventListener("click", (function (n) {
             e.contains(n.target) || o.contains(n.target) || (o.style.display = "none"), t.contains(n.target) || a.contains(n.target) || (a.style.display = "none")
@@ -3363,117 +3354,47 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("closePending").addEventListener("click", (function () {
             document.getElementById("pendingModal").style.display = "none", pendingOffers = [], updatePendingModal(), this.blur()
         })), async function () {
-            console.log("[USERS] Initializing worlds and users from MCWorlds");
+            console.log("[USERS] Initializing worlds and users");
             var e = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
             if (e) {
                 var t = await GetPublicMessagesByAddress(e);
                 for (var o of t || [])
                     if (o.TransactionId && !processedMessages.has(o.TransactionId)) {
-                        // Parse ToAddress keyword to get world@user format
-                        var keyword = await GetKeywordByPublicAddress(o.ToAddress);
-                        if (!keyword) {
+                        console.log("[USERS] Processing message:", o.TransactionId);
+                        var a = await GetProfileByAddress(o.FromAddress);
+                        if (!a || !a.URN) {
+                            console.log("[USERS] Skipping message: No valid URN for address:", o.FromAddress);
                             continue
                         }
-                        keyword = keyword.replace(/^"|"$/g, "").trim();
-                        
-                        // Only process world@user format keywords (skip legacy MCUserJoin@ etc)
-                        if (!keyword.includes("@") || keyword.startsWith("MC")) {
+                        var n = a.URN.replace(/[^a-zA-Z0-9]/g, ""),
+                            r = await GetProfileByURN(n);
+                        if (!r || !r.Creators || !r.Creators.includes(o.FromAddress)) {
+                            console.log("[USERS] Skipping message: Invalid profile for user:", n);
                             continue
                         }
-                        
-                        var parts = keyword.split("@");
-                        if (parts.length !== 2) {
+                        var s = await GetKeywordByPublicAddress(o.ToAddress);
+                        if (!s) {
+                            console.log("[USERS] Skipping message: No keyword for address:", o.ToAddress);
                             continue
                         }
-                        
-                        var worldFromKeyword = parts[0].replace(/[^a-zA-Z0-9]/g, "");
-                        var userFromKeyword = parts[1].replace(/[^a-zA-Z0-9]/g, "");
-                        
-                        if (!worldFromKeyword || !userFromKeyword) {
+                        var i = s.replace(/^"|"$/g, "");
+                        if (!i.includes("MCUserJoin@")) {
+                            console.log("[USERS] Skipping message: Invalid keyword:", i);
                             continue
                         }
-                        
-                        // Parse FromAddress to validate user
-                        var profile = await GetProfileByAddress(o.FromAddress);
-                        var validUser = null;
-                        var isValidUser = false;
-                        
-                        if (profile && profile.URN) {
-                            validUser = profile.URN.replace(/[^a-zA-Z0-9]/g, "");
-                            var userProfile = await GetProfileByURN(validUser);
-                            isValidUser = userProfile && userProfile.Creators && userProfile.Creators.includes(o.FromAddress);
-                        }
-                        
-                        // Get BlockDate as timestamp
-                        var timestamp = o.BlockDate ? Date.parse(o.BlockDate) : Date.now();
-                        
-                        console.log("[USERS] " + worldFromKeyword + "@" + userFromKeyword + " | valid: " + (isValidUser ? validUser : "no") + " | " + new Date(timestamp).toISOString());
-                        
-                        // Update knownWorlds with historical data
-                        if (knownWorlds.has(worldFromKeyword)) {
-                            var worldData = knownWorlds.get(worldFromKeyword);
-                            worldData.users.add(userFromKeyword);
-                            if (!worldData.connections) worldData.connections = [];
-                            worldData.connections.push({
-                                user: userFromKeyword,
-                                validUser: validUser,
-                                isValid: isValidUser,
-                                timestamp: timestamp,
-                                transactionId: o.TransactionId
-                            });
-                            worldData.lastActivity = Math.max(worldData.lastActivity || 0, timestamp);
-                        } else {
-                            knownWorlds.set(worldFromKeyword, {
-                                discoverer: userFromKeyword,
-                                users: new Set([userFromKeyword]),
-                                toAddress: o.ToAddress,
-                                connections: [{
-                                    user: userFromKeyword,
-                                    validUser: validUser,
-                                    isValid: isValidUser,
-                                    timestamp: timestamp,
-                                    transactionId: o.TransactionId
-                                }],
-                                lastActivity: timestamp
-                            });
-                        }
-                        
-                        // Track users with valid indicator
-                        if (!knownUsers.has(userFromKeyword)) {
-                            knownUsers.set(userFromKeyword, {
-                                address: o.FromAddress,
-                                isValid: isValidUser,
-                                lastSeen: timestamp
-                            });
-                        } else {
-                            var userData = knownUsers.get(userFromKeyword);
-                            if (typeof userData === 'string') {
-                                knownUsers.set(userFromKeyword, {
-                                    address: userData,
-                                    isValid: isValidUser,
-                                    lastSeen: timestamp
-                                });
-                            } else {
-                                userData.lastSeen = Math.max(userData.lastSeen || 0, timestamp);
-                                if (isValidUser) userData.isValid = true;
-                            }
-                        }
-                        
-                        // Store spawn data - will be calculated when game starts
-                        spawnChunks.set(userFromKeyword, {
+                        var l = i.split("@")[1].replace(/[^a-zA-Z0-9]/g, "");
+                        n && l && (console.log("[USERS] Adding user:", n, "to world:", l), knownWorlds.has(l) ? knownWorlds.get(l).users.add(n) : knownWorlds.set(l, {
+                            discoverer: n,
+                            users: new Set([n]),
+                            toAddress: o.ToAddress
+                        }), knownUsers.has(n) || knownUsers.set(n, o.FromAddress), spawnChunks.set(n, {
                             cx: null,
                             cz: null,
-                            username: userFromKeyword,
-                            world: worldFromKeyword,
-                            keyword: worldFromKeyword + "@" + userFromKeyword
-                        });
-                        processedMessages.add(o.TransactionId);
-                    }
-                console.log("[USERS] Discovered " + knownWorlds.size + " worlds and " + knownUsers.size + " users");
-                for (var [world, data] of knownWorlds) {
-                    console.log("[USERS] World " + world + ": " + data.users.size + " users, " + (data.connections ? data.connections.length : 0) + " connections");
-                }
-                }
+                            username: n,
+                            world: l
+                        }), processedMessages.add(o.TransactionId))
+                    } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
+                console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }
         }(), updateLoginUI(), setupEmojiPicker();
         var s = document.getElementById("dropZone");
