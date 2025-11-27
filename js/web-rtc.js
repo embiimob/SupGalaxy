@@ -2117,57 +2117,260 @@ function openUsersModal() {
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
-    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.display = "block", t.innerHTML = '\n            <h3>Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList"></div>\n            <p class="warning">Note: Servers may be offline. Connection requires the host to be active. Recent attempts increase success likelihood.</p>\n            <div style="margin-top:10px;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "400px", t.style.maxWidth = "500px", t.style.maxHeight = "80vh", t.style.overflowY = "auto", t.style.display = "block", t.innerHTML = '
+            <h3>🌍 Known Worlds</h3>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;opacity:0.8;">Connect to Friend</label>
+                <div style="position:relative;">
+                    <input id="friendHandle" placeholder="Enter friend\'s handle (e.g., player1)" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                    <div id="friendSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1620;border:1px solid rgba(255,255,255,0.06);border-radius:8px;max-height:150px;overflow-y:auto;z-index:230;"></div>
+                </div>
+                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;opacity:0.8;">Switch World</label>
+                <div style="position:relative;">
+                    <input id="switchWorldInput" placeholder="Enter world name (e.g., KANYE)" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                    <div id="worldSwitchSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1620;border:1px solid rgba(255,255,255,0.06);border-radius:8px;max-height:150px;overflow-y:auto;z-index:230;"></div>
+                </div>
+                <button id="switchWorldBtn" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:#0f2a3a;color:#fff;border:1px solid rgba(255,255,255,0.04);font-weight:700;cursor:pointer;">Switch World</button>
+            </div>
+            <div id="usersList"></div>
+            <p class="warning" style="font-size:11px;opacity:0.7;">Note: Connection requires the host to be active in the same world.</p>
+            <div style="margin-top:10px;text-align:right;">
+                <button id="closeUsers">Close</button>
+            </div>
+        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    
+    // Setup autocomplete for friend handle
+    var friendInput = t.querySelector("#friendHandle");
+    var friendSuggestions = t.querySelector("#friendSuggestions");
+    friendInput.addEventListener("input", function() {
+        var val = friendInput.value.toLowerCase();
+        var users = Array.from(knownUsers.keys()).filter(function(u) {
+            return u.toLowerCase().startsWith(val);
+        }).slice(0, 10);
+        friendSuggestions.innerHTML = users.map(function(u) {
+            return '<div style="padding:8px;cursor:pointer;" data-value="' + u + '">' + u + '</div>';
+        }).join("");
+        friendSuggestions.style.display = users.length > 0 && val ? "block" : "none";
+    });
+    friendSuggestions.addEventListener("click", function(ev) {
+        if (ev.target.dataset.value) {
+            friendInput.value = ev.target.dataset.value;
+            friendSuggestions.style.display = "none";
+        }
+    });
+    friendInput.addEventListener("keydown", function(e) { e.stopPropagation(); });
+    
+    // Setup autocomplete for switch world
+    var switchWorldInput = t.querySelector("#switchWorldInput");
+    var worldSwitchSuggestions = t.querySelector("#worldSwitchSuggestions");
+    switchWorldInput.addEventListener("input", function() {
+        var val = switchWorldInput.value.toLowerCase();
+        var worlds = Array.from(knownWorlds.keys()).filter(function(w) {
+            return w.toLowerCase().startsWith(val);
+        }).slice(0, 10);
+        worldSwitchSuggestions.innerHTML = worlds.map(function(w) {
+            return '<div style="padding:8px;cursor:pointer;" data-value="' + w + '">' + w + '</div>';
+        }).join("");
+        worldSwitchSuggestions.style.display = worlds.length > 0 && val ? "block" : "none";
+    });
+    worldSwitchSuggestions.addEventListener("click", function(ev) {
+        if (ev.target.dataset.value) {
+            switchWorldInput.value = ev.target.dataset.value;
+            worldSwitchSuggestions.style.display = "none";
+        }
+    });
+    switchWorldInput.addEventListener("keydown", function(e) { e.stopPropagation(); });
+    
+    // Switch world button handler
+    t.querySelector("#switchWorldBtn").onclick = function() {
+        var newWorld = switchWorldInput.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+        if (newWorld && newWorld !== worldName) {
+            console.log("[MODAL] Switching to world:", newWorld);
+            switchWorld(newWorld);
+            t.remove();
+            isPromptOpen = false;
+        } else if (newWorld === worldName) {
+            addMessage("Already in world " + newWorld, 3000);
+        } else {
+            addMessage("Please enter a world name", 3000);
+        }
+    };
+    
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
-    var a = !1,
-        r = document.createElement("h4");
-    for (var s of (r.innerText = "Connected Players", o.appendChild(r), peers)) {
+    var a = !1;
+    
+    // Connected Players section
+    var r = document.createElement("h4");
+    r.style.borderTop = "1px solid rgba(255,255,255,0.1)";
+    r.style.paddingTop = "10px";
+    r.style.marginTop = "10px";
+    r.innerText = "Connected Players";
+    o.appendChild(r);
+    for (var s of peers) {
         var n = s[0];
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
             var i = calculateSpawnPoint(n + "@" + worldName);
-            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")", (m = document.createElement("button")).innerText = "Visit Spawn",
-                function (e, o) {
-                    m.onclick = function () {
-                        console.log("[MODAL] Teleporting to spawn of:", e), respawnPlayer(o.x, 100, o.z), t.style.display = "none", isPromptOpen = !1
-                    }
-                }(n, i), h.appendChild(f), h.appendChild(m), o.appendChild(h)
+            var h = document.createElement("div");
+            h.style.display = "flex";
+            h.style.gap = "8px";
+            h.style.alignItems = "center";
+            h.style.marginTop = "8px";
+            var f = document.createElement("div");
+            f.innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")";
+            var m = document.createElement("button");
+            m.innerText = "Visit Spawn";
+            (function(peerName, spawnPt) {
+                m.onclick = function() {
+                    console.log("[MODAL] Teleporting to spawn of:", peerName);
+                    respawnPlayer(spawnPt.x, 100, spawnPt.z);
+                    t.style.display = "none";
+                    isPromptOpen = !1;
+                };
+            })(n, i);
+            h.appendChild(f);
+            h.appendChild(m);
+            o.appendChild(h);
         }
     }
-    var c = document.createElement("h4");
-    c.innerText = "Known Servers (Last 10)", o.appendChild(c);
-    var l = new Map;
-    for (var d of knownServers) (!l.has(d.hostUser) || l.get(d.hostUser).timestamp < d.timestamp) && l.set(d.hostUser, d);
-    var p = Array.from(l.values()).sort((function (e, t) {
-        return t.timestamp - e.timestamp
-    })).slice(0, 10);
-    for (var d of p) {
-        a = !0, console.log("[MODAL] Rendering server:", d.hostUser), (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px";
-        var m, f = document.createElement("div"),
-            u = connectionAttempts.get(d.hostUser);
-        if (f.innerText = d.hostUser + " at (" + Math.floor(d.spawn.x) + ", " + Math.floor(d.spawn.y) + ", " + Math.floor(d.spawn.z) + ")\nServer started: " + new Date(d.timestamp).toLocaleString() + "\nLast connect attempt: " + (u ? new Date(u).toLocaleString() : "Never") + "\nConnection requests: " + (d.connectionRequestCount || 0) + "\nLatest request: " + (d.latestRequestTime ? new Date(d.latestRequestTime).toLocaleString() : "None"), f.style.whiteSpace = "pre-line", !(peers.has(d.hostUser) || isHost && d.hostUser === userName)) (m = document.createElement("button")).innerText = "Try Connect", m.onclick = async function () {
-            console.log("[WEBRTC] Attempting to connect to server:", d.hostUser), addMessage("Finding a route to " + d.hostUser + "...", 5e3), await connectToServer(d.hostUser, d.offer, d.iceCandidates), t.style.display = "none", isPromptOpen = !1
-        }, h.appendChild(m);
-        h.appendChild(f), o.appendChild(h)
+    
+    // Known Worlds Historical View - show current world first, then other worlds
+    var worldsHeader = document.createElement("h4");
+    worldsHeader.style.borderTop = "1px solid rgba(255,255,255,0.1)";
+    worldsHeader.style.paddingTop = "10px";
+    worldsHeader.style.marginTop = "10px";
+    worldsHeader.innerText = "🌍 World Activity History";
+    o.appendChild(worldsHeader);
+    
+    // Get world activity data from initialization module
+    var worldActivity = typeof getKnownWorldsActivity === 'function' ? getKnownWorldsActivity() : [];
+    
+    // Sort to show current world first
+    var currentWorldData = worldActivity.find(function(w) { return w.world === worldName; });
+    var otherWorlds = worldActivity.filter(function(w) { return w.world !== worldName; });
+    var sortedWorlds = currentWorldData ? [currentWorldData].concat(otherWorlds) : otherWorlds;
+    
+    if (sortedWorlds.length === 0) {
+        // Fallback: show knownWorlds data if no activity data
+        var knownWorldsArr = Array.from(knownWorlds.entries());
+        if (knownWorldsArr.length > 0) {
+            for (var wi = 0; wi < Math.min(knownWorldsArr.length, 10); wi++) {
+                var wName = knownWorldsArr[wi][0];
+                var wData = knownWorldsArr[wi][1];
+                var wDiv = document.createElement("div");
+                wDiv.style.cssText = "margin-top:8px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;";
+                var isCurrentWorld = wName === worldName;
+                wDiv.innerHTML = '<div style="font-weight:bold;color:' + (isCurrentWorld ? 'var(--accent)' : '#fff') + ';">' + 
+                    (isCurrentWorld ? '📍 ' : '🌍 ') + wName + (isCurrentWorld ? ' (Current)' : '') + '</div>' +
+                    '<div style="font-size:11px;opacity:0.7;">Users: ' + (wData.users ? wData.users.size : 0) + '</div>';
+                o.appendChild(wDiv);
+                a = true;
+            }
+        }
+    } else {
+        // Show world activity from initialization data
+        for (var wi = 0; wi < Math.min(sortedWorlds.length, 10); wi++) {
+            var world = sortedWorlds[wi];
+            var wDiv = document.createElement("div");
+            wDiv.style.cssText = "margin-top:8px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;";
+            var isCurrentWorld = world.world === worldName;
+            
+            var usersHtml = '';
+            if (world.users && world.users.length > 0) {
+                usersHtml = '<div style="margin-top:6px;">';
+                for (var ui = 0; ui < Math.min(world.users.length, 5); ui++) {
+                    var user = world.users[ui];
+                    var lastAttemptStr = user.lastAttempt ? new Date(user.lastAttempt).toLocaleDateString() : 'Unknown';
+                    usersHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(255,255,255,0.05);">' +
+                        '<span style="font-size:11px;">' + user.name + ' (' + user.attempts + ' attempts, last: ' + lastAttemptStr + ')</span>' +
+                        '<button class="connectUserBtn" data-user="' + user.name + '" data-world="' + world.world + '" style="padding:2px 6px;font-size:10px;background:#0f2a3a;border:1px solid rgba(255,255,255,0.04);color:#fff;border-radius:4px;cursor:pointer;">🏠 Connect</button>' +
+                        '</div>';
+                }
+                if (world.users.length > 5) {
+                    usersHtml += '<div style="font-size:10px;opacity:0.6;">... and ' + (world.users.length - 5) + ' more user(s)</div>';
+                }
+                usersHtml += '</div>';
+            }
+            
+            wDiv.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<span style="font-weight:bold;color:' + (isCurrentWorld ? 'var(--accent)' : '#fff') + ';">' + 
+                (isCurrentWorld ? '📍 ' : '🌍 ') + world.world + (isCurrentWorld ? ' (Current)' : '') + '</span>' +
+                '<span style="font-size:10px;opacity:0.7;">' + world.userCount + ' user(s), ' + world.totalAttempts + ' attempts</span>' +
+                '</div>' +
+                (world.lastActivity ? '<div style="font-size:10px;opacity:0.6;">Last activity: ' + new Date(world.lastActivity).toLocaleString() + '</div>' : '') +
+                usersHtml;
+            o.appendChild(wDiv);
+            a = true;
+        }
+        
+        // Add click handlers for connect buttons
+        o.querySelectorAll('.connectUserBtn').forEach(function(btn) {
+            btn.onclick = function() {
+                var targetUser = this.dataset.user;
+                var targetWorld = this.dataset.world;
+                console.log("[MODAL] Connecting to user:", targetUser, "in world:", targetWorld);
+                if (targetWorld !== worldName) {
+                    switchWorld(targetWorld);
+                }
+                var spawn = calculateSpawnPoint(targetUser + "@" + targetWorld);
+                knownServers.push({
+                    hostUser: targetUser,
+                    spawn: spawn,
+                    offer: null,
+                    iceCandidates: [],
+                    transactionId: "local_" + Date.now(),
+                    timestamp: Date.now(),
+                    connectionRequestCount: 0,
+                    latestRequestTime: null
+                });
+                connectToServer(targetUser, null, []);
+                t.remove();
+                isPromptOpen = false;
+            };
+        });
     }
+    
+    // Pending connections section (for hosts)
     if (isHost) {
         var g = document.createElement("h4");
-        for (var y of (g.innerText = "Pending Connections", o.appendChild(g), pendingOffers)) {
-            var h;
-            (h = document.createElement("div")).style.display = "flex", h.style.gap = "8px", h.style.alignItems = "center", h.style.marginTop = "8px", (f = document.createElement("div")).innerText = y.clientUser + " at " + new Date(y.timestamp).toLocaleString() + "\nBio: " + (y.profile && y.profile.Bio ? y.profile.Bio : "No bio"), f.style.whiteSpace = "pre-line", h.appendChild(f), o.appendChild(h), a = !0
+        g.style.borderTop = "1px solid rgba(255,255,255,0.1)";
+        g.style.paddingTop = "10px";
+        g.style.marginTop = "10px";
+        g.innerText = "Pending Connections";
+        o.appendChild(g);
+        for (var y of pendingOffers) {
+            var ph = document.createElement("div");
+            ph.style.display = "flex";
+            ph.style.gap = "8px";
+            ph.style.alignItems = "center";
+            ph.style.marginTop = "8px";
+            var pf = document.createElement("div");
+            pf.innerText = y.clientUser + " at " + new Date(y.timestamp).toLocaleString() + "
+Bio: " + (y.profile && y.profile.Bio ? y.profile.Bio : "No bio");
+            pf.style.whiteSpace = "pre-line";
+            ph.appendChild(pf);
+            o.appendChild(ph);
+            a = !0;
         }
     }
+    
     if (!a) {
-        console.log("[MODAL] No servers or peers to render in modal");
+        console.log("[MODAL] No worlds or peers to render in modal");
         var w = document.createElement("div");
-        w.style.marginTop = "8px", w.innerText = "No players available", o.appendChild(w)
+        w.style.marginTop = "8px";
+        w.innerText = "No world activity found yet. Explore and connect!";
+        o.appendChild(w);
     }
+    
     t.querySelector("#closeUsers").onclick = function () {
         console.log("[MODAL] Closing users modal"), t.remove(), isPromptOpen = !1
-    }, t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
-        e.stopPropagation()
-    })), t.querySelector("#connectFriend").onclick = function () {
+    };
+    
+    t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
         var e = document.getElementById("friendHandle").value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
         if (e)
@@ -2185,7 +2388,7 @@ function openUsersModal() {
                     latestRequestTime: null
                 }), connectToServer(e, null, []), t.style.display = "none", isPromptOpen = !1
             } else addMessage("Cannot connect to yourself", 3e3);
-        else addMessage("Please enter a friend’s handle", 3e3)
+        else addMessage("Please enter a friend's handle", 3e3)
     }
 }
 
