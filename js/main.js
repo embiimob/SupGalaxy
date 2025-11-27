@@ -1963,7 +1963,7 @@ function checkCollisionWithBlock(e, t, o) {
     return !1
 }
 
-function checkCollision(e, t, o) {
+function checkBlockCollision(e, t, o) {
     const a = Math.floor(e),
         n = Math.floor(e + player.width),
         r = Math.floor(t),
@@ -1975,6 +1975,137 @@ function checkCollision(e, t, o) {
             for (let o = i; o <= l; o++)
                 if (isSolid(getBlockAt(e, t, o))) return !0;
     return !1
+}
+
+function checkCollision(e, t, o) {
+    if (checkBlockCollision(e, t, o)) return true;
+    return checkMeshCollision(e, t, o);
+}
+
+function checkMeshCollision(x, y, z) {
+    // Only check if magicianStones exist
+    if (!magicianStones || Object.keys(magicianStones).length === 0) return false;
+
+    const playerBox = new THREE.Box3();
+    playerBox.min.set(x, y, z);
+    playerBox.max.set(x + player.width, y + player.height, z + player.depth);
+
+    // Optimization: Reuse Box3 objects if possible, but creating new ones is safer for now.
+    const stones = Object.values(magicianStones);
+
+    for (const stone of stones) {
+        if (!stone.mesh) continue;
+
+        // Skip screens/images that shouldn't have collision?
+        // User asked for "models imported via minimap" to have collision.
+        // Usually these are GLBs. Images (planes) might be annoying.
+        // But for now, check everything with a mesh.
+        // We can check if it's a PlaneGeometry to skip?
+        // Let's assume user wants all "Magician Stone" content to be collidable.
+
+        const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
+        if (!playerBox.intersectsBox(stoneBox)) continue;
+
+        // Detailed check
+        let collision = false;
+        stone.mesh.traverse((child) => {
+            if (collision) return;
+            if (child.isMesh) {
+                if (checkGeometryCollision(child, playerBox)) {
+                    collision = true;
+                }
+            }
+        });
+        if (collision) return true;
+    }
+    return false;
+}
+
+function checkGeometryCollision(mesh, box) {
+    const geometry = mesh.geometry;
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+
+    // Quick local bbox check (transformed to world)
+    // Actually setFromObject handles the hierarchy world transform.
+    // So we are good to proceed to triangle check.
+
+    const pos = geometry.attributes.position;
+    const index = geometry.index;
+    const matrix = mesh.matrixWorld;
+
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const triangle = new THREE.Triangle();
+
+    // Optimization: Don't check every triangle if mesh is huge.
+    // But we don't have spatial index for geometry here.
+    // Check all for now.
+
+    if (index) {
+        for (let i = 0; i < index.count; i += 3) {
+            vA.fromBufferAttribute(pos, index.getX(i)).applyMatrix4(matrix);
+            vB.fromBufferAttribute(pos, index.getX(i+1)).applyMatrix4(matrix);
+            vC.fromBufferAttribute(pos, index.getX(i+2)).applyMatrix4(matrix);
+
+            // Optimization: check if triangle bbox intersects player box
+            const triMinX = Math.min(vA.x, vB.x, vC.x);
+            const triMaxX = Math.max(vA.x, vB.x, vC.x);
+            if (triMaxX < box.min.x || triMinX > box.max.x) continue;
+
+            const triMinY = Math.min(vA.y, vB.y, vC.y);
+            const triMaxY = Math.max(vA.y, vB.y, vC.y);
+            if (triMaxY < box.min.y || triMinY > box.max.y) continue;
+
+            const triMinZ = Math.min(vA.z, vB.z, vC.z);
+            const triMaxZ = Math.max(vA.z, vB.z, vC.z);
+            if (triMaxZ < box.min.z || triMinZ > box.max.z) continue;
+
+            triangle.set(vA, vB, vC);
+            if (box.intersectsTriangle(triangle)) return true;
+        }
+    } else {
+        for (let i = 0; i < pos.count; i += 3) {
+            vA.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+            vB.fromBufferAttribute(pos, i+1).applyMatrix4(matrix);
+            vC.fromBufferAttribute(pos, i+2).applyMatrix4(matrix);
+
+            const triMinX = Math.min(vA.x, vB.x, vC.x);
+            const triMaxX = Math.max(vA.x, vB.x, vC.x);
+            if (triMaxX < box.min.x || triMinX > box.max.x) continue;
+
+            const triMinY = Math.min(vA.y, vB.y, vC.y);
+            const triMaxY = Math.max(vA.y, vB.y, vC.y);
+            if (triMaxY < box.min.y || triMinY > box.max.y) continue;
+
+            const triMinZ = Math.min(vA.z, vB.z, vC.z);
+            const triMaxZ = Math.max(vA.z, vB.z, vC.z);
+            if (triMaxZ < box.min.z || triMinZ > box.max.z) continue;
+
+            triangle.set(vA, vB, vC);
+            if (box.intersectsTriangle(triangle)) return true;
+        }
+    }
+    return false;
+}
+
+function getMeshSurfaceY(x, y, z) {
+    // Cast ray down from head level
+    const origin = new THREE.Vector3(x + player.width/2, y + player.height, z + player.depth/2);
+    const raycaster = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0));
+    // Look down slightly more than player height to find the ground we just hit or are about to hit
+    raycaster.far = player.height + 2;
+
+    const meshes = Object.values(magicianStones).map(s => s.mesh).filter(m => m);
+    if (meshes.length === 0) return null;
+
+    const intersects = raycaster.intersectObjects(meshes, true);
+
+    if (intersects.length > 0) {
+        // Find the highest intersection point that is below the head
+        return intersects[0].point.y;
+    }
+    return null;
 }
 
 function pushPlayerOut() {
@@ -2854,7 +2985,29 @@ function gameLoop(e) {
         checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= gravity * t;
         var u = player.vy * t,
             p = player.y + u;
-        checkCollision(player.x, p, player.z) ? u < 0 ? (player.y = Math.ceil(p - .001), player.vy = 0, player.onGround = !0) : u > 0 && (player.y = Math.floor(p + player.height) - player.height, player.vy = 0) : (player.y = p, player.onGround = !1), checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")));
+        if (checkCollision(player.x, p, player.z)) {
+            if (u < 0) {
+                if (checkBlockCollision(player.x, p, player.z)) {
+                    player.y = Math.ceil(p - .001);
+                } else {
+                    const meshY = getMeshSurfaceY(player.x, player.y, player.z);
+                    if (meshY !== null) {
+                        player.y = meshY;
+                    }
+                }
+                player.vy = 0;
+                player.onGround = !0;
+            } else if (u > 0) {
+                if (checkBlockCollision(player.x, p, player.z)) {
+                    player.y = Math.floor(p + player.height) - player.height;
+                }
+                player.vy = 0;
+            }
+        } else {
+            player.y = p;
+            player.onGround = !1;
+        }
+        checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")));
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
                 const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
