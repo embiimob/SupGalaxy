@@ -355,7 +355,7 @@ Chunk.prototype.idx = function (e, t, o) {
             }
         }
     }
-}, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
+}, ChunkManager.prototype.applyDeltasToChunk = function (e, t, rebuild = true) {
     var o = e.replace(/^#/, "");
     if (parseChunkKey(o)) {
         var a = this.chunks.get(o);
@@ -364,7 +364,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
                     a.set(n.x, n.y, n.z, r)
-                } updateTorchRegistry(a), a.needsRebuild = !0, this.buildChunkMesh(a)
+                }
+            updateTorchRegistry(a);
+            a.needsRebuild = !0;
+            if (rebuild) {
+                this.buildChunkMesh(a);
+            }
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
@@ -533,6 +538,9 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
         const now = Date.now();
         const blockDate = o; // o is the BlockDate timestamp
 
+        // Use a set to track chunks that need rebuilding to avoid redundant rebuilds
+        const dirtyChunks = new Set();
+
         for (var n of e) {
             var r = n.chunk,
                 s = n.changes;
@@ -587,8 +595,20 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                 }
 
-                chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
+                // Apply deltas without immediate rebuild
+                chunkManager.applyDeltasToChunk(r, s, false);
+                dirtyChunks.add(r.replace(/^#/, ""));
             } else console.error("[ChunkManager] chunkManager not defined")
+        }
+
+        // Batch rebuild all dirty chunks once
+        if (chunkManager) {
+            for (const chunkKey of dirtyChunks) {
+                const chunk = chunkManager.chunks.get(chunkKey);
+                if (chunk) {
+                    chunkManager.buildChunkMesh(chunk);
+                }
+            }
         }
 
         const dataString = JSON.stringify(e);
