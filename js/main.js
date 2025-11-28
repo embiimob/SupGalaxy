@@ -2220,7 +2220,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && (playerJump(), safePlayAudio(soundJump)), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -2239,7 +2239,7 @@ function registerKeyEvents() {
 }
 
 function playerJump() {
-    player.onGround && (player.vy = isSprinting ? 25.5 : 8.5, player.onGround = !1, safePlayAudio(soundJump))
+    player.onGround && (player.vy = isSprinting ? 25.5 : 8.5, player.onGround = !1)
 }
 
 function toggleCameraMode() {
@@ -2509,7 +2509,7 @@ function setupMobile() {
         })), a.addEventListener("touchend", (function (e) {
             joystick.right = !1, e.preventDefault()
         })), document.getElementById("mJump").addEventListener("touchstart", (function (e) {
-            playerJump(), safePlayAudio(soundJump), e.preventDefault()
+            playerJump(), e.preventDefault()
         })), document.getElementById("mInventory").addEventListener("touchstart", (function (e) {
             toggleInventory(), e.preventDefault()
         })), document.getElementById("mCam").addEventListener("touchstart", (function (e) {

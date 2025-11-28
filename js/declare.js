@@ -633,7 +633,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     hasMovedSubstantially = !1,
     soundBreak = document.getElementById("soundBreak"),
     soundPlace = document.getElementById("soundPlace"),
-    soundJump = document.getElementById("soundJump"),
     soundHit = document.getElementById("soundHit"),
     pending = (knownWorlds = new Map, knownUsers = new Map, new Set),
     spawnChunks = new Map,
