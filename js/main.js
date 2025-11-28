@@ -353,25 +353,6 @@ function updateTorchRegistry(e) {
             }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function initThree() {
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
@@ -2190,13 +2171,6 @@ function pushPlayerOut() {
         }
     return !1
 }
-
-
-
-
-
-
-
 
 function updateMinimap() {
     if (minimapCtx) {
