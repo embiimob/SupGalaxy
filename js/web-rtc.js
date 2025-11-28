@@ -584,15 +584,23 @@ function setupDataChannel(e, t) {
                         if (!WORLD_STATES.has(s.world)) {
                             WORLD_STATES.set(s.world, {
                                 chunkDeltas: new Map(),
-                                foreignBlockOrigins: new Map()
+                                foreignBlockOrigins: new Map(),
+                                runtimeChunkDeltas: new Map()
                             });
                         }
                         const worldState = WORLD_STATES.get(s.world);
+                        if (!worldState.runtimeChunkDeltas) worldState.runtimeChunkDeltas = new Map();
                         const chunkKey = makeChunkKey(s.world, Math.floor(modWrap(s.wx, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(s.wz, MAP_SIZE) / CHUNK_SIZE));
+                        const deltaEntry = { x: modWrap(s.wx, CHUNK_SIZE), y: s.wy, z: modWrap(s.wz, CHUNK_SIZE), b: s.bid };
                         if (!worldState.chunkDeltas.has(chunkKey)) {
                             worldState.chunkDeltas.set(chunkKey, []);
                         }
-                        worldState.chunkDeltas.get(chunkKey).push({ x: modWrap(s.wx, CHUNK_SIZE), y: s.wy, z: modWrap(s.wz, CHUNK_SIZE), b: s.bid });
+                        worldState.chunkDeltas.get(chunkKey).push(deltaEntry);
+                        // Also add to runtimeChunkDeltas for multiplayer changes
+                        if (!worldState.runtimeChunkDeltas.has(chunkKey)) {
+                            worldState.runtimeChunkDeltas.set(chunkKey, []);
+                        }
+                        worldState.runtimeChunkDeltas.get(chunkKey).push({...deltaEntry});
 
                         if (s.originSeed && s.originSeed !== s.world) {
                             const blockKey = `${s.wx},${s.wy},${s.wz}`;

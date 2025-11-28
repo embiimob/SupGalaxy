@@ -2,10 +2,16 @@ function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
             chunkDeltas: new Map,
-            foreignBlockOrigins: new Map
+            foreignBlockOrigins: new Map,
+            runtimeChunkDeltas: new Map
         });
     }
-    return WORLD_STATES.get(worldName);
+    // Ensure runtimeChunkDeltas exists for existing world states (migration)
+    const state = WORLD_STATES.get(worldName);
+    if (!state.runtimeChunkDeltas) {
+        state.runtimeChunkDeltas = new Map;
+    }
+    return state;
 }
 
 function simpleHash(e) {
@@ -99,7 +105,8 @@ async function applySaveFile(e, t, o) {
         for (const [worldName, data] of e.worldStates) {
             WORLD_STATES.set(worldName, {
                 chunkDeltas: new Map(data.chunkDeltas),
-                foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+                foreignBlockOrigins: new Map(data.foreignBlockOrigins),
+                runtimeChunkDeltas: new Map
             });
         }
         processedMessages = new Set(e.processedMessages);
@@ -2253,7 +2260,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && (playerJump(), safePlayAudio(soundJump)), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().runtimeChunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && (playerJump(), safePlayAudio(soundJump)), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -2438,7 +2445,8 @@ async function downloadSinglePlayerSession() {
         musicPlaylist: musicPlaylist,
         videoPlaylist: videoPlaylist
     };
-    for (var t of worldState.chunkDeltas) {
+    // Use runtimeChunkDeltas for user saves (excludes IPFS-loaded data)
+    for (var t of worldState.runtimeChunkDeltas) {
         var o = t[0],
             a = t[1];
         parseChunkKey(o) && e.deltas.push({
@@ -2456,7 +2464,7 @@ async function downloadSinglePlayerSession() {
         s = URL.createObjectURL(r),
         i = document.createElement("a");
     i.href = s, i.download = worldName + "_session_" + Date.now() + ".json", document.body.appendChild(i), i.click(), i.remove(), URL.revokeObjectURL(s), addMessage("Session downloaded");
-    var l = Array.from(worldState.chunkDeltas.keys()),
+    var l = Array.from(worldState.runtimeChunkDeltas.keys()),
         d = await Promise.all(l.map((async function (e) {
             var t = await GetPublicAddressByKeyword(e);
             return t ? t.trim().replace(/^"|"$/g, "") : e
@@ -2483,7 +2491,8 @@ function updateHealthBar() {
 
 function updateSaveChangesButton() {
     const worldState = getCurrentWorldState();
-    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none"
+    // Show save button if there are runtime changes (user/multiplayer modifications)
+    document.getElementById("saveChangesBtn").style.display = worldState.runtimeChunkDeltas.size > 0 ? "inline-block" : "none"
 }
 
 function updateHudButtons() {

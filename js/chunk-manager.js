@@ -334,12 +334,20 @@ Chunk.prototype.idx = function (e, t, o) {
 
             var y = p.key;
             const worldState = getCurrentWorldState();
-            if (worldState.chunkDeltas.has(y) || worldState.chunkDeltas.set(y, []), worldState.chunkDeltas.get(y).push({
+            const deltaEntry = {
                 x: c,
                 y: t,
                 z: u,
                 b: a
-            }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
+            };
+            // Add to chunkDeltas (full state)
+            if (!worldState.chunkDeltas.has(y)) worldState.chunkDeltas.set(y, []);
+            worldState.chunkDeltas.get(y).push(deltaEntry);
+            // Also add to runtimeChunkDeltas (user/multiplayer changes only, excludes IPFS loads)
+            if (!worldState.runtimeChunkDeltas.has(y)) worldState.runtimeChunkDeltas.set(y, []);
+            worldState.runtimeChunkDeltas.get(y).push({...deltaEntry});
+            
+            if (p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
                 const n = JSON.stringify({
                     type: "block_change",
                     world: worldName,
@@ -542,13 +550,16 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
                             chunkDeltas: new Map(),
-                            foreignBlockOrigins: new Map()
+                            foreignBlockOrigins: new Map(),
+                            runtimeChunkDeltas: new Map()
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
+                    if (!worldState.runtimeChunkDeltas) worldState.runtimeChunkDeltas = new Map();
                     if (!worldState.chunkDeltas.has(r)) {
                         worldState.chunkDeltas.set(r, []);
                     }
+                    // IPFS-loaded data only goes to chunkDeltas, NOT runtimeChunkDeltas
                     worldState.chunkDeltas.get(r).push(...s);
                 }
 
