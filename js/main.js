@@ -191,7 +191,13 @@ async function applySaveFile(e, t, o) {
             for (var r of t.deltas) {
                 var s = r.chunk.replace(/^#/, ""),
                     i = r.changes;
-                chunkManager.applyDeltasToChunk(s, i)
+                chunkManager.applyDeltasToChunk(s, i);
+                const worldState = getCurrentWorldState();
+                if (!worldState.chunkDeltas.has(s)) {
+                    worldState.chunkDeltas.set(s, []);
+                }
+                const changesWithSource = i.map(change => ({ ...change, source: 'local' }));
+                worldState.chunkDeltas.get(s).push(...changesWithSource);
             }
         populateSpawnChunks(), spawnPoint = {
             x: player.x,
@@ -1697,7 +1703,7 @@ function removeBlockAt(e, t, o, breaker) {
             // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
-            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName);
+            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
             if (breaker === userName) {
                 addToInventory(a, 1, l);
@@ -1871,7 +1877,7 @@ function placeBlockAt(e, t, o, a) {
                             return; // Don't show message - silently fail for host
                         }
                         
-                        if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed), n.originSeed && n.originSeed !== worldSeed) {
+                        if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
                             addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`);
@@ -2441,10 +2447,14 @@ async function downloadSinglePlayerSession() {
     for (var t of worldState.chunkDeltas) {
         var o = t[0],
             a = t[1];
-        parseChunkKey(o) && e.deltas.push({
-            chunk: o,
-            changes: a
-        })
+        // Filter changes to include only those modified locally
+        var localChanges = a.filter(change => change.source === 'local');
+        if (localChanges.length > 0 && parseChunkKey(o)) {
+            e.deltas.push({
+                chunk: o,
+                changes: localChanges
+            });
+        }
     }
     var n = {
         playerData: e,

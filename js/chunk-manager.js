@@ -307,7 +307,7 @@ Chunk.prototype.idx = function (e, t, o) {
         c = modWrap(s, CHUNK_SIZE),
         u = this.getChunk(i, l);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
-}, ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null) {
+ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null, source = 'local') {
     if (!(t < 0 || t >= MAX_HEIGHT)) {
         var s = modWrap(e, MAP_SIZE),
             i = modWrap(o, MAP_SIZE),
@@ -338,7 +338,8 @@ Chunk.prototype.idx = function (e, t, o) {
                 x: c,
                 y: t,
                 z: u,
-                b: a
+                b: a,
+                source: source
             }), p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
                 const n = JSON.stringify({
                     type: "block_change",
@@ -549,7 +550,8 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!worldState.chunkDeltas.has(r)) {
                         worldState.chunkDeltas.set(r, []);
                     }
-                    worldState.chunkDeltas.get(r).push(...s);
+                    const changesWithSource = s.map(change => ({ ...change, source: 'ipfs' }));
+                    worldState.chunkDeltas.get(r).push(...changesWithSource);
                 }
 
                 // Set ownership based on BlockDate and owner
