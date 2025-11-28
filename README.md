@@ -37,6 +37,9 @@ Built with ❤️ by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**,**Cha
 ### 🪄 The Magician’s Stone
 A special block capable of adding **images, video, audio and animated 3d models** into the game world.
 
+### 🪄 The Calligraphy Stone
+A special block capable of adding **colored or transparent signs with clickable web links** into the game world.
+
 ### 🎙 Proximity Video & Voice
 See and hear players based on distance—natural spatial communication.
 
