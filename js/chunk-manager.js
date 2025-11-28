@@ -307,7 +307,7 @@ Chunk.prototype.idx = function (e, t, o) {
         c = modWrap(s, CHUNK_SIZE),
         u = this.getChunk(i, l);
     return u.generated || this.generateChunk(u), u.get(d, a, c)
-ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null, source = 'local') {
+}, ChunkManager.prototype.setBlockGlobal = function (e, t, o, a, n = !0, r = null, source = 'local') {
     if (!(t < 0 || t >= MAX_HEIGHT)) {
         var s = modWrap(e, MAP_SIZE),
             i = modWrap(o, MAP_SIZE),
