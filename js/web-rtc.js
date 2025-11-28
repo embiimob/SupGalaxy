@@ -606,7 +606,7 @@ function setupDataChannel(e, t) {
                         }
                     }
                     if (s.world === worldName) {
-                         if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed), s.originSeed && s.originSeed !== worldSeed) {
+                         if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed, 'network'), s.originSeed && s.originSeed !== worldSeed) {
                             const e = `${s.wx},${s.wy},${s.wz}`;
                             getCurrentWorldState().foreignBlockOrigins.set(e, s.originSeed)
                         }
@@ -1135,7 +1135,7 @@ function setupDataChannel(e, t) {
                         
                         if (isChunkMutationAllowed(placeChunkKey, s.username)) {
                             // Allowed: place block and broadcast
-                            chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed);
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed, 'network');
                             
                             if (s.originSeed && s.originSeed !== worldSeed) {
                                 const blockKey = `${s.x},${s.y},${s.z}`;
@@ -1256,7 +1256,7 @@ function setupDataChannel(e, t) {
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
                             const blockId = getBlockAt(s.x, s.y, s.z);
                             
-                            chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
                             if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
                             
                             // Renew or establish ownership on edit
@@ -1371,7 +1371,7 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         // Client receives authoritative block place from host
                         console.log(`[WebRTC] Client received block place from host: (${s.x}, ${s.y}, ${s.z}) blockId: ${s.blockId}`);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, false, s.originSeed);
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, false, s.originSeed, 'network');
                         
                         if (s.originSeed && s.originSeed !== worldSeed) {
                             const blockKey = `${s.x},${s.y},${s.z}`;
@@ -1408,7 +1408,7 @@ function setupDataChannel(e, t) {
                         // Client receives authoritative block break from host
                         console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
                         const blockId = getBlockAt(s.x, s.y, s.z);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username);
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
                         
                         const blockKey = `${s.x},${s.y},${s.z}`;
                         if (s.originSeed) {
