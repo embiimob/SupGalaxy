@@ -600,7 +600,7 @@ function setupDataChannel(e, t) {
                         if (!worldState.runtimeChunkDeltas.has(chunkKey)) {
                             worldState.runtimeChunkDeltas.set(chunkKey, []);
                         }
-                        worldState.runtimeChunkDeltas.get(chunkKey).push({...deltaEntry});
+                        worldState.runtimeChunkDeltas.get(chunkKey).push(deltaEntry);
 
                         if (s.originSeed && s.originSeed !== s.world) {
                             const blockKey = `${s.wx},${s.wy},${s.wz}`;

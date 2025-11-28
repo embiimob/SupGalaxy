@@ -345,7 +345,7 @@ Chunk.prototype.idx = function (e, t, o) {
             worldState.chunkDeltas.get(y).push(deltaEntry);
             // Also add to runtimeChunkDeltas (user/multiplayer changes only, excludes IPFS loads)
             if (!worldState.runtimeChunkDeltas.has(y)) worldState.runtimeChunkDeltas.set(y, []);
-            worldState.runtimeChunkDeltas.get(y).push({...deltaEntry});
+            worldState.runtimeChunkDeltas.get(y).push(deltaEntry);
             
             if (p.needsRebuild = !0, 0 === c && (this.getChunk(l - 1, d).needsRebuild = !0), c === CHUNK_SIZE - 1 && (this.getChunk(l + 1, d).needsRebuild = !0), 0 === u && (this.getChunk(l, d - 1).needsRebuild = !0), u === CHUNK_SIZE - 1 && (this.getChunk(l, d + 1).needsRebuild = !0), updateSaveChangesButton(), n) {
                 const n = JSON.stringify({

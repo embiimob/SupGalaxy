@@ -106,7 +106,9 @@ async function applySaveFile(e, t, o) {
             WORLD_STATES.set(worldName, {
                 chunkDeltas: new Map(data.chunkDeltas),
                 foreignBlockOrigins: new Map(data.foreignBlockOrigins),
-                runtimeChunkDeltas: new Map
+                // Initialize runtimeChunkDeltas from saved data if available, otherwise start empty
+                // Host sessions start fresh after restore (all changes are in chunkDeltas)
+                runtimeChunkDeltas: data.runtimeChunkDeltas ? new Map(data.runtimeChunkDeltas) : new Map
             });
         }
         processedMessages = new Set(e.processedMessages);
