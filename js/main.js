@@ -17,21 +17,21 @@ function simpleHash(e) {
 }
 function reconstructCalligraphyStonesFromDeltas(deltas) {
     if (!deltas || deltas.length === 0) return;
-    
+
     // Ensure calligraphyStones global exists
     if (typeof calligraphyStones === 'undefined') {
         calligraphyStones = {};
     }
-    
+
     console.log("[RECONSTRUCTION] Scanning deltas for orphaned calligraphy stones (b:128)");
     let reconstructedCount = 0;
-    
+
     for (const deltaGroup of deltas) {
         const chunkKey = deltaGroup.chunk.replace(/^#/, "");
         const changes = deltaGroup.changes;
-        
+
         if (!changes || !Array.isArray(changes)) continue;
-        
+
         for (const change of changes) {
             // Check if this is a calligraphy stone block (id 128)
             if (change.b === 128) {
@@ -41,21 +41,21 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
                     console.warn(`[RECONSTRUCTION] Invalid chunk key format: ${chunkKey}`);
                     continue;
                 }
-                
+
                 const cx = parseInt(parts[1]);
                 const cz = parseInt(parts[2]);
-                
+
                 // Calculate world coordinates using modWrap for consistency
                 const worldX = modWrap(cx * CHUNK_SIZE + change.x, MAP_SIZE);
                 const worldY = change.y;
                 const worldZ = modWrap(cz * CHUNK_SIZE + change.z, MAP_SIZE);
-                
+
                 const key = `${worldX},${worldY},${worldZ}`;
-                
+
                 // Only reconstruct if no metadata exists for this position
                 if (!calligraphyStones[key]) {
                     console.log(`[RECONSTRUCTION] Creating placeholder for calligraphy stone at ${key}`);
-                    
+
                     // Create placeholder with sensible defaults
                     const placeholderData = {
                         x: worldX,
@@ -76,7 +76,7 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
                         link: '',
                         direction: { x: 0, y: 0, z: 1 } // Default forward direction
                     };
-                    
+
                     try {
                         createCalligraphyStoneScreen(placeholderData);
                         reconstructedCount++;
@@ -87,7 +87,7 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
             }
         }
     }
-    
+
     if (reconstructedCount > 0) {
         console.log(`[RECONSTRUCTION] Successfully reconstructed ${reconstructedCount} calligraphy stone(s)`);
     }
@@ -212,7 +212,7 @@ async function applySaveFile(e, t, o) {
             magicianStones = {}; // Clear existing stones
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
-                    const stoneData = t.magicianStones[key];
+                    const stoneData = { ...t.magicianStones[key], source: 'local' };
                     createMagicianStoneScreen(stoneData);
 
                     // Defer block placement until the chunk is loaded
@@ -234,7 +234,7 @@ async function applySaveFile(e, t, o) {
             calligraphyStones = {}; // Clear existing stones
             for (const key in t.calligraphyStones) {
                 if (Object.hasOwnProperty.call(t.calligraphyStones, key)) {
-                    const stoneData = t.calligraphyStones[key];
+                    const stoneData = { ...t.calligraphyStones[key], source: 'local' };
                     createCalligraphyStoneScreen(stoneData);
 
                     // Defer block placement until the chunk is loaded
@@ -273,12 +273,12 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         const blockDate = new Date(o).getTime();
         const blockAge = p - blockDate;
-        
+
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
-            
+
             const ownership = OWNED_CHUNKS.get(s);
-            
+
             // Apply IPFS ownership rules
             if (!ownership) {
                 // No existing ownership
@@ -311,14 +311,14 @@ async function applySaveFile(e, t, o) {
         if (e.magicianStones) {
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {
-                    createMagicianStoneScreen(e.magicianStones[key]);
+                    createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
                 }
             }
         }
         if (e.calligraphyStones) {
             for (const key in e.calligraphyStones) {
                 if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
-                    createCalligraphyStoneScreen(e.calligraphyStones[key]);
+                    createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
                 }
             }
         } else if (e.deltas) {
@@ -919,7 +919,7 @@ async function createMagicianStoneScreen(stoneData) {
     }
 
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
-    
+
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
         const loader = new THREE.GLTFLoader();
@@ -927,23 +927,23 @@ async function createMagicianStoneScreen(stoneData) {
             url,
             function(gltf) {
                 const model = gltf.scene;
-                
+
                 // Calculate bounding box and scale to fit within width x height
                 const box = new THREE.Box3().setFromObject(model);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-                
+
                 // Scale to fit the bounding box defined by width and height
                 const scaleX = width / size.x;
                 const scaleY = height / size.y;
                 const scaleZ = width / size.z; // Use width for depth as well
                 const scale = Math.min(scaleX, scaleY, scaleZ);
-                
+
                 model.scale.multiplyScalar(scale);
-                
+
                 // Center the model at origin after scaling
                 model.position.sub(center.multiplyScalar(scale));
-                
+
                 // Setup animations if they exist
                 let mixer = null;
                 if (gltf.animations && gltf.animations.length > 0) {
@@ -957,11 +957,11 @@ async function createMagicianStoneScreen(stoneData) {
                         });
                     }
                 }
-                
+
                 // Create a container group for positioning
                 const screenMesh = new THREE.Group();
                 screenMesh.add(model);
-                
+
                 // Orientation and Position
                 let playerDirection;
                 if (stoneData.direction) {
@@ -1009,11 +1009,11 @@ async function createMagicianStoneScreen(stoneData) {
                 context.textAlign = 'center';
                 context.fillText('Failed to load 3D model', 128, 64);
                 const texture = new THREE.CanvasTexture(canvas);
-                
+
                 const planeGeometry = new THREE.PlaneGeometry(width, height);
                 const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, map: texture });
                 const screenMesh = new THREE.Mesh(planeGeometry, material);
-                
+
                 // Position and orient the error placeholder
                 let playerDirection;
                 if (stoneData.direction) {
@@ -1153,7 +1153,7 @@ function createCalligraphyStoneScreen(stoneData) {
     const pixelsPerBlock = 128; // Resolution per block
     const canvasWidth = width * pixelsPerBlock;
     const canvasHeight = height * pixelsPerBlock;
-    
+
     const canvas = document.createElement('canvas');
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -1174,21 +1174,21 @@ function createCalligraphyStoneScreen(stoneData) {
     // Word wrap text while respecting newlines
     const lines = [];
     const maxWidth = canvasWidth - 20; // 10px padding on each side
-    
+
     // Split by newlines first to respect user line breaks
     const paragraphs = (text || '').split('\n');
-    
+
     for (const paragraph of paragraphs) {
         // Handle empty lines (blank lines between paragraphs)
         if (paragraph.trim() === '') {
             lines.push('');
             continue;
         }
-        
+
         // Word wrap within each paragraph
         const words = paragraph.split(' ');
         let currentLine = '';
-        
+
         for (const word of words) {
             const testLine = currentLine + (currentLine ? ' ' : '') + word;
             const metrics = context.measureText(testLine);
@@ -1730,7 +1730,7 @@ function removeBlockAt(e, t, o, breaker) {
                 }
                 lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
             }
-            
+
             // Broadcast to clients
             if (isHost) {
                 const breakMsg = JSON.stringify({
@@ -1766,7 +1766,7 @@ function removeBlockAt(e, t, o, breaker) {
             }
             addMessage("Breaking...", 500);
         }
-        
+
         if (a === 127) {
             const key = `${e},${t},${o}`;
             if (magicianStones[key]) {
@@ -1835,7 +1835,7 @@ function placeBlockAt(e, t, o, a) {
                 else {
                     for (var s of mobs)
                         if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
-                    
+
                     // Special handling for Magician's Stone
                     if (a === 127) {
                         const playerDirection = new THREE.Vector3();
@@ -1865,7 +1865,7 @@ function placeBlockAt(e, t, o, a) {
                         isPromptOpen = true;
                         return;
                     }
-                    
+
                     // Host-authoritative: only host mutates directly, clients send requests
                     if (isHost || peers.size === 0) {
                         // Host or solo: check ownership and place immediately
@@ -1876,7 +1876,7 @@ function placeBlockAt(e, t, o, a) {
                             console.log(`[Ownership] Block place denied for host at chunk ${d}`);
                             return; // Don't show message - silently fail for host
                         }
-                        
+
                         if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
@@ -1894,7 +1894,7 @@ function placeBlockAt(e, t, o, a) {
                             var c = createFlameParticles(e, t + .5, o);
                             scene.add(c), torchParticles.set(a, c);
                         }
-                        
+
                         // Broadcast to clients
                         if (isHost) {
                             const placeMsg = JSON.stringify({
@@ -2380,6 +2380,7 @@ async function downloadSinglePlayerSession() {
     for (const key in magicianStones) {
         if (Object.hasOwnProperty.call(magicianStones, key)) {
             const stone = magicianStones[key];
+            if (stone.source !== 'local') continue;
             serializableMagicianStones[key] = {
                 x: stone.x,
                 y: stone.y,
@@ -2402,6 +2403,7 @@ async function downloadSinglePlayerSession() {
     for (const key in calligraphyStones) {
         if (Object.hasOwnProperty.call(calligraphyStones, key)) {
             const stone = calligraphyStones[key];
+            if (stone.source !== 'local') continue;
             serializableCalligraphyStones[key] = {
                 x: stone.x,
                 y: stone.y,
@@ -2601,7 +2603,7 @@ async function populateSpawnChunks() {
         const chunkX = Math.floor(spawn.x / CHUNK_SIZE);
         const chunkZ = Math.floor(spawn.z / CHUNK_SIZE);
         const chunkKey = makeChunkKey(spawnData.world, chunkX, chunkZ);
-        
+
         // Check for home spawn collision
         const existing = OWNED_CHUNKS.get(chunkKey);
         if (existing && existing.type === 'home' && existing.username !== spawnData.username) {
@@ -2639,7 +2641,7 @@ async function populateSpawnChunks() {
             // No collision, assign ownership
             updateChunkOwnership(chunkKey, spawnData.username, Date.now(), 'home');
         }
-        
+
         // Update the spawnChunks entry with the new key format (username@worldname)
         spawnChunks.set(spawnKey, {
             cx: Math.floor(spawn.x / CHUNK_SIZE),
@@ -2743,12 +2745,12 @@ async function startGame() {
     Math.floor(MAP_SIZE / CHUNK_SIZE);
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
-    
+
     // Assign home spawn ownership for the local player
     const homeChunkKey = makeChunkKey(worldName, i, l);
     updateChunkOwnership(homeChunkKey, userName, Date.now(), 'home');
     console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName}`);
-    
+
     // Update local spawnChunks map with key format: username@worldname
     const spawnKey = userName + "@" + worldName;
     spawnChunks.set(spawnKey, {
@@ -2758,7 +2760,7 @@ async function startGame() {
         world: worldName,
         spawn: s
     });
-    
+
     if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
         renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
     } catch (e) {
@@ -2778,30 +2780,30 @@ async function startGame() {
 
 function scanExpiredOwnership() {
     if (!isHost) return; // Only host scans for expired ownership
-    
+
     const now = Date.now();
     const expired = [];
-    
+
     for (const [chunkKey, ownership] of OWNED_CHUNKS.entries()) {
         // Only scan IPFS ownership (home spawns never expire)
         if (ownership.type === 'ipfs' && ownership.expiryDate && now > ownership.expiryDate) {
             expired.push(chunkKey);
         }
-        
+
         // Update pending status if maturity period has passed
         if (ownership.pending && ownership.claimDate && now - ownership.claimDate >= IPFS_MATURITY_PERIOD) {
             ownership.pending = false;
             console.log(`[Ownership] Chunk ${chunkKey} claim matured for ${ownership.username}`);
         }
     }
-    
+
     // Remove expired ownerships
     for (const chunkKey of expired) {
         const ownership = OWNED_CHUNKS.get(chunkKey);
         OWNED_CHUNKS.delete(chunkKey);
         console.log(`[Ownership] Expired IPFS ownership removed for chunk ${chunkKey} (was owned by ${ownership.username})`);
     }
-    
+
     if (expired.length > 0) {
         console.log(`[Ownership] Scanned ownership: ${expired.length} expired claims removed, ${OWNED_CHUNKS.size} active claims remaining`);
     }
@@ -2993,12 +2995,12 @@ function switchWorld(newWorldName, targetSpawn) {
     }, chunkManager = new ChunkManager(worldSeed), initSky();
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
-    
+
     // Assign home spawn ownership for the new world
     const homeChunkKey = makeChunkKey(worldName, o, a);
     updateChunkOwnership(homeChunkKey, userName, Date.now(), 'home');
     console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName} after world switch`);
-    
+
     // Update spawnChunks map with new world data using key format: username@worldname
     const spawnKey = userName + "@" + worldName;
     spawnChunks.set(spawnKey, {
@@ -3008,7 +3010,7 @@ function switchWorld(newWorldName, targetSpawn) {
         world: worldName,
         spawn: t
     });
-    
+
     chunkManager.preloadChunks(o, a, LOAD_RADIUS), addMessage(`Switched to world: ${worldName}`, 4e3)
 
     for (const [peerUsername, peer] of peers.entries()) {
@@ -3020,7 +3022,7 @@ function switchWorld(newWorldName, targetSpawn) {
             }));
         }
     }
-    
+
     // Refresh ownership for all known users in this world
     populateSpawnChunks();
 
@@ -3892,7 +3894,7 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
     } else if (['glb', 'gltf'].includes(fileExtension)) {
         // Show loading indicator while checking GLB/GLTF file
         previewContainer.innerHTML = '<span style="color: #888;">Loading 3D model...</span>';
-        
+
         // Validate the GLB/GLTF file by attempting to load it
         const loader = new THREE.GLTFLoader();
         loader.load(
@@ -3901,17 +3903,17 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
                 // Success - show model info
                 const animationCount = gltf.animations.length;
                 const modelName = url.split('/').pop();
-                
+
                 let infoHTML = '<div style="padding: 10px; background: #2a2a2a; border-radius: 4px;">';
                 infoHTML += '<div style="color: #4CAF50; font-size: 18px; margin-bottom: 8px;">✓ 3D Model Ready</div>';
                 infoHTML += '<div style="color: #ccc; font-size: 12px; margin-bottom: 4px;">File: ' + modelName + '</div>';
-                
+
                 if (animationCount > 0) {
                     infoHTML += '<div style="color: #64B5F6; font-size: 12px;">🎬 ' + animationCount + ' animation(s) detected</div>';
                 } else {
                     infoHTML += '<div style="color: #888; font-size: 12px;">Static model (no animations)</div>';
                 }
-                
+
                 infoHTML += '</div>';
                 previewContainer.innerHTML = infoHTML;
             },
@@ -3950,6 +3952,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         autoplayAnimation: document.getElementById('magicianStoneAutoplayAnimation').checked,
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
         direction: magicianStonePlacement.direction // Use the direction saved on placement
+    , source: 'local'
     };
 
     createMagicianStoneScreen(stoneData);
@@ -4015,6 +4018,7 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
         text: text,
         link: document.getElementById('calligraphyStoneUrl').value,
         direction: calligraphyStonePlacement.direction // Use the direction saved on placement
+    , source: 'local'
     };
 
     createCalligraphyStoneScreen(stoneData);
