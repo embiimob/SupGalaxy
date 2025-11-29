@@ -958,7 +958,8 @@ function setupDataChannel(e, t) {
                                 magicianStones[key].gifTexture.dispose();
                             }
                             if (magicianStones[key].gifImgElement) {
-                                magicianStones[key].gifImgElement.src = '';
+                                // Use a 1x1 transparent pixel to properly stop GIF animation and release resources
+                                magicianStones[key].gifImgElement.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                             }
                             delete magicianStones[key];
                         }

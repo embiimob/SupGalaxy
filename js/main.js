@@ -1806,7 +1806,8 @@ function removeBlockAt(e, t, o, breaker) {
                     magicianStones[key].gifTexture.dispose();
                 }
                 if (magicianStones[key].gifImgElement) {
-                    magicianStones[key].gifImgElement.src = '';
+                    // Use a 1x1 transparent pixel to properly stop GIF animation and release resources
+                    magicianStones[key].gifImgElement.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                 }
                 delete magicianStones[key];
 
@@ -3522,8 +3523,13 @@ function gameLoop(e) {
 
                 // Update GIF texture to enable animation (only when within render distance)
                 // The browser handles GIF frame updates internally; we mark needsUpdate to sync with WebGL
+                // Throttle updates to ~30fps by checking elapsed time (about every other frame at 60fps)
                 if (stone.gifTexture && stone.gifImgElement && stone.gifImgElement.complete && distance <= (stone.distance || 50)) {
-                    stone.gifTexture.needsUpdate = true;
+                    const now = e; // e is the timestamp from requestAnimationFrame
+                    if (!stone.lastGifUpdate || (now - stone.lastGifUpdate) >= 33) {
+                        stone.gifTexture.needsUpdate = true;
+                        stone.lastGifUpdate = now;
+                    }
                 }
 
                 if (mediaElement && stone.autoplay) {
