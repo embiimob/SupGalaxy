@@ -97,11 +97,19 @@ function buildGreedyMesh(e, t, o) {
             const o = BLOCKS[t.blockId];
             if (!o) continue;
             let a;
-            if (o.light) a = new THREE.MeshBasicMaterial({
-                map: emberTexture,
-                transparent: !0,
-                opacity: .8
-            });
+            if (o.light) {
+                if (!emberTexture && typeof worldSeed !== 'undefined') {
+                    console.warn("[ChunkManager] emberTexture missing, regenerating...");
+                    emberTexture = createEmberTexture(worldSeed);
+                }
+                a = new THREE.MeshBasicMaterial({
+                    map: emberTexture,
+                    color: 0xffaa00, // Fallback tint
+                    transparent: !0,
+                    opacity: .8,
+                    side: THREE.DoubleSide
+                });
+            }
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -275,11 +283,19 @@ Chunk.prototype.idx = function (e, t, o) {
             var D, K = BLOCKS[w] || {
                 color: "#ff00ff"
             };
-            if (K.light) D = new THREE.MeshBasicMaterial({
-                map: emberTexture,
-                transparent: !0,
-                opacity: .8
-            });
+            if (K.light) {
+                if (!emberTexture && typeof worldSeed !== 'undefined') {
+                    console.warn("[ChunkManager] emberTexture missing, regenerating...");
+                    emberTexture = createEmberTexture(worldSeed);
+                }
+                D = new THREE.MeshBasicMaterial({
+                    map: emberTexture,
+                    color: 0xffaa00, // Fallback tint
+                    transparent: !0,
+                    opacity: .8,
+                    side: THREE.DoubleSide
+                });
+            }
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
@@ -534,7 +550,14 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
         const now = Date.now();
         const blockDate = o; // o is the BlockDate timestamp
 
-        for (var n of e) {
+        const showProgress = e.length > 5;
+        if (showProgress && window.showLoadingIndicator) {
+            window.showLoadingIndicator(0, "Applying Updates...");
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+        for (let idx = 0; idx < e.length; idx++) {
+            var n = e[idx];
             var r = n.chunk,
                 s = n.changes;
             if (chunkManager) {
@@ -591,6 +614,16 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
                 chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
             } else console.error("[ChunkManager] chunkManager not defined")
+
+            if (showProgress && window.showLoadingIndicator && idx % 5 === 0) {
+                const percent = Math.round((idx / e.length) * 100);
+                window.showLoadingIndicator(percent, `Processing ${percent}%`);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        if (showProgress && window.hideLoadingIndicator) {
+            window.hideLoadingIndicator();
         }
 
         const dataString = JSON.stringify(e);

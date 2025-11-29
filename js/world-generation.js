@@ -100,21 +100,25 @@ function createEmberTexture(e) {
             g: 255,
             b: Math.floor(200 * i())
         }];
-    for (let e = 0; e < t; e++)
-        for (let o = 0; o < t; o++) {
-            const a = fbm(n, e / 8, o / 8, 3, .6),
-                r = 4 * (o * t + e);
+    for (let x = 0; x < t; x++)
+        for (let y = 0; y < t; y++) {
+            const a = fbm(n, x / 8, y / 8, 3, .6),
+                r = 4 * (y * t + x);
             let i, d, c;
             if (a < .5) {
-                const e = a / .5;
-                i = l[0].r + (l[1].r - l[0].r) * e, d = l[0].g + (l[1].g - l[0].g) * e, c = l[0].b + (l[1].b - l[0].b) * e
+                const factor = a / .5;
+                i = l[0].r + (l[1].r - l[0].r) * factor, d = l[0].g + (l[1].g - l[0].g) * factor, c = l[0].b + (l[1].b - l[0].b) * factor
             } else {
-                const e = (a - .5) / .5;
-                i = l[1].r + (l[2].r - l[1].r) * e, d = l[1].g + (l[2].g - l[1].g) * e, c = l[1].b + (l[2].b - l[1].b) * e
+                const factor = (a - .5) / .5;
+                i = l[1].r + (l[2].r - l[1].r) * factor, d = l[1].g + (l[2].g - l[1].g) * factor, c = l[1].b + (l[2].b - l[1].b) * factor
             }
             s[r] = i, s[r + 1] = d, s[r + 2] = c, s[r + 3] = a > .3 ? 255 : 0
         }
-    return a.putImageData(r, 0, 0), new THREE.CanvasTexture(o)
+    a.putImageData(r, 0, 0);
+    const tex = new THREE.CanvasTexture(o);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    return tex;
 }
 
 function createMobTexture(e, t, o = !1) {
@@ -150,7 +154,8 @@ function createBlockTexture(e, t) {
     n.width = a, n.height = a;
     const r = n.getContext("2d"),
         s = makeSeededRandom(e + "_block_texture_" + t),
-        i = new THREE.Color(BLOCKS[t].color);
+        blockDef = BLOCKS[t] || { color: "#ff00ff" },
+        i = new THREE.Color(blockDef.color);
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
     const d = Math.floor(5 * s()),
