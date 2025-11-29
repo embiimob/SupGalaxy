@@ -8,17 +8,17 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@embii4u">
     <meta name="twitter:title" content="🌌 SupGalaxy: Decentralized Voxel Adventure on Bitcoin">
-    <meta name="twitter:description" content="SupGalaxy v0.5.16-beta: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
+    <meta name="twitter:description" content="SupGalaxy v0.6.0: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
     <meta name="twitter:image" content="https://supgalaxy.org/SupGalaxy.jpg">
     <meta name="twitter:image:alt" content="SupGalaxy thumbnail: A cosmic voxel world with starry skies, procedural terrain, and player-built structures on the blockchain.">
 
     <!-- Open Graph Meta Tags (Bonus for Facebook, LinkedIn, etc.) -->
     <meta property="og:title" content="🌌 SupGalaxy: Infinite Decentralized Voxel Adventure on Blockchain">
-    <meta property="og:description" content="SupGalaxy v0.5.16-beta: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
+    <meta property="og:description" content="SupGalaxy v0.6.0: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
     <meta property="og:image" content="https://supgalaxy.org/SupGalaxy.jpg">
     <meta property="og:url" content="https://supgalaxy.org">
     <meta property="og:type" content="website">
-    <title>SupGalaxy v0.5.16-beta</title>
+    <title>SupGalaxy v0.6.0</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -55,7 +55,7 @@
     </div>
 
     <div id="videoMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
-        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
+        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; max-width: 95vw; max-height: 95vh; overflow: auto; color: #fff;">
             <h3>Video Menu</h3>
             <div style="display: flex; margin-bottom: 10px;">
                 <input type="text" id="videoSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
@@ -110,7 +110,7 @@
     <div id="hotbar" style="display:none;"></div>
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
-        <div id="versionLabel">SupGalaxy v0.5.16-beta</div>
+        <div id="versionLabel">SupGalaxy v0.6.0</div>
         <div id="musicPlayer" style="margin-top: 8px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
             <div style="display: flex; justify-content: space-around; margin-top: 4px;">
@@ -177,16 +177,19 @@
         <p>You died! All items lost.</p>
         <button id="respawnBtn">Continue</button>
     </div>
-    <div id="mobileControls">
-        <div class="m-btn" id="mUp">↑</div>
-        <div class="m-btn" id="mLeft">←</div>
-        <div class="m-btn" id="mDown">↓</div>
-        <div class="m-btn" id="mRight">→</div>
-    </div>
-    <div id="mobileRight">
-        <div class="m-action" id="mJump">J</div>
-        <div class="m-action" id="mInventory">I</div>
-        <div class="m-action" id="mCam">T</div>
+    <!-- New Mobile Controls -->
+    <div id="mobileInterface" style="display: none;">
+        <div id="mobileJoystickZone">
+            <div id="mobileJoystickKnob"></div>
+        </div>
+        <div id="mobileLookZone"></div>
+        <div id="mobileButtonsContainer">
+            <!-- Order requested: I, T, S, J -->
+            <div class="m-action-btn" id="mobileInventoryBtn">I</div>
+            <div class="m-action-btn" id="mobileCamBtn">T</div>
+            <div class="m-action-btn" id="mobileSprintBtn">S</div>
+            <div class="m-action-btn" id="mobileJumpBtn">J</div>
+        </div>
     </div>
     <div id="crosshair">+</div>
     <div id="damageFlash" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0); pointer-events: none; z-index: 9999; transition: background 0.1s;"></div>
@@ -218,7 +221,7 @@
         <div id="proximityVideoLabel" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; margin-top: 4px;"></div>
     </div>
     <div id="musicMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
-        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; color: #fff;">
+        <div style="background: var(--panel); padding: 14px; border-radius: 10px; min-width: 480px; max-width: 95vw; max-height: 95vh; overflow: auto; color: #fff;">
             <h3>Music Menu</h3>
             <div style="display: flex; margin-bottom: 10px;">
                 <input type="text" id="musicSearchInput" placeholder="Enter search keyword" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">

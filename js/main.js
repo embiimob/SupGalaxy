@@ -406,7 +406,9 @@ function initThree() {
             selectedHotIndex = (selectedHotIndex + t + 9) % 9, updateHotbarUI()
         }
     })), renderer.domElement.addEventListener("click", (function () {
-        if ("first" === cameraMode && !mouseLocked && !isMobile()) try {
+        if (isMobile()) {
+            if ("first" === cameraMode) document.getElementById("crosshair").style.display = "block";
+        } else if ("first" === cameraMode && !mouseLocked) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
             addMessage("Pointer lock failed. Serve over HTTPS or check iframe permissions.")
@@ -512,8 +514,9 @@ function initHotbar() {
     var e = document.getElementById("hotbar");
     e.innerHTML = "";
     for (var t = 0; t < 9; t++) {
+        let index = t;
         var o = document.createElement("div");
-        o.className = "hot-slot", o.dataset.index = t;
+        o.className = "hot-slot", o.dataset.index = index;
         var content = document.createElement("div");
         content.className = "hot-slot-content";
         var a = document.createElement("div");
@@ -524,19 +527,60 @@ function initHotbar() {
         content.appendChild(n);
         o.appendChild(content);
         e.appendChild(o);
+
+        // Click to select
         o.addEventListener("click", (function() {
             document.querySelectorAll(".hot-slot").forEach((function(e) {
                 e.classList.remove("active")
             })), this.classList.add("active"), selectedHotIndex = parseInt(this.dataset.index), updateHotbarUI();
-            if ("flex" === document.getElementById("mobileControls").style.display) {
-                onPointerDown({
-                    button: 2,
-                    preventDefault: () => {}
-                })
+
+            // Only fire action if mobile controls are explicitly shown
+            // But wait, user says "make usable objects usable by tapping on them within a reasonable distance".
+            // Hotbar selection shouldn't necessarily fire the action immediately unless intended.
+            // The previous code had: if ("flex" === document.getElementById("mobileControls").style.display) { onPointerDown... }
+            // This might be annoying if you just want to switch items. I'll remove it for now to be safe,
+            // as users usually select item then tap screen to use.
+        }));
+
+        // Long press logic
+        let pressTimer;
+        const startPress = (e) => {
+            // Only if valid item
+            if (!INVENTORY[index] || INVENTORY[index].count <= 0) return;
+
+            pressTimer = setTimeout(() => {
+                // Check if inventory is open
+                const invOpen = document.getElementById("inventoryModal").style.display === "block";
+                if (invOpen) {
+                    // Trash confirmation
+                    trashIndex = index;
+                    document.getElementById("trashItemName").innerText = "Trash " + BLOCKS[INVENTORY[trashIndex].id].name + " x" + INVENTORY[trashIndex].count + " ? ";
+                    document.getElementById("trashConfirm").style.display = "block";
+                } else {
+                    // Drop item (Whole Stack)
+                    selectedHotIndex = index; // Ensure we drop the one we held
+                    dropSelectedItem(true);
+                }
+            }, 500); // 500ms long press
+        };
+
+        const cancelPress = () => {
+            clearTimeout(pressTimer);
+        };
+
+        o.addEventListener("touchstart", startPress, { passive: true });
+        o.addEventListener("touchend", cancelPress);
+        o.addEventListener("touchcancel", cancelPress);
+
+        // Keep context menu for desktop fallback
+        o.addEventListener("contextmenu", (function(e) {
+            e.preventDefault();
+            if (INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0) {
+                 trashIndex = this.dataset.index;
+                 document.getElementById("trashItemName").innerText = "Trash " + BLOCKS[INVENTORY[trashIndex].id].name + " x" + INVENTORY[trashIndex].count + " ? ";
+                 document.getElementById("trashConfirm").style.display = "block";
             }
-        })), o.addEventListener("contextmenu", (function(e) {
-            e.preventDefault(), INVENTORY[this.dataset.index] && INVENTORY[this.dataset.index].count > 0 && (trashIndex = this.dataset.index, document.getElementById("trashItemName").innerText = "Trash " + BLOCKS[INVENTORY[trashIndex].id].name + " x" + INVENTORY[trashIndex].count + " ? ", document.getElementById("trashConfirm").style.display = "block")
-        }))
+        }));
     }
     updateHotbarUI()
 }
@@ -1325,28 +1369,80 @@ function createCalligraphyStoneScreen(stoneData) {
     scene.add(screenMesh);
 }
 
-function dropSelectedItem() {
+function dropSelectedItem(dropAll = false) {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
-    const t = `${userName}-${Date.now()}`,
-        o = new THREE.Vector3;
-    camera.getWorldDirection(o);
-    const a = new THREE.Vector3(player.x, player.y + 1, player.z).add(o.multiplyScalar(1.5));
-    createDroppedItemOrb(t, a, e.id, e.originSeed, userName), e.count--, e.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI();
-    const n = JSON.stringify({
-        type: "item_dropped",
-        dropId: t,
-        world: worldName,
-        blockId: e.id,
-        originSeed: e.originSeed,
-        position: {
-            x: a.x,
-            y: a.y,
-            z: a.z
-        },
-        dropper: userName
-    });
-    for (const [e, t] of peers.entries()) t.dc && "open" === t.dc.readyState && t.dc.send(n)
+
+    // Determine how many to drop
+    const countToDrop = dropAll ? e.count : 1;
+
+    // For each item to drop, we create an orb.
+    // If dropping a stack, maybe we should drop one orb representing the stack?
+    // The current system seems to assume 1 orb = 1 block/item because addToInventory takes count.
+    // createDroppedItemOrb doesn't seem to take count, but addToInventory does.
+    // Let's check addToInventory: addToInventory(id, count, seed).
+    // Let's check createDroppedItemOrb: createDroppedItemOrb(id, pos, blockId, seed, dropper).
+    // It pushes to droppedItems list. The game loop checks distance and calls addToInventory(o.blockId, 1, o.originSeed).
+    // Ah, the pickup logic (in gameLoop) hardcodes count 1.
+    // So if I drop a stack as one orb, it will be picked up as 1 item.
+    // To support stack dropping properly without refactoring the entire item drop system to support stacks,
+    // I should loop and drop 'countToDrop' individual items, or I need to refactor the drop system.
+    // Dropping 64 items individually might be laggy.
+    // Refactoring dropped items to support count is better but risky.
+    // Wait, the user prompt says "drop whole stack".
+    // If I drop 64 items, it spawns 64 lights/meshes. That's heavy.
+    // Let's modify the pickup logic to support stack count if I can.
+    // But `createDroppedItemOrb` creates a visual representation.
+    // I'll stick to dropping individual items for now to be safe with existing logic, OR just drop them in a loop.
+    // Actually, let's look at `gameLoop` pickup logic.
+    // `addToInventory(o.blockId, 1, o.originSeed)`
+    // Yes, hardcoded 1.
+    // If I change `createDroppedItemOrb` to accept count, I need to store it in the object.
+    // And update `gameLoop`.
+
+    // Let's try to update `createDroppedItemOrb` to handle counts.
+    // But `createDroppedItemOrb` signature: (e, t, o, a, n) -> id, pos, blockId, seed, dropper.
+    // I can modify `droppedItems` object structure.
+
+    // For now, to be safe and fulfill "drop whole stack", I will loop.
+    // Limit to reasonable number if needed? 64 is fine.
+
+    for (let i = 0; i < countToDrop; i++) {
+        // Offset slightly so they don't all stack perfectly (z-fighting/physics look)
+        const offset = new THREE.Vector3(Math.random() * 0.2 - 0.1, Math.random() * 0.2 - 0.1, Math.random() * 0.2 - 0.1);
+
+        const t = `${userName}-${Date.now()}-${i}`;
+        const o = new THREE.Vector3();
+        camera.getWorldDirection(o);
+        const a = new THREE.Vector3(player.x, player.y + 1, player.z).add(o.multiplyScalar(1.5)).add(offset);
+
+        createDroppedItemOrb(t, a, e.id, e.originSeed, userName);
+
+        const n = JSON.stringify({
+            type: "item_dropped",
+            dropId: t,
+            world: worldName,
+            blockId: e.id,
+            originSeed: e.originSeed,
+            position: {
+                x: a.x,
+                y: a.y,
+                z: a.z
+            },
+            dropper: userName
+        });
+        for (const [key, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === "open") {
+                peer.dc.send(n);
+            }
+        }
+    }
+
+    e.count -= countToDrop;
+    if (e.count <= 0) {
+        INVENTORY[selectedHotIndex] = null;
+    }
+    updateHotbarUI();
 }
 
 function onPointerDown(e) {
@@ -2338,15 +2434,38 @@ function playerJump() {
 }
 
 function toggleCameraMode() {
-    if (addMessage("Camera: " + (cameraMode = "third" === cameraMode ? "first" : "third")), controls.enabled = "third" === cameraMode, avatarGroup.visible = "third" === cameraMode, "third" === cameraMode) camera.position.set(player.x, player.y + 5, player.z + 10), controls.target.set(player.x, player.y + .6, player.z), controls.update(), isMobile() || document.exitPointerLock(), mouseLocked = !1, document.getElementById("crosshair").style.display = "none";
-    else {
-        if (isMobile()) document.getElementById("crosshair").style.display = "block";
-        else try {
-            renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
-        } catch (e) {
-            addMessage("Pointer lock failed. Please serve over HTTPS or ensure allow-pointer-lock is set in iframe."), document.getElementById("crosshair").style.display = "block"
+    addMessage("Camera: " + (cameraMode = "third" === cameraMode ? "first" : "third"));
+
+    // Toggle controls and avatar visibility
+    controls.enabled = "third" === cameraMode;
+    avatarGroup.visible = "third" === cameraMode;
+
+    if ("third" === cameraMode) {
+        // Switch to Third Person
+        camera.position.set(player.x, player.y + 5, player.z + 10);
+        controls.target.set(player.x, player.y + .6, player.z);
+        controls.update();
+
+        if (!isMobile()) document.exitPointerLock();
+        mouseLocked = false;
+        document.getElementById("crosshair").style.display = "none";
+    } else {
+        // Switch to First Person
+        if (isMobile()) {
+            document.getElementById("crosshair").style.display = "block";
+        } else {
+            try {
+                renderer.domElement.requestPointerLock();
+                mouseLocked = true;
+                document.getElementById("crosshair").style.display = "block";
+            } catch (e) {
+                addMessage("Pointer lock failed. Please serve over HTTPS or ensure allow-pointer-lock is set in iframe.");
+                document.getElementById("crosshair").style.display = "block";
+            }
         }
-        player.yaw = 0, player.pitch = 0, camera.rotation.set(0, 0, 0, "YXZ")
+        player.yaw = 0;
+        player.pitch = 0;
+        camera.rotation.set(0, 0, 0, "YXZ");
     }
 }
 
@@ -2582,35 +2701,295 @@ function isMobile() {
 }
 
 function setupMobile() {
-    if (isMobile()) {
-        var e = document.getElementById("mUp"),
-            t = document.getElementById("mDown"),
-            o = document.getElementById("mLeft"),
-            a = document.getElementById("mRight");
-        e.addEventListener("touchstart", (function (e) {
-            joystick.up = !0, e.preventDefault()
-        })), e.addEventListener("touchend", (function (e) {
-            joystick.up = !1, e.preventDefault()
-        })), t.addEventListener("touchstart", (function (e) {
-            joystick.down = !0, e.preventDefault()
-        })), t.addEventListener("touchend", (function (e) {
-            joystick.down = !1, e.preventDefault()
-        })), o.addEventListener("touchstart", (function (e) {
-            joystick.left = !0, e.preventDefault()
-        })), o.addEventListener("touchend", (function (e) {
-            joystick.left = !1, e.preventDefault()
-        })), a.addEventListener("touchstart", (function (e) {
-            joystick.right = !0, e.preventDefault()
-        })), a.addEventListener("touchend", (function (e) {
-            joystick.right = !1, e.preventDefault()
-        })), document.getElementById("mJump").addEventListener("touchstart", (function (e) {
-            playerJump(), e.preventDefault()
-        })), document.getElementById("mInventory").addEventListener("touchstart", (function (e) {
-            toggleInventory(), e.preventDefault()
-        })), document.getElementById("mCam").addEventListener("touchstart", (function (e) {
-            toggleCameraMode(), e.preventDefault()
-        }))
-    }
+    if (!isMobile()) return;
+
+    // Joystick variables
+    const joystickZone = document.getElementById("mobileJoystickZone");
+    const joystickKnob = document.getElementById("mobileJoystickKnob");
+    let joystickOrigin = { x: 0, y: 0 };
+    let joystickId = null;
+
+    // Joystick Event Handlers
+    joystickZone.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        joystickId = touch.identifier;
+        joystickOrigin = { x: touch.clientX, y: touch.clientY };
+
+        joystickKnob.style.display = "block";
+        joystickKnob.style.left = touch.clientX + "px";
+        joystickKnob.style.top = touch.clientY + "px";
+        joystickKnob.style.transform = "translate(-50%, -50%)"; // Reset transform for centering
+    }, { passive: false });
+
+    joystickZone.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                const touch = e.changedTouches[i];
+                const dx = touch.clientX - joystickOrigin.x;
+                const dy = touch.clientY - joystickOrigin.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDist = 50; // Max joystick radius
+
+                let clampedX = dx;
+                let clampedY = dy;
+
+                if (distance > maxDist) {
+                    const ratio = maxDist / distance;
+                    clampedX = dx * ratio;
+                    clampedY = dy * ratio;
+                }
+
+                joystickKnob.style.transform = `translate(calc(-50% + ${clampedX}px), calc(-50% + ${clampedY}px))`;
+
+                // Update joystick input state
+                // Normalize to -1 to 1
+                const normX = clampedX / maxDist;
+                const normY = clampedY / maxDist;
+
+                // Deadzone
+                const deadzone = 0.2;
+
+                joystick.right = normX > deadzone;
+                joystick.left = normX < -deadzone;
+                joystick.down = normY > deadzone;
+                joystick.up = normY < -deadzone;
+
+                break;
+            }
+        }
+    }, { passive: false });
+
+    const endJoystick = (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                joystickId = null;
+                joystickKnob.style.display = "none";
+                joystick.up = false;
+                joystick.down = false;
+                joystick.left = false;
+                joystick.right = false;
+                break;
+            }
+        }
+    };
+
+    joystickZone.addEventListener("touchend", endJoystick, { passive: false });
+    joystickZone.addEventListener("touchcancel", endJoystick, { passive: false });
+
+    // Look/Interact Zone variables
+    const lookZone = document.getElementById("mobileLookZone");
+    let lookOrigin = { x: 0, y: 0 };
+    let lookId = null;
+    let lookStartTime = 0;
+    let lookMoved = false;
+    let lastPinchDistance = 0;
+
+    // Look Event Handlers
+    lookZone.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+
+        // Handle initial pinch distance
+        if (e.touches.length === 2 && cameraMode === "third") {
+            const dx = e.touches[0].pageX - e.touches[1].pageX;
+            const dy = e.touches[0].pageY - e.touches[1].pageY;
+            lastPinchDistance = Math.sqrt(dx * dx + dy * dy);
+            return; // Don't start look logic if pinching
+        }
+
+        const touch = e.changedTouches[0];
+        lookId = touch.identifier;
+        lookOrigin = { x: touch.clientX, y: touch.clientY };
+        lookStartTime = Date.now();
+        lookMoved = false;
+    }, { passive: false });
+
+    lookZone.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+
+        // Handle Pinch to Zoom in 3rd Person
+        if (e.touches.length === 2 && cameraMode === "third") {
+            const dx = e.touches[0].pageX - e.touches[1].pageX;
+            const dy = e.touches[0].pageY - e.touches[1].pageY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (lastPinchDistance > 0) {
+                const delta = distance - lastPinchDistance;
+                // Zoom sensitivity
+                const zoomSpeed = 0.05;
+
+                // Adjust camera distance
+                const eye = new THREE.Vector3().copy(controls.object.position).sub(controls.target);
+                let len = eye.length();
+
+                // Spread (positive delta) -> Zoom In (shorter distance)
+                // Pinch (negative delta) -> Zoom Out (longer distance)
+                // Wait, typically spread enlarges content.
+                // If I spread fingers, I want to see MORE detail, so zoom IN.
+                // So delta > 0 should DECREASE distance.
+
+                len -= delta * zoomSpeed;
+
+                // Clamp
+                len = Math.max(controls.minDistance, Math.min(controls.maxDistance, len));
+
+                eye.normalize().multiplyScalar(len);
+                controls.object.position.copy(controls.target).add(eye);
+                controls.update();
+            }
+
+            lastPinchDistance = distance;
+            return; // Skip look logic
+        }
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === lookId) {
+                const touch = e.changedTouches[i];
+                const dx = touch.clientX - lookOrigin.x;
+                const dy = touch.clientY - lookOrigin.y;
+
+                // Update Look
+                const sensitivity = 0.005;
+                if (cameraMode === "first") {
+                    player.yaw -= dx * sensitivity;
+                    player.pitch -= dy * sensitivity;
+                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+
+                    camera.rotation.set(player.pitch, player.yaw, 0, "YXZ");
+                    if (avatarGroup && avatarGroup.children[3]) {
+                        avatarGroup.children[3].rotation.set(player.pitch, 0, 0);
+                    }
+                } else {
+                    // Third person orbit
+                    if (controls && controls.enabled) {
+                        controls.rotateLeft(dx * sensitivity);
+                        controls.rotateUp(dy * sensitivity);
+                        controls.update();
+                    }
+                }
+
+                lookOrigin = { x: touch.clientX, y: touch.clientY };
+
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                    lookMoved = true;
+                }
+                break;
+            }
+        }
+    }, { passive: false });
+
+    const endLook = (e) => {
+        e.preventDefault();
+
+        // Reset pinch if fingers lifted
+        if (e.touches.length < 2) {
+            lastPinchDistance = 0;
+        }
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === lookId) {
+                const touch = e.changedTouches[i];
+                const duration = Date.now() - lookStartTime;
+
+                if (!lookMoved && duration < 300) {
+                    // Short Tap - Interact / Use
+                    const item = INVENTORY[selectedHotIndex];
+                    let button = 2; // Default to Right Click (Place/Interact)
+
+                    // If item is a gun (121, 126) or consumable (122), use Left Click (Button 0)
+                    // because Right Click with hand_attachable items triggers 'drop' logic.
+                    // Guns and honey are usually 0 to fire/eat.
+                    if (item && (item.id === 121 || item.id === 126 || item.id === 122)) {
+                        button = 0;
+                    }
+
+                    onPointerDown({
+                        button: button,
+                        preventDefault: () => {}
+                    });
+                }
+
+                // Reset
+                lookId = null;
+                clearInterval(breakInterval);
+                breakInterval = null;
+                break;
+            }
+        }
+    };
+
+    let breakInterval = null;
+    lookZone.addEventListener("touchstart", (e) => {
+        // Start holding timer
+        if (breakInterval) clearInterval(breakInterval);
+        breakInterval = setTimeout(() => {
+            if (!lookMoved) {
+                // Long press - Break/Attack (Left Click equivalent)
+                onPointerDown({
+                    button: 0, // Left click / Break
+                    preventDefault: () => {}
+                });
+                // Repeated breaking if holding? The prompt says "tapped and held down for a moment", implying single action or continuous?
+                // Standard minecraft is continuous. Let's make it continuous if held?
+                // For now, let's just trigger one action or set a flag.
+                // onPointerDown handles one hit.
+
+                // Let's set a repeated attack interval
+                breakInterval = setInterval(() => {
+                     if (!lookMoved) {
+                        onPointerDown({
+                            button: 0,
+                            preventDefault: () => {}
+                        });
+                     }
+                }, 250); // 4 hits per second
+            }
+        }, 300); // 300ms threshold
+    }, { passive: false });
+
+    lookZone.addEventListener("touchend", (e) => {
+        // Clear interval on end
+        if (breakInterval) {
+            clearTimeout(breakInterval);
+            clearInterval(breakInterval);
+            breakInterval = null;
+        }
+        endLook(e);
+    }, { passive: false });
+
+    lookZone.addEventListener("touchcancel", (e) => {
+        if (breakInterval) {
+            clearTimeout(breakInterval);
+            clearInterval(breakInterval);
+            breakInterval = null;
+        }
+        endLook(e);
+    }, { passive: false });
+
+
+    // Buttons
+    document.getElementById("mobileJumpBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        playerJump();
+    });
+
+    document.getElementById("mobileSprintBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        isSprinting = !isSprinting;
+        addMessage(isSprinting ? "Sprinting enabled" : "Sprinting disabled", 1000);
+    });
+
+    document.getElementById("mobileInventoryBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        toggleInventory();
+    });
+
+    document.getElementById("mobileCamBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        toggleCameraMode();
+    });
 }
 
 function updateLoginUI() {
@@ -2820,10 +3199,17 @@ async function startGame() {
         spawn: s
     });
 
-    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) try {
-        renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
-    } catch (e) {
-        addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
+    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) {
+        try {
+            renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
+        } catch (e) {
+            addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
+        }
+    } else {
+        // Mobile start
+        if (cameraMode === "first") {
+            document.getElementById("crosshair").style.display = "block";
+        }
     }
     player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
     registerKeyEvents();
@@ -2834,7 +3220,8 @@ async function startGame() {
     c && (c.innerText = player.score), await initServers(), worker.postMessage({
         type: "sync_processed",
         ids: Array.from(processedMessages)
-    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3)
+    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3);
+    handleResizeAndOrientation();
 }
 
 function scanExpiredOwnership() {
@@ -3156,7 +3543,7 @@ function gameLoop(e) {
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
             i = 0;
-        isMobile() ? (joystick.up && (i -= 1), joystick.down && (i += 1), joystick.left && (s -= 1), joystick.right && (s += 1)) : (keys.w && (i += 1), keys.s && (i -= 1), keys.a && (s -= 1), keys.d && (s += 1), i <= 0 && isSprinting && (isSprinting = !1, addMessage("Sprinting disabled", 1500)), "first" === cameraMode && (keys.arrowup && (player.pitch += .02), keys.arrowdown && (player.pitch -= .02), keys.arrowleft && (player.yaw += .02), keys.arrowright && (player.yaw -= .02), player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"))), "first" === cameraMode ? a = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, "YXZ")) : (a = new THREE.Vector3, camera.getWorldDirection(a)), a.y = 0, a.normalize(), n = (new THREE.Vector3).crossVectors(a, new THREE.Vector3(0, 1, 0));
+        isMobile() ? (joystick.up && (i += 1), joystick.down && (i -= 1), joystick.left && (s -= 1), joystick.right && (s += 1)) : (keys.w && (i += 1), keys.s && (i -= 1), keys.a && (s -= 1), keys.d && (s += 1), i <= 0 && isSprinting && (isSprinting = !1, addMessage("Sprinting disabled", 1500)), "first" === cameraMode && (keys.arrowup && (player.pitch += .02), keys.arrowdown && (player.pitch -= .02), keys.arrowleft && (player.yaw += .02), keys.arrowright && (player.yaw -= .02), player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"))), "first" === cameraMode ? a = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, "YXZ")) : (a = new THREE.Vector3, camera.getWorldDirection(a)), a.y = 0, a.normalize(), n = (new THREE.Vector3).crossVectors(a, new THREE.Vector3(0, 1, 0));
         var l = new THREE.Vector3;
         l.addScaledVector(a, i), l.addScaledVector(n, s);
         const o = l.length() > .001;
@@ -3263,8 +3650,14 @@ function gameLoop(e) {
         }
         updateMinimap();
         var h = document.getElementById("posLabel");
-        if (h && (h.innerText = Math.floor(player.x) + ", " + Math.floor(player.y) + ", " + Math.floor(player.z)), "third" === cameraMode) controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2), controls.update();
-        else {
+        if (h && (h.innerText = Math.floor(player.x) + ", " + Math.floor(player.y) + ", " + Math.floor(player.z)), "third" === cameraMode) {
+             controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2);
+             // Do NOT call controls.update() here every frame if we want manual control logic to persist without jitter?
+             // Actually, controls.update() is required for damping and auto-rotation.
+             // But if we are manually setting position, we might fight it.
+             // Standard OrbitControls usage: set target, call update.
+             controls.update();
+        } else {
             var f = new THREE.Vector3(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
             camera.position.copy(f)
         }
@@ -3937,10 +4330,18 @@ function handleResizeAndOrientation() {
     const rightPanel = document.getElementById('rightPanel');
     const mobileModeToggle = document.getElementById('mobileModeToggle');
 
+    const mobileInterface = document.getElementById('mobileInterface');
+
     if (isSmallScreen && isPortrait) {
         hud.style.display = 'none';
-        mobileControls.style.display = 'flex';
-        mobileRight.style.display = 'flex';
+        // Auto-enable mobile controls in portrait on small screens
+        // Only show if user is actually logged in/playing, not on login screen
+        if (document.getElementById("loginOverlay").style.display === "none") {
+             if (mobileInterface) mobileInterface.style.display = 'block';
+        } else {
+             if (mobileInterface) mobileInterface.style.display = 'none';
+        }
+
         hotbar.classList.add('mobile-hotbar');
         updateHotbarSlots(4);
         mobileModeToggle.style.display = 'none';
@@ -3948,18 +4349,21 @@ function handleResizeAndOrientation() {
         mobileModeToggle.style.display = 'block';
         if (mobileModeActive) {
             hud.style.display = 'none';
-            mobileControls.style.display = 'flex';
-            mobileRight.style.display = 'flex';
+            if (mobileInterface) mobileInterface.style.display = 'block';
             rightPanel.classList.add('minimap-small');
         } else {
-            hud.style.display = 'block';
-            mobileControls.style.display = 'none';
-            mobileRight.style.display = 'none';
+            const isLoginVisible = document.getElementById("loginOverlay").style.display !== "none";
+            hud.style.display = isLoginVisible ? 'none' : 'block';
+            if (mobileInterface) mobileInterface.style.display = 'none';
             rightPanel.classList.remove('minimap-small');
         }
         hotbar.classList.remove('mobile-hotbar');
         updateHotbarSlots(9);
     }
+
+    // Ensure old controls are hidden
+    if (mobileControls) mobileControls.style.display = 'none';
+    if (mobileRight) mobileRight.style.display = 'none';
 }
 
 function updateHotbarSlots(numSlots) {
