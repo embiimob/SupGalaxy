@@ -1056,18 +1056,28 @@ async function createMagicianStoneScreen(stoneData) {
     let texture;
 
     if (fileExtension === 'gif') {
-        // For GIFs, use an <img> element as the texture source to preserve animation
+        // For GIFs, use a canvas that redraws the img element each frame
+        // This captures the current GIF frame as the browser decodes it
         const img = document.createElement('img');
         img.crossOrigin = 'anonymous';
-        texture = new THREE.Texture(img);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
         img.onload = () => {
+            canvas.width = img.naturalWidth || img.width || 256;
+            canvas.height = img.naturalHeight || img.height || 256;
+            ctx.drawImage(img, 0, 0);
             texture.needsUpdate = true;
         };
         img.onerror = () => {
             console.error('Failed to load GIF for Magician Stone:', url);
         };
         img.src = url;
+        
+        texture = new THREE.CanvasTexture(canvas);
         stoneData.gifImgElement = img;
+        stoneData.gifCanvas = canvas;
+        stoneData.gifContext = ctx;
         stoneData.gifTexture = texture;
     } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
@@ -3522,11 +3532,13 @@ function gameLoop(e) {
                 }
 
                 // Update GIF texture to enable animation (only when within render distance)
-                // The browser handles GIF frame updates internally; we mark needsUpdate to sync with WebGL
+                // Redraw the GIF image to the canvas to capture the current frame
                 // Throttle updates to ~30fps by checking elapsed time (about every other frame at 60fps)
-                if (stone.gifTexture && stone.gifImgElement && stone.gifImgElement.complete && distance <= (stone.distance || 50)) {
+                if (stone.gifTexture && stone.gifImgElement && stone.gifContext && stone.gifImgElement.complete && distance <= (stone.distance || 50)) {
                     const now = e; // e is the timestamp from requestAnimationFrame
                     if (!stone.lastGifUpdate || (now - stone.lastGifUpdate) >= 33) {
+                        // Redraw the current GIF frame to the canvas
+                        stone.gifContext.drawImage(stone.gifImgElement, 0, 0);
                         stone.gifTexture.needsUpdate = true;
                         stone.lastGifUpdate = now;
                     }
