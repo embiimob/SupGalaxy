@@ -954,6 +954,12 @@ function setupDataChannel(e, t) {
                                 magicianStones[key].audioElement.pause();
                                 magicianStones[key].audioElement.src = '';
                             }
+                            if (magicianStones[key].gifTexture) {
+                                magicianStones[key].gifTexture.dispose();
+                            }
+                            if (magicianStones[key].gifImgElement) {
+                                magicianStones[key].gifImgElement.src = '';
+                            }
                             delete magicianStones[key];
                         }
                     }

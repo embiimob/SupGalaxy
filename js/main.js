@@ -1802,6 +1802,12 @@ function removeBlockAt(e, t, o, breaker) {
                     magicianStones[key].audioElement.pause();
                     magicianStones[key].audioElement.src = '';
                 }
+                if (magicianStones[key].gifTexture) {
+                    magicianStones[key].gifTexture.dispose();
+                }
+                if (magicianStones[key].gifImgElement) {
+                    magicianStones[key].gifImgElement.src = '';
+                }
                 delete magicianStones[key];
 
                 const message = JSON.stringify({
