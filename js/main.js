@@ -1,3 +1,29 @@
+
+function showLoadingIndicator(percent, text) {
+    const el = document.getElementById('worldSyncProgress');
+    if (!el) return;
+    el.style.display = 'flex';
+    const circle = el.querySelector('.progress-circle');
+    if (circle) {
+        circle.style.setProperty('--p', percent);
+        circle.dataset.progress = percent;
+    }
+    const label = el.querySelector('.progress-circle-label');
+    if (label) {
+        label.textContent = text || `${Math.round(percent)}%`;
+    }
+}
+
+function hideLoadingIndicator() {
+    const el = document.getElementById('worldSyncProgress');
+    if (el) {
+        el.style.display = 'none';
+    }
+}
+
+// Make them global
+window.showLoadingIndicator = showLoadingIndicator;
+window.hideLoadingIndicator = hideLoadingIndicator;
 function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
@@ -187,8 +213,12 @@ async function applySaveFile(e, t, o) {
         updateHotbarUI();
         console.log("[LOGIN] Creating ChunkManager from session");
         chunkManager = new ChunkManager(worldSeed);
-        if (t.deltas)
-            for (var r of t.deltas) {
+        if (t.deltas) {
+            showLoadingIndicator(0, "Loading File...");
+            await new Promise(r => setTimeout(r, 50)); // Allow UI to render
+            const totalDeltas = t.deltas.length;
+            for (let idx = 0; idx < totalDeltas; idx++) {
+                const r = t.deltas[idx];
                 var s = r.chunk.replace(/^#/, ""),
                     i = r.changes;
                 chunkManager.applyDeltasToChunk(s, i);
@@ -198,7 +228,15 @@ async function applySaveFile(e, t, o) {
                 }
                 const changesWithSource = i.map(change => ({ ...change, source: 'local' }));
                 worldState.chunkDeltas.get(s).push(...changesWithSource);
+
+                if (idx % 10 === 0) {
+                    const percent = Math.round((idx / totalDeltas) * 100);
+                    showLoadingIndicator(percent, `Loading ${percent}%`);
+                    await new Promise(r => setTimeout(r, 0)); // Yield to UI
+                }
             }
+            hideLoadingIndicator();
+        }
         populateSpawnChunks(), spawnPoint = {
             x: player.x,
             y: player.y,
@@ -2956,7 +2994,7 @@ function switchWorld(newWorldName, targetSpawn) {
         x: player.x,
         y: player.y,
         z: player.z
-    }, chunkManager = new ChunkManager(worldSeed), initSky();
+    }, emberTexture = createEmberTexture(worldSeed), chunkManager = new ChunkManager(worldSeed), initSky();
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
 

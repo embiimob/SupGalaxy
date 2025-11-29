@@ -475,12 +475,7 @@ function setupDataChannel(e, t) {
                             total: s.total,
                             received: 0
                         });
-                        const worldSyncProgress = document.getElementById('worldSyncProgress');
-                        worldSyncProgress.style.display = 'flex';
-                        const progressCircle = worldSyncProgress.querySelector('.progress-circle');
-                        progressCircle.style.setProperty('--p', '0');
-                        progressCircle.dataset.progress = '0';
-                        worldSyncProgress.querySelector('.progress-circle-label').textContent = '0%';
+                        showLoadingIndicator(0, '0%');
                     }
                     break;
                 case 'world_sync_chunk':
@@ -491,15 +486,7 @@ function setupDataChannel(e, t) {
                             update.received++;
 
                             const progress = Math.round(update.received / update.total * 100);
-                            const circle = document.querySelector('.progress-circle');
-                            if (circle) {
-                                circle.style.setProperty('--p', progress);
-                                circle.dataset.progress = progress;
-                                const label = document.querySelector('.progress-circle-label');
-                                if (label) {
-                                    label.textContent = `${progress}%`;
-                                }
-                            }
+                            showLoadingIndicator(progress, `${progress}%`);
 
                             if (update.received === update.total) {
                                 const fullDataString = update.chunks.join('');
@@ -527,7 +514,7 @@ function setupDataChannel(e, t) {
                                 partialIPFSUpdates.delete(s.transactionId);
 
                                 setTimeout(() => {
-                                    document.getElementById('worldSyncProgress').style.display = 'none';
+                                    hideLoadingIndicator();
                                 }, 2000);
                             }
                         }
@@ -785,6 +772,7 @@ function setupDataChannel(e, t) {
                             timestamp: s.timestamp,
                             sourceUsername: n
                         });
+                        showLoadingIndicator(0, 'Receiving...');
                     }
                     break;
                 case "ipfs_chunk_update_chunk":
@@ -793,10 +781,20 @@ function setupDataChannel(e, t) {
                         if (update && !update.chunks[s.index]) { // Prevent processing duplicates
                             update.chunks[s.index] = s.chunk;
                             update.received++;
+
+                            const progress = Math.round(update.received / update.total * 100);
+                            showLoadingIndicator(progress, `Receiving ${progress}%`);
+
                             if (update.received === s.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
-                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
-                                partialIPFSUpdates.delete(s.transactionId);
+                                // Hide indicator logic is handled in applyChunkUpdates or separately if synchronous
+                                // Since applyChunkUpdates might take time, we can keep the indicator up or switch to "Processing"
+                                showLoadingIndicator(100, "Processing...");
+                                setTimeout(async () => {
+                                    await applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
+                                    partialIPFSUpdates.delete(s.transactionId);
+                                    hideLoadingIndicator();
+                                }, 50); // Yield to render "Processing" state
                             }
                         }
                     }
