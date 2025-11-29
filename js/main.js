@@ -1055,7 +1055,18 @@ async function createMagicianStoneScreen(stoneData) {
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
 
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+    if (fileExtension === 'gif') {
+        // For GIFs, use an <img> element as the texture source to preserve animation
+        const img = document.createElement('img');
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+        texture = new THREE.Texture(img);
+        img.onload = () => {
+            texture.needsUpdate = true;
+        };
+        stoneData.gifImgElement = img;
+        stoneData.gifTexture = texture;
+    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -3498,6 +3509,11 @@ function gameLoop(e) {
                 // Update animation mixer if exists
                 if (stone.mixer) {
                     stone.mixer.update(t);
+                }
+
+                // Update GIF texture to enable animation
+                if (stone.gifTexture && stone.gifImgElement && stone.gifImgElement.complete) {
+                    stone.gifTexture.needsUpdate = true;
                 }
 
                 if (mediaElement && stone.autoplay) {
