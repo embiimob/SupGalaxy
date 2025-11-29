@@ -1059,11 +1059,14 @@ async function createMagicianStoneScreen(stoneData) {
         // For GIFs, use an <img> element as the texture source to preserve animation
         const img = document.createElement('img');
         img.crossOrigin = 'anonymous';
-        img.src = url;
         texture = new THREE.Texture(img);
         img.onload = () => {
             texture.needsUpdate = true;
         };
+        img.onerror = () => {
+            console.error('Failed to load GIF for Magician Stone:', url);
+        };
+        img.src = url;
         stoneData.gifImgElement = img;
         stoneData.gifTexture = texture;
     } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
@@ -3511,8 +3514,9 @@ function gameLoop(e) {
                     stone.mixer.update(t);
                 }
 
-                // Update GIF texture to enable animation
-                if (stone.gifTexture && stone.gifImgElement && stone.gifImgElement.complete) {
+                // Update GIF texture to enable animation (only when within render distance)
+                // The browser handles GIF frame updates internally; we mark needsUpdate to sync with WebGL
+                if (stone.gifTexture && stone.gifImgElement && stone.gifImgElement.complete && distance <= (stone.distance || 50)) {
                     stone.gifTexture.needsUpdate = true;
                 }
 
