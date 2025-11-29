@@ -1055,7 +1055,64 @@ async function createMagicianStoneScreen(stoneData) {
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
 
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+    if (fileExtension === 'gif') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        texture = new THREE.CanvasTexture(canvas);
+
+        try {
+            const response = await fetch(url);
+            const buffer = await response.arrayBuffer();
+            const u8Buffer = new Uint8Array(buffer);
+            const gifReader = new GifReader(u8Buffer);
+
+            canvas.width = gifReader.width;
+            canvas.height = gifReader.height;
+            texture.image = canvas; // Update texture with resized canvas
+            texture.needsUpdate = true;
+
+            const frames = [];
+            const numFrames = gifReader.numFrames();
+
+            // Create a temporary canvas to decode frames
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = gifReader.width;
+            frameCanvas.height = gifReader.height;
+            const frameCtx = frameCanvas.getContext('2d');
+            const frameImageData = frameCtx.createImageData(gifReader.width, gifReader.height);
+
+            // Pre-decode frames if not too many, or we can decode on the fly.
+            // For better performance in loop, let's decode on the fly or cache a few.
+            // But GifReader needs to decode sequentially for disposal to work right usually.
+            // Omggif decodeAndBlitFrameRGBA handles pixels.
+
+            stoneData.gifData = {
+                reader: gifReader,
+                currentFrame: 0,
+                accumulatedTime: 0,
+                frames: [], // We can cache ImageData or ImageBitmap
+                startTime: performance.now(),
+                canvas: canvas,
+                ctx: ctx,
+                texture: texture,
+                tempImageData: frameImageData,
+                numFrames: numFrames
+            };
+
+            // Initial draw
+            gifReader.decodeAndBlitFrameRGBA(0, frameImageData.data);
+            ctx.putImageData(frameImageData, 0, 0);
+            texture.needsUpdate = true;
+
+        } catch (e) {
+            console.error("Failed to parse GIF", e);
+            // Fallback to static image loader if parsing fails
+            texture = new THREE.TextureLoader().load(url);
+        }
+
+    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -3498,6 +3555,72 @@ function gameLoop(e) {
                 // Update animation mixer if exists
                 if (stone.mixer) {
                     stone.mixer.update(t);
+                }
+
+                // Update GIF animation
+                if (stone.gifData && stone.gifData.reader) {
+                    const gif = stone.gifData;
+                    gif.accumulatedTime += t * 1000; // Convert dt (seconds) to ms
+
+                    let frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                    let delay = frameInfo.delay * 10; // Delay is in 100ths of a second
+                    if (delay === 0) delay = 100; // Default delay if 0
+
+                    while (gif.accumulatedTime >= delay) {
+                        gif.accumulatedTime -= delay;
+
+                        // Handle disposal of the CURRENT frame (that we are about to overwrite)
+                        // If disposal method was 2 (Restore to Background), we must clear its area in our persistent buffer.
+                        // Note: frameInfo currently points to the frame we just displayed.
+                        if (frameInfo.disposal === 2) {
+                             // Clear the rect in the persistent buffer
+                             const data = gif.tempImageData.data;
+                             const width = gif.reader.width; // Buffer is always full width
+
+                             // Bounds to clear
+                             const cx = frameInfo.x;
+                             const cy = frameInfo.y;
+                             const cw = frameInfo.width;
+                             const ch = frameInfo.height;
+
+                             // Iterate and clear to 0
+                             for (let y = cy; y < cy + ch; y++) {
+                                 for (let x = cx; x < cx + cw; x++) {
+                                     // Safety check for bounds
+                                     if (x >= 0 && x < width && y >= 0 && y < gif.reader.height) {
+                                         const offset = (y * width + x) * 4;
+                                         data[offset] = 0;
+                                         data[offset + 1] = 0;
+                                         data[offset + 2] = 0;
+                                         data[offset + 3] = 0;
+                                     }
+                                 }
+                             }
+                        }
+
+                        // Advance to next frame
+                        gif.currentFrame = (gif.currentFrame + 1) % gif.numFrames;
+
+                        // If we looped back to 0, we might need to clear if the whole animation expects a fresh start?
+                        // However, disposal logic usually handles this frame-by-frame.
+                        // Standard GIF behavior relies on frame 0 being drawn over whatever (or cleared if frame n-1 said so).
+
+                        // Decode NEXT frame into the persistent buffer
+                        // decodeAndBlitFrameRGBA writes new pixels into the buffer.
+                        // It skips transparent pixels, so previous data is preserved (compositing).
+                        // CRITICAL: The buffer MUST be the size of the full logical screen (gif.reader.width/height)
+                        // because omggif calculates offsets based on global width.
+                        gif.reader.decodeAndBlitFrameRGBA(gif.currentFrame, gif.tempImageData.data);
+
+                        // Push the updated full buffer to the canvas
+                        gif.ctx.putImageData(gif.tempImageData, 0, 0);
+                        gif.texture.needsUpdate = true;
+
+                        // Update info for next loop check
+                        frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                        delay = frameInfo.delay * 10;
+                        if (delay === 0) delay = 100;
+                    }
                 }
 
                 if (mediaElement && stone.autoplay) {
