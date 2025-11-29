@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "canvas": "^3.2.0",
-    "jsdom": "^27.2.0"
-  }
-}

@@ -140,11 +140,12 @@
             position: fixed;
             left: 12px;
             top: 12px;
-            z-index: 180;
+            z-index: 200;
             background: rgba(6,8,12,0.55);
             padding: 10px;
             border-radius: 8px;
             min-width: 220px;
+            display: none;
         }
 
 .progress-circle {
@@ -214,7 +215,7 @@
             left: 50%;
             transform: translateX(-50%);
             bottom: 12px;
-            z-index: 190;
+            z-index: 210;
             display: flex;
             gap: 4px;
             width: 90%;
@@ -278,7 +279,7 @@
             position: fixed;
             right: 12px;
             top: 12px;
-            z-index: 180;
+            z-index: 200;
             background: rgba(6,8,12,0.55);
             padding: 10px;
             border-radius: 8px;
@@ -326,7 +327,8 @@
             border-radius: 10px;
             width: 90%;
             max-width: 500px;
-            max-height: 80vh;
+            max-height: 90vh; /* Increased for mobile */
+            overflow: auto; /* Allow scroll if off-screen */
             display: flex;
             flex-direction: column;
         }
@@ -414,6 +416,9 @@
             padding: 14px;
             border-radius: 10px;
             min-width: 480px;
+            max-height: 80vh; /* Mobile safeguard */
+            overflow: auto;
+            overscroll-behavior: contain;
             color: #fff;
         }
 
@@ -825,6 +830,8 @@
                 width: 95vw;
                 min-width: unset;
                 padding: 8px;
+                max-height: 80vh;
+                overflow-y: auto;
             }
 
             #inventoryGrid, #inventoryHotbar {
@@ -869,3 +876,183 @@
                 box-shadow: 0 0 10px 3px rgba(255, 209, 102, 0.7);
             }
         }
+
+/* Update Mobile Controls */
+#mobileInterface {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 170; /* Below HUD (180), Hotbar (190), etc. */
+}
+
+#mobileJoystickZone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    pointer-events: auto;
+    touch-action: none;
+    z-index: 50; /* Above canvas, below everything else */
+}
+
+#mobileJoystickKnob {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    display: none;
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+#mobileLookZone {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 50%;
+    height: 100%;
+    pointer-events: auto;
+    touch-action: none;
+    z-index: 50; /* Above canvas, below HUD */
+}
+
+#mobileButtonsContainer {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    pointer-events: auto;
+    z-index: 195;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Re-use old IDs but they are now all in one container at bottom */
+#mobileButtonsLeft {
+    display: contents; /* Allow children to sit in the flex container */
+}
+
+#mobileButtonsRight {
+    display: contents;
+}
+
+.m-action-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 25px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    user-select: none;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: transform 0.1s, background 0.1s;
+}
+
+.m-action-btn:active {
+    background: rgba(255, 209, 102, 0.5);
+    transform: scale(0.95);
+    border-color: var(--accent);
+    color: #111;
+}
+
+#mobileJumpBtn {
+    background: rgba(200, 200, 200, 0.3);
+}
+
+#mobileSprintBtn {
+    background: rgba(200, 200, 200, 0.3);
+}
+
+/* Shrink hotbar in mobile mode and move to top */
+.mobile-hotbar {
+    top: 12px;
+    bottom: auto !important; /* Override default bottom positioning */
+}
+
+.mobile-hotbar .hot-slot {
+    width: 35px; /* Shrunk from 10% or 50px */
+    padding-bottom: 35px;
+    height: 0;
+    border-radius: 6px;
+}
+
+.mobile-hotbar .hot-slot-content {
+    /* No change needed, absolute pos */
+}
+
+.mobile-hotbar .hot-label {
+    font-size: 8px; /* Smaller font */
+}
+
+.mobile-hotbar .hot-count {
+    font-size: 8px;
+    bottom: 1px;
+    right: 1px;
+    padding: 1px 2px;
+}
+
+/* Hide old controls if they still exist in CSS but are removed from HTML */
+#mobileControls, #mobileRight {
+    display: none !important;
+}
+
+/* Adjustments for landscape mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    #mobileButtonsContainer {
+        bottom: 10px;
+    }
+    /* Force hotbar to top in landscape too */
+    #hotbar {
+        top: 12px;
+        bottom: auto !important;
+    }
+}
+
+/* Adjustments for landscape mobile / small height screens */
+@media (max-height: 600px) {
+    #rightPanel {
+        width: 130px;
+        height: auto;
+        min-height: 180px;
+        padding: 6px;
+    }
+
+    #minimap {
+        height: 100px;
+    }
+
+    #versionLabel {
+        font-size: 9px;
+        margin-top: 2px;
+    }
+
+    #musicPlayer {
+        margin-top: 4px;
+    }
+
+    #musicPlayer button {
+        padding: 2px 4px;
+        font-size: 9px;
+    }
+
+    #currentTrack {
+        font-size: 9px;
+    }
+
+    #musicMenuBtn {
+        font-size: 9px;
+        padding: 2px;
+    }
+}
