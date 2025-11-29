@@ -958,7 +958,10 @@ function setupDataChannel(e, t) {
                                 magicianStones[key].gifTexture.dispose();
                             }
                             if (magicianStones[key].gifImgElement) {
-                                // Use a 1x1 transparent pixel to properly stop GIF animation and release resources
+                                // Remove img from DOM and clear src to release resources
+                                if (magicianStones[key].gifImgElement.parentNode) {
+                                    magicianStones[key].gifImgElement.parentNode.removeChild(magicianStones[key].gifImgElement);
+                                }
                                 magicianStones[key].gifImgElement.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                             }
                             delete magicianStones[key];

@@ -1058,8 +1058,16 @@ async function createMagicianStoneScreen(stoneData) {
     if (fileExtension === 'gif') {
         // For GIFs, use a canvas that redraws the img element each frame
         // This captures the current GIF frame as the browser decodes it
+        // The img must be in the DOM for browsers to animate it
         const img = document.createElement('img');
         img.crossOrigin = 'anonymous';
+        img.style.position = 'absolute';
+        img.style.left = '-9999px';
+        img.style.top = '-9999px';
+        img.style.visibility = 'hidden';
+        img.style.pointerEvents = 'none';
+        document.body.appendChild(img);
+        
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
@@ -1816,7 +1824,10 @@ function removeBlockAt(e, t, o, breaker) {
                     magicianStones[key].gifTexture.dispose();
                 }
                 if (magicianStones[key].gifImgElement) {
-                    // Use a 1x1 transparent pixel to properly stop GIF animation and release resources
+                    // Remove img from DOM and clear src to release resources
+                    if (magicianStones[key].gifImgElement.parentNode) {
+                        magicianStones[key].gifImgElement.parentNode.removeChild(magicianStones[key].gifImgElement);
+                    }
                     magicianStones[key].gifImgElement.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
                 }
                 delete magicianStones[key];
