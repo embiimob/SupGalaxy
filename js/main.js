@@ -1055,7 +1055,64 @@ async function createMagicianStoneScreen(stoneData) {
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
 
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+    if (fileExtension === 'gif') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        texture = new THREE.CanvasTexture(canvas);
+
+        try {
+            const response = await fetch(url);
+            const buffer = await response.arrayBuffer();
+            const u8Buffer = new Uint8Array(buffer);
+            const gifReader = new GifReader(u8Buffer);
+
+            canvas.width = gifReader.width;
+            canvas.height = gifReader.height;
+            texture.image = canvas; // Update texture with resized canvas
+            texture.needsUpdate = true;
+
+            const frames = [];
+            const numFrames = gifReader.numFrames();
+
+            // Create a temporary canvas to decode frames
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = gifReader.width;
+            frameCanvas.height = gifReader.height;
+            const frameCtx = frameCanvas.getContext('2d');
+            const frameImageData = frameCtx.createImageData(gifReader.width, gifReader.height);
+
+            // Pre-decode frames if not too many, or we can decode on the fly.
+            // For better performance in loop, let's decode on the fly or cache a few.
+            // But GifReader needs to decode sequentially for disposal to work right usually.
+            // Omggif decodeAndBlitFrameRGBA handles pixels.
+
+            stoneData.gifData = {
+                reader: gifReader,
+                currentFrame: 0,
+                accumulatedTime: 0,
+                frames: [], // We can cache ImageData or ImageBitmap
+                startTime: performance.now(),
+                canvas: canvas,
+                ctx: ctx,
+                texture: texture,
+                tempImageData: frameImageData,
+                numFrames: numFrames
+            };
+
+            // Initial draw
+            gifReader.decodeAndBlitFrameRGBA(0, frameImageData.data);
+            ctx.putImageData(frameImageData, 0, 0);
+            texture.needsUpdate = true;
+
+        } catch (e) {
+            console.error("Failed to parse GIF", e);
+            // Fallback to static image loader if parsing fails
+            texture = new THREE.TextureLoader().load(url);
+        }
+
+    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -3498,6 +3555,138 @@ function gameLoop(e) {
                 // Update animation mixer if exists
                 if (stone.mixer) {
                     stone.mixer.update(t);
+                }
+
+                // Update GIF animation
+                if (stone.gifData && stone.gifData.reader) {
+                    const gif = stone.gifData;
+                    gif.accumulatedTime += t * 1000; // Convert dt (seconds) to ms
+
+                    let frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                    let delay = frameInfo.delay * 10; // Delay is in 100ths of a second
+                    if (delay === 0) delay = 100; // Default delay if 0
+
+                    while (gif.accumulatedTime >= delay) {
+                        gif.accumulatedTime -= delay;
+                        gif.currentFrame = (gif.currentFrame + 1) % gif.numFrames;
+
+                        // Decode next frame
+                        // For correct transparency/disposal handling, we might need to redraw from scratch or handle disposal.
+                        // omggif doesn't handle disposal automatically in decodeAndBlitFrameRGBA?
+                        // Actually it just writes pixels. If disposal is 2 (restore background) or 3 (restore previous), we need logic.
+                        // For simple GIFs, just drawing over might work if they are full frames.
+                        // But many GIFs are optimized with transparency.
+
+                        // Simple approach: decode to temp buffer and put.
+                        // If optimization issues arise, full disposal logic is needed.
+                        // Let's assume simple overdraw for now, but respect transparency if possible.
+                        // decodeAndBlitFrameRGBA writes r,g,b,a.
+
+                        // If disposal was "restore to background" (2), we should clear before drawing next?
+                        // Let's implement basic disposal logic if possible, or just draw.
+                        // To be safe and simple: just draw the frame.
+
+                        // Optimization: check disposal of PREVIOUS frame
+                        /*
+                        const prevFrameIndex = (gif.currentFrame - 1 + gif.numFrames) % gif.numFrames;
+                        const prevInfo = gif.reader.frameInfo(prevFrameIndex);
+                        if (prevInfo.disposal === 2) {
+                            gif.ctx.clearRect(prevInfo.x, prevInfo.y, prevInfo.width, prevInfo.height);
+                        }
+                        */
+                        // However, omggif's decodeAndBlitFrameRGBA writes to a flat array.
+                        // It doesn't composite onto existing canvas context directly.
+
+                        // Correct way with omggif for canvas:
+                        // 1. Get current canvas image data
+                        // 2. decodeAndBlitFrameRGBA into it? No, that overwrites.
+
+                        // Let's just decode the current frame to a buffer and putImageData.
+                        // But putImageData overwrites everything including transparent pixels.
+                        // We need to composite.
+
+                        // Create a temporary canvas for the frame if not exists
+                        if (!gif.frameCanvas) {
+                            gif.frameCanvas = document.createElement('canvas');
+                            gif.frameCanvas.width = gif.canvas.width;
+                            gif.frameCanvas.height = gif.canvas.height;
+                            gif.frameCtx = gif.frameCanvas.getContext('2d');
+                            gif.frameImageData = gif.frameCtx.createImageData(gif.reader.width, gif.reader.height); // Note: frame size might be smaller than canvas
+                        }
+
+                        // Clear temp canvas? No, we need the pixel data from gif reader.
+                        // The gif reader writes to the array passed to it.
+                        // We need to clear the array first? No, decodeAndBlitFrameRGBA writes all pixels of the frame.
+                        // If the frame has transparent pixels, they will be 0 in the array if we cleared it?
+                        // omggif logic: "pixels[op++] = r; ... pixels[op++] = 255;" -> It sets alpha to 255 usually.
+                        // Wait, looking at omggif: "if (index === trans) { op += 4; } else { ... }"
+                        // So it SKIPS transparent pixels in the output array.
+                        // So we need to maintain the state of pixels.
+
+                        // Better approach for loop:
+                        // We should maintain a persistent ImageData buffer that represents the full frame state if we want to handle it manually.
+                        // But to use Context2D composition:
+                        // 1. Clear a temp buffer (typed array).
+                        // 2. Decode frame into it. Transparent pixels are skipped (left as 0 if we cleared, or old value).
+                        // If we want to use ctx.drawImage for composition, we need an ImageData that has 0 alpha for transparent pixels.
+
+                        // Let's try:
+                        // 1. Fill temp ImageData with 0 (transparent).
+                        // 2. Decode frame. Transparent pixels are skipped, so they remain 0. Opaque pixels are written.
+                        // 3. Put ImageData to temp canvas.
+                        // 4. Draw temp canvas to main canvas.
+
+                        const frameW = frameInfo.width;
+                        const frameH = frameInfo.height;
+                        const frameX = frameInfo.x;
+                        const frameY = frameInfo.y;
+
+                        // Re-allocate if frame size changes (unlikely for standard GIF but possible)
+                        if (gif.frameImageData.width !== frameW || gif.frameImageData.height !== frameH) {
+                             gif.frameImageData = gif.frameCtx.createImageData(frameW, frameH);
+                        }
+
+                        // Clear the buffer
+                        new Uint32Array(gif.frameImageData.data.buffer).fill(0);
+
+                        // Decode
+                        gif.reader.decodeAndBlitFrameRGBA(gif.currentFrame, gif.frameImageData.data);
+
+                        // Handle disposal of previous frame before drawing new one?
+                        // Disposal 2: Restore to background (clear area).
+                        const prevFrameIndex = (gif.currentFrame === 0) ? gif.numFrames - 1 : gif.currentFrame - 1;
+                        const prevInfo = gif.reader.frameInfo(prevFrameIndex);
+                        if (prevInfo.disposal === 2) {
+                            gif.ctx.clearRect(prevInfo.x, prevInfo.y, prevInfo.width, prevInfo.height);
+                        }
+
+                        // Put to temp canvas (resized to frame size)
+                        // Actually we can just use a shared small canvas or resize logic.
+                        // Let's use putImageData on the main canvas? No, that overwrites.
+                        // We must use drawImage.
+
+                        // Resize temp canvas to match frame?
+                        if (gif.frameCanvas.width !== frameW || gif.frameCanvas.height !== frameH) {
+                            gif.frameCanvas.width = frameW;
+                            gif.frameCanvas.height = frameH;
+                        }
+                        gif.frameCtx.putImageData(gif.frameImageData, 0, 0);
+
+                        // Draw to main canvas
+                        // If it's the first frame and not transparent, maybe clear?
+                        if (gif.currentFrame === 0 && prevInfo.disposal !== 2) {
+                             // gif.ctx.clearRect(0, 0, gif.canvas.width, gif.canvas.height);
+                             // Usually GIFs start fresh or loop.
+                        }
+
+                        gif.ctx.drawImage(gif.frameCanvas, frameX, frameY);
+                        gif.texture.needsUpdate = true;
+
+                        // Update info for next loop check
+                        frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                        delay = frameInfo.delay * 10;
+                        if (delay === 0) delay = 100;
+                    }
                 }
 
                 if (mediaElement && stone.autoplay) {
