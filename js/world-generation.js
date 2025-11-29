@@ -150,7 +150,8 @@ function createBlockTexture(e, t) {
     n.width = a, n.height = a;
     const r = n.getContext("2d"),
         s = makeSeededRandom(e + "_block_texture_" + t),
-        i = new THREE.Color(BLOCKS[t].color);
+        d = BLOCKS[t] || { color: "#ff00ff" },
+        i = new THREE.Color(d.color);
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
     const d = Math.floor(5 * s()),
