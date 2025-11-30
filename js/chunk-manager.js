@@ -627,7 +627,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
         }
 
         const dataString = JSON.stringify(e);
-        const chunkSize = 16384; // 16KB chunks
+        const chunkSize = 131072; // 128KB chunks
         const chunks = [];
         for (let i = 0; i < dataString.length; i += chunkSize) {
             chunks.push(dataString.slice(i, i + chunkSize));
@@ -700,6 +700,10 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             type: "update_processed",
             transactionIds: [a]
         });
+
+        if (typeof processedMessages !== 'undefined') {
+            processedMessages.add(a);
+        }
 
         const message = JSON.stringify({
             type: 'processed_transaction_id',
