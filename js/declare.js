@@ -270,6 +270,22 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Calligraphy Stone",
             color: "#D4AF37",
             strength: 3
+        },
+        129: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            strength: 2
+        },
+        130: {
+            name: "Crafting Table",
+            color: "#8b5a33",
+            strength: 2
+        },
+        131: {
+            name: "Chest",
+            color: "#654321",
+            strength: 2,
+            transparent: !0
         }
     },
     BIOMES = [{
@@ -557,6 +573,33 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             4: 2,
             11: 2
         }
+    }, {
+        id: "wooden_planks",
+        out: {
+            id: 129,
+            count: 4
+        },
+        requires: {
+            7: 1
+        }
+    }, {
+        id: "crafting_table",
+        out: {
+            id: 130,
+            count: 1
+        },
+        requires: {
+            129: 4
+        }
+    }, {
+        id: "chest",
+        out: {
+            id: 131,
+            count: 1
+        },
+        requires: {
+            129: 8
+        }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
@@ -670,7 +713,9 @@ var volcanoes = [],
     magicianStonePlacement = null,
     magicianStones = {},
     calligraphyStonePlacement = null,
-    calligraphyStones = {};
+    calligraphyStones = {},
+    chests = {},
+    currentChestKey = null;
 const lightManager = {
     lights: [],
     poolSize: 8,
