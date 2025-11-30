@@ -392,8 +392,21 @@ function updateTorchRegistry(e) {
 }
 
 function initThree() {
-    console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
-        antialias: !0
+    console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created");
+
+    // Create explicit context for high-performance GPU preference
+    const canvas = document.createElement('canvas');
+    const contextAttributes = { alpha: false, powerPreference: "high-performance", antialias: true };
+    let context = canvas.getContext('webgl2', contextAttributes);
+    if (!context) {
+        context = canvas.getContext('webgl', contextAttributes);
+    }
+
+    (renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        context: context,
+        antialias: !0,
+        powerPreference: "high-performance"
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
