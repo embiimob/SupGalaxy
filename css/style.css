@@ -325,12 +325,14 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            width: 90%;
+            width: 95%;
             max-width: 500px;
-            max-height: 90vh; /* Increased for mobile */
-            overflow: auto; /* Allow scroll if off-screen */
+            max-height: 85vh; /* Safe zone for mobile */
+            overflow-y: auto;
+            overscroll-behavior: contain;
             display: flex;
             flex-direction: column;
+            box-sizing: border-box;
         }
 
         #craftModal h3 {
@@ -415,11 +417,13 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 480px;
-            max-height: 80vh; /* Mobile safeguard */
-            overflow: auto;
+            width: 95%;
+            max-width: 480px;
+            max-height: 85vh;
+            overflow-y: auto;
             overscroll-behavior: contain;
             color: #fff;
+            box-sizing: border-box;
         }
 
         #inventoryGrid {
@@ -606,7 +610,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #joinScriptModal h3 {
@@ -634,7 +643,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #downloadModal h3 {
@@ -662,7 +676,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #teleportModal h3 {
@@ -735,8 +754,13 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
             display: none;
+            box-sizing: border-box;
         }
 
             #usersModal h3 {
@@ -758,8 +782,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 300px;
+            width: 90%;
+            max-width: 300px;
+            max-height: 60vh;
+            overflow-y: auto;
             display: none;
+            box-sizing: border-box;
         }
 
             #pendingModal h3 {
@@ -1040,6 +1068,7 @@
 
     #musicPlayer {
         margin-top: 4px;
+        max-width: 95vw;
     }
 
     #musicPlayer button {
@@ -1054,5 +1083,40 @@
     #musicMenuBtn {
         font-size: 9px;
         padding: 2px;
+    }
+}
+
+/* Mobile Modal Overhaul */
+.modal-panel {
+    background: var(--panel);
+    padding: 14px;
+    border-radius: 10px;
+    width: 95%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    color: #fff;
+    box-sizing: border-box;
+}
+
+.responsive-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.responsive-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+@media (max-width: 600px) {
+    .responsive-grid-3 {
+        grid-template-columns: 1fr;
+    }
+    .responsive-grid-2 {
+        grid-template-columns: 1fr;
     }
 }
