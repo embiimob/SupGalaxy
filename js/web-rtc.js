@@ -733,7 +733,6 @@ function setupDataChannel(e, t) {
                         const f = droppedItems.findIndex((e => e.id === s.dropId));
                         if (-1 !== f) {
                             scene.remove(droppedItems[f].mesh);
-                            scene.remove(droppedItems[f].light);
                             droppedItems.splice(f, 1);
                         }
                     }
