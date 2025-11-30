@@ -327,10 +327,11 @@
             border-radius: 10px;
             width: 90%;
             max-width: 500px;
-            max-height: 90vh; /* Increased for mobile */
-            overflow: auto; /* Allow scroll if off-screen */
+            max-height: 85vh; /* Adjusted for mobile safe areas */
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
+            overscroll-behavior: contain;
         }
 
         #craftModal h3 {
@@ -343,6 +344,7 @@
             overflow-y: auto;
             flex-grow: 1;
             padding-right: 5px; /* for scrollbar */
+            padding-bottom: 20px; /* Ensure bottom items are visible */
         }
 
         .recipe-item {
@@ -1054,5 +1056,58 @@
     #musicMenuBtn {
         font-size: 9px;
         padding: 2px;
+    }
+}
+
+#chestModal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 220;
+    display: none;
+    background: var(--panel);
+    padding: 14px;
+    border-radius: 10px;
+    min-width: 320px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    color: #fff;
+    flex-direction: column;
+    padding-bottom: 30px;
+}
+
+#chestGrid {
+    display: grid;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    margin-bottom: 10px;
+    justify-content: center;
+}
+
+#chestInventoryGrid {
+    display: grid;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    margin-bottom: 10px;
+    justify-content: center;
+}
+
+#chestInventoryHotbar {
+    display: grid;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    border-top: 2px solid rgba(255,255,255,0.1);
+    padding-top: 10px;
+    justify-content: center;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+    #chestGrid, #chestInventoryGrid, #chestInventoryHotbar {
+        grid-template-columns: repeat(9, 1fr);
+        gap: 2px;
     }
 }

@@ -92,6 +92,8 @@ function buildGreedyMesh(e, t, o) {
     for (const e in a) {
         const t = a[e];
         if (t.geometries.length > 0) {
+            // Skip mesh generation for Chest (131) as it uses a custom mesh
+            if (t.blockId === 131) continue;
             const e = THREE.BufferGeometryUtils.mergeBufferGeometries(t.geometries);
             if (!e) continue;
             const o = BLOCKS[t.blockId];
@@ -215,6 +217,7 @@ Chunk.prototype.idx = function (e, t, o) {
         for (var c = 0; c < CHUNK_SIZE; c++)
             for (var u = 0; u < MAX_HEIGHT; u++) {
                 if (!(w = e.get(d, u, c)) || w === BLOCK_AIR) continue;
+                if (w === 131) continue; // Skip mesh generation for Chest
                 for (var p = modWrap(r + d, MAP_SIZE), m = modWrap(s + c, MAP_SIZE), y = i + d, h = l + c, f = [{
                     x: 1,
                     y: 0,
