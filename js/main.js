@@ -292,6 +292,34 @@ async function applySaveFile(e, t, o) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
             reconstructCalligraphyStonesFromDeltas(t.deltas);
         }
+
+        if (t.chests) {
+            console.log("[LOGIN] Loading chests from session");
+            chests = {};
+            for (const key in t.chests) {
+                if (t.chests[key]) {
+                    const chestData = t.chests[key];
+                    const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
+                    chests[key] = {
+                        ...chestData,
+                        mesh: meshData.mesh,
+                        lid: meshData.lid,
+                        isOpen: false
+                    };
+
+                    const cx = Math.floor(modWrap(chestData.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(chestData.z, MAP_SIZE) / CHUNK_SIZE);
+                    const chunkKey = makeChunkKey(worldName, cx, cz);
+                    const delta = {
+                        x: modWrap(chestData.x, CHUNK_SIZE),
+                        y: chestData.y,
+                        z: modWrap(chestData.z, CHUNK_SIZE),
+                        b: 131
+                    };
+                    chunkManager.addPendingDeltas(chunkKey, [delta]);
+                }
+            }
+        }
         setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
         if (!isMobile()) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
@@ -901,7 +929,7 @@ function createProjectile(e, t, o, a, n = "red") {
     }), scene.add(c)
 }
 
-function createDroppedItemOrb(e, t, o, a, n) {
+function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
     const s = new THREE.SphereGeometry(.25, 16, 16),
@@ -912,16 +940,14 @@ function createDroppedItemOrb(e, t, o, a, n) {
         }),
         l = new THREE.Mesh(s, i);
     l.position.copy(t);
-    const d = new THREE.PointLight(r.color, .8, 5);
-    d.position.copy(t), l.light = d, scene.add(d);
     const c = {
         id: e,
         blockId: o,
         originSeed: a,
         mesh: l,
-        light: d,
         createdAt: Date.now(),
-        dropper: n
+        dropper: n,
+        count: count
     };
     droppedItems.push(c), scene.add(l)
 }
@@ -947,6 +973,175 @@ function createMusicSymbolMesh() {
     symbolGroup.add(flagMesh);
 
     return symbolGroup;
+}
+
+function createChestMesh(x, y, z, rotation = 0) {
+    const chestGroup = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: 0x654321 }); // Dark wood
+    const lockMaterial = new THREE.MeshStandardMaterial({ color: 0xFFD700 }); // Gold
+
+    // Base
+    const baseGeo = new THREE.BoxGeometry(0.8, 0.5, 0.8);
+    const base = new THREE.Mesh(baseGeo, material);
+    base.position.y = 0.25;
+    chestGroup.add(base);
+
+    // Lid pivot group
+    const lidGroup = new THREE.Group();
+    lidGroup.position.set(0, 0.5, -0.4); // Hinge position
+
+    // Lid
+    const lidGeo = new THREE.BoxGeometry(0.8, 0.3, 0.8);
+    const lid = new THREE.Mesh(lidGeo, material);
+    lid.position.set(0, 0.15, 0.4); // Relative to hinge
+    lidGroup.add(lid);
+
+    // Lock
+    const lockGeo = new THREE.BoxGeometry(0.1, 0.2, 0.05);
+    const lock = new THREE.Mesh(lockGeo, lockMaterial);
+    lock.position.set(0, 0.15, 0.825);
+    lidGroup.add(lock);
+
+    chestGroup.add(lidGroup);
+
+    chestGroup.position.set(x + 0.5, y, z + 0.5);
+    chestGroup.rotation.y = rotation;
+
+    chestGroup.userData.x = x;
+    chestGroup.userData.y = y;
+    chestGroup.userData.z = z;
+
+    scene.add(chestGroup);
+
+    return { mesh: chestGroup, lid: lidGroup };
+}
+
+function openChest(x, y, z) {
+    currentChestKey = `${x},${y},${z}`;
+    const chest = chests[currentChestKey];
+    if (!chest) return;
+
+    chest.isOpen = true;
+    chest.lastInteractionTime = performance.now();
+
+    document.getElementById("chestModal").style.display = "block";
+    isPromptOpen = true;
+
+    updateChestUI();
+}
+
+function closeChest() {
+    if (currentChestKey && chests[currentChestKey]) {
+        chests[currentChestKey].isOpen = false;
+        chests[currentChestKey].lastInteractionTime = performance.now();
+    }
+    currentChestKey = null;
+    document.getElementById("chestModal").style.display = "none";
+    isPromptOpen = false;
+}
+
+function updateChestUI() {
+    if (!currentChestKey) return;
+    const chest = chests[currentChestKey];
+    const chestGrid = document.getElementById("chestGrid");
+    const invGrid = document.getElementById("chestInventoryGrid");
+    const hotbarGrid = document.getElementById("chestInventoryHotbar");
+
+    chestGrid.innerHTML = "";
+    invGrid.innerHTML = "";
+    hotbarGrid.innerHTML = "";
+
+    // Chest slots (27)
+    for (let i = 0; i < 27; i++) {
+        const slot = document.createElement("div");
+        slot.className = "inv-slot";
+        const item = chest.items[i];
+        if (item) {
+            const color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [128, 128, 128];
+            slot.style.backgroundColor = `rgba(${color.join(",")}, 0.6)`;
+            slot.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : "???";
+            if (item.count > 1) {
+                const countDiv = document.createElement("div");
+                countDiv.className = "inv-count";
+                countDiv.innerText = item.count;
+                slot.appendChild(countDiv);
+            }
+        }
+        slot.onclick = () => {
+            if (item) {
+                // Take item to inventory
+                addToInventory(item.id, item.count, item.originSeed);
+                chest.items[i] = null;
+                updateChestUI();
+                updateHotbarUI();
+            }
+        };
+        chestGrid.appendChild(slot);
+    }
+
+    // Inventory slots
+    for (let i = 9; i < 36; i++) {
+        invGrid.appendChild(createChestInventorySlot(i));
+    }
+    for (let i = 0; i < 9; i++) {
+        hotbarGrid.appendChild(createChestInventorySlot(i));
+    }
+}
+
+function createChestInventorySlot(index) {
+    const slot = document.createElement("div");
+    slot.className = "inv-slot";
+    const item = INVENTORY[index];
+    if (item) {
+        const color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [128, 128, 128];
+        slot.style.backgroundColor = `rgba(${color.join(",")}, 0.6)`;
+        slot.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : "???";
+        if (item.count > 1) {
+            const countDiv = document.createElement("div");
+            countDiv.className = "inv-count";
+            countDiv.innerText = item.count;
+            slot.appendChild(countDiv);
+        }
+    }
+    slot.onclick = () => {
+        if (item && currentChestKey) {
+            // Move to chest
+            const chest = chests[currentChestKey];
+            // Find empty slot or stackable
+            let added = false;
+            // Try to stack first
+            for (let i = 0; i < 27; i++) {
+                if (chest.items[i] && chest.items[i].id === item.id && chest.items[i].originSeed === item.originSeed && chest.items[i].count < 64) {
+                    const space = 64 - chest.items[i].count;
+                    const amount = Math.min(item.count, space);
+                    chest.items[i].count += amount;
+                    item.count -= amount;
+                    if (item.count <= 0) {
+                        INVENTORY[index] = null;
+                        added = true;
+                        break;
+                    }
+                }
+            }
+            // If still have items, find empty slot
+            if (!added && item.count > 0) {
+                for (let i = 0; i < 27; i++) {
+                    if (!chest.items[i]) {
+                        chest.items[i] = { ...item }; // Clone
+                        INVENTORY[index] = null;
+                        added = true;
+                        break;
+                    }
+                }
+            }
+            if (!added && item.count > 0) {
+                addMessage("Chest full!");
+            }
+            updateChestUI();
+            updateHotbarUI();
+        }
+    };
+    return slot;
 }
 
 async function createMagicianStoneScreen(stoneData) {
@@ -1569,6 +1764,55 @@ function onPointerDown(e) {
         return
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+
+    // Check for Chest Intersections
+    const chestMeshes = Object.values(chests).map(c => c.mesh).filter(m => m);
+    const chestIntersects = raycaster.intersectObjects(chestMeshes, true);
+
+    if (chestIntersects.length > 0) {
+        let intersectedObject = chestIntersects[0].object;
+        // Traverse up to find the group with userData
+        let parentGroup = intersectedObject;
+        while(parentGroup.parent && !parentGroup.userData.x && parentGroup !== scene) {
+            parentGroup = parentGroup.parent;
+        }
+
+        if (parentGroup && parentGroup.userData.x !== undefined) {
+            const cx = parentGroup.userData.x;
+            const cy = parentGroup.userData.y;
+            const cz = parentGroup.userData.z;
+
+            if (e.button === 2) {
+                // Right click: Open
+                openChest(cx, cy, cz);
+                return;
+            } else if (e.button === 0) {
+                // Left click: Break
+                animateAttack();
+                if (isHost || peers.size === 0) {
+                    removeBlockAt(cx, cy, cz, userName);
+                } else {
+                    const requestMsg = JSON.stringify({
+                        type: 'request_block_break',
+                        x: cx,
+                        y: cy,
+                        z: cz,
+                        username: userName,
+                        world: worldName
+                    });
+                    for (const [, peer] of peers.entries()) {
+                        if (peer.dc && peer.dc.readyState === 'open') {
+                            peer.dc.send(requestMsg);
+                            break;
+                        }
+                    }
+                    addMessage("Breaking...", 500);
+                }
+                return;
+            }
+        }
+    }
+
     const magicianStoneMeshes = Object.values(magicianStones).map(s => s.mesh);
     const magicianStoneIntersects = raycaster.intersectObjects(magicianStoneMeshes, true);
 
@@ -1658,6 +1902,20 @@ function onPointerDown(e) {
             }
         }
     } else if (2 === e.button) {
+        // Right click interaction
+        const x = Math.floor(i.x - .5 * l.x);
+        const y = Math.floor(i.y - .5 * l.y);
+        const z = Math.floor(i.z - .5 * l.z);
+        const blockId = getBlockAt(x, y, z);
+
+        if (blockId === 130) { // Crafting Table
+            openCrafting();
+            return;
+        } else if (blockId === 131) { // Chest
+            openChest(x, y, z);
+            return;
+        }
+
         placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
     }
 }
@@ -1979,6 +2237,27 @@ function removeBlockAt(e, t, o, breaker) {
         if (a === 123 || a === 122) {
             setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
         }
+
+        if (a === 131) {
+            const key = `${e},${t},${o}`;
+            if (chests[key]) {
+                const chest = chests[key];
+                // Drop chest contents
+                for (const item of chest.items) {
+                    if (item && item.count > 0) {
+                        const offset = new THREE.Vector3(Math.random() * 0.5 - 0.25, Math.random() * 0.5 - 0.25, Math.random() * 0.5 - 0.25);
+                        const pos = new THREE.Vector3(e + 0.5, t + 0.5, o + 0.5).add(offset);
+                        const dropId = `${userName}-${Date.now()}-${Math.random()}`;
+                        createDroppedItemOrb(dropId, pos, item.id, item.originSeed, userName, item.count);
+                    }
+                }
+                if (chest.mesh) {
+                    scene.remove(chest.mesh);
+                    disposeObject(chest.mesh);
+                }
+                delete chests[key];
+            }
+        }
     }
 }
 
@@ -2023,6 +2302,33 @@ function placeBlockAt(e, t, o, a) {
                         document.getElementById('calligraphyStoneModal').style.display = 'flex';
                         isPromptOpen = true;
                         return;
+                    }
+
+                    // Special handling for Chest
+                    if (a === 131) {
+                        const playerDirection = new THREE.Vector3();
+                        camera.getWorldDirection(playerDirection);
+                        playerDirection.y = 0;
+                        playerDirection.normalize();
+                        // Snap to 90 degrees and face player (invert direction)
+                        let rotation = 0;
+                        if (Math.abs(playerDirection.x) > Math.abs(playerDirection.z)) {
+                            rotation = playerDirection.x > 0 ? -Math.PI / 2 : Math.PI / 2;
+                        } else {
+                            rotation = playerDirection.z > 0 ? Math.PI : 0;
+                        }
+
+                        const key = `${e},${t},${o}`;
+                        const chestData = {
+                            x: e, y: t, z: o,
+                            rotation: rotation,
+                            items: new Array(27).fill(null),
+                            isOpen: false
+                        };
+                        const meshData = createChestMesh(e, t, o, rotation);
+                        chestData.mesh = meshData.mesh;
+                        chestData.lid = meshData.lid;
+                        chests[key] = chestData;
                     }
 
                     // Host-authoritative: only host mutates directly, clients send requests
@@ -2601,6 +2907,19 @@ async function downloadSinglePlayerSession() {
         }
     }
 
+    const serializableChests = {};
+    for (const key in chests) {
+        if (chests[key]) {
+            serializableChests[key] = {
+                x: chests[key].x,
+                y: chests[key].y,
+                z: chests[key].z,
+                rotation: chests[key].rotation,
+                items: chests[key].items
+            };
+        }
+    }
+
     var e = {
         world: worldName,
         seed: worldSeed,
@@ -2610,6 +2929,7 @@ async function downloadSinglePlayerSession() {
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
+        chests: serializableChests,
         profile: {
             x: player.x,
             y: player.y,
@@ -3613,6 +3933,15 @@ function gameLoop(e) {
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
             e.update(t)
         })), manageMobs(), manageVolcanoes(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+
+        // Update chest animations
+        for (const key in chests) {
+            const chest = chests[key];
+            if (chest && chest.lid) {
+                const targetRotation = chest.isOpen ? -Math.PI / 2 : 0;
+                chest.lid.rotation.x += (targetRotation - chest.lid.rotation.x) * 5 * t;
+            }
+        }
         for (const [e, o] of torchParticles.entries()) {
             const e = o.geometry.attributes.position.array,
                 a = o.geometry.velocities;
@@ -3794,13 +4123,13 @@ function gameLoop(e) {
         for (let e = droppedItems.length - 1; e >= 0; e--) {
             const o = droppedItems[e],
                 a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z);
-            if (o.mesh.position.y > a + .25 ? o.mesh.position.y -= 4 * t : o.mesh.position.y = a + .25, o.light.position.copy(o.mesh.position), Date.now() - o.createdAt > 3e5) {
-                scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
+            if (o.mesh.position.y > a + .25 ? o.mesh.position.y -= 4 * t : o.mesh.position.y = a + .25, Date.now() - o.createdAt > 3e5) {
+                scene.remove(o.mesh), droppedItems.splice(e, 1);
                 continue
             }
             if (o.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + .9, player.z)) < 1.5) {
                 if (o.dropper === userName && Date.now() - o.createdAt < 2e3) continue;
-                addToInventory(o.blockId, 1, o.originSeed), scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
+                addToInventory(o.blockId, o.count || 1, o.originSeed), scene.remove(o.mesh), droppedItems.splice(e, 1);
                 const t = JSON.stringify({
                     type: "item_picked_up",
                     dropId: o.id,
@@ -4038,7 +4367,6 @@ function gameLoop(e) {
                 }
             }
         }
-
         renderer.render(scene, camera)
     }
     requestAnimationFrame(gameLoop)
@@ -4133,6 +4461,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             openUsersModal(), this.blur()
         })), document.getElementById("closeCraft").addEventListener("click", (function () {
             isPromptOpen = !1, document.getElementById("craftModal").style.display = "none", this.blur()
+        })), document.getElementById("closeChest").addEventListener("click", (function () {
+            closeChest(), this.blur()
         })), document.getElementById("closeInventory").addEventListener("click", (function () {
             toggleInventory(), this.blur()
         })), document.getElementById("closeJoinScript").addEventListener("click", (function () {

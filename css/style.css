@@ -327,12 +327,11 @@
             border-radius: 10px;
             width: 95%;
             max-width: 500px;
-            max-height: 85vh; /* Safe zone for mobile */
+            max-height: 85vh; /* Adjusted for mobile safe areas */
             overflow-y: auto;
-            overscroll-behavior: contain;
             display: flex;
             flex-direction: column;
-            box-sizing: border-box;
+            overscroll-behavior: contain;
         }
 
         #craftModal h3 {
@@ -345,6 +344,7 @@
             overflow-y: auto;
             flex-grow: 1;
             padding-right: 5px; /* for scrollbar */
+            padding-bottom: 20px; /* Ensure bottom items are visible */
         }
 
         .recipe-item {
@@ -1086,37 +1086,55 @@
     }
 }
 
-/* Mobile Modal Overhaul */
-.modal-panel {
+#chestModal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 220;
+    display: none;
     background: var(--panel);
     padding: 14px;
     border-radius: 10px;
-    width: 95%;
-    max-width: 600px;
-    max-height: 85vh;
+    min-width: 320px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
     overflow-y: auto;
     overscroll-behavior: contain;
     color: #fff;
-    box-sizing: border-box;
+    flex-direction: column;
+    padding-bottom: 30px;
 }
 
-.responsive-grid-3 {
+#chestGrid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    margin-bottom: 10px;
+    justify-content: center;
 }
 
-.responsive-grid-2 {
+#chestInventoryGrid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    margin-bottom: 10px;
+    justify-content: center;
 }
 
-@media (max-width: 600px) {
-    .responsive-grid-3 {
-        grid-template-columns: 1fr;
-    }
-    .responsive-grid-2 {
-        grid-template-columns: 1fr;
+#chestInventoryHotbar {
+    display: grid;
+    grid-template-columns: repeat(9, 50px);
+    gap: 4px;
+    border-top: 2px solid rgba(255,255,255,0.1);
+    padding-top: 10px;
+    justify-content: center;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+    #chestGrid, #chestInventoryGrid, #chestInventoryHotbar {
+        grid-template-columns: repeat(9, 1fr);
+        gap: 2px;
     }
 }
