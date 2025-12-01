@@ -803,6 +803,8 @@ self.onmessage = async function(e) {
 
                                 updatesByTransaction.set(msg.TransactionId, {
                                     changes: normalizedDeltas,
+                                    magicianStones: processData.magicianStones,
+                                    calligraphyStones: processData.calligraphyStones,
                                     address: msg.FromAddress,
                                     timestamp: new Date(msg.BlockDate).getTime(),
                                     transactionId: msg.TransactionId
@@ -835,7 +837,7 @@ self.onmessage = async function(e) {
                 for (var entry of updatesByTransaction) {
                     var transactionId = entry[0];
                     var update = entry[1];
-                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId }] });
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
@@ -1382,7 +1384,15 @@ self.onmessage = async function(e) {
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {
-                    applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
+                    let payload = update.changes;
+                    if (update.magicianStones || update.calligraphyStones) {
+                        payload = {
+                            deltas: update.changes,
+                            magicianStones: update.magicianStones,
+                            calligraphyStones: update.calligraphyStones
+                        };
+                    }
+                    applyChunkUpdates(payload, update.address, update.timestamp, update.transactionId);
                 }
             } else if (data.type === "chunk_ownership") {
                updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
@@ -1410,6 +1420,17 @@ self.onmessage = async function(e) {
                     for (const key in data.stones) {
                         if (Object.hasOwnProperty.call(data.stones, key)) {
                             createCalligraphyStoneScreen(data.stones[key]);
+                        }
+                    }
+                    if (isHost) {
+                        const message = JSON.stringify({
+                            type: 'calligraphy_stones_sync',
+                            stones: data.stones
+                        });
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(message);
+                            }
                         }
                     }
                 }
