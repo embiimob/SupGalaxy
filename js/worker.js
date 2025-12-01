@@ -805,7 +805,9 @@ self.onmessage = async function(e) {
                                     changes: normalizedDeltas,
                                     address: msg.FromAddress,
                                     timestamp: new Date(msg.BlockDate).getTime(),
-                                    transactionId: msg.TransactionId
+                                    transactionId: msg.TransactionId,
+                                    magicianStones: processData.magicianStones || null,
+                                    calligraphyStones: processData.calligraphyStones || null
                                 });
                                 for (var delta of normalizedDeltas) {
                                     var chunk = delta.chunk;
@@ -835,7 +837,7 @@ self.onmessage = async function(e) {
                 for (var entry of updatesByTransaction) {
                     var transactionId = entry[0];
                     var update = entry[1];
-                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId }] });
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
@@ -1382,7 +1384,14 @@ self.onmessage = async function(e) {
                 }
             } else if (data.type === "chunk_updates") {
                 for (var update of data.updates || []) {
-                    applyChunkUpdates(update.changes, update.address, update.timestamp, update.transactionId);
+                    // Create a full data object that includes stone metadata for proper relay
+                    var fullData = {
+                        deltas: update.changes,
+                        magicianStones: update.magicianStones || null,
+                        calligraphyStones: update.calligraphyStones || null
+                    };
+                    // sourceUsername is undefined to indicate this is from local worker (IPFS fetch)
+                    applyChunkUpdates(fullData, update.address, update.timestamp, update.transactionId, undefined);
                 }
             } else if (data.type === "chunk_ownership") {
                updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
@@ -1410,6 +1419,17 @@ self.onmessage = async function(e) {
                     for (const key in data.stones) {
                         if (Object.hasOwnProperty.call(data.stones, key)) {
                             createCalligraphyStoneScreen(data.stones[key]);
+                        }
+                    }
+                    if (isHost) {
+                        const message = JSON.stringify({
+                            type: 'calligraphy_stones_sync',
+                            stones: data.stones
+                        });
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(message);
+                            }
                         }
                     }
                 }
