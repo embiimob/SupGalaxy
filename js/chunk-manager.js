@@ -564,17 +564,18 @@ ChunkManager.prototype.update = function (e, t, o) {
 /**
  * Immediately unloads all chunks that are beyond the specified radius from the player's current position.
  * Uses CIRCULAR distance check - only chunks within Euclidean distance are kept.
- * Also enforces the MAX_ACTIVE_CHUNKS (22) cap by unloading farthest chunks first.
+ * Also enforces the MAX_ACTIVE_CHUNKS (169) cap by unloading farthest chunks first.
  * This is called after teleportation to ensure previously visited areas are cleaned up and don't appear
  * as tiny objects on the horizon.
  * @param {number} playerX - The player's current X position
  * @param {number} playerZ - The player's current Z position
- * @param {number} radius - The maximum chunk distance to keep (defaults to currentLoadRadius)
+ * @param {number} radius - The maximum chunk distance to keep (defaults to 3x INITIAL_LOAD_RADIUS to preserve nearby chunks during teleport)
  */
 ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) {
-    // Validate radius parameter: use currentLoadRadius if not provided or invalid
+    // Validate radius parameter: use 3x INITIAL_LOAD_RADIUS if not provided or invalid
+    // This ensures that teleportation (e.g., pressing home button) doesn't wipe out the local area map
     if (typeof radius !== 'number' || radius <= 0 || !isFinite(radius)) {
-        radius = currentLoadRadius;
+        radius = INITIAL_LOAD_RADIUS * 3;
     }
     const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
     const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
