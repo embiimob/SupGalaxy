@@ -1146,6 +1146,11 @@ function createChestInventorySlot(index) {
 
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance } = stoneData;
+    
+    // Entity-based deduplication key: uses world position (x,y,z) as the unique identifier.
+    // This key is independent of the underlying file extension (.glb, .gltf, .gif, .mp4, etc.)
+    // to ensure that the same logical magician stone entity is never instantiated multiple times,
+    // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
     // Deduplication: Skip if this stone is already loaded or currently loading
@@ -1158,7 +1163,8 @@ async function createMagicianStoneScreen(stoneData) {
         return;
     }
 
-    // Mark as loading to prevent duplicate loads during async operations
+    // Mark as loading to prevent duplicate loads during async operations.
+    // This guard applies to ALL asset types, not just .glb files.
     magicianStonesLoading.add(key);
 
     if (url.startsWith('IPFS:')) {
@@ -1179,9 +1185,10 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
-                // Check if another load completed while this one was in progress
+                // Post-async-load deduplication check: another load may have completed while this one was in progress.
+                // This check is entity-based (using position key) and independent of file extension.
                 if (magicianStones[key] && magicianStones[key].mesh) {
-                    console.log(`[MagicianStone] Duplicate load completed for key ${key} - discarding and disposing`);
+                    console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
                     // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
@@ -1326,6 +1333,14 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
+            // Post-async-load deduplication check: another load may have completed while this one was in progress.
+            // This check ensures that only one instance is created, regardless of asset format.
+            if (magicianStones[key] && magicianStones[key].mesh) {
+                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding`);
+                magicianStonesLoading.delete(key);
+                return;
+            }
+
             canvas.width = gifReader.width;
             canvas.height = gifReader.height;
             texture.image = canvas; // Update texture with resized canvas
@@ -1413,6 +1428,14 @@ async function createMagicianStoneScreen(stoneData) {
         context.textAlign = 'center';
         context.fillText('Preview Unavailable', 128, 64);
         texture = new THREE.CanvasTexture(canvas);
+    }
+
+    // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
+    // This check is entity-based (using position key) and independent of file extension.
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding`);
+        magicianStonesLoading.delete(key);
+        return;
     }
 
     let screenMesh;
