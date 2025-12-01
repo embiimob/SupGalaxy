@@ -519,7 +519,10 @@ Chunk.prototype.idx = function (e, t, o) {
  * @param {number} radius - The maximum chunk distance to keep (defaults to currentLoadRadius)
  */
 ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) {
-    radius = radius || currentLoadRadius;
+    // Validate radius parameter: use currentLoadRadius if not provided or invalid
+    if (typeof radius !== 'number' || radius <= 0 || !isFinite(radius)) {
+        radius = currentLoadRadius;
+    }
     const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
     const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
     
@@ -580,7 +583,7 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
     }
     
     if (chunksToRemove.length > 0) {
-        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunks after teleport`);
+        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunk(s)`);
     }
 };
 
