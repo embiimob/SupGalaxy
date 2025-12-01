@@ -247,6 +247,12 @@ async function applySaveFile(e, t, o) {
             d = Math.floor(player.z / CHUNK_SIZE);
         if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
             console.log("[LOGIN] Loading magician stones from session");
+            // Clean up any existing magician stones before loading new ones
+            for (const existingKey in magicianStones) {
+                if (magicianStones[existingKey]) {
+                    cleanupMagicianStone(magicianStones[existingKey], existingKey);
+                }
+            }
             magicianStones = {}; // Clear existing stones
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
@@ -2254,18 +2260,8 @@ function removeBlockAt(e, t, o, breaker) {
         if (a === 127) {
             const key = `${e},${t},${o}`;
             if (magicianStones[key]) {
-                if (magicianStones[key].mesh) {
-                    scene.remove(magicianStones[key].mesh);
-                    disposeObject(magicianStones[key].mesh);
-                }
-                if (magicianStones[key].videoElement) {
-                    magicianStones[key].videoElement.pause();
-                    magicianStones[key].videoElement.src = '';
-                }
-                 if (magicianStones[key].audioElement) {
-                    magicianStones[key].audioElement.pause();
-                    magicianStones[key].audioElement.src = '';
-                }
+                // Use the cleanup helper to properly dispose all resources including GIF data
+                cleanupMagicianStone(magicianStones[key], key);
                 delete magicianStones[key];
 
                 const message = JSON.stringify({
@@ -3861,19 +3857,8 @@ function switchWorld(newWorldName, targetSpawn) {
     // Note: Metadata is already saved above; here we only dispose the 3D meshes and media elements.
     for (const key in magicianStones) {
         if (magicianStones[key]) {
-            if (magicianStones[key].mesh) {
-                scene.remove(magicianStones[key].mesh);
-                disposeObject(magicianStones[key].mesh);
-            }
-            // Stop and clean up media elements to prevent memory leaks
-            if (magicianStones[key].videoElement) {
-                magicianStones[key].videoElement.pause();
-                magicianStones[key].videoElement.src = '';
-            }
-            if (magicianStones[key].audioElement) {
-                magicianStones[key].audioElement.pause();
-                magicianStones[key].audioElement.src = '';
-            }
+            // Use the cleanup helper to properly dispose all resources including GIF data
+            cleanupMagicianStone(magicianStones[key], key);
         }
     }
     magicianStones = {};

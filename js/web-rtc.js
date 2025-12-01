@@ -1020,18 +1020,8 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         const key = s.key;
                         if (magicianStones[key]) {
-                            if (magicianStones[key].mesh) {
-                                scene.remove(magicianStones[key].mesh);
-                                disposeObject(magicianStones[key].mesh);
-                            }
-                            if (magicianStones[key].videoElement) {
-                                magicianStones[key].videoElement.pause();
-                                magicianStones[key].videoElement.src = '';
-                            }
-                            if (magicianStones[key].audioElement) {
-                                magicianStones[key].audioElement.pause();
-                                magicianStones[key].audioElement.src = '';
-                            }
+                            // Use the cleanup helper to properly dispose all resources including GIF data
+                            cleanupMagicianStone(magicianStones[key], key);
                             delete magicianStones[key];
                         }
                     }
