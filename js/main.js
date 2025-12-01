@@ -1187,8 +1187,10 @@ async function createMagicianStoneScreen(stoneData) {
             function(gltf) {
                 // Check if another load completed while this one was in progress
                 if (magicianStones[key] && magicianStones[key].mesh) {
-                    console.log(`[MagicianStone] Duplicate load completed for key ${key} - discarding`);
+                    console.log(`[MagicianStone] Duplicate load completed for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
+                    // Properly dispose the loaded model to prevent memory leaks
+                    disposeObject(gltf.scene);
                     return;
                 }
 
@@ -3460,9 +3462,20 @@ async function startGame() {
     e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
-    if (t.length > 8) { gameStarted = false; return void addMessage("World name too long (max 8 chars)", 3e3); }
-    if (o.length > 20) { gameStarted = false; return void addMessage("Username too long (max 20 chars)", 3e3); }
-    if (!t || !o) { gameStarted = false; return void addMessage("Please enter a world and username", 3e3); }
+
+    // Validate inputs - use helper function to avoid repetitive gameStarted reset
+    function validateAndReset(condition, message) {
+        if (condition) {
+            gameStarted = false;
+            addMessage(message, 3e3);
+            return true;
+        }
+        return false;
+    }
+    if (validateAndReset(t.length > 8, "World name too long (max 8 chars)")) return;
+    if (validateAndReset(o.length > 20, "Username too long (max 20 chars)")) return;
+    if (validateAndReset(!t || !o, "Please enter a world and username")) return;
+
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
     const a = makeSeededRandom((worldSeed = worldName) + "_colors");
     for (const e in BLOCKS)
