@@ -1226,6 +1226,16 @@ function setupDataChannel(e, t) {
                                 }
                             }
 
+                            // Send decrement to requester
+                            const peer = peers.get(s.username);
+                            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: 'inventory_decrement',
+                                    blockId: s.blockId,
+                                    count: 1
+                                }));
+                            }
+
                             // Broadcast to all clients
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
@@ -1412,6 +1422,27 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case 'inventory_decrement':
+                    if (!isHost) {
+                        // Only client processes this
+                        const item = INVENTORY[selectedHotIndex];
+                        // Try selected slot first
+                        if (item && item.id === s.blockId && item.count >= s.count) {
+                            item.count -= s.count;
+                            if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
+                        } else {
+                            // Fallback search
+                            for (let i = 0; i < INVENTORY.length; i++) {
+                                if (INVENTORY[i] && INVENTORY[i].id === s.blockId && INVENTORY[i].count >= s.count) {
+                                    INVENTORY[i].count -= s.count;
+                                    if (INVENTORY[i].count <= 0) INVENTORY[i] = null;
+                                    break;
+                                }
+                            }
+                        }
+                        updateHotbarUI();
+                    }
+                    break;
                 case 'block_place':
                     if (!isHost) {
                         // Client receives authoritative block place from host
@@ -1423,18 +1454,9 @@ function setupDataChannel(e, t) {
                             getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
                         }
 
-                        // Update inventory if this was our request
+                        // Play audio only for the initiating client
                         if (s.username === userName) {
-                            const item = INVENTORY[selectedHotIndex];
-                            if (item && item.id === s.blockId) {
-                                item.count -= 1;
-                                if (item.count <= 0) {
-                                    INVENTORY[selectedHotIndex] = null;
-                                }
-                                updateHotbarUI();
-                                addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
-                            }
-                            // Play audio only for the initiating client
+                            addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
                             safePlayAudio(soundPlace);
                         }
 
