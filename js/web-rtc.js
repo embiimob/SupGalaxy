@@ -843,6 +843,15 @@ function setupDataChannel(e, t) {
                     break;
                 case "ipfs_chunk_from_client_start":
                     if (isHost) {
+                        if (processedMessages.has(s.transactionId)) {
+                            console.log(`[WebRTC] Host skipping already processed IPFS update: ${s.transactionId}`);
+                            return;
+                        }
+                        if (partialIPFSUpdates.has(s.transactionId)) {
+                            console.log(`[WebRTC] Host skipping duplicate IPFS start: ${s.transactionId}`);
+                            return;
+                        }
+
                         partialIPFSUpdates.set(s.transactionId, {
                             chunks: new Array(s.total), // Pre-allocate array
                             total: s.total,
@@ -851,6 +860,20 @@ function setupDataChannel(e, t) {
                             timestamp: s.timestamp,
                             sourceUsername: n
                         });
+
+                        // Relay to other peers as ipfs_chunk_update_start
+                        const relayMessage = JSON.stringify({
+                            type: 'ipfs_chunk_update_start',
+                            total: s.total,
+                            fromAddress: s.fromAddress,
+                            timestamp: s.timestamp,
+                            transactionId: s.transactionId
+                        });
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(relayMessage);
+                            }
+                        }
                     }
                     break;
                 case "ipfs_chunk_from_client_chunk":
@@ -859,6 +882,21 @@ function setupDataChannel(e, t) {
                         if (update && !update.chunks[s.index]) { // Prevent processing duplicates
                             update.chunks[s.index] = s.chunk;
                             update.received++;
+
+                            // Relay to other peers as ipfs_chunk_update_chunk
+                            const relayMessage = JSON.stringify({
+                                type: 'ipfs_chunk_update_chunk',
+                                transactionId: s.transactionId,
+                                index: s.index,
+                                chunk: s.chunk,
+                                total: s.total
+                            });
+                            for (const [peerUsername, peer] of peers.entries()) {
+                                if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(relayMessage);
+                                }
+                            }
+
                             if (update.received === s.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
                                 applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
