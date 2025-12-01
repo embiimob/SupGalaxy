@@ -5,7 +5,7 @@
     "worker": true
   },
   "parserOptions": {
-    "ecmaVersion": "latest",
+    "ecmaVersion": 2022,
     "sourceType": "script"
   },
   "rules": {
