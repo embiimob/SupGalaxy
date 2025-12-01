@@ -3832,6 +3832,14 @@ function switchWorld(newWorldName, targetSpawn) {
     const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
+    // Store the old world name before updating
+    const oldWorldName = worldName;
+
+    // --- SAVE CURRENT WORLD'S STONE DATA BEFORE SWITCHING ---
+    // This preserves stone metadata (URLs, text, settings) so they can be restored when returning to this world.
+    // The mesh objects are disposed but the configuration data is retained in WORLD_STONE_DATA.
+    saveCurrentWorldStoneData(oldWorldName);
+
     // Clear mobs and their meshes
     mobs.forEach(mob => {
         if (mob.mesh) scene.remove(mob.mesh);
@@ -3850,16 +3858,29 @@ function switchWorld(newWorldName, targetSpawn) {
     smokeParticles = [];
 
     // Clear magician stones (3D models) and their loading registry
+    // Note: Metadata is already saved above; here we only dispose the 3D meshes and media elements.
     for (const key in magicianStones) {
-        if (magicianStones[key] && magicianStones[key].mesh) {
-            scene.remove(magicianStones[key].mesh);
-            disposeObject(magicianStones[key].mesh);
+        if (magicianStones[key]) {
+            if (magicianStones[key].mesh) {
+                scene.remove(magicianStones[key].mesh);
+                disposeObject(magicianStones[key].mesh);
+            }
+            // Stop and clean up media elements to prevent memory leaks
+            if (magicianStones[key].videoElement) {
+                magicianStones[key].videoElement.pause();
+                magicianStones[key].videoElement.src = '';
+            }
+            if (magicianStones[key].audioElement) {
+                magicianStones[key].audioElement.pause();
+                magicianStones[key].audioElement.src = '';
+            }
         }
     }
     magicianStones = {};
     magicianStonesLoading.clear();
 
     // Clear calligraphy stones and their loading registry
+    // Note: Metadata is already saved above; here we only dispose the 3D meshes.
     for (const key in calligraphyStones) {
         if (calligraphyStones[key] && calligraphyStones[key].mesh) {
             scene.remove(calligraphyStones[key].mesh);
@@ -3909,7 +3930,14 @@ function switchWorld(newWorldName, targetSpawn) {
         spawn: t
     });
 
-    chunkManager.preloadChunks(o, a, LOAD_RADIUS), addMessage(`Switched to world: ${worldName}`, 4e3)
+    chunkManager.preloadChunks(o, a, LOAD_RADIUS);
+
+    // --- RESTORE STONE DATA FOR THE NEW WORLD ---
+    // This reloads stone media/behaviors when returning to a previously visited world.
+    // If this is a new world with no saved data, nothing is restored.
+    restoreWorldStoneData(worldName);
+
+    addMessage(`Switched to world: ${worldName}`, 4e3);
 
     for (const [peerUsername, peer] of peers.entries()) {
         if (peer.dc && peer.dc.readyState === 'open') {
@@ -3929,6 +3957,120 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
     initServers();
+}
+
+/**
+ * Saves the current world's stone metadata to WORLD_STONE_DATA.
+ * This preserves URLs, text, settings, and other configuration data so that
+ * stones can be fully reconstructed when the player returns to this world.
+ * Called automatically before switching to a different world.
+ * @param {string} currentWorldName - The name of the world being left
+ */
+function saveCurrentWorldStoneData(currentWorldName) {
+    if (!currentWorldName) return;
+    
+    // Serialize magician stones (exclude mesh and media elements, keep config data)
+    const savedMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            savedMagicianStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                loop: stone.loop,
+                autoplay: stone.autoplay,
+                autoplayAnimation: stone.autoplayAnimation,
+                distance: stone.distance,
+                direction: stone.direction,
+                source: stone.source
+            };
+        }
+    }
+
+    // Serialize calligraphy stones (exclude mesh, keep config data)
+    const savedCalligraphyStones = {};
+    for (const key in calligraphyStones) {
+        if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+            const stone = calligraphyStones[key];
+            savedCalligraphyStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor,
+                transparent: stone.transparent,
+                fontFamily: stone.fontFamily,
+                fontSize: stone.fontSize,
+                fontWeight: stone.fontWeight,
+                fontColor: stone.fontColor,
+                text: stone.text,
+                link: stone.link,
+                direction: stone.direction,
+                source: stone.source
+            };
+        }
+    }
+
+    // Store in per-world map
+    WORLD_STONE_DATA.set(currentWorldName, {
+        magicianStones: savedMagicianStones,
+        calligraphyStones: savedCalligraphyStones
+    });
+
+    console.log(`[WorldSwitch] Saved ${Object.keys(savedMagicianStones).length} magician stone(s) and ${Object.keys(savedCalligraphyStones).length} calligraphy stone(s) for world: ${currentWorldName}`);
+}
+
+/**
+ * Restores stone metadata from WORLD_STONE_DATA for the specified world.
+ * This recreates stone meshes and media when the player returns to a previously visited world.
+ * Called automatically after switching to a world.
+ * @param {string} targetWorldName - The name of the world being entered
+ */
+function restoreWorldStoneData(targetWorldName) {
+    if (!targetWorldName) return;
+
+    const savedData = WORLD_STONE_DATA.get(targetWorldName);
+    if (!savedData) {
+        console.log(`[WorldSwitch] No saved stone data for world: ${targetWorldName}`);
+        return;
+    }
+
+    // Restore magician stones
+    if (savedData.magicianStones) {
+        const stoneCount = Object.keys(savedData.magicianStones).length;
+        console.log(`[WorldSwitch] Restoring ${stoneCount} magician stone(s) for world: ${targetWorldName}`);
+        for (const key in savedData.magicianStones) {
+            if (Object.hasOwnProperty.call(savedData.magicianStones, key)) {
+                const stoneData = savedData.magicianStones[key];
+                // Recreate the stone screen with its saved configuration
+                createMagicianStoneScreen(stoneData);
+            }
+        }
+    }
+
+    // Restore calligraphy stones
+    if (savedData.calligraphyStones) {
+        const stoneCount = Object.keys(savedData.calligraphyStones).length;
+        console.log(`[WorldSwitch] Restoring ${stoneCount} calligraphy stone(s) for world: ${targetWorldName}`);
+        for (const key in savedData.calligraphyStones) {
+            if (Object.hasOwnProperty.call(savedData.calligraphyStones, key)) {
+                const stoneData = savedData.calligraphyStones[key];
+                // Recreate the stone screen with its saved configuration
+                createCalligraphyStoneScreen(stoneData);
+            }
+        }
+    }
 }
 
 function updateAvatarAnimation(e, t) {
