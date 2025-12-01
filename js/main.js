@@ -2515,6 +2515,11 @@ function respawnPlayer(e, t, o) {
             } s || (player.x = a, player.y = chunkManager.getSurfaceY(a, n) + 1, player.z = n, player.vy = 0, player.onGround = !0, player.health = 20, player.yaw = 0, player.pitch = 0)
     } else player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !1, player.health = 20, player.yaw = 0, player.pitch = 0;
     updateHotbarUI(), updateHealthBar(), document.getElementById("health").innerText = player.health;
+    
+    // Immediately unload all chunks that are beyond the render distance
+    // This prevents previously visited areas from appearing as tiny objects on the horizon after teleport
+    chunkManager.unloadDistantChunks(player.x, player.z, currentLoadRadius);
+    
     var l = Math.floor(a / CHUNK_SIZE),
         d = Math.floor(n / CHUNK_SIZE);
     currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
