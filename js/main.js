@@ -4668,8 +4668,10 @@ function handleResizeAndOrientation() {
         // Only show if user is actually logged in/playing, not on login screen
         if (document.getElementById("loginOverlay").style.display === "none") {
              if (mobileInterface) mobileInterface.style.display = 'block';
+             document.body.classList.add('is-mobile-mode');
         } else {
              if (mobileInterface) mobileInterface.style.display = 'none';
+             document.body.classList.remove('is-mobile-mode');
         }
 
         hotbar.classList.add('mobile-hotbar');
@@ -4680,11 +4682,13 @@ function handleResizeAndOrientation() {
         if (mobileModeActive) {
             hud.style.display = 'none';
             if (mobileInterface) mobileInterface.style.display = 'block';
+            document.body.classList.add('is-mobile-mode');
             rightPanel.classList.add('minimap-small');
         } else {
             const isLoginVisible = document.getElementById("loginOverlay").style.display !== "none";
             hud.style.display = isLoginVisible ? 'none' : 'block';
             if (mobileInterface) mobileInterface.style.display = 'none';
+            document.body.classList.remove('is-mobile-mode');
             rightPanel.classList.remove('minimap-small');
         }
         hotbar.classList.remove('mobile-hotbar');

@@ -1138,3 +1138,8 @@
         gap: 2px;
     }
 }
+
+/* Disable interaction with messages in mobile mode to allow joystick usage */
+body.is-mobile-mode #messages {
+    pointer-events: none;
+}
