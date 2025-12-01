@@ -489,6 +489,8 @@ Chunk.prototype.idx = function (e, t, o) {
         }
     
     // Use global MAX_LOADED_CHUNKS cap as primary bound, with dynamic threshold as secondary
+    // Dynamic limit formula: (chunks in square area) * 10 (exploration headroom) * 3 (multiplayer factor)
+    // This allows smooth chunk loading during exploration while respecting the hard cap
     const dynamicLimit = (2 * currentLoadRadius + 1) * (2 * currentLoadRadius + 1) * 10 * 3;
     const g = Math.min(dynamicLimit, MAX_LOADED_CHUNKS);
     if (this.chunks.size > g) {

@@ -2512,8 +2512,9 @@ function respawnPlayer(e, t, o) {
         r = t || chunkManager.getSurfaceY(a, n) + 1;
     
     // Calculate target chunk coordinates to check if it's already loaded
-    var targetChunkX = Math.floor(modWrap(a, MAP_SIZE) / CHUNK_SIZE),
-        targetChunkZ = Math.floor(modWrap(n, MAP_SIZE) / CHUNK_SIZE);
+    // Note: a and n are already wrapped, so no need to call modWrap again
+    var targetChunkX = Math.floor(a / CHUNK_SIZE),
+        targetChunkZ = Math.floor(n / CHUNK_SIZE);
     var targetChunkKey = makeChunkKey(worldName, targetChunkX, targetChunkZ);
     var isTargetChunkLoaded = chunkManager.chunks.has(targetChunkKey);
     
