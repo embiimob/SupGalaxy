@@ -1425,14 +1425,36 @@ function setupDataChannel(e, t) {
 
                         // Update inventory if this was our request
                         if (s.username === userName) {
-                            const item = INVENTORY[selectedHotIndex];
-                            if (item && item.id === s.blockId) {
-                                item.count -= 1;
-                                if (item.count <= 0) {
-                                    INVENTORY[selectedHotIndex] = null;
+                            let item = INVENTORY[selectedHotIndex];
+                            let decremented = false;
+
+                            // Helper to check match with loose equality for ID safety
+                            // s.originSeed might be undefined if from local world, so we handle that.
+                            const isMatch = (it) => it && it.id == s.blockId && (it.originSeed == s.originSeed || (!it.originSeed && !s.originSeed));
+
+                            // Check if current slot matches the placed block
+                            if (isMatch(item)) {
+                                item.count--;
+                                if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
+                                decremented = true;
+                            } else {
+                                // Fallback: Search inventory for the matching item to decrement
+                                // This handles cases where user switched slots before server response
+                                for (let i = 0; i < INVENTORY.length; i++) {
+                                    if (isMatch(INVENTORY[i])) {
+                                        INVENTORY[i].count--;
+                                        if (INVENTORY[i].count <= 0) INVENTORY[i] = null;
+                                        decremented = true;
+                                        break;
+                                    }
                                 }
+                            }
+
+                            if (decremented) {
                                 updateHotbarUI();
                                 addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
+                            } else {
+                                console.warn(`[WebRTC] Could not find item to decrement for placed block: ${s.blockId} from user ${s.username}`);
                             }
                             // Play audio only for the initiating client
                             safePlayAudio(soundPlace);
