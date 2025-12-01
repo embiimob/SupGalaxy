@@ -1336,8 +1336,12 @@ async function createMagicianStoneScreen(stoneData) {
             // Post-async-load deduplication check: another load may have completed while this one was in progress.
             // This check ensures that only one instance is created, regardless of asset format.
             if (magicianStones[key] && magicianStones[key].mesh) {
-                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding`);
+                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
+                // Clean up the texture that was created before fetch
+                if (texture) {
+                    texture.dispose();
+                }
                 return;
             }
 
@@ -1433,8 +1437,20 @@ async function createMagicianStoneScreen(stoneData) {
     // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
     // This check is entity-based (using position key) and independent of file extension.
     if (magicianStones[key] && magicianStones[key].mesh) {
-        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding`);
+        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
+        // Clean up any resources that were created
+        if (texture) {
+            texture.dispose();
+        }
+        if (stoneData.videoElement) {
+            stoneData.videoElement.pause();
+            stoneData.videoElement.src = '';
+        }
+        if (stoneData.audioElement) {
+            stoneData.audioElement.pause();
+            stoneData.audioElement.src = '';
+        }
         return;
     }
 
