@@ -16,7 +16,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     IPFS_MAX_OWNERSHIP_PERIOD = 365 * 24 * 60 * 60 * 1000,
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
-    INITIAL_LOAD_RADIUS = 9,
+    // Render distance configuration:
+    // INITIAL_LOAD_RADIUS: Maximum number of chunks to render around the player (reduced by ~20% for performance)
+    // LOAD_RADIUS: Reduced radius used during sprinting to improve performance
+    // currentLoadRadius: Dynamic radius that switches between INITIAL and LOAD based on player state
+    INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),

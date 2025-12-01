@@ -510,6 +510,80 @@ Chunk.prototype.idx = function (e, t, o) {
     }
     };
 
+/**
+ * Immediately unloads all chunks that are beyond the specified radius from the player's current position.
+ * This is called after teleportation to ensure previously visited areas are cleaned up and don't appear
+ * as tiny objects on the horizon.
+ * @param {number} playerX - The player's current X position
+ * @param {number} playerZ - The player's current Z position
+ * @param {number} radius - The maximum chunk distance to keep (defaults to currentLoadRadius)
+ */
+ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) {
+    radius = radius || currentLoadRadius;
+    const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
+    const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
+    
+    // Build a set of chunk keys that should remain loaded
+    const chunksToKeep = new Set();
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
+            const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
+            chunksToKeep.add(makeChunkKey(worldName, cx, cz));
+        }
+    }
+    
+    // Find and remove all chunks that are outside the radius
+    const chunksToRemove = [];
+    for (const [key, chunk] of this.chunks) {
+        if (!chunksToKeep.has(key)) {
+            chunksToRemove.push(chunk);
+        }
+    }
+    
+    // Unload the distant chunks
+    for (const chunk of chunksToRemove) {
+        // Remove the mesh from the scene
+        if (chunk.mesh) {
+            meshGroup.remove(chunk.mesh);
+            disposeObject(chunk.mesh);
+            chunk.mesh = null;
+        }
+        
+        // Clean up smoke particles associated with this chunk
+        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+            const particle = smokeParticles[i];
+            if (particle.userData.chunkKey === chunk.key) {
+                scene.remove(particle);
+                disposeObject(particle);
+                smokeParticles.splice(i, 1);
+            }
+        }
+        
+        // Clean up torch registry entries for this chunk
+        const chunkStartX = chunk.cx * CHUNK_SIZE;
+        const chunkStartZ = chunk.cz * CHUNK_SIZE;
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+            for (let z = 0; z < CHUNK_SIZE; z++) {
+                for (let y = 0; y < MAX_HEIGHT; y++) {
+                    const blockId = chunk.get(x, y, z);
+                    if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                        const torchKey = `${modWrap(chunkStartX + x, MAP_SIZE)},${y},${modWrap(chunkStartZ + z, MAP_SIZE)}`;
+                        torchRegistry.delete(torchKey);
+                    }
+                }
+            }
+        }
+        
+        // Remove the chunk from the manager
+        this.chunks.delete(chunk.key);
+    }
+    
+    if (chunksToRemove.length > 0) {
+        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunks after teleport`);
+    }
+};
+
 function makeChunkKey(e, t, o) {
     return ("" + e).slice(0, 8) + ":" + t + ":" + o
 }
