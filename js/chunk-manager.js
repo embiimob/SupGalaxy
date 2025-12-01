@@ -413,13 +413,19 @@ Chunk.prototype.idx = function (e, t, o) {
     }
     return SEA_LEVEL
 }, ChunkManager.prototype.preloadChunks = function (e, t, o) {
-    for (var a = Math.floor(MAP_SIZE / CHUNK_SIZE), n = [], r = 0; r <= o; r++)
-        for (var s = -r; s <= r; s++)
-            for (var i = -r; i <= r; i++) Math.abs(s) !== r && Math.abs(i) !== r || n.push({
-                cx: e + s,
-                cz: t + i,
-                dist: Math.abs(s) + Math.abs(i)
-            });
+    // Use circular distance check instead of square for more natural load area
+    var a = Math.floor(MAP_SIZE / CHUNK_SIZE), n = [], radiusSq = o * o;
+    for (var s = -o; s <= o; s++)
+        for (var i = -o; i <= o; i++) {
+            // Circular filter: only include chunks within circular radius
+            if (s * s + i * i <= radiusSq) {
+                n.push({
+                    cx: e + s,
+                    cz: t + i,
+                    dist: Math.sqrt(s * s + i * i)
+                });
+            }
+        }
     n.sort((function (e, t) {
         return e.dist - t.dist
     }));
@@ -438,16 +444,22 @@ Chunk.prototype.idx = function (e, t, o) {
     var a = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
         n = Math.floor(modWrap(t, MAP_SIZE) / CHUNK_SIZE);
     a === this.lastPcx && n === this.lastPcz || (this.lastPcx = a, this.lastPcz = n);
-    for (var r = [], s = -currentLoadRadius; s <= currentLoadRadius; s++)
+    
+    // Use circular distance check for more natural load area
+    var r = [], radiusSq = currentLoadRadius * currentLoadRadius;
+    for (var s = -currentLoadRadius; s <= currentLoadRadius; s++)
         for (var i = -currentLoadRadius; i <= currentLoadRadius; i++) {
-            var l = modWrap(a + s, CHUNKS_PER_SIDE),
-                d = modWrap(n + i, CHUNKS_PER_SIDE);
-            r.push({
-                cx: l,
-                cz: d,
-                dx: s,
-                dz: i
-            })
+            // Circular filter: only include chunks within circular radius
+            if (s * s + i * i <= radiusSq) {
+                var l = modWrap(a + s, CHUNKS_PER_SIDE),
+                    d = modWrap(n + i, CHUNKS_PER_SIDE);
+                r.push({
+                    cx: l,
+                    cz: d,
+                    dx: s,
+                    dz: i
+                });
+            }
         }
     r.sort(((e, t) => {
         const a = e.dx * e.dx + e.dz * e.dz,
@@ -474,7 +486,11 @@ Chunk.prototype.idx = function (e, t, o) {
                 h = Math.floor(modWrap(y.x, MAP_SIZE) / CHUNK_SIZE),
                 f = Math.floor(modWrap(y.z, MAP_SIZE) / CHUNK_SIZE);
             this.preloadChunks(h, f, 2)
-        } const g = (2 * currentLoadRadius + 1) * (2 * currentLoadRadius + 1) * 10 * 3;
+        }
+    
+    // Use global MAX_LOADED_CHUNKS cap as primary bound, with dynamic threshold as secondary
+    const dynamicLimit = (2 * currentLoadRadius + 1) * (2 * currentLoadRadius + 1) * 10 * 3;
+    const g = Math.min(dynamicLimit, MAX_LOADED_CHUNKS);
     if (this.chunks.size > g) {
         let e = Array.from(this.chunks.values());
         e.sort(((e, t) => {
@@ -488,6 +504,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 for (let e = smokeParticles.length - 1; e >= 0; e--) {
                     const t = smokeParticles[e];
                     t.userData.chunkKey === o.key && (scene.remove(t), disposeObject(t), smokeParticles.splice(e, 1))
+                }
+                // Clean up volcanoes associated with this chunk
+                for (let e = volcanoes.length - 1; e >= 0; e--) {
+                    if (volcanoes[e].chunkKey === o.key) {
+                        volcanoes.splice(e, 1);
+                    }
                 }
                 const e = o.cx * CHUNK_SIZE,
                     t = o.cz * CHUNK_SIZE;
@@ -526,13 +548,17 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
     const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
     const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
     
-    // Build a set of chunk keys that should remain loaded
+    // Build a set of chunk keys that should remain loaded using circular distance check
     const chunksToKeep = new Set();
+    const radiusSq = radius * radius;
     for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
-            const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
-            const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
-            chunksToKeep.add(makeChunkKey(worldName, cx, cz));
+            // Circular filter: only keep chunks within circular radius
+            if (dx * dx + dz * dz <= radiusSq) {
+                const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
+                const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
+                chunksToKeep.add(makeChunkKey(worldName, cx, cz));
+            }
         }
     }
     
@@ -560,6 +586,13 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
                 scene.remove(particle);
                 disposeObject(particle);
                 smokeParticles.splice(i, 1);
+            }
+        }
+        
+        // Clean up volcanoes associated with this chunk
+        for (let i = volcanoes.length - 1; i >= 0; i--) {
+            if (volcanoes[i].chunkKey === chunk.key) {
+                volcanoes.splice(i, 1);
             }
         }
         

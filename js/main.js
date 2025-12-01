@@ -2504,9 +2504,19 @@ function handlePlayerDeath() {
 }
 
 function respawnPlayer(e, t, o) {
+    // Determine if this is a home teleport (no coords provided, uses spawnPoint)
+    var isHomeTeleport = (e === undefined && t === undefined && o === undefined);
+    
     var a = modWrap(e || spawnPoint.x, MAP_SIZE),
         n = modWrap(o || spawnPoint.z, MAP_SIZE),
         r = t || chunkManager.getSurfaceY(a, n) + 1;
+    
+    // Calculate target chunk coordinates to check if it's already loaded
+    var targetChunkX = Math.floor(modWrap(a, MAP_SIZE) / CHUNK_SIZE),
+        targetChunkZ = Math.floor(modWrap(n, MAP_SIZE) / CHUNK_SIZE);
+    var targetChunkKey = makeChunkKey(worldName, targetChunkX, targetChunkZ);
+    var isTargetChunkLoaded = chunkManager.chunks.has(targetChunkKey);
+    
     if (checkCollision(a, r, n)) {
         for (var s = !1, i = 0; i <= 5; i++)
             if (!checkCollision(a, r + i, n)) {
@@ -2516,19 +2526,30 @@ function respawnPlayer(e, t, o) {
     } else player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !1, player.health = 20, player.yaw = 0, player.pitch = 0;
     updateHotbarUI(), updateHealthBar(), document.getElementById("health").innerText = player.health;
     
-    // Immediately unload all chunks that are beyond the render distance
-    // This prevents previously visited areas from appearing as tiny objects on the horizon after teleport
-    chunkManager.unloadDistantChunks(player.x, player.z, currentLoadRadius);
+    // Smart teleport behavior:
+    // 1. Home teleport: Never unload previous area (let distance-based eviction handle cleanup)
+    // 2. Teleport within loaded area: Skip unloading, destination chunk already exists
+    // 3. Teleport to distant area: Unload old area to prevent tiny horizon artifacts
+    if (!isHomeTeleport && !isTargetChunkLoaded) {
+        // Distant teleport: unload chunks from previous location
+        chunkManager.unloadDistantChunks(player.x, player.z, currentLoadRadius);
+    }
     
     var l = Math.floor(a / CHUNK_SIZE),
         d = Math.floor(n / CHUNK_SIZE);
     currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
+    
+    // Use circular distance check for chunk iteration
+    var radiusSq = currentLoadRadius * currentLoadRadius;
     for (var c = -currentLoadRadius; c <= currentLoadRadius; c++)
         for (var u = -currentLoadRadius; u <= currentLoadRadius; u++) {
-            var p = modWrap(l + c, CHUNKS_PER_SIDE),
-                m = modWrap(d + u, CHUNKS_PER_SIDE),
-                y = chunkManager.getChunk(p, m);
-            y.generated || chunkManager.generateChunk(y), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y)
+            // Circular filter: only process chunks within circular radius
+            if (c * c + u * u <= radiusSq) {
+                var p = modWrap(l + c, CHUNKS_PER_SIDE),
+                    m = modWrap(d + u, CHUNKS_PER_SIDE),
+                    y = chunkManager.getChunk(p, m);
+                y.generated || chunkManager.generateChunk(y), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y);
+            }
         }
     if (chunkManager.update(player.x, player.z), "first" === cameraMode) {
         camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2), camera.rotation.set(0, 0, 0, "YXZ");
