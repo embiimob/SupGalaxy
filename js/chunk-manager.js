@@ -412,17 +412,38 @@ Chunk.prototype.idx = function (e, t, o) {
         if (e !== BLOCK_AIR && 6 !== e && 16 !== e) return d + 1
     }
     return SEA_LEVEL
+/**
+ * Preloads chunks within a circular radius around the specified position.
+ * Uses CIRCULAR loading (not square) to improve initial load time - only chunks within
+ * the Euclidean distance are loaded, forming a circular region rather than a square.
+ * @param {number} e - Center chunk X coordinate
+ * @param {number} t - Center chunk Z coordinate
+ * @param {number} o - Radius in chunks (Euclidean distance)
+ */
 }, ChunkManager.prototype.preloadChunks = function (e, t, o) {
-    for (var a = Math.floor(MAP_SIZE / CHUNK_SIZE), n = [], r = 0; r <= o; r++)
-        for (var s = -r; s <= r; s++)
-            for (var i = -r; i <= r; i++) Math.abs(s) !== r && Math.abs(i) !== r || n.push({
-                cx: e + s,
-                cz: t + i,
-                dist: Math.abs(s) + Math.abs(i)
-            });
+    var a = Math.floor(MAP_SIZE / CHUNK_SIZE), n = [];
+    
+    // Build list of chunks within circular radius
+    // Use Euclidean distance check to form a circle instead of square
+    for (var s = -o; s <= o; s++)
+        for (var i = -o; i <= o; i++) {
+            var distSq = s * s + i * i;
+            var radiusSq = o * o;
+            // Only include chunks within the circular radius
+            if (distSq <= radiusSq) {
+                n.push({
+                    cx: e + s,
+                    cz: t + i,
+                    dist: Math.sqrt(distSq)
+                });
+            }
+        }
+    
+    // Sort by distance (closest first)
     n.sort((function (e, t) {
         return e.dist - t.dist
     }));
+    
     var l = 0;
     (function e() {
         if (!(l >= n.length)) {
@@ -434,24 +455,45 @@ Chunk.prototype.idx = function (e, t, o) {
             i.generated || this.generateChunk(i), l++, setTimeout(e.bind(this), 33)
         }
     }).call(this)
-}, ChunkManager.prototype.update = function (e, t, o) {
+},
+/**
+ * Updates chunk loading/unloading based on player position.
+ * Uses CIRCULAR (spherical) loading instead of square - chunks are only loaded if they fall
+ * within a radius from the player in chunk coordinates.
+ * Enforces a hard cap of MAX_ACTIVE_CHUNKS (22) - when exceeded, the farthest chunks are unloaded.
+ * @param {number} e - Player X position
+ * @param {number} t - Player Z position  
+ * @param {THREE.Vector3} o - Player movement direction vector (for prioritizing chunks in movement direction)
+ */
+ChunkManager.prototype.update = function (e, t, o) {
     var a = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
         n = Math.floor(modWrap(t, MAP_SIZE) / CHUNK_SIZE);
     a === this.lastPcx && n === this.lastPcz || (this.lastPcx = a, this.lastPcz = n);
-    for (var r = [], s = -currentLoadRadius; s <= currentLoadRadius; s++)
+    
+    // Build list of candidate chunks using CIRCULAR loading (not square)
+    // Only include chunks within currentLoadRadius distance from player (Euclidean distance in chunk coords)
+    var r = [];
+    for (var s = -currentLoadRadius; s <= currentLoadRadius; s++)
         for (var i = -currentLoadRadius; i <= currentLoadRadius; i++) {
-            var l = modWrap(a + s, CHUNKS_PER_SIDE),
-                d = modWrap(n + i, CHUNKS_PER_SIDE);
-            r.push({
-                cx: l,
-                cz: d,
-                dx: s,
-                dz: i
-            })
+            // Calculate Euclidean distance in chunk coordinates
+            var distSq = s * s + i * i;
+            var radiusSq = currentLoadRadius * currentLoadRadius;
+            // Only include chunks within the circular radius
+            if (distSq <= radiusSq) {
+                var l = modWrap(a + s, CHUNKS_PER_SIDE),
+                    d = modWrap(n + i, CHUNKS_PER_SIDE);
+                r.push({
+                    cx: l,
+                    cz: d,
+                    dx: s,
+                    dz: i,
+                    distSq: distSq
+                });
+            }
         }
+    
+    // Sort chunks by distance, prioritizing chunks in movement direction
     r.sort(((e, t) => {
-        const a = e.dx * e.dx + e.dz * e.dz,
-            n = t.dx * t.dx + t.dz * t.dz;
         let r = !1,
             s = !1;
         if (o && o.lengthSq() > 0) {
@@ -460,8 +502,9 @@ Chunk.prototype.idx = function (e, t, o) {
             const n = new THREE.Vector3(t.dx, 0, t.dz);
             n.lengthSq() > 0 && n.normalize().dot(o) > .3 && (s = !0)
         }
-        return r && !s ? -1 : !r && s ? 1 : a - n
+        return r && !s ? -1 : !r && s ? 1 : e.distSq - t.distSq
     }));
+    
     var c = new Set,
         u = 0;
     for (const e of r) {
@@ -474,15 +517,21 @@ Chunk.prototype.idx = function (e, t, o) {
                 h = Math.floor(modWrap(y.x, MAP_SIZE) / CHUNK_SIZE),
                 f = Math.floor(modWrap(y.z, MAP_SIZE) / CHUNK_SIZE);
             this.preloadChunks(h, f, 2)
-        } const g = (2 * currentLoadRadius + 1) * (2 * currentLoadRadius + 1) * 10 * 3;
-    if (this.chunks.size > g) {
+        }
+    
+    // Enforce hard cap of MAX_ACTIVE_CHUNKS (22)
+    // When exceeded, unload the farthest chunks from the player first
+    if (this.chunks.size > MAX_ACTIVE_CHUNKS) {
         let e = Array.from(this.chunks.values());
+        // Sort by distance from player (farthest first for removal)
         e.sort(((e, t) => {
             const o = Math.hypot(e.cx - a, e.cz - n);
             return Math.hypot(t.cx - a, t.cz - n) - o
         }));
-        for (let t = 0; t < e.length && this.chunks.size > g; t++) {
+        // Unload farthest chunks until we're at or under the cap
+        for (let t = 0; t < e.length && this.chunks.size > MAX_ACTIVE_CHUNKS; t++) {
             const o = e[t];
+            // Don't unload chunks that are in our current load set
             if (!c.has(o.key)) {
                 o.mesh && (meshGroup.remove(o.mesh), disposeObject(o.mesh));
                 for (let e = smokeParticles.length - 1; e >= 0; e--) {
@@ -512,6 +561,8 @@ Chunk.prototype.idx = function (e, t, o) {
 
 /**
  * Immediately unloads all chunks that are beyond the specified radius from the player's current position.
+ * Uses CIRCULAR distance check - only chunks within Euclidean distance are kept.
+ * Also enforces the MAX_ACTIVE_CHUNKS (22) cap by unloading farthest chunks first.
  * This is called after teleportation to ensure previously visited areas are cleaned up and don't appear
  * as tiny objects on the horizon.
  * @param {number} playerX - The player's current X position
@@ -526,23 +577,35 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
     const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
     const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
     
-    // Build a set of chunk keys that should remain loaded
+    // Build a set of chunk keys that should remain loaded using CIRCULAR check
     const chunksToKeep = new Set();
+    const radiusSq = radius * radius;
     for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
-            const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
-            const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
-            chunksToKeep.add(makeChunkKey(worldName, cx, cz));
+            // Only keep chunks within circular radius (Euclidean distance)
+            const distSq = dx * dx + dz * dz;
+            if (distSq <= radiusSq) {
+                const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
+                const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
+                chunksToKeep.add(makeChunkKey(worldName, cx, cz));
+            }
         }
     }
     
-    // Find and remove all chunks that are outside the radius
+    // Find all chunks that are outside the circular radius
     const chunksToRemove = [];
     for (const [key, chunk] of this.chunks) {
         if (!chunksToKeep.has(key)) {
             chunksToRemove.push(chunk);
         }
     }
+    
+    // Sort by distance from player (farthest first) to remove farthest chunks first
+    chunksToRemove.sort((a, b) => {
+        const distA = Math.hypot(a.cx - pcx, a.cz - pcz);
+        const distB = Math.hypot(b.cx - pcx, b.cz - pcz);
+        return distB - distA; // Farthest first
+    });
     
     // Unload the distant chunks
     for (const chunk of chunksToRemove) {
@@ -582,8 +645,29 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
         this.chunks.delete(chunk.key);
     }
     
+    // Also enforce MAX_ACTIVE_CHUNKS cap after unloading distant chunks
+    if (this.chunks.size > MAX_ACTIVE_CHUNKS) {
+        let allChunks = Array.from(this.chunks.values());
+        // Sort by distance from player (farthest first for removal)
+        allChunks.sort((a, b) => {
+            const distA = Math.hypot(a.cx - pcx, a.cz - pcz);
+            const distB = Math.hypot(b.cx - pcx, b.cz - pcz);
+            return distB - distA;
+        });
+        
+        // Unload farthest chunks until we're at or under the cap
+        while (this.chunks.size > MAX_ACTIVE_CHUNKS && allChunks.length > 0) {
+            const chunkToRemove = allChunks.shift();
+            if (chunkToRemove.mesh) {
+                meshGroup.remove(chunkToRemove.mesh);
+                disposeObject(chunkToRemove.mesh);
+            }
+            this.chunks.delete(chunkToRemove.key);
+        }
+    }
+    
     if (chunksToRemove.length > 0) {
-        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunk(s)`);
+        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunk(s), ${this.chunks.size} remaining`);
     }
 };
 
