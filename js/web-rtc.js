@@ -136,7 +136,7 @@ async function sendWorldStateAsync(peer, worldState, username) {
     };
 
     const dataString = JSON.stringify(dataToSend);
-    const chunkSize = 16384; // 16KB chunks
+    const chunkSize = 131072; // 128KB chunks
     const chunks = [];
     for (let i = 0; i < dataString.length; i += chunkSize) {
         chunks.push(dataString.slice(i, i + chunkSize));
@@ -457,14 +457,17 @@ function setupDataChannel(e, t) {
                 case "world_sync":
                     if (!isHost) {
                         console.log("[WEBRTC] Received world_sync");
+                        const worldState = getCurrentWorldState();
                         if (s.chunkDeltas) {
                             const deltas = new Map(s.chunkDeltas);
                             for (const [chunkKey, changes] of deltas.entries()) {
-                                chunkManager.addPendingDeltas(chunkKey, changes);
+                                // Apply changes locally only - do not relay
+                                worldState.chunkDeltas.set(chunkKey, changes);
+                                chunkManager.applyDeltasToChunk(chunkKey, changes);
                             }
                         }
                         if (s.foreignBlockOrigins) {
-                            getCurrentWorldState().foreignBlockOrigins = new Map(s.foreignBlockOrigins);
+                            worldState.foreignBlockOrigins = new Map(s.foreignBlockOrigins);
                         }
                     }
                     break;
@@ -492,13 +495,16 @@ function setupDataChannel(e, t) {
                                 const fullDataString = update.chunks.join('');
                                 const fullData = JSON.parse(fullDataString);
 
+                                const worldState = getCurrentWorldState();
                                 if (fullData.chunkDeltas) {
                                     for (const [chunkKey, changes] of fullData.chunkDeltas) {
-                                        chunkManager.addPendingDeltas(chunkKey, changes);
+                                        // Apply changes locally only - do not relay
+                                        worldState.chunkDeltas.set(chunkKey, changes);
+                                        chunkManager.applyDeltasToChunk(chunkKey, changes);
                                     }
                                 }
                                 if (fullData.foreignBlockOrigins) {
-                                    getCurrentWorldState().foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
+                                    worldState.foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
                                 }
                                 if (fullData.processedIds) {
                                     for (const id of fullData.processedIds) {
@@ -764,6 +770,10 @@ function setupDataChannel(e, t) {
                     break;
                 case "ipfs_chunk_update_start":
                     if (!isHost) {
+                        if (processedMessages.has(s.transactionId)) {
+                            console.log(`[WebRTC] Skipping already processed IPFS update: ${s.transactionId}`);
+                            return;
+                        }
                         partialIPFSUpdates.set(s.transactionId, {
                             chunks: new Array(s.total), // Pre-allocate array
                             total: s.total,
@@ -834,6 +844,15 @@ function setupDataChannel(e, t) {
                     break;
                 case "ipfs_chunk_from_client_start":
                     if (isHost) {
+                        if (processedMessages.has(s.transactionId)) {
+                            console.log(`[WebRTC] Host skipping already processed IPFS update: ${s.transactionId}`);
+                            return;
+                        }
+                        if (partialIPFSUpdates.has(s.transactionId)) {
+                            console.log(`[WebRTC] Host skipping duplicate IPFS start: ${s.transactionId}`);
+                            return;
+                        }
+
                         partialIPFSUpdates.set(s.transactionId, {
                             chunks: new Array(s.total), // Pre-allocate array
                             total: s.total,
@@ -842,6 +861,20 @@ function setupDataChannel(e, t) {
                             timestamp: s.timestamp,
                             sourceUsername: n
                         });
+
+                        // Relay to other peers as ipfs_chunk_update_start
+                        const relayMessage = JSON.stringify({
+                            type: 'ipfs_chunk_update_start',
+                            total: s.total,
+                            fromAddress: s.fromAddress,
+                            timestamp: s.timestamp,
+                            transactionId: s.transactionId
+                        });
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(relayMessage);
+                            }
+                        }
                     }
                     break;
                 case "ipfs_chunk_from_client_chunk":
@@ -850,6 +883,21 @@ function setupDataChannel(e, t) {
                         if (update && !update.chunks[s.index]) { // Prevent processing duplicates
                             update.chunks[s.index] = s.chunk;
                             update.received++;
+
+                            // Relay to other peers as ipfs_chunk_update_chunk
+                            const relayMessage = JSON.stringify({
+                                type: 'ipfs_chunk_update_chunk',
+                                transactionId: s.transactionId,
+                                index: s.index,
+                                chunk: s.chunk,
+                                total: s.total
+                            });
+                            for (const [peerUsername, peer] of peers.entries()) {
+                                if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(relayMessage);
+                                }
+                            }
+
                             if (update.received === s.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
                                 applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
