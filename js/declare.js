@@ -20,11 +20,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // INITIAL_LOAD_RADIUS: Maximum number of chunks to render around the player (reduced by ~20% for performance)
     // LOAD_RADIUS: Reduced radius used during sprinting to improve performance
     // currentLoadRadius: Dynamic radius that switches between INITIAL and LOAD based on player state
-    // MAX_ACTIVE_CHUNKS: Hard cap on the number of loaded chunks (22). When exceeded, farthest chunks are unloaded.
+    // MAX_ACTIVE_CHUNKS: Hard cap on the number of loaded chunks (169). When exceeded, farthest chunks are unloaded.
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
-    MAX_ACTIVE_CHUNKS = 22,
+    MAX_ACTIVE_CHUNKS = 169,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
     VERSION = "SupGalaxy v0.6.3",
     POLL_INTERVAL = 3e4,
