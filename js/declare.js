@@ -23,7 +23,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // MAX_LOADED_CHUNKS: Hard cap on total chunks to prevent memory issues and crashes
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
-    MAX_LOADED_CHUNKS = 777,
+    MAX_LOADED_CHUNKS = 420,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
     VERSION = "SupGalaxy v0.6.3",
