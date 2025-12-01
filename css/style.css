@@ -325,7 +325,7 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            width: 90%;
+            width: 95%;
             max-width: 500px;
             max-height: 85vh; /* Adjusted for mobile safe areas */
             overflow-y: auto;
@@ -417,11 +417,13 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 480px;
-            max-height: 80vh; /* Mobile safeguard */
-            overflow: auto;
+            width: 95%;
+            max-width: 480px;
+            max-height: 85vh;
+            overflow-y: auto;
             overscroll-behavior: contain;
             color: #fff;
+            box-sizing: border-box;
         }
 
         #inventoryGrid {
@@ -608,7 +610,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #joinScriptModal h3 {
@@ -636,7 +643,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #downloadModal h3 {
@@ -664,7 +676,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            box-sizing: border-box;
         }
 
             #teleportModal h3 {
@@ -737,8 +754,13 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 360px;
+            width: 90%;
+            max-width: 360px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
             display: none;
+            box-sizing: border-box;
         }
 
             #usersModal h3 {
@@ -760,8 +782,12 @@
             background: var(--panel);
             padding: 14px;
             border-radius: 10px;
-            min-width: 300px;
+            width: 90%;
+            max-width: 300px;
+            max-height: 60vh;
+            overflow-y: auto;
             display: none;
+            box-sizing: border-box;
         }
 
             #pendingModal h3 {
@@ -1042,6 +1068,7 @@
 
     #musicPlayer {
         margin-top: 4px;
+        max-width: 95vw;
     }
 
     #musicPlayer button {
