@@ -712,9 +712,14 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             type: 'processed_transaction_id',
             transactionId: a
         });
-        for (const [, peer] of peers.entries()) {
+        for (const [peerUsername, peer] of peers.entries()) {
             if (peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(message);
+                // Only send processed confirmation to the source of the message (ACK)
+                // Do not send to others, as we either just sent them the payload (and sending this would block it)
+                // or they don't need to know yet.
+                if (sourceUsername && peerUsername === sourceUsername) {
+                    peer.dc.send(message);
+                }
             }
         }
     } catch (e) {
