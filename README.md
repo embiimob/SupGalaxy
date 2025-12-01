@@ -133,7 +133,58 @@ Connection established → avatars appear → PvP active.
 
 # 🧩 Developer Guide
 
-SupGalaxy is entirely browser-based—no bundlers, node modules, or build steps.
+SupGalaxy is entirely browser-based—no bundlers, node modules, or build steps required to run the game.
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+ (for development tools only)
+- Modern browser (Chrome, Firefox, Edge)
+
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/embiimob/SupGalaxy.git
+cd SupGalaxy
+
+# Install development dependencies
+npm install
+```
+
+### Running the Game
+Simply open `index.html` in your browser. No build step required!
+
+For local development, you can use any static file server:
+```bash
+# Using Python
+python -m http.server 8080
+
+# Using Node.js (npx)
+npx serve .
+```
+
+### Development Workflow
+
+#### Linting
+```bash
+# Run ESLint to check for code issues
+npm run lint
+
+# Run ESLint with auto-fix
+npm run lint:fix
+
+# Run ESLint with strict mode (no warnings allowed)
+npm run lint:strict
+```
+
+#### Formatting
+```bash
+# Check formatting
+npm run format:check
+
+# Auto-format all files
+npm run format
+```
 
 ### Core Architecture
 - **three.js** rendering  
@@ -235,5 +286,20 @@ Export JSON from the game → publish using Sup!? → peers sync automatically.
 - **Contribute**: Pull requests welcome  
 - **Community**: Join **#HugPuddle** on Sup!?  
 - **Contact**: @embii4u on Sup!?  
+
+## Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+1. **Fork the repository** and create your branch from `main`
+2. **Run linting** before submitting: `npm run lint`
+3. **Check formatting**: `npm run format:check`
+4. **Write clear commit messages**
+5. **Submit a pull request** with a clear description of changes
+
+### Code Style
+- The project uses ESLint and Prettier for code quality
+- Run `npm run format` to auto-format your code
+- Avoid introducing new warnings in ESLint
 
 **SupGalaxy: A gift to the world. Build freely. Explore infinitely.** ✨
