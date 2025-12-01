@@ -551,13 +551,41 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
         const blockDate = o; // o is the BlockDate timestamp
 
         const showProgress = e.length > 5;
+        // Extract magician and calligraphy stones if present in the full payload
+        // The payload 'e' is expected to be an array of chunk updates, but if it came from
+        // an IPFS export, it might be the full object.
+        // However, applyChunkUpdates is usually called with 'fullData' which is the array of chunk updates.
+        // IF the export format includes metadata at the top level, we need to check if 'e' has those properties.
+        // Wait, 'e' is passed as 'fullData'.
+        // Let's check if 'e' is an array or object.
+        let chunksArray = Array.isArray(e) ? e : (e.deltas || []);
+
+        // Handle metadata if 'e' is the full export object
+        if (!Array.isArray(e)) {
+            if (e.magicianStones) {
+                for (const key in e.magicianStones) {
+                    if (Object.hasOwnProperty.call(e.magicianStones, key)) {
+                        createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
+                    }
+                }
+            }
+            if (e.calligraphyStones) {
+                for (const key in e.calligraphyStones) {
+                    if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
+                        createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
+                    }
+                }
+            }
+        }
+
+        const showProgress = chunksArray.length > 5;
         if (showProgress && window.showLoadingIndicator) {
             window.showLoadingIndicator(0, "Applying Updates...");
             await new Promise(resolve => setTimeout(resolve, 10));
         }
 
-        for (let idx = 0; idx < e.length; idx++) {
-            var n = e[idx];
+        for (let idx = 0; idx < chunksArray.length; idx++) {
+            var n = chunksArray[idx];
             var r = n.chunk,
                 s = n.changes;
             if (chunkManager) {
@@ -616,7 +644,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             } else console.error("[ChunkManager] chunkManager not defined")
 
             if (showProgress && window.showLoadingIndicator && idx % 5 === 0) {
-                const percent = Math.round((idx / e.length) * 100);
+                const percent = Math.round((idx / chunksArray.length) * 100);
                 window.showLoadingIndicator(percent, `Processing ${percent}%`);
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
