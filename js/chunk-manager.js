@@ -669,7 +669,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             sendChunk(); // Start the sending process
         }
 
-        if (isHost) {
+        if (isHost && !sourceUsername) {
             const startMessage = JSON.stringify({
                 type: 'ipfs_chunk_update_start',
                 total: chunks.length,
