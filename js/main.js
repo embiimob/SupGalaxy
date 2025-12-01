@@ -1161,12 +1161,6 @@ async function createMagicianStoneScreen(stoneData) {
     // Mark as loading to prevent duplicate loads during async operations
     magicianStonesLoading.add(key);
 
-    // Remove existing screen if it exists (defensive cleanup)
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        scene.remove(magicianStones[key].mesh);
-        disposeObject(magicianStones[key].mesh);
-    }
-
     if (url.startsWith('IPFS:')) {
         try {
             url = await resolveIPFS(url);
@@ -1483,12 +1477,6 @@ function createCalligraphyStoneScreen(stoneData) {
 
     // Mark as loading to prevent duplicate loads
     calligraphyStonesLoading.add(key);
-
-    // Remove existing screen if it exists (defensive cleanup)
-    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
-        scene.remove(calligraphyStones[key].mesh);
-        disposeObject(calligraphyStones[key].mesh);
-    }
 
     // Create canvas for text rendering
     const pixelsPerBlock = 128; // Resolution per block
