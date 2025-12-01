@@ -1148,7 +1148,20 @@ async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance } = stoneData;
     const key = `${x},${y},${z}`;
 
-    // Remove existing screen if it exists
+    // Deduplication: Skip if this stone is already loaded or currently loading
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already exists`);
+        return;
+    }
+    if (magicianStonesLoading.has(key)) {
+        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already loading`);
+        return;
+    }
+
+    // Mark as loading to prevent duplicate loads during async operations
+    magicianStonesLoading.add(key);
+
+    // Remove existing screen if it exists (defensive cleanup)
     if (magicianStones[key] && magicianStones[key].mesh) {
         scene.remove(magicianStones[key].mesh);
         disposeObject(magicianStones[key].mesh);
@@ -1159,6 +1172,7 @@ async function createMagicianStoneScreen(stoneData) {
             url = await resolveIPFS(url);
         } catch (error) {
             console.error('Error resolving IPFS URL for in-world screen:', error);
+            magicianStonesLoading.delete(key); // Remove from loading set on error
             return; // Don't create a screen if the URL is invalid
         }
     }
@@ -1171,6 +1185,13 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
+                // Check if another load completed while this one was in progress
+                if (magicianStones[key] && magicianStones[key].mesh) {
+                    console.log(`[MagicianStone] Duplicate load completed for key ${key} - discarding`);
+                    magicianStonesLoading.delete(key);
+                    return;
+                }
+
                 const model = gltf.scene;
 
                 // Calculate bounding box and scale to fit within width x height
@@ -1235,6 +1256,7 @@ async function createMagicianStoneScreen(stoneData) {
                 screenMesh.lookAt(lookAtTarget);
 
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false };
+                magicianStonesLoading.delete(key); // Remove from loading set after successful creation
                 scene.add(screenMesh);
             },
             function(progress) {
@@ -1284,6 +1306,7 @@ async function createMagicianStoneScreen(stoneData) {
                 screenMesh.lookAt(lookAtTarget);
 
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+                magicianStonesLoading.delete(key); // Remove from loading set after error handling
                 scene.add(screenMesh);
             }
         );
@@ -1438,6 +1461,7 @@ async function createMagicianStoneScreen(stoneData) {
     screenMesh.lookAt(lookAtTarget);
 
     magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+    magicianStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
 }
 
@@ -1445,7 +1469,20 @@ function createCalligraphyStoneScreen(stoneData) {
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
     const key = `${x},${y},${z}`;
 
-    // Remove existing screen if it exists
+    // Deduplication: Skip if this stone is already loaded or currently loading
+    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
+        return;
+    }
+    if (calligraphyStonesLoading.has(key)) {
+        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
+        return;
+    }
+
+    // Mark as loading to prevent duplicate loads
+    calligraphyStonesLoading.add(key);
+
+    // Remove existing screen if it exists (defensive cleanup)
     if (calligraphyStones[key] && calligraphyStones[key].mesh) {
         scene.remove(calligraphyStones[key].mesh);
         disposeObject(calligraphyStones[key].mesh);
@@ -1561,6 +1598,7 @@ function createCalligraphyStoneScreen(stoneData) {
     screenMesh.userData.calligraphyKey = key;
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
+    calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
 }
 
@@ -3411,13 +3449,20 @@ async function populateSpawnChunks() {
     }
 }
 async function startGame() {
+    // Guard to prevent double game initialization
+    if (gameStarted) {
+        console.log("[LOGIN] Game already started, skipping duplicate initialization");
+        return;
+    }
+    gameStarted = true;
+
     var e = document.getElementById("startBtn");
     e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
-    if (t.length > 8) return void addMessage("World name too long (max 8 chars)", 3e3);
-    if (o.length > 20) return void addMessage("Username too long (max 20 chars)", 3e3);
-    if (!t || !o) return void addMessage("Please enter a world and username", 3e3);
+    if (t.length > 8) { gameStarted = false; return void addMessage("World name too long (max 8 chars)", 3e3); }
+    if (o.length > 20) { gameStarted = false; return void addMessage("Username too long (max 20 chars)", 3e3); }
+    if (!t || !o) { gameStarted = false; return void addMessage("Please enter a world and username", 3e3); }
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
     const a = makeSeededRandom((worldSeed = worldName) + "_colors");
     for (const e in BLOCKS)
@@ -3736,6 +3781,26 @@ function switchWorld(newWorldName, targetSpawn) {
     pebbles = [];
     smokeParticles.forEach(particle => scene.remove(particle));
     smokeParticles = [];
+
+    // Clear magician stones (3D models) and their loading registry
+    for (const key in magicianStones) {
+        if (magicianStones[key] && magicianStones[key].mesh) {
+            scene.remove(magicianStones[key].mesh);
+            disposeObject(magicianStones[key].mesh);
+        }
+    }
+    magicianStones = {};
+    magicianStonesLoading.clear();
+
+    // Clear calligraphy stones and their loading registry
+    for (const key in calligraphyStones) {
+        if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+            scene.remove(calligraphyStones[key].mesh);
+            disposeObject(calligraphyStones[key].mesh);
+        }
+    }
+    calligraphyStones = {};
+    calligraphyStonesLoading.clear();
 
     // Clear other world-specific data
     hiveLocations = [];
