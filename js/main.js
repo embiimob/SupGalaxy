@@ -940,14 +940,11 @@ function createDroppedItemOrb(e, t, o, a, n, count = 1) {
         }),
         l = new THREE.Mesh(s, i);
     l.position.copy(t);
-    const d = new THREE.PointLight(r.color, .8, 5);
-    d.position.copy(t), l.light = d, scene.add(d);
     const c = {
         id: e,
         blockId: o,
         originSeed: a,
         mesh: l,
-        light: d,
         createdAt: Date.now(),
         dropper: n,
         count: count
@@ -4126,13 +4123,13 @@ function gameLoop(e) {
         for (let e = droppedItems.length - 1; e >= 0; e--) {
             const o = droppedItems[e],
                 a = chunkManager.getSurfaceY(o.mesh.position.x, o.mesh.position.z);
-            if (o.mesh.position.y > a + .25 ? o.mesh.position.y -= 4 * t : o.mesh.position.y = a + .25, o.light.position.copy(o.mesh.position), Date.now() - o.createdAt > 3e5) {
-                scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
+            if (o.mesh.position.y > a + .25 ? o.mesh.position.y -= 4 * t : o.mesh.position.y = a + .25, Date.now() - o.createdAt > 3e5) {
+                scene.remove(o.mesh), droppedItems.splice(e, 1);
                 continue
             }
             if (o.mesh.position.distanceTo(new THREE.Vector3(player.x, player.y + .9, player.z)) < 1.5) {
                 if (o.dropper === userName && Date.now() - o.createdAt < 2e3) continue;
-                addToInventory(o.blockId, o.count || 1, o.originSeed), scene.remove(o.mesh), scene.remove(o.light), droppedItems.splice(e, 1);
+                addToInventory(o.blockId, o.count || 1, o.originSeed), scene.remove(o.mesh), droppedItems.splice(e, 1);
                 const t = JSON.stringify({
                     type: "item_picked_up",
                     dropId: o.id,
