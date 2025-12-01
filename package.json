@@ -4,9 +4,9 @@
   "description": "A Fully Decentralized Voxel Adventure where every chunk can be owned, modified and anchored on the bitcoin blockchain with chunk data loaded via IPFS",
   "main": "index.html",
   "scripts": {
-    "lint": "eslint js/*.js",
-    "lint:strict": "eslint js/*.js --max-warnings 0",
-    "lint:fix": "eslint js/*.js --fix",
+    "lint": "eslint \"js/**/*.js\"",
+    "lint:strict": "eslint \"js/**/*.js\" --max-warnings 0",
+    "lint:fix": "eslint \"js/**/*.js\" --fix",
     "format": "prettier --write \"js/**/*.js\" \"css/**/*.css\" \"*.html\"",
     "format:check": "prettier --check \"js/**/*.js\" \"css/**/*.css\" \"*.html\""
   },
