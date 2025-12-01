@@ -775,16 +775,24 @@ function cleanupMagicianStone(stone, key) {
 
     // Stop and clean up video element
     if (stone.videoElement) {
-        stone.videoElement.pause();
-        stone.videoElement.src = '';
-        stone.videoElement.load(); // Force release of video resources
+        try {
+            stone.videoElement.pause();
+            stone.videoElement.src = '';
+            stone.videoElement.load(); // Force release of video resources
+        } catch (e) {
+            console.warn(`[MagicianStone] Error cleaning up video element for key ${key}:`, e);
+        }
     }
 
     // Stop and clean up audio element
     if (stone.audioElement) {
-        stone.audioElement.pause();
-        stone.audioElement.src = '';
-        stone.audioElement.load(); // Force release of audio resources
+        try {
+            stone.audioElement.pause();
+            stone.audioElement.src = '';
+            stone.audioElement.load(); // Force release of audio resources
+        } catch (e) {
+            console.warn(`[MagicianStone] Error cleaning up audio element for key ${key}:`, e);
+        }
     }
 
     // Clean up GIF animation resources - this is the critical fix for the GIF artifact bug
