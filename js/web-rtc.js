@@ -1270,7 +1270,8 @@ function setupDataChannel(e, t) {
                                 console.log(`[Inventory] Host sent remove_from_inventory to ${s.username} for block ${s.blockId}`);
                             }
 
-                            // Broadcast to all clients (excluding the requester who gets the inventory update above)
+                            // Broadcast block_place to all clients (including the requester for visual update)
+                            // The requester also receives remove_from_inventory above for inventory management
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
                                 x: s.x,
