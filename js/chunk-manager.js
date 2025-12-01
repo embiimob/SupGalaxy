@@ -425,10 +425,11 @@ Chunk.prototype.idx = function (e, t, o) {
     
     // Build list of chunks within circular radius
     // Use Euclidean distance check to form a circle instead of square
+    // Calculate radius squared once outside the loops for efficiency
+    var radiusSq = o * o;
     for (var s = -o; s <= o; s++)
         for (var i = -o; i <= o; i++) {
             var distSq = s * s + i * i;
-            var radiusSq = o * o;
             // Only include chunks within the circular radius
             if (distSq <= radiusSq) {
                 n.push({
@@ -458,7 +459,7 @@ Chunk.prototype.idx = function (e, t, o) {
 },
 /**
  * Updates chunk loading/unloading based on player position.
- * Uses CIRCULAR (spherical) loading instead of square - chunks are only loaded if they fall
+ * Uses CIRCULAR loading instead of square - chunks are only loaded if they fall
  * within a radius from the player in chunk coordinates.
  * Enforces a hard cap of MAX_ACTIVE_CHUNKS (22) - when exceeded, the farthest chunks are unloaded.
  * @param {number} e - Player X position
@@ -472,12 +473,13 @@ ChunkManager.prototype.update = function (e, t, o) {
     
     // Build list of candidate chunks using CIRCULAR loading (not square)
     // Only include chunks within currentLoadRadius distance from player (Euclidean distance in chunk coords)
+    // Calculate radius squared once outside the loops for efficiency
     var r = [];
+    var radiusSq = currentLoadRadius * currentLoadRadius;
     for (var s = -currentLoadRadius; s <= currentLoadRadius; s++)
         for (var i = -currentLoadRadius; i <= currentLoadRadius; i++) {
             // Calculate Euclidean distance in chunk coordinates
             var distSq = s * s + i * i;
-            var radiusSq = currentLoadRadius * currentLoadRadius;
             // Only include chunks within the circular radius
             if (distSq <= radiusSq) {
                 var l = modWrap(a + s, CHUNKS_PER_SIDE),
@@ -658,10 +660,38 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
         // Unload farthest chunks until we're at or under the cap
         while (this.chunks.size > MAX_ACTIVE_CHUNKS && allChunks.length > 0) {
             const chunkToRemove = allChunks.shift();
+            
+            // Remove mesh from scene
             if (chunkToRemove.mesh) {
                 meshGroup.remove(chunkToRemove.mesh);
                 disposeObject(chunkToRemove.mesh);
             }
+            
+            // Clean up smoke particles associated with this chunk
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const particle = smokeParticles[i];
+                if (particle.userData.chunkKey === chunkToRemove.key) {
+                    scene.remove(particle);
+                    disposeObject(particle);
+                    smokeParticles.splice(i, 1);
+                }
+            }
+            
+            // Clean up torch registry entries for this chunk
+            const chunkStartX = chunkToRemove.cx * CHUNK_SIZE;
+            const chunkStartZ = chunkToRemove.cz * CHUNK_SIZE;
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    for (let y = 0; y < MAX_HEIGHT; y++) {
+                        const blockId = chunkToRemove.get(x, y, z);
+                        if (BLOCKS[blockId] && BLOCKS[blockId].light) {
+                            const torchKey = `${modWrap(chunkStartX + x, MAP_SIZE)},${y},${modWrap(chunkStartZ + z, MAP_SIZE)}`;
+                            torchRegistry.delete(torchKey);
+                        }
+                    }
+                }
+            }
+            
             this.chunks.delete(chunkToRemove.key);
         }
     }
