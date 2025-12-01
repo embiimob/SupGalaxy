@@ -724,7 +724,11 @@ var volcanoes = [],
     calligraphyStones = {},
     calligraphyStonesLoading = new Set(), // Entity-based deduplication: tracks calligraphy stones by position key during loading
     chests = {},
-    currentChestKey = null;
+    currentChestKey = null,
+    // Per-world stone data storage: Stores magician and calligraphy stone metadata per world.
+    // This allows stone media/behaviors to be preserved and restored when switching worlds.
+    // Key: worldName, Value: { magicianStones: {}, calligraphyStones: {}, chests: {} }
+    WORLD_STONE_DATA = new Map();
 const lightManager = {
     lights: [],
     poolSize: 8,
