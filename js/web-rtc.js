@@ -941,6 +941,37 @@ function setupDataChannel(e, t) {
                 case "add_to_inventory":
                     addToInventory(s.blockId, s.count, s.originSeed);
                     break;
+                case "remove_from_inventory":
+                    // Host-authoritative inventory decrement for peers
+                    // Bug fix: This message is sent by the host to ensure peer inventory
+                    // is decremented after a successful block placement
+                    if (!isHost) {
+                        let removed = false;
+                        const targetBlockId = s.blockId;
+                        const targetOriginSeed = s.originSeed || worldSeed;
+                        const targetCount = s.count || 1;
+                        
+                        // Search inventory for matching item
+                        for (let i = 0; i < INVENTORY.length; i++) {
+                            const item = INVENTORY[i];
+                            if (item && item.id === targetBlockId && 
+                                (item.originSeed || worldSeed) === targetOriginSeed) {
+                                item.count -= targetCount;
+                                if (item.count <= 0) {
+                                    INVENTORY[i] = null;
+                                }
+                                removed = true;
+                                break;
+                            }
+                        }
+                        if (removed) {
+                            updateHotbarUI();
+                            console.log(`[Inventory] Removed ${targetCount}x block ${targetBlockId} from inventory (host-authoritative)`);
+                        } else {
+                            console.warn(`[Inventory] Could not find item to remove: blockId=${targetBlockId}, originSeed=${targetOriginSeed}`);
+                        }
+                    }
+                    break;
                 case "block_damaged":
                     if (!isHost) {
                         updateBlockDamageVisuals(s.x, s.y, s.z, s.hits);
@@ -1226,7 +1257,21 @@ function setupDataChannel(e, t) {
                                 }
                             }
 
-                            // Broadcast to all clients
+                            // Bug fix: Send inventory decrement message to the peer who placed the block
+                            // This ensures peer inventory is decremented under host authority
+                            const requestingPeer = peers.get(s.username);
+                            if (requestingPeer && requestingPeer.dc && requestingPeer.dc.readyState === 'open') {
+                                requestingPeer.dc.send(JSON.stringify({
+                                    type: 'remove_from_inventory',
+                                    blockId: s.blockId,
+                                    count: 1,
+                                    originSeed: s.originSeed
+                                }));
+                                console.log(`[Inventory] Host sent remove_from_inventory to ${s.username} for block ${s.blockId}`);
+                            }
+
+                            // Broadcast block_place to all clients (including the requester for visual update)
+                            // The requester also receives remove_from_inventory above for inventory management
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
                                 x: s.x,
@@ -1423,17 +1468,10 @@ function setupDataChannel(e, t) {
                             getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
                         }
 
-                        // Update inventory if this was our request
+                        // Bug fix: Inventory decrement is now handled by 'remove_from_inventory' message
+                        // sent by the host. This block_place message only handles UI feedback.
                         if (s.username === userName) {
-                            const item = INVENTORY[selectedHotIndex];
-                            if (item && item.id === s.blockId) {
-                                item.count -= 1;
-                                if (item.count <= 0) {
-                                    INVENTORY[selectedHotIndex] = null;
-                                }
-                                updateHotbarUI();
-                                addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
-                            }
+                            addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
                             // Play audio only for the initiating client
                             safePlayAudio(soundPlace);
                         }
