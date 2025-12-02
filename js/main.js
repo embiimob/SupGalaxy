@@ -1172,11 +1172,9 @@ async function createMagicianStoneScreen(stoneData) {
 
     // Deduplication: Skip if this stone is already loaded or currently loading
     if (magicianStones[key] && magicianStones[key].mesh) {
-        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already exists`);
         return;
     }
     if (magicianStonesLoading.has(key)) {
-        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
     }
 
