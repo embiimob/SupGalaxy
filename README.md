@@ -142,6 +142,26 @@ SupGalaxy is entirely browser-based—no bundlers, node modules, or build steps.
 - WebRTC peer-to-peer networking  
 - Simple JS modules
 
+### Module Organization
+
+| File | Purpose |
+|------|---------|
+| `js/declare.js` | Global variables, constants, block/biome/recipe definitions |
+| `js/input.js` | Input handling (keyboard events, mobile touch controls, joystick) |
+| `js/main.js` | Core game loop, UI management, session handling |
+| `js/chunk-manager.js` | Chunk generation, loading, and mesh building |
+| `js/world-generation.js` | Procedural terrain, noise functions, spawn calculations |
+| `js/mobs.js` | Mob AI and behavior |
+| `js/web-rtc.js` | Multiplayer networking and peer connections |
+| `js/api.js` | P2FK and IPFS API communication |
+| `js/audio-player.js` | Music player functionality |
+| `js/video-player.js` | Video player functionality |
+| `js/worker.js` | Background worker for polling |
+
+### Debug Mode
+
+Set `window.DEBUG_MODE = true` in the browser console or in `js/input.js` to enable verbose logging. This is useful for development and troubleshooting.
+
 ### Extend SupGalaxy
 
 #### Add a Block
