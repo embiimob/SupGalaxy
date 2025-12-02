@@ -186,9 +186,12 @@ Chunk.prototype.idx = function (e, t, o) {
     const worldState = getCurrentWorldState();
     if (worldState.chunkDeltas.has(e.key)) {
         const deltas = worldState.chunkDeltas.get(e.key);
+        console.log(`[ChunkManager] Building mesh for chunk ${e.key}, applying ${deltas.length} stored deltas`);
         for (const delta of deltas) {
             e.set(delta.x, delta.y, delta.z, delta.b);
         }
+    } else {
+        console.log(`[ChunkManager] Building mesh for chunk ${e.key}, no stored deltas`);
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
     const t = volcanoes.find((t => t.chunkKey === e.key));
@@ -380,16 +383,24 @@ Chunk.prototype.idx = function (e, t, o) {
     if (parseChunkKey(o)) {
         var a = this.chunks.get(o);
         if (a) {
+            console.log(`[ChunkManager] Applying ${t.length} deltas to loaded chunk ${o}`);
             for (var n of t)
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
                     a.set(n.x, n.y, n.z, r)
                 } updateTorchRegistry(a), a.needsRebuild = !0, this.buildChunkMesh(a)
+        } else {
+            console.log(`[ChunkManager] Chunk ${o} not currently loaded - deltas stored for later application`);
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
     var t = this.chunks.get(e);
-    t && (t.needsRebuild = !0, this.buildChunkMesh(t))
+    if (t) {
+        console.log(`[ChunkManager] Marking chunk ${e} dirty and rebuilding mesh`);
+        t.needsRebuild = !0, this.buildChunkMesh(t)
+    } else {
+        console.log(`[ChunkManager] Cannot mark chunk ${e} dirty - not currently loaded`);
+    }
 }, ChunkManager.prototype.getSurfaceY = function (e, t) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),
