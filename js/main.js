@@ -240,14 +240,16 @@ async function applySaveFile(e, t, o) {
         Math.floor(MAP_SIZE / CHUNK_SIZE);
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
-        if (debugLog('LOGIN', 'Preloading initial chunks from session'), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
+        debugLog('LOGIN', 'Preloading initial chunks from session');
+        chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS);
+        if (t.magicianStones) {
             debugLog('LOGIN', 'Loading magician stones from session');
             for (const existingKey in magicianStones) {
                 if (magicianStones[existingKey]) {
                     cleanupMagicianStone(magicianStones[existingKey], existingKey);
                 }
             }
-            magicianStones = {}; // Clear existing stones
+            magicianStones = {};
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = { ...t.magicianStones[key], source: 'local' };
