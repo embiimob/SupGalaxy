@@ -664,6 +664,8 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
         const now = Date.now();
         const blockDate = o; // o is the BlockDate timestamp
+        
+        console.log(`[ChunkManager] applyChunkUpdates: BlockDate=${new Date(blockDate).toISOString()}, Address=${t}, TxId=${a}`);
 
         // Extract magician and calligraphy stones if present in the full payload
         // The payload 'e' is expected to be an array of chunk updates, but if it came from
