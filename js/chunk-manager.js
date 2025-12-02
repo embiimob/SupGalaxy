@@ -738,6 +738,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     
                     // Filter changes using monotonic ordering check
                     const acceptedChanges = [];
+                    const rejectedChanges = [];
                     for (const change of s) {
                         // Calculate world position for this block
                         const worldX = cx * CHUNK_SIZE + change.x;
@@ -753,13 +754,30 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                             acceptedChanges.push({ ...change, source: 'ipfs' });
                             // Store the new truncated date for this block
                             worldState.ipfsTruncatedDates.set(blockPosKey, incomingTruncatedDate);
+                        } else {
+                            // Track rejected changes for detailed logging
+                            rejectedChanges.push({
+                                blockId: change.b,
+                                position: blockPosKey,
+                                existingTruncated: existingTruncatedDate,
+                                incomingTruncated: incomingTruncatedDate
+                            });
                         }
                     }
                     
-                    // Log summary of skipped updates to avoid log spam
-                    const skippedCount = s.length - acceptedChanges.length;
-                    if (skippedCount > 0) {
-                        console.log(`[IPFS Ordering] Skipped ${skippedCount} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) not newer than existing`);
+                    // Log detailed info about rejected updates
+                    if (rejectedChanges.length > 0) {
+                        console.log(`[IPFS Ordering] Rejected ${rejectedChanges.length} block update(s) in chunk ${r}`);
+                        console.log(`  Transaction ID: ${a}`);
+                        console.log(`  Incoming BlockDate: ${new Date(blockDate).toISOString()} (truncated unix: ${incomingTruncatedDate})`);
+                        for (const rejected of rejectedChanges) {
+                            console.log(`  - Block ID ${rejected.blockId} at position ${rejected.position}: existing truncated=${rejected.existingTruncated}, incoming truncated=${rejected.incomingTruncated} (incoming NOT newer)`);
+                        }
+                    }
+                    
+                    // Log summary of accepted updates
+                    if (acceptedChanges.length > 0) {
+                        console.log(`[IPFS Ordering] Accepted ${acceptedChanges.length} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) is newer than existing`);
                     }
                     
                     // Only add accepted changes to deltas
