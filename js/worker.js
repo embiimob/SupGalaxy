@@ -728,10 +728,20 @@ self.onmessage = async function(e) {
                         if (response.length < qty) break;
                         skip += qty;
                     }
+                    // IMPORTANT: Sort messages oldest-first (ascending by BlockDate) before processing.
+                    // GetPublicMessagesByAddress returns messages newest-first, but chunk deltas
+                    // MUST be applied in chronological order (oldest first) to ensure the final
+                    // voxel/chunk state is correct. Applying them newest-first would cause
+                    // structural inconsistencies (e.g., holes not aligning with walls).
+                    messages.sort(function(a, b) {
+                        var dateA = a.BlockDate ? new Date(a.BlockDate).getTime() : 0;
+                        var dateB = b.BlockDate ? new Date(b.BlockDate).getTime() : 0;
+                        return dateA - dateB; // Ascending order: oldest first
+                    });
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping chunk processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
+                            console.log('[Worker] Skipping already processed chunk message:', msg.TransactionId);
+                            continue; // Skip already processed, but continue to check newer ones
                         }
                         if (!msg.TransactionId) continue;
                         var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
@@ -756,7 +766,7 @@ self.onmessage = async function(e) {
                                 });
 
                                 if (processData.magicianStones) {
-                                     magicianStonesUpdates.push({ stones: processData.magicianStones, transactionId: msg.TransactionId });
+                                     magicianStonesUpdates.push({ stones: processData.magicianStones, transactionId: msg.TransactionId, timestamp: new Date(msg.BlockDate).getTime() });
                                      for (const key in processData.magicianStones) {
                                         if (Object.hasOwnProperty.call(processData.magicianStones, key)) {
                                             const stone = processData.magicianStones[key];
@@ -779,7 +789,7 @@ self.onmessage = async function(e) {
                                 }
 
                                 if (processData.calligraphyStones) {
-                                     calligraphyStonesUpdates.push({ stones: processData.calligraphyStones, transactionId: msg.TransactionId });
+                                     calligraphyStonesUpdates.push({ stones: processData.calligraphyStones, transactionId: msg.TransactionId, timestamp: new Date(msg.BlockDate).getTime() });
                                      for (const key in processData.calligraphyStones) {
                                         if (Object.hasOwnProperty.call(processData.calligraphyStones, key)) {
                                             const stone = processData.calligraphyStones[key];
@@ -834,18 +844,26 @@ self.onmessage = async function(e) {
                 }
             }
             if (updatesByTransaction.size > 0) {
-                for (var entry of updatesByTransaction) {
-                    var transactionId = entry[0];
-                    var update = entry[1];
+                // IMPORTANT: Sort updates by timestamp (oldest first) before dispatching.
+                // This ensures chunk deltas are applied in chronological order on the main thread,
+                // preserving correct voxel state. DO NOT reverse this order.
+                var sortedUpdates = Array.from(updatesByTransaction.values()).sort(function(a, b) {
+                    return a.timestamp - b.timestamp; // Ascending order: oldest first
+                });
+                for (var update of sortedUpdates) {
                     self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
+                // Sort by timestamp (oldest first) for consistent chronological ordering
+                magicianStonesUpdates.sort(function(a, b) { return a.timestamp - b.timestamp; });
                 for (var update of magicianStonesUpdates) {
                     self.postMessage({ type: 'magician_stones_update', stones: update.stones, transactionId: update.transactionId });
                 }
             }
             if (calligraphyStonesUpdates.length > 0) {
+                // Sort by timestamp (oldest first) for consistent chronological ordering
+                calligraphyStonesUpdates.sort(function(a, b) { return a.timestamp - b.timestamp; });
                 for (var update of calligraphyStonesUpdates) {
                     self.postMessage({ type: 'calligraphy_stones_update', stones: update.stones, transactionId: update.transactionId });
                 }
