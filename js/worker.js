@@ -728,12 +728,19 @@ self.onmessage = async function(e) {
                         if (response.length < qty) break;
                         skip += qty;
                     }
+                    var newMessages = [];
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
                             console.log('[Worker] Stopping chunk processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
                         if (!msg.TransactionId) continue;
+                        newMessages.push(msg);
+                    }
+
+                    // Process messages in reverse order (oldest to newest) to ensure correct state application
+                    for (var i = newMessages.length - 1; i >= 0; i--) {
+                        var msg = newMessages[i];
                         var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
                         if (match) {
                             var hash = match[1];
