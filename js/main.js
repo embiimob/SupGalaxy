@@ -1584,11 +1584,11 @@ async function createMagicianStoneScreen(stoneData) {
     scene.add(screenMesh);
 }
 
-function createCalligraphyStoneScreen(stoneData) {
+async function createCalligraphyStoneScreen(stoneData) {
     // Defensive check: validate stoneData is an object with required fields
     if (!stoneData || typeof stoneData !== 'object') {
         console.warn('[CalligraphyStone] Skipping invalid stoneData: not an object');
-        return Promise.resolve(); // Return resolved promise for consistency with Promise.allSettled
+        return;
     }
     
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
@@ -1596,7 +1596,7 @@ function createCalligraphyStoneScreen(stoneData) {
     // Defensive check: validate required numeric coordinates
     if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
         console.warn('[CalligraphyStone] Skipping invalid stoneData: missing or invalid coordinates', stoneData);
-        return Promise.resolve();
+        return;
     }
     
     const key = `${x},${y},${z}`;
@@ -1604,11 +1604,11 @@ function createCalligraphyStoneScreen(stoneData) {
     // Deduplication: Skip if this stone is already loaded or currently loading
     if (calligraphyStones[key] && calligraphyStones[key].mesh) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
-        return Promise.resolve();
+        return;
     }
     if (calligraphyStonesLoading.has(key)) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
-        return Promise.resolve();
+        return;
     }
 
     // Mark as loading to prevent duplicate loads
@@ -1728,7 +1728,6 @@ function createCalligraphyStoneScreen(stoneData) {
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
     console.log(`[CalligraphyStone] Successfully created calligraphy stone at key ${key}`);
-    return Promise.resolve(); // Return resolved promise for consistency with Promise.allSettled
 }
 
 function dropSelectedItem(dropAll = false) {
