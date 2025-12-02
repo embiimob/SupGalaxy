@@ -782,13 +782,13 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         console.log(`  Transaction ID: ${a}`);
                         console.log(`  Incoming BlockDate: ${new Date(blockDate).toISOString()} (truncated unix: ${incomingTruncatedDate})`);
                         for (const rejected of rejectedChanges) {
-                            console.log(`  - Block ID ${rejected.blockId} at position ${rejected.position}: existing truncated=${rejected.existingTruncated}, incoming truncated=${rejected.incomingTruncated} (incoming NOT newer)`);
+                            console.log(`  - Block ID ${rejected.blockId} at position ${rejected.position}: existing truncated=${rejected.existingTruncated}, incoming truncated=${rejected.incomingTruncated} (incoming is older)`);
                         }
                     }
                     
                     // Log summary of accepted updates
                     if (acceptedChanges.length > 0) {
-                        console.log(`[IPFS Ordering] Accepted ${acceptedChanges.length} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) is newer than existing`);
+                        console.log(`[IPFS Ordering] Accepted ${acceptedChanges.length} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) is newer than or equal to existing`);
                     }
                     
                     // Only add accepted changes to deltas

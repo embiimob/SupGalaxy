@@ -797,8 +797,9 @@ function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
     if (!existingTruncated || existingTruncated <= 0) {
         return true;
     }
-    // Only accept if incoming is strictly greater than existing
-    return incomingTruncated > existingTruncated;
+    // Accept if incoming is greater than or equal to existing
+    // Equal dates are accepted to allow multiple updates in the same block
+    return incomingTruncated >= existingTruncated;
 }
 
 /**

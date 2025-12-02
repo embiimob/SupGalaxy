@@ -110,9 +110,9 @@ function runIpfsVersioningTests() {
         assertTrue(shouldApplyIpfsUpdate(1, 1000000), 'Should accept large difference');
     });
     
-    // Test 8: shouldApplyIpfsUpdate rejects equal or smaller incoming timestamp
-    test('shouldApplyIpfsUpdate rejects equal or smaller incoming timestamp', function() {
-        assertFalse(shouldApplyIpfsUpdate(1000, 1000), 'Should reject equal timestamps');
+    // Test 8: shouldApplyIpfsUpdate accepts equal timestamps (allows multiple updates in same block)
+    test('shouldApplyIpfsUpdate accepts equal timestamps, rejects smaller', function() {
+        assertTrue(shouldApplyIpfsUpdate(1000, 1000), 'Should accept equal timestamps (same block)');
         assertFalse(shouldApplyIpfsUpdate(1000, 999), 'Should reject smaller incoming');
         assertFalse(shouldApplyIpfsUpdate(1000, 1), 'Should reject much smaller incoming');
     });
