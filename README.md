@@ -181,9 +181,9 @@ BIOMES.push({
 #### IPFS Block Versioning
 SupGalaxy uses a **truncated unix date** system to ensure block updates from IPFS remain in correct chronological order:
 
-- **BlockDate Field**: All exported JSON files include a `blockDate` timestamp (milliseconds since Unix epoch) that represents when the blocks were originally created/modified. This timestamp is preserved through export/import cycles.
+- **BlockDate from Blockchain**: When chunks are published to the blockchain via IPFS, they receive a BlockDate from the transaction. This BlockDate is returned by GetPublicMessagesByAddress when loading chunks by keyword search.
 - **Truncated Unix Date**: Seconds since 2025-09-21 00:00:00 UTC (custom epoch). This provides a compact integer for versioning.
-- **Monotonic Ordering**: IPFS Loading updates to blocks are only accepted if they have a strictly newer truncated unix date than any existing update.
+- **Monotonic Ordering**: Block updates are only accepted if they have a strictly newer (larger) truncated unix date than any existing update.
 - **Out-of-Order Protection**: If IPFS files arrive or are processed out of order, older updates are automatically skipped.
 
 Helper functions:
@@ -191,7 +191,7 @@ Helper functions:
 // Compute truncated date from a BlockDate timestamp (in milliseconds)
 const truncated = computeIpfsTruncatedDate(blockTimestampMs);
 
-// Check if an IPFS update should be applied
+// Check if an IPFS update should be applied (returns true if incoming > existing)
 if (shouldApplyIpfsUpdate(existingTruncated, incomingTruncated)) {
   // Apply the update
 }

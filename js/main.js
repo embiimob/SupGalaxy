@@ -351,20 +351,13 @@ async function applySaveFile(e, t, o) {
         var c = await GetProfileByAddress(t),
             u = c && c.URN ? c.URN : "anonymous",
             p = Date.now();
-        // Use blockDate from file if present, otherwise use provided parameter o, otherwise fall back to current time
-        // This ensures backward compatibility with legacy files while supporting proper BlockDate ordering
+        // For manually uploaded files (local changes not yet published to blockchain),
+        // use current time as BlockDate. Published chunks get their BlockDate from
+        // GetPublicMessagesByAddress when loaded via keyword search.
         let blockDate = p; // Default to current time
-        if (e.blockDate && typeof e.blockDate === 'number' && !isNaN(e.blockDate)) {
-            blockDate = e.blockDate; // Use blockDate from file if valid
-        } else if (o) {
-            const parsedDate = new Date(o).getTime();
-            if (!isNaN(parsedDate)) {
-                blockDate = parsedDate; // Use parameter if valid
-            }
-        }
         const blockAge = p - blockDate;
         
-        console.log(`[IPFS Load] BlockDate: ${new Date(blockDate).toISOString()}, Age: ${Math.floor(blockAge / MS_PER_DAY)} days, Source: ${e.blockDate ? 'file' : (o ? 'parameter' : 'fallback')}`);
+        console.log(`[IPFS Load] Manual file upload - using current time as BlockDate: ${new Date(blockDate).toISOString()}`);
 
 
 
@@ -3038,7 +3031,6 @@ async function downloadSinglePlayerSession() {
         seed: worldSeed,
         user: userName,
         savedAt: (new Date).toISOString(),
-        blockDate: Date.now(), // Add BlockDate timestamp for proper IPFS versioning
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
@@ -4878,7 +4870,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var o = new FileReader;
                 o.onload = function (e) {
                     try {
-                        // Pass null as blockDate parameter to use the blockDate embedded in the file
+                        // Manual file upload uses current time as BlockDate (for local-only changes)
                         applySaveFile(JSON.parse(e.target.result), "local", null)
                     } catch (e) {
                         console.error("Error parsing session file:", e), addMessage("Sorry, file malformed.", 3e3)
@@ -4903,7 +4895,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var reader = new FileReader();
                 reader.onload = function(e) {
                     try {
-                        // Pass null as blockDate parameter to use the blockDate embedded in the file
+                        // Manual file upload uses current time as BlockDate (for local-only changes)
                         applySaveFile(JSON.parse(e.target.result), "local", null);
                     } catch (err) {
                         console.error("Error parsing session file:", err);
