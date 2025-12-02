@@ -644,6 +644,134 @@ function parseChunkKey(e) {
     } : null
 }
 
+/**
+ * Applies a single change to a chunk at the specified position.
+ * This is used during ordered reprocessing to apply individual block changes.
+ * @param {string} chunkKey - The normalized chunk key
+ * @param {Object} change - The change object with x, y, z, b properties
+ */
+function applySingleBlockChange(chunkKey, change) {
+    if (!chunkManager) return;
+    const chunk = chunkManager.chunks.get(chunkKey);
+    if (!chunk) return;
+    
+    if (change.x < 0 || change.x >= CHUNK_SIZE || 
+        change.y < 0 || change.y >= MAX_HEIGHT || 
+        change.z < 0 || change.z >= CHUNK_SIZE) {
+        return;
+    }
+    
+    const blockId = change.b === BLOCK_AIR || (change.b && BLOCKS[change.b]) ? change.b : 4;
+    chunk.set(change.x, change.y, change.z, blockId);
+}
+
+/**
+ * Reprocesses all IPFS updates for a chunk in sorted order by timestamp.
+ * This is called when an out-of-order update is detected to ensure the final
+ * chunk state matches what would have happened if all messages arrived in order.
+ * 
+ * @param {string} chunkKey - The normalized chunk key (without '#')
+ */
+function reprocessChunkUpdatesInOrder(chunkKey) {
+    if (!IPFS_CHUNK_MESSAGE_HISTORY.has(chunkKey)) return;
+    
+    const history = IPFS_CHUNK_MESSAGE_HISTORY.get(chunkKey);
+    if (history.length === 0) return;
+    
+    // Sort by timestamp (ascending order - oldest first)
+    history.sort((a, b) => a.timestamp - b.timestamp);
+    
+    console.log(`[ChunkManager] Reprocessing ${history.length} IPFS updates for chunk ${chunkKey} in order`);
+    
+    // Get or create the chunk
+    if (!chunkManager) return;
+    const chunk = chunkManager.chunks.get(chunkKey);
+    if (!chunk) return;
+    
+    // Track which block positions have been set, with their final state
+    // We process all changes in order to get the final state
+    const blockStates = new Map(); // key: "x,y,z", value: { b: blockId }
+    
+    // Process all changes in timestamp order
+    for (const update of history) {
+        for (const change of update.changes) {
+            const posKey = `${change.x},${change.y},${change.z}`;
+            blockStates.set(posKey, { b: change.b });
+        }
+        // Mark as applied (or re-applied)
+        update.applied = true;
+    }
+    
+    // Apply the final computed state to the chunk
+    for (const [posKey, state] of blockStates) {
+        const [x, y, z] = posKey.split(',').map(Number);
+        applySingleBlockChange(chunkKey, { x, y, z, b: state.b });
+    }
+    
+    // Rebuild the chunk mesh once after all changes
+    updateTorchRegistry(chunk);
+    chunk.needsRebuild = true;
+    chunkManager.buildChunkMesh(chunk);
+}
+
+/**
+ * Adds an IPFS update to the chunk's message history and checks for out-of-order arrivals.
+ * If an out-of-order update is detected, triggers reprocessing of all updates for that chunk.
+ * 
+ * @param {string} chunkKey - The normalized chunk key (without '#')
+ * @param {number} timestamp - The BlockDate timestamp
+ * @param {string} transactionId - The transaction ID
+ * @param {Array} changes - Array of block changes
+ * @param {string} address - The from address
+ * @returns {Object} - { isDuplicate, isOutOfOrder } flags indicating the result
+ */
+function addToChunkHistory(chunkKey, timestamp, transactionId, changes, address) {
+    const normalized = chunkKey.replace(/^#/, "");
+    
+    // Initialize history for this chunk if needed
+    if (!IPFS_CHUNK_MESSAGE_HISTORY.has(normalized)) {
+        IPFS_CHUNK_MESSAGE_HISTORY.set(normalized, []);
+    }
+    
+    const history = IPFS_CHUNK_MESSAGE_HISTORY.get(normalized);
+    
+    // Check if this transaction is already in the history (avoid duplicates)
+    if (history.some(h => h.transactionId === transactionId)) {
+        console.log(`[ChunkManager] Skipping duplicate transaction ${transactionId} for chunk ${normalized}`);
+        return { isDuplicate: true, isOutOfOrder: false };
+    }
+    
+    // Find the latest timestamp in the history
+    let latestTimestamp = 0;
+    for (const h of history) {
+        if (h.timestamp > latestTimestamp) {
+            latestTimestamp = h.timestamp;
+        }
+    }
+    
+    // Check if this update is out of order (arrives with an earlier timestamp than something we've already applied)
+    const isOutOfOrder = history.length > 0 && timestamp < latestTimestamp;
+    
+    // Add the new update to history
+    history.push({
+        timestamp,
+        transactionId,
+        changes: changes.map(c => ({ ...c })), // Deep copy changes
+        address,
+        applied: false
+    });
+    
+    if (isOutOfOrder) {
+        console.log(`[ChunkManager] Out-of-order update detected for chunk ${normalized}: ` +
+            `new timestamp ${new Date(timestamp).toISOString()} is earlier than latest ${new Date(latestTimestamp).toISOString()}`);
+        // Trigger reprocessing
+        reprocessChunkUpdatesInOrder(normalized);
+        return { isDuplicate: false, isOutOfOrder: true };
+    }
+    
+    return { isDuplicate: false, isOutOfOrder: false };
+}
+
 async function applyChunkUpdates(e, t, o, a, sourceUsername) {
     try {
         // Get username from fromAddress
@@ -698,12 +826,27 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
 
+        // Group changes by chunk key for ordered processing
+        const changesByChunk = new Map();
+        for (const n of chunksArray) {
+            const chunkKey = n.chunk.replace(/^#/, "");
+            if (!changesByChunk.has(chunkKey)) {
+                changesByChunk.set(chunkKey, []);
+            }
+            changesByChunk.get(chunkKey).push(...n.changes);
+        }
+
+        // Track which chunks need reprocessing due to out-of-order updates
+        const chunksToReprocess = new Set();
+
         for (let idx = 0; idx < chunksArray.length; idx++) {
             var n = chunksArray[idx];
             var r = n.chunk,
                 s = n.changes;
             if (chunkManager) {
-                const worldNameFromChunk = parseChunkKey(r)?.world;
+                const normalizedChunkKey = r.replace(/^#/, "");
+                const worldNameFromChunk = parseChunkKey(normalizedChunkKey)?.world;
+                
                 if (worldNameFromChunk) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
@@ -712,17 +855,16 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
-                    if (!worldState.chunkDeltas.has(r)) {
-                        worldState.chunkDeltas.set(r, []);
+                    if (!worldState.chunkDeltas.has(normalizedChunkKey)) {
+                        worldState.chunkDeltas.set(normalizedChunkKey, []);
                     }
                     const changesWithSource = s.map(change => ({ ...change, source: 'ipfs' }));
-                    worldState.chunkDeltas.get(r).push(...changesWithSource);
+                    worldState.chunkDeltas.get(normalizedChunkKey).push(...changesWithSource);
                 }
 
                 // Set ownership based on BlockDate and owner
                 if (ownerUsername && blockDate) {
-                    const normalized = r.replace(/^#/, "");
-                    const existing = OWNED_CHUNKS.get(normalized);
+                    const existing = OWNED_CHUNKS.get(normalizedChunkKey);
                     const blockAge = now - blockDate;
 
                     // Only set ownership if claim is valid (30d-1y) or pending (<30d)
@@ -746,15 +888,37 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         }
 
                         if (shouldUpdate) {
-                            updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
+                            updateChunkOwnership(normalizedChunkKey, ownerUsername, blockDate, 'ipfs', blockDate);
+                            console.log(`[Ownership] IPFS chunk ${normalizedChunkKey} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
                         } else {
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership not updated - existing ownership takes precedence`);
+                            console.log(`[Ownership] IPFS chunk ${normalizedChunkKey} ownership not updated - existing ownership takes precedence`);
                         }
                     }
                 }
 
-                chunkManager.applyDeltasToChunk(r, s), chunkManager.markDirty(r)
+                // Add to history and check for out-of-order updates
+                // Use the blockDate (o) as the timestamp for ordering
+                const result = addToChunkHistory(normalizedChunkKey, blockDate, a, s, t);
+                
+                if (result.isDuplicate) {
+                    // Duplicate transaction - skip processing entirely
+                    console.log(`[ChunkManager] Skipping duplicate update for chunk ${normalizedChunkKey}`);
+                } else if (result.isOutOfOrder) {
+                    // Out-of-order update detected and reprocessing was triggered
+                    // The chunk was already rebuilt in reprocessChunkUpdatesInOrder
+                    chunksToReprocess.add(normalizedChunkKey);
+                } else {
+                    // Apply changes normally (in-order update)
+                    // Mark the update as applied in history
+                    const history = IPFS_CHUNK_MESSAGE_HISTORY.get(normalizedChunkKey);
+                    if (history) {
+                        const entry = history.find(h => h.transactionId === a);
+                        if (entry) entry.applied = true;
+                    }
+                    
+                    chunkManager.applyDeltasToChunk(normalizedChunkKey, s);
+                    chunkManager.markDirty(normalizedChunkKey);
+                }
             } else console.error("[ChunkManager] chunkManager not defined")
 
             if (showProgress && window.showLoadingIndicator && idx % 5 === 0) {

@@ -716,6 +716,18 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
 var crackTexture, damagedBlocks = new Map,
     crackMeshes = new THREE.Group,
     blockParticles = [];
+
+/**
+ * Per-chunk IPFS message history for ordered processing.
+ * Key: chunkKey (normalized, without '#')
+ * Value: Array of { timestamp, transactionId, changes, address, applied }
+ * 
+ * This allows us to:
+ * 1. Sort all IPFS updates for a chunk by their BlockDate timestamp
+ * 2. Detect out-of-order arrivals and re-process when needed
+ * 3. Track which updates have been applied to avoid duplicates
+ */
+var IPFS_CHUNK_MESSAGE_HISTORY = new Map();
 const maxAudioDistance = 32,
     rolloffFactor = 2;
 var volcanoes = [],
