@@ -722,7 +722,12 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                     
                     // Compute truncated unix date for monotonic ordering of IPFS updates
+                    // If blockDate is missing/invalid, this returns 0 and updates will be rejected
+                    // (shouldApplyIpfsUpdate rejects incoming truncated dates <= 0)
                     const incomingTruncatedDate = computeIpfsTruncatedDate(blockDate);
+                    if (incomingTruncatedDate === 0 && blockDate !== undefined) {
+                        console.warn(`[IPFS Ordering] BlockDate ${blockDate} resulted in truncated date 0 (before epoch 2025-09-21 or invalid)`);
+                    }
                     
                     // Parse chunk coordinates for world position calculation
                     const parsedChunk = parseChunkKey(r);
@@ -746,9 +751,13 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                             acceptedChanges.push({ ...change, source: 'ipfs' });
                             // Store the new truncated date for this block
                             worldState.ipfsTruncatedDates.set(blockPosKey, incomingTruncatedDate);
-                        } else {
-                            console.log(`[IPFS Ordering] Skipped update for block at ${blockPosKey}: incoming truncated date (${incomingTruncatedDate}) <= existing (${existingTruncatedDate})`);
                         }
+                    }
+                    
+                    // Log summary of skipped updates to avoid log spam
+                    const skippedCount = s.length - acceptedChanges.length;
+                    if (skippedCount > 0) {
+                        console.log(`[IPFS Ordering] Skipped ${skippedCount} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) not newer than existing`);
                     }
                     
                     // Only add accepted changes to deltas

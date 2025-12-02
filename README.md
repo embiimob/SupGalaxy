@@ -178,6 +178,26 @@ BIOMES.push({
 - Avatar rendering through `userPositions`  
 - TURN server strongly recommended  
 
+#### IPFS Block Versioning
+SupGalaxy uses a **truncated unix date** system to ensure block updates from IPFS remain in correct chronological order:
+
+- **Truncated Unix Date**: Seconds since 2025-09-21 00:00:00 UTC (custom epoch). This provides a compact integer for versioning.
+- **Monotonic Ordering**: IPFS Loading updates to blocks are only accepted if they have a strictly newer truncated unix date than any existing update.
+- **Out-of-Order Protection**: If IPFS files arrive or are processed out of order, older updates are automatically skipped.
+
+Helper functions:
+```js
+// Compute truncated date from a BlockDate timestamp (in milliseconds)
+const truncated = computeIpfsTruncatedDate(blockTimestampMs);
+
+// Check if an IPFS update should be applied
+if (shouldApplyIpfsUpdate(existingTruncated, incomingTruncated)) {
+  // Apply the update
+}
+```
+
+Run tests in the browser console: `runIpfsVersioningTests()`
+
 ---
 
 # 🌐 Local Decentralized Setup (Advanced)

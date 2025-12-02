@@ -16,6 +16,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     IPFS_MAX_OWNERSHIP_PERIOD = 365 * 24 * 60 * 60 * 1000,
     // Custom epoch for IPFS truncated unix date versioning: 2025-09-21 00:00:00 UTC
     // This provides a compact integer representing seconds since this epoch for ordering block updates
+    // Note: JavaScript months are 0-indexed, so month 8 = September
     IPFS_EPOCH_2025_09_21 = Math.floor(Date.UTC(2025, 8, 21, 0, 0, 0) / 1000),
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
