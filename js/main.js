@@ -353,10 +353,19 @@ async function applySaveFile(e, t, o) {
             p = Date.now();
         // Use blockDate from file if present, otherwise use provided parameter o, otherwise fall back to current time
         // This ensures backward compatibility with legacy files while supporting proper BlockDate ordering
-        const blockDate = e.blockDate || (o ? new Date(o).getTime() : p);
+        let blockDate = p; // Default to current time
+        if (e.blockDate && typeof e.blockDate === 'number' && !isNaN(e.blockDate)) {
+            blockDate = e.blockDate; // Use blockDate from file if valid
+        } else if (o) {
+            const parsedDate = new Date(o).getTime();
+            if (!isNaN(parsedDate)) {
+                blockDate = parsedDate; // Use parameter if valid
+            }
+        }
         const blockAge = p - blockDate;
         
-        console.log(`[IPFS Load] BlockDate: ${new Date(blockDate).toISOString()}, Age: ${Math.floor(blockAge / 86400000)} days, Source: ${e.blockDate ? 'file' : (o ? 'parameter' : 'fallback')}`);
+        console.log(`[IPFS Load] BlockDate: ${new Date(blockDate).toISOString()}, Age: ${Math.floor(blockAge / MS_PER_DAY)} days, Source: ${e.blockDate ? 'file' : (o ? 'parameter' : 'fallback')}`);
+
 
 
         for (var r of e.deltas) {
