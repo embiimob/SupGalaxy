@@ -28,10 +28,17 @@ function getCurrentWorldState() {
     if (!WORLD_STATES.has(worldName)) {
         WORLD_STATES.set(worldName, {
             chunkDeltas: new Map,
-            foreignBlockOrigins: new Map
+            foreignBlockOrigins: new Map,
+            // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
+            ipfsTruncatedDates: new Map
         });
     }
-    return WORLD_STATES.get(worldName);
+    // Ensure existing world states have the ipfsTruncatedDates map (backward compatibility)
+    const state = WORLD_STATES.get(worldName);
+    if (!state.ipfsTruncatedDates) {
+        state.ipfsTruncatedDates = new Map;
+    }
+    return state;
 }
 
 function simpleHash(e) {
@@ -125,7 +132,8 @@ async function applySaveFile(e, t, o) {
         for (const [worldName, data] of e.worldStates) {
             WORLD_STATES.set(worldName, {
                 chunkDeltas: new Map(data.chunkDeltas),
-                foreignBlockOrigins: new Map(data.foreignBlockOrigins)
+                foreignBlockOrigins: new Map(data.foreignBlockOrigins),
+                ipfsTruncatedDates: new Map(data.ipfsTruncatedDates || [])
             });
         }
         processedMessages = new Set(e.processedMessages);
@@ -2907,7 +2915,8 @@ async function downloadHostSession() {
     const serializableWorldStates = Array.from(WORLD_STATES.entries()).map(([worldName, data]) => {
         return [worldName, {
             chunkDeltas: Array.from(data.chunkDeltas.entries()),
-            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries())
+            foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries()),
+            ipfsTruncatedDates: Array.from((data.ipfsTruncatedDates || new Map()).entries())
         }];
     });
 

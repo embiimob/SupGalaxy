@@ -581,10 +581,15 @@ function setupDataChannel(e, t) {
                         if (!WORLD_STATES.has(s.world)) {
                             WORLD_STATES.set(s.world, {
                                 chunkDeltas: new Map(),
-                                foreignBlockOrigins: new Map()
+                                foreignBlockOrigins: new Map(),
+                                ipfsTruncatedDates: new Map()
                             });
                         }
                         const worldState = WORLD_STATES.get(s.world);
+                        // Ensure ipfsTruncatedDates exists for backward compatibility
+                        if (!worldState.ipfsTruncatedDates) {
+                            worldState.ipfsTruncatedDates = new Map();
+                        }
                         const chunkKey = makeChunkKey(s.world, Math.floor(modWrap(s.wx, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(s.wz, MAP_SIZE) / CHUNK_SIZE));
                         if (!worldState.chunkDeltas.has(chunkKey)) {
                             worldState.chunkDeltas.set(chunkKey, []);

@@ -708,15 +708,65 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
                             chunkDeltas: new Map(),
-                            foreignBlockOrigins: new Map()
+                            foreignBlockOrigins: new Map(),
+                            ipfsTruncatedDates: new Map()
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
+                    // Ensure ipfsTruncatedDates exists for backward compatibility
+                    if (!worldState.ipfsTruncatedDates) {
+                        worldState.ipfsTruncatedDates = new Map();
+                    }
                     if (!worldState.chunkDeltas.has(r)) {
                         worldState.chunkDeltas.set(r, []);
                     }
-                    const changesWithSource = s.map(change => ({ ...change, source: 'ipfs' }));
-                    worldState.chunkDeltas.get(r).push(...changesWithSource);
+                    
+                    // Compute truncated unix date for monotonic ordering of IPFS updates
+                    // If blockDate is missing/invalid, this returns 0 and updates will be rejected
+                    // (shouldApplyIpfsUpdate rejects incoming truncated dates <= 0)
+                    const incomingTruncatedDate = computeIpfsTruncatedDate(blockDate);
+                    if (incomingTruncatedDate === 0 && blockDate !== undefined) {
+                        console.warn(`[IPFS Ordering] BlockDate ${blockDate} resulted in truncated date 0 (before epoch 2025-09-21 or invalid)`);
+                    }
+                    
+                    // Parse chunk coordinates for world position calculation
+                    const parsedChunk = parseChunkKey(r);
+                    const cx = parsedChunk ? parsedChunk.cx : 0;
+                    const cz = parsedChunk ? parsedChunk.cz : 0;
+                    
+                    // Filter changes using monotonic ordering check
+                    const acceptedChanges = [];
+                    for (const change of s) {
+                        // Calculate world position for this block
+                        const worldX = cx * CHUNK_SIZE + change.x;
+                        const worldY = change.y;
+                        const worldZ = cz * CHUNK_SIZE + change.z;
+                        const blockPosKey = `${worldX},${worldY},${worldZ}`;
+                        
+                        // Get existing truncated date for this block
+                        const existingTruncatedDate = worldState.ipfsTruncatedDates.get(blockPosKey) || 0;
+                        
+                        // Apply monotonic ordering check
+                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDate)) {
+                            acceptedChanges.push({ ...change, source: 'ipfs' });
+                            // Store the new truncated date for this block
+                            worldState.ipfsTruncatedDates.set(blockPosKey, incomingTruncatedDate);
+                        }
+                    }
+                    
+                    // Log summary of skipped updates to avoid log spam
+                    const skippedCount = s.length - acceptedChanges.length;
+                    if (skippedCount > 0) {
+                        console.log(`[IPFS Ordering] Skipped ${skippedCount} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) not newer than existing`);
+                    }
+                    
+                    // Only add accepted changes to deltas
+                    if (acceptedChanges.length > 0) {
+                        worldState.chunkDeltas.get(r).push(...acceptedChanges);
+                    }
+                    
+                    // Use filtered changes for applying to chunk
+                    s = acceptedChanges.map(c => ({ x: c.x, y: c.y, z: c.z, b: c.b }));
                 }
 
                 // Set ownership based on BlockDate and owner
