@@ -749,3 +749,77 @@ const lightManager = {
     }
 };
 
+/**
+ * Cleans up all resources associated with a magician stone.
+ * This includes:
+ * - Removing the mesh from the scene and disposing it
+ * - Stopping and cleaning up video elements
+ * - Stopping and cleaning up audio elements
+ * - Disposing GIF animation resources (texture, canvas, reader)
+ * - Stopping any animation mixers
+ * 
+ * This function is defined in declare.js to be available to all scripts
+ * (especially web-rtc.js which needs to handle network stone removal events).
+ * 
+ * @param {Object} stone - The magician stone object to clean up
+ * @param {string} key - The key of the stone (for logging purposes)
+ */
+function cleanupMagicianStone(stone, key) {
+    if (!stone) return;
+
+    // Remove and dispose the 3D mesh
+    if (stone.mesh) {
+        scene.remove(stone.mesh);
+        disposeObject(stone.mesh);
+    }
+
+    // Stop and clean up video element
+    if (stone.videoElement) {
+        try {
+            stone.videoElement.pause();
+            stone.videoElement.src = '';
+            stone.videoElement.load(); // Force release of video resources
+        } catch (e) {
+            console.warn(`[MagicianStone] Error cleaning up video element for key ${key}:`, e);
+        }
+    }
+
+    // Stop and clean up audio element
+    if (stone.audioElement) {
+        try {
+            stone.audioElement.pause();
+            stone.audioElement.src = '';
+            stone.audioElement.load(); // Force release of audio resources
+        } catch (e) {
+            console.warn(`[MagicianStone] Error cleaning up audio element for key ${key}:`, e);
+        }
+    }
+
+    // Clean up GIF animation resources - this is the critical fix for the GIF artifact bug
+    if (stone.gifData) {
+        // Dispose the THREE.CanvasTexture to release WebGL resources
+        if (stone.gifData.texture) {
+            stone.gifData.texture.dispose();
+        }
+        // Clear the canvas context to help garbage collection
+        if (stone.gifData.ctx && stone.gifData.canvas) {
+            stone.gifData.ctx.clearRect(0, 0, stone.gifData.canvas.width, stone.gifData.canvas.height);
+        }
+        // Nullify references to allow garbage collection
+        stone.gifData.reader = null;
+        stone.gifData.canvas = null;
+        stone.gifData.ctx = null;
+        stone.gifData.texture = null;
+        stone.gifData.tempImageData = null;
+        stone.gifData = null;
+    }
+
+    // Stop any animation mixer (for 3D models with animations)
+    if (stone.mixer) {
+        stone.mixer.stopAllAction();
+        stone.mixer = null;
+    }
+
+    console.log(`[MagicianStone] Cleaned up resources for key ${key}`);
+}
+
