@@ -2199,7 +2199,7 @@ async function toggleCamera() {
     }
 }
 // Flag to track if audio initialization has been attempted
-var audioInitialized = false;
+var audioInitAttempted = false;
 var audioInitPromise = null;
 
 // Lazy audio initialization - only requests microphone permission on first peer connection
@@ -2209,8 +2209,8 @@ async function ensureAudioInitialized() {
         return audioInitPromise;
     }
     
-    // If already initialized (stream exists or we already tried), return immediately
-    if (audioInitialized) {
+    // If already attempted (stream exists or we already tried), return immediately
+    if (audioInitAttempted) {
         return localAudioStream;
     }
     
@@ -2225,12 +2225,12 @@ async function ensureAudioInitialized() {
                 }
             });
             console.log("[WebRTC] Microphone permission granted");
-            audioInitialized = true;
+            audioInitAttempted = true;
             return localAudioStream;
         } catch (e) {
             console.error("Error accessing microphone:", e);
             addMessage("Microphone access denied. Proximity chat will be disabled.", 5000);
-            audioInitialized = true; // Mark as initialized even on failure to avoid repeated prompts
+            audioInitAttempted = true; // Mark as attempted even on failure to avoid repeated prompts
             return null;
         }
     })();
