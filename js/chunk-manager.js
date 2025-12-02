@@ -186,12 +186,9 @@ Chunk.prototype.idx = function (e, t, o) {
     const worldState = getCurrentWorldState();
     if (worldState.chunkDeltas.has(e.key)) {
         const deltas = worldState.chunkDeltas.get(e.key);
-        console.log(`[ChunkManager] Building mesh for chunk ${e.key}, applying ${deltas.length} stored deltas`);
         for (const delta of deltas) {
             e.set(delta.x, delta.y, delta.z, delta.b);
         }
-    } else {
-        console.log(`[ChunkManager] Building mesh for chunk ${e.key}, no stored deltas`);
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
     const t = volcanoes.find((t => t.chunkKey === e.key));
@@ -383,24 +380,16 @@ Chunk.prototype.idx = function (e, t, o) {
     if (parseChunkKey(o)) {
         var a = this.chunks.get(o);
         if (a) {
-            console.log(`[ChunkManager] Applying ${t.length} deltas to loaded chunk ${o}`);
             for (var n of t)
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
                     a.set(n.x, n.y, n.z, r)
                 } updateTorchRegistry(a), a.needsRebuild = !0, this.buildChunkMesh(a)
-        } else {
-            console.log(`[ChunkManager] Chunk ${o} not currently loaded - deltas stored for later application`);
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
     var t = this.chunks.get(e);
-    if (t) {
-        console.log(`[ChunkManager] Marking chunk ${e} dirty and rebuilding mesh`);
-        t.needsRebuild = !0, this.buildChunkMesh(t)
-    } else {
-        console.log(`[ChunkManager] Cannot mark chunk ${e} dirty - not currently loaded`);
-    }
+    t && (t.needsRebuild = !0, this.buildChunkMesh(t))
 }, ChunkManager.prototype.getSurfaceY = function (e, t) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),
@@ -675,8 +664,6 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
         const now = Date.now();
         const blockDate = o; // o is the BlockDate timestamp
-        
-        console.log(`[ChunkManager] applyChunkUpdates: BlockDate=${new Date(blockDate).toISOString()}, Address=${t}, TxId=${a}`);
 
         // Extract magician and calligraphy stones if present in the full payload
         // The payload 'e' is expected to be an array of chunk updates, but if it came from
@@ -776,21 +763,6 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         }
                     }
                     
-                    // Log detailed info about rejected updates
-                    if (rejectedChanges.length > 0) {
-                        console.log(`[IPFS Ordering] Rejected ${rejectedChanges.length} block update(s) in chunk ${r}`);
-                        console.log(`  Transaction ID: ${a}`);
-                        console.log(`  Incoming BlockDate: ${new Date(blockDate).toISOString()} (truncated unix: ${incomingTruncatedDate})`);
-                        for (const rejected of rejectedChanges) {
-                            console.log(`  - Block ID ${rejected.blockId} at position ${rejected.position}: existing truncated=${rejected.existingTruncated}, incoming truncated=${rejected.incomingTruncated} (incoming is older)`);
-                        }
-                    }
-                    
-                    // Log summary of accepted updates
-                    if (acceptedChanges.length > 0) {
-                        console.log(`[IPFS Ordering] Accepted ${acceptedChanges.length} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) is newer than or equal to existing`);
-                    }
-                    
                     // Only add accepted changes to deltas
                     if (acceptedChanges.length > 0) {
                         worldState.chunkDeltas.get(r).push(...acceptedChanges);
@@ -828,9 +800,6 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
                         if (shouldUpdate) {
                             updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
-                        } else {
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership not updated - existing ownership takes precedence`);
                         }
                     }
                 }
@@ -955,7 +924,6 @@ function isChunkMutationAllowed(chunkKey, username) {
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                 // This chunk is a home spawn chunk in this world
                 if (spawnData.username !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnData.username} in world ${parsed.world}`);
                     return false;
                 }
                 return true; // Own home spawn
@@ -973,19 +941,16 @@ function isChunkMutationAllowed(chunkKey, username) {
     
     // Check if ownership is pending (immature IPFS claim < 30 days)
     if (ownership.pending) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
         return true; // Pending chunks are editable by anyone
     }
     
     // Check if ownership has expired (> 1 year)
     if (ownership.expiryDate && now > ownership.expiryDate) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
         return true; // Expired chunks are editable by anyone
     }
     
     // Check if owned by different user (mature ownership 30d-1y)
     if (ownership.username !== username) {
-        console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
         return false;
     }
     
@@ -1011,7 +976,6 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
                 claimDate: claimDate || now,
                 type: 'home'
             });
-            console.log(`[Ownership] Home spawn chunk ${normalized} assigned to ${username}`);
         } else if (ownershipType === 'ipfs') {
             // IPFS ownership: check maturity and set expiry
             const age = now - blockDate;
@@ -1025,8 +989,6 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
                 type: 'ipfs',
                 pending: isPending
             });
-            
-            console.log(`[Ownership] IPFS chunk ${normalized} assigned to ${username}, pending: ${isPending}, expires: ${new Date(expiryDate).toISOString()}`);
         }
     } catch (e) {
         console.error("[ChunkManager] Failed to update chunk ownership:", e);

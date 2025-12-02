@@ -356,10 +356,6 @@ async function applySaveFile(e, t, o) {
         // GetPublicMessagesByAddress when loaded via keyword search.
         let blockDate = p; // Default to current time
         const blockAge = p - blockDate;
-        
-        console.log(`[IPFS Load] Manual file upload - using current time as BlockDate: ${new Date(blockDate).toISOString()}`);
-
-
 
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
