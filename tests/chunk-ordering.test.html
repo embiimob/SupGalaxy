@@ -125,8 +125,17 @@
             
             const history = IPFS_CHUNK_MESSAGE_HISTORY.get(normalized);
             
-            // Check for duplicates
-            if (history.some(h => h.transactionId === transactionId)) {
+            // Check if this transaction is already in the history
+            // If so, merge the changes instead of skipping
+            const existingEntry = history.find(h => h.transactionId === transactionId);
+            if (existingEntry) {
+                const newChanges = changes.map(c => ({ ...c }));
+                existingEntry.changes.push(...newChanges);
+                
+                if (existingEntry.applied) {
+                    reprocessChunkUpdatesInOrder(normalized);
+                    return { isDuplicate: false, isOutOfOrder: true };
+                }
                 return { isDuplicate: true, isOutOfOrder: false };
             }
             
@@ -314,25 +323,28 @@
             assertEqual(chunk.get(6, 10, 5), 2, 'Position B should be Grass');
         });
 
-        // Test 5: Duplicate transactions should be ignored
-        runTest('Duplicate transactions are ignored', () => {
+        // Test 5: Same transaction ID with different changes should merge changes
+        runTest('Same transaction ID merges changes instead of ignoring', () => {
             const chunkKey = 'world:0:0';
             
-            // First update
+            // First update with some changes
             applyChunkUpdate(chunkKey, 1000, 'tx1', [
-                { x: 5, y: 10, z: 5, b: 1 } // Stone
+                { x: 5, y: 10, z: 5, b: 1 } // Stone at position A
             ]);
             
-            // Duplicate with same transaction ID (different changes should be ignored)
+            // Same transaction ID but different position should be merged
             applyChunkUpdate(chunkKey, 1000, 'tx1', [
-                { x: 5, y: 10, z: 5, b: 2 } // Grass
+                { x: 6, y: 10, z: 5, b: 2 } // Grass at position B
             ]);
             
             const chunk = mockChunks.get(chunkKey);
-            assertEqual(chunk.get(5, 10, 5), 1, 'Block should be Stone (duplicate ignored)');
+            // Both changes should be applied
+            assertEqual(chunk.get(5, 10, 5), 1, 'Position A should be Stone');
+            assertEqual(chunk.get(6, 10, 5), 2, 'Position B should be Grass');
             
             const history = IPFS_CHUNK_MESSAGE_HISTORY.get(chunkKey);
             assertEqual(history.length, 1, 'History should have only 1 entry');
+            assertEqual(history[0].changes.length, 2, 'Entry should have 2 changes merged');
         });
 
         // Test 6: Air block update at latest timestamp should not be overwritten

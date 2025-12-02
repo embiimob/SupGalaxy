@@ -735,9 +735,20 @@ function addToChunkHistory(chunkKey, timestamp, transactionId, changes, address)
     
     const history = IPFS_CHUNK_MESSAGE_HISTORY.get(normalized);
     
-    // Check if this transaction is already in the history (avoid duplicates)
-    if (history.some(h => h.transactionId === transactionId)) {
-        console.log(`[ChunkManager] Skipping duplicate transaction ${transactionId} for chunk ${normalized}`);
+    // Check if this transaction is already in the history
+    // If so, merge the changes instead of skipping (a single transaction may have multiple delta entries for the same chunk)
+    const existingEntry = history.find(h => h.transactionId === transactionId);
+    if (existingEntry) {
+        // Merge changes into the existing entry
+        const newChanges = changes.map(c => ({ ...c }));
+        existingEntry.changes.push(...newChanges);
+        console.log(`[ChunkManager] Merged ${newChanges.length} additional changes for transaction ${transactionId} in chunk ${normalized}`);
+        
+        // If the entry was already applied, we need to reprocess to include the new changes
+        if (existingEntry.applied) {
+            reprocessChunkUpdatesInOrder(normalized);
+            return { isDuplicate: false, isOutOfOrder: true };
+        }
         return { isDuplicate: true, isOutOfOrder: false };
     }
     
