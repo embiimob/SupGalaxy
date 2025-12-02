@@ -37,14 +37,15 @@ function setupAutoplayResumeHandler() {
             if (musicPlaylist.length > 0 && !isMusicPlaying) {
                 playTrack(currentTrackIndex);
             }
-            // Try to resume video if playlist exists  
-            if (typeof videoPlaylist !== 'undefined' && videoPlaylist.length > 0 && !isVideoPlaying) {
+            // Try to resume video if playlist exists and video player is available
+            if (typeof videoPlaylist !== 'undefined' && typeof currentVideoIndex !== 'undefined' && 
+                videoPlaylist.length > 0 && !isVideoPlaying && typeof playVideo === 'function') {
                 playVideo(currentVideoIndex);
             }
         }
     };
     
-    // Add listeners for common user interaction events (once, to resume audio)
+    // Add persistent listeners for common user interaction events to resume audio when paused
     ['click', 'touchstart', 'keydown'].forEach(eventType => {
         document.addEventListener(eventType, resumeAudio, { once: false, passive: true });
     });
