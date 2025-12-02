@@ -9,6 +9,55 @@ var previewAudio = new Audio();
 var currentPreviewUrl = null;
 var showingPlaylist = false;
 
+// Helper function to detect if an error is caused by autoplay restrictions
+function isAutoplayError(error) {
+    if (!error) return false;
+    const errorMsg = error.message || error.name || String(error);
+    const autoplayPatterns = [
+        'user has not interacted',
+        'without user activation',
+        'not allowed',
+        'play() failed',
+        'play() request was interrupted',
+        'NotAllowedError',
+        'autoplay'
+    ];
+    return autoplayPatterns.some(pattern => 
+        errorMsg.toLowerCase().includes(pattern.toLowerCase())
+    );
+}
+
+// Set up global autoplay pause handling - when user interacts, try to resume
+function setupAutoplayResumeHandler() {
+    const resumeAudio = function() {
+        if (isAutoplayPaused) {
+            console.log('[AutoplayPause] User interaction detected, attempting to resume audio');
+            isAutoplayPaused = false;
+            // Try to resume music if playlist exists
+            if (musicPlaylist.length > 0 && !isMusicPlaying) {
+                playTrack(currentTrackIndex);
+            }
+            // Try to resume video if playlist exists and video player is available
+            if (typeof videoPlaylist !== 'undefined' && typeof currentVideoIndex !== 'undefined' && 
+                videoPlaylist.length > 0 && !isVideoPlaying && typeof playVideo === 'function') {
+                playVideo(currentVideoIndex);
+            }
+        }
+    };
+    
+    // Add persistent listeners for common user interaction events to resume audio when paused
+    ['click', 'touchstart', 'keydown'].forEach(eventType => {
+        document.addEventListener(eventType, resumeAudio, { once: false, passive: true });
+    });
+}
+
+// Initialize autoplay resume handler when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupAutoplayResumeHandler);
+} else {
+    setupAutoplayResumeHandler();
+}
+
 // Music Player Logic
 function initMusicPlayer() {
     const playPauseBtn = document.getElementById('playPauseBtn');
@@ -150,6 +199,14 @@ function playTrack(index) {
     const playPauseBtn = document.getElementById('playPauseBtn');
     if (!musicStatus || !playPauseBtn) return;
 
+    // If paused due to autoplay restrictions, don't attempt to play
+    if (isAutoplayPaused) {
+        musicStatus.innerText = 'Tap to play music';
+        isMusicPlaying = false;
+        playPauseBtn.innerText = '▶';
+        return;
+    }
+
     if (musicPlaylist.length === 0 || index < 0 || index >= musicPlaylist.length) {
         musicStatus.innerText = 'Playlist finished';
         isMusicPlaying = false;
@@ -168,11 +225,23 @@ function playTrack(index) {
         playPromise.then(() => {
             isMusicPlaying = true;
             playPauseBtn.innerText = '⏸';
+            // Clear autoplay pause if this play succeeded (user must have interacted)
+            isAutoplayPaused = false;
         }).catch(error => {
             console.error(`Audio playback for ${track.name} failed:`, error);
             isMusicPlaying = false;
             playPauseBtn.innerText = '▶';
-            setTimeout(skipMusic, 2000);
+            
+            // Check if this is an autoplay restriction error
+            if (isAutoplayError(error)) {
+                // Set autoplay paused state and don't retry
+                isAutoplayPaused = true;
+                musicStatus.innerText = 'Tap to play music';
+                console.log('[AutoplayPause] Audio blocked by browser, waiting for user interaction');
+            } else {
+                // For other errors (network, etc.), skip to next track
+                setTimeout(skipMusic, 2000);
+            }
         });
     }
 }
@@ -180,6 +249,13 @@ function playTrack(index) {
 function playPauseMusic() {
     if (musicPlaylist.length === 0) return;
     const playPauseBtn = document.getElementById('playPauseBtn');
+    const musicStatus = document.getElementById('currentTrack');
+    
+    // Clear autoplay pause on explicit user action (this is a real user interaction)
+    if (isAutoplayPaused) {
+        isAutoplayPaused = false;
+    }
+    
     if (isMusicPlaying) {
         musicAudioElement.pause();
         isMusicPlaying = false;
@@ -193,6 +269,11 @@ function playPauseMusic() {
                     if (playPauseBtn) playPauseBtn.innerText = '⏸';
                 }).catch(error => {
                     console.error("Audio playback failed on resume:", error);
+                    // Check if this is an autoplay restriction error
+                    if (isAutoplayError(error)) {
+                        isAutoplayPaused = true;
+                        if (musicStatus) musicStatus.innerText = 'Tap to play music';
+                    }
                 });
             }
         } else {

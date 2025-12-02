@@ -580,10 +580,19 @@ function disposeObject(e) {
 }
 
 function safePlayAudio(e) {
+    // Don't attempt to play if autoplay is paused due to browser restrictions
+    if (isAutoplayPaused) return;
+    
     if (e) {
         var t = e.play();
-        void 0 !== t && t.catch((function (e) {
-            audioErrorLogged || (addMessage("Audio playback issue detected", 3e3), audioErrorLogged = !0)
+        void 0 !== t && t.catch((function (err) {
+            // Check if this is an autoplay restriction error
+            if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
+                isAutoplayPaused = true;
+                console.log('[AutoplayPause] Sound effect blocked by browser, waiting for user interaction');
+            } else {
+                audioErrorLogged || (addMessage("Audio playback issue detected", 3e3), audioErrorLogged = !0);
+            }
         }))
     }
 }

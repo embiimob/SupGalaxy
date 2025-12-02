@@ -157,6 +157,14 @@ function playVideo(index) {
     const playPauseBtn = document.getElementById('videoPlayPauseBtn');
     if (!videoStatus || !playPauseBtn) return;
 
+    // If paused due to autoplay restrictions, don't attempt to play
+    if (isAutoplayPaused) {
+        videoStatus.innerText = 'Tap to play video';
+        isVideoPlaying = false;
+        playPauseBtn.innerText = '▶';
+        return;
+    }
+
     if (videoPlaylist.length === 0 || index < 0 || index >= videoPlaylist.length) {
         videoStatus.innerText = 'Playlist finished';
         isVideoPlaying = false;
@@ -175,11 +183,23 @@ function playVideo(index) {
         playPromise.then(() => {
             isVideoPlaying = true;
             playPauseBtn.innerText = '⏸';
+            // Clear autoplay pause if this play succeeded (user must have interacted)
+            isAutoplayPaused = false;
         }).catch(error => {
             console.error(`Video playback for ${track.name} failed:`, error);
             isVideoPlaying = false;
             playPauseBtn.innerText = '▶';
-            setTimeout(skipVideo, 2000);
+            
+            // Check if this is an autoplay restriction error (use the helper from audio-player.js)
+            if (typeof isAutoplayError === 'function' && isAutoplayError(error)) {
+                // Set autoplay paused state and don't retry
+                isAutoplayPaused = true;
+                videoStatus.innerText = 'Tap to play video';
+                console.log('[AutoplayPause] Video blocked by browser, waiting for user interaction');
+            } else {
+                // For other errors (network, etc.), skip to next track
+                setTimeout(skipVideo, 2000);
+            }
         });
     }
 }
@@ -187,6 +207,13 @@ function playVideo(index) {
 function playPauseVideo() {
     if (videoPlaylist.length === 0) return;
     const playPauseBtn = document.getElementById('videoPlayPauseBtn');
+    const videoStatus = document.getElementById('videoInfo');
+    
+    // Clear autoplay pause on explicit user action (this is a real user interaction)
+    if (isAutoplayPaused) {
+        isAutoplayPaused = false;
+    }
+    
     if (isVideoPlaying) {
         videoElement.pause();
         isVideoPlaying = false;
@@ -200,6 +227,11 @@ function playPauseVideo() {
                     if (playPauseBtn) playPauseBtn.innerText = '⏸';
                 }).catch(error => {
                     console.error("Video playback failed on resume:", error);
+                    // Check if this is an autoplay restriction error
+                    if (typeof isAutoplayError === 'function' && isAutoplayError(error)) {
+                        isAutoplayPaused = true;
+                        if (videoStatus) videoStatus.innerText = 'Tap to play video';
+                    }
                 });
             }
         } else {
