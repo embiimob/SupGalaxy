@@ -834,9 +834,12 @@ self.onmessage = async function(e) {
                 }
             }
             if (updatesByTransaction.size > 0) {
-                for (var entry of updatesByTransaction) {
-                    var transactionId = entry[0];
-                    var update = entry[1];
+                // Convert to array and sort by timestamp (oldest first) before sending
+                // This ensures updates are processed in chronological order
+                var updatesArray = Array.from(updatesByTransaction.values());
+                updatesArray.sort(function(a, b) { return a.timestamp - b.timestamp; });
+                
+                for (var update of updatesArray) {
                     self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones }] });
                 }
             }
