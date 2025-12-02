@@ -49,7 +49,7 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
         calligraphyStones = {};
     }
 
-    debugLog('RECONSTRUCTION', 'Scanning deltas for orphaned calligraphy stones (b:128)');
+    console.log("[RECONSTRUCTION] Scanning deltas for orphaned calligraphy stones (b:128)");
     let reconstructedCount = 0;
 
     for (const deltaGroup of deltas) {
@@ -59,7 +59,9 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
         if (!changes || !Array.isArray(changes)) continue;
 
         for (const change of changes) {
+            // Check if this is a calligraphy stone block (id 128)
             if (change.b === 128) {
+                // Parse chunk coordinates from chunk key (format: worldname:cx:cz)
                 const parts = chunkKey.split(':');
                 if (parts.length < 3) {
                     console.warn(`[RECONSTRUCTION] Invalid chunk key format: ${chunkKey}`);
@@ -69,15 +71,18 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
                 const cx = parseInt(parts[1]);
                 const cz = parseInt(parts[2]);
 
+                // Calculate world coordinates using modWrap for consistency
                 const worldX = modWrap(cx * CHUNK_SIZE + change.x, MAP_SIZE);
                 const worldY = change.y;
                 const worldZ = modWrap(cz * CHUNK_SIZE + change.z, MAP_SIZE);
 
                 const key = `${worldX},${worldY},${worldZ}`;
 
+                // Only reconstruct if no metadata exists for this position
                 if (!calligraphyStones[key]) {
-                    debugLog('RECONSTRUCTION', `Creating placeholder for calligraphy stone at ${key}`);
+                    console.log(`[RECONSTRUCTION] Creating placeholder for calligraphy stone at ${key}`);
 
+                    // Create placeholder with sensible defaults
                     const placeholderData = {
                         x: worldX,
                         y: worldY,
@@ -95,7 +100,7 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
                         fontColor: '#000000',
                         text: '',
                         link: '',
-                        direction: { x: 0, y: 0, z: 1 }
+                        direction: { x: 0, y: 0, z: 1 } // Default forward direction
                     };
 
                     try {
@@ -110,7 +115,7 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
     }
 
     if (reconstructedCount > 0) {
-        debugLog('RECONSTRUCTION', `Successfully reconstructed ${reconstructedCount} calligraphy stone(s)`);
+        console.log(`[RECONSTRUCTION] Successfully reconstructed ${reconstructedCount} calligraphy stone(s)`);
     }
 }
 
@@ -189,7 +194,7 @@ async function applySaveFile(e, t, o) {
         document.getElementById("worldLabel").textContent = worldName;
         document.getElementById("seedLabel").textContent = "User " + userName;
         updateHudButtons();
-        debugLog('LOGIN', 'Initializing Three.js from session');
+        console.log("[LOGIN] Initializing Three.js from session");
         await initAudio();
         initThree();
         initMusicPlayer();
@@ -206,11 +211,11 @@ async function applySaveFile(e, t, o) {
         selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
         initHotbar();
         updateHotbarUI();
-        debugLog('LOGIN', 'Creating ChunkManager from session');
+        console.log("[LOGIN] Creating ChunkManager from session");
         chunkManager = new ChunkManager(worldSeed);
         if (t.deltas) {
             showLoadingIndicator(0, "Loading File...");
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 50)); // Allow UI to render
             const totalDeltas = t.deltas.length;
             for (let idx = 0; idx < totalDeltas; idx++) {
                 const r = t.deltas[idx];
@@ -227,7 +232,7 @@ async function applySaveFile(e, t, o) {
                 if (idx % 10 === 0) {
                     const percent = Math.round((idx / totalDeltas) * 100);
                     showLoadingIndicator(percent, `Loading ${percent}%`);
-                    await new Promise(r => setTimeout(r, 0));
+                    await new Promise(r => setTimeout(r, 0)); // Yield to UI
                 }
             }
             hideLoadingIndicator();
@@ -240,16 +245,15 @@ async function applySaveFile(e, t, o) {
         Math.floor(MAP_SIZE / CHUNK_SIZE);
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
-        debugLog('LOGIN', 'Preloading initial chunks from session');
-        chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS);
-        if (t.magicianStones) {
-            debugLog('LOGIN', 'Loading magician stones from session');
+        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
+            console.log("[LOGIN] Loading magician stones from session");
+            // Clean up any existing magician stones before loading new ones
             for (const existingKey in magicianStones) {
                 if (magicianStones[existingKey]) {
                     cleanupMagicianStone(magicianStones[existingKey], existingKey);
                 }
             }
-            magicianStones = {};
+            magicianStones = {}; // Clear existing stones
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = { ...t.magicianStones[key], source: 'local' };
@@ -270,13 +274,14 @@ async function applySaveFile(e, t, o) {
             }
         }
         if (t.calligraphyStones) {
-            debugLog('LOGIN', 'Loading calligraphy stones from session');
-            calligraphyStones = {};
+            console.log("[LOGIN] Loading calligraphy stones from session");
+            calligraphyStones = {}; // Clear existing stones
             for (const key in t.calligraphyStones) {
                 if (Object.hasOwnProperty.call(t.calligraphyStones, key)) {
                     const stoneData = { ...t.calligraphyStones[key], source: 'local' };
                     createCalligraphyStoneScreen(stoneData);
 
+                    // Defer block placement until the chunk is loaded
                     const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
                     const cz = Math.floor(modWrap(stoneData.z, MAP_SIZE) / CHUNK_SIZE);
                     const chunkKey = makeChunkKey(worldName, cx, cz);
@@ -290,11 +295,12 @@ async function applySaveFile(e, t, o) {
                 }
             }
         } else if (t.deltas) {
+            // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
             reconstructCalligraphyStonesFromDeltas(t.deltas);
         }
 
         if (t.chests) {
-            debugLog('LOGIN', 'Loading chests from session');
+            console.log("[LOGIN] Loading chests from session");
             chests = {};
             for (const key in t.chests) {
                 if (t.chests[key]) {
@@ -328,16 +334,10 @@ async function applySaveFile(e, t, o) {
         }
         player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
         registerKeyEvents();
-        debugLog('LOGIN', 'Starting game loop from session');
-        requestAnimationFrame(gameLoop);
-        addMessage("Loaded session for " + userName + " in " + worldName, 3e3);
-        updateHud();
-        initServers();
-        worker.postMessage({
+        return console.log("[LOGIN] Starting game loop from session"), requestAnimationFrame(gameLoop), addMessage("Loaded session for " + userName + " in " + worldName, 3e3), updateHud(), initServers(), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
-        });
-        return startWorker();
+        }), startWorker()
     }
     if (e && (e.foreignBlockOrigins && (getCurrentWorldState().foreignBlockOrigins = new Map(e.foreignBlockOrigins)), addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3), e.deltas)) {
         var c = await GetProfileByAddress(t),
@@ -426,33 +426,13 @@ function updateTorchRegistry(e) {
 }
 
 function initThree() {
-    debugLog('RENDER', 'Starting Three.js initialization');
-    scene = new THREE.Scene;
-    scene.background = new THREE.Color(8900331);
-    camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4);
-    camera.position.set(0, 34, 0);
-    renderer = new THREE.WebGLRenderer({ antialias: !0 });
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
-    document.body.appendChild(renderer.domElement);
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = !0;
-    controls.maxPolarAngle = Math.PI / 2;
-    controls.minDistance = 2;
-    controls.maxDistance = 400;
-    controls.enabled = !1;
+    console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
+        antialias: !0
+    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t);
-    emberTexture = createEmberTexture(worldSeed);
-    meshGroup = new THREE.Group;
-    scene.add(meshGroup);
-    scene.add(crackMeshes);
-    lightManager.init();
-    initSky();
-    debugLog('RENDER', 'Three.js initialization complete');
-    renderer.domElement.addEventListener("pointerdown", (function (e) {
+    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
         onPointerDown(e)
     })), renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
@@ -1181,42 +1161,49 @@ async function createMagicianStoneScreen(stoneData) {
 
     // Deduplication: Skip if this stone is already loaded or currently loading
     if (magicianStones[key] && magicianStones[key].mesh) {
-        debugLog('MagicianStone', `Skipping duplicate creation for key ${key} - already exists`);
+        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already exists`);
         return;
     }
     if (magicianStonesLoading.has(key)) {
-        debugLog('MagicianStone', `Skipping duplicate creation for key ${key} - already loading`);
+        console.log(`[MagicianStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
     }
 
+    // Mark as loading to prevent duplicate loads during async operations.
+    // This guard applies to ALL asset types, not just .glb files.
     magicianStonesLoading.add(key);
 
     if (url.startsWith('IPFS:')) {
         try {
             url = await resolveIPFS(url);
         } catch (error) {
-            console.error('[MagicianStone] Error resolving IPFS URL:', error);
-            magicianStonesLoading.delete(key);
-            return;
+            console.error('Error resolving IPFS URL for in-world screen:', error);
+            magicianStonesLoading.delete(key); // Remove from loading set on error
+            return; // Don't create a screen if the URL is invalid
         }
     }
 
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
+    // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
         const loader = new THREE.GLTFLoader();
         loader.load(
             url,
             function(gltf) {
+                // Post-async-load deduplication check: another load may have completed while this one was in progress.
+                // This check is entity-based (using position key) and independent of file extension.
                 if (magicianStones[key] && magicianStones[key].mesh) {
-                    debugLog('MagicianStone', `Duplicate GLB/GLTF load completed for key ${key} - discarding`);
+                    console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
+                    // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
                     return;
                 }
 
                 const model = gltf.scene;
 
+                // Calculate bounding box and scale to fit within width x height
                 const box = new THREE.Box3().setFromObject(model);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
@@ -1352,9 +1339,12 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
+            // Post-async-load deduplication check: another load may have completed while this one was in progress.
+            // This check ensures that only one instance is created, regardless of asset format.
             if (magicianStones[key] && magicianStones[key].mesh) {
-                debugLog('MagicianStone', `Duplicate GIF load completed for key ${key} - discarding`);
+                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
+                // Clean up the texture that was created before fetch
                 if (texture) {
                     texture.dispose();
                 }
@@ -1450,9 +1440,12 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
+    // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
+    // This check is entity-based (using position key) and independent of file extension.
     if (magicianStones[key] && magicianStones[key].mesh) {
-        debugLog('MagicianStone', `Duplicate non-GLB load completed for key ${key} - discarding`);
+        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
+        // Clean up any resources that were created
         if (texture) {
             texture.dispose();
         }
@@ -1480,10 +1473,12 @@ async function createMagicianStoneScreen(stoneData) {
         screenMesh = new THREE.Mesh(planeGeometry, material);
     }
 
+    // Orientation and Position
     let playerDirection;
     if (stoneData.direction) {
         playerDirection = new THREE.Vector3(stoneData.direction.x, stoneData.direction.y, stoneData.direction.z);
     } else {
+        // Fallback for old stones saved without direction
         playerDirection = new THREE.Vector3();
         camera.getWorldDirection(playerDirection);
         playerDirection.y = 0;
@@ -1515,18 +1510,21 @@ function createCalligraphyStoneScreen(stoneData) {
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
     const key = `${x},${y},${z}`;
 
+    // Deduplication: Skip if this stone is already loaded or currently loading
     if (calligraphyStones[key] && calligraphyStones[key].mesh) {
-        debugLog('CalligraphyStone', `Skipping duplicate creation for key ${key} - already exists`);
+        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
         return;
     }
     if (calligraphyStonesLoading.has(key)) {
-        debugLog('CalligraphyStone', `Skipping duplicate creation for key ${key} - already loading`);
+        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
     }
 
+    // Mark as loading to prevent duplicate loads
     calligraphyStonesLoading.add(key);
 
-    const pixelsPerBlock = 128;
+    // Create canvas for text rendering
+    const pixelsPerBlock = 128; // Resolution per block
     const canvasWidth = width * pixelsPerBlock;
     const canvasHeight = height * pixelsPerBlock;
 
@@ -2800,9 +2798,36 @@ document.getElementById("trashCancel").addEventListener("click", (function () {
 })), document.getElementById("trashOk").addEventListener("click", (function () {
     trashIndex >= 0 && (INVENTORY[trashIndex] = null, updateHotbarUI(), addMessage("Item trashed")), document.getElementById("trashConfirm").style.display = "none", trashIndex = -1, this.blur()
 }));
+var keys = {};
 
-// Note: registerKeyEvents, playerJump, isMobile, and setupMobile functions
-// have been moved to js/input.js for better modularity
+function registerKeyEvents() {
+    function e(e) {
+        const t = e.key.toLowerCase();
+        if ("w" === t && !keys[t]) {
+            const e = performance.now();
+            e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
+        }
+        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+            button: 0,
+            preventDefault: () => { }
+        }), "e" === e.key.toLowerCase() && onPointerDown({
+            button: 2,
+            preventDefault: () => { }
+        })
+    }
+
+    function t(e) {
+        keys[e.key.toLowerCase()] = !1
+    }
+    return window.addEventListener("keydown", e), window.addEventListener("keyup", t),
+        function () {
+            window.removeEventListener("keydown", e), window.removeEventListener("keyup", t)
+        }
+}
+
+function playerJump() {
+    player.onGround && (player.vy = isSprinting ? 25.5 : 8.5, player.onGround = !1)
+}
 
 function toggleCameraMode() {
     addMessage("Camera: " + (cameraMode = "third" === cameraMode ? "first" : "third"));
@@ -3081,16 +3106,310 @@ function updateHud() {
     document.getElementById("homeIcon").style.display = a > 10 ? "inline" : "none", updateHealthBar(), updateHotbarUI(), updateHudButtons()
 }
 
-// Note: isMobile() and setupMobile() functions have been moved to js/input.js
+function isMobile() {
+    return /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)
+}
+
+function setupMobile() {
+    if (!isMobile()) return;
+
+    // Joystick variables
+    const joystickZone = document.getElementById("mobileJoystickZone");
+    const joystickKnob = document.getElementById("mobileJoystickKnob");
+    let joystickOrigin = { x: 0, y: 0 };
+    let joystickId = null;
+
+    // Joystick Event Handlers
+    joystickZone.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        joystickId = touch.identifier;
+        joystickOrigin = { x: touch.clientX, y: touch.clientY };
+
+        joystickKnob.style.display = "block";
+        joystickKnob.style.left = touch.clientX + "px";
+        joystickKnob.style.top = touch.clientY + "px";
+        joystickKnob.style.transform = "translate(-50%, -50%)"; // Reset transform for centering
+    }, { passive: false });
+
+    joystickZone.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                const touch = e.changedTouches[i];
+                const dx = touch.clientX - joystickOrigin.x;
+                const dy = touch.clientY - joystickOrigin.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDist = 50; // Max joystick radius
+
+                let clampedX = dx;
+                let clampedY = dy;
+
+                if (distance > maxDist) {
+                    const ratio = maxDist / distance;
+                    clampedX = dx * ratio;
+                    clampedY = dy * ratio;
+                }
+
+                joystickKnob.style.transform = `translate(calc(-50% + ${clampedX}px), calc(-50% + ${clampedY}px))`;
+
+                // Update joystick input state
+                // Normalize to -1 to 1
+                const normX = clampedX / maxDist;
+                const normY = clampedY / maxDist;
+
+                // Deadzone
+                const deadzone = 0.2;
+
+                joystick.right = normX > deadzone;
+                joystick.left = normX < -deadzone;
+                joystick.down = normY > deadzone;
+                joystick.up = normY < -deadzone;
+
+                break;
+            }
+        }
+    }, { passive: false });
+
+    const endJoystick = (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                joystickId = null;
+                joystickKnob.style.display = "none";
+                joystick.up = false;
+                joystick.down = false;
+                joystick.left = false;
+                joystick.right = false;
+                break;
+            }
+        }
+    };
+
+    joystickZone.addEventListener("touchend", endJoystick, { passive: false });
+    joystickZone.addEventListener("touchcancel", endJoystick, { passive: false });
+
+    // Look/Interact Zone variables
+    const lookZone = document.getElementById("mobileLookZone");
+    let lookOrigin = { x: 0, y: 0 };
+    let lookId = null;
+    let lookStartTime = 0;
+    let lookMoved = false;
+    let lastPinchDistance = 0;
+
+    // Look Event Handlers
+    lookZone.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+
+        // Handle initial pinch distance
+        if (e.touches.length === 2 && cameraMode === "third") {
+            const dx = e.touches[0].pageX - e.touches[1].pageX;
+            const dy = e.touches[0].pageY - e.touches[1].pageY;
+            lastPinchDistance = Math.sqrt(dx * dx + dy * dy);
+            return; // Don't start look logic if pinching
+        }
+
+        const touch = e.changedTouches[0];
+        lookId = touch.identifier;
+        lookOrigin = { x: touch.clientX, y: touch.clientY };
+        lookStartTime = Date.now();
+        lookMoved = false;
+    }, { passive: false });
+
+    lookZone.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+
+        // Handle Pinch to Zoom in 3rd Person
+        if (e.touches.length === 2 && cameraMode === "third") {
+            const dx = e.touches[0].pageX - e.touches[1].pageX;
+            const dy = e.touches[0].pageY - e.touches[1].pageY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (lastPinchDistance > 0) {
+                const delta = distance - lastPinchDistance;
+                // Zoom sensitivity
+                const zoomSpeed = 0.05;
+
+                // Adjust camera distance
+                const eye = new THREE.Vector3().copy(controls.object.position).sub(controls.target);
+                let len = eye.length();
+
+                // Spread (positive delta) -> Zoom In (shorter distance)
+                // Pinch (negative delta) -> Zoom Out (longer distance)
+                // Wait, typically spread enlarges content.
+                // If I spread fingers, I want to see MORE detail, so zoom IN.
+                // So delta > 0 should DECREASE distance.
+
+                len -= delta * zoomSpeed;
+
+                // Clamp
+                len = Math.max(controls.minDistance, Math.min(controls.maxDistance, len));
+
+                eye.normalize().multiplyScalar(len);
+                controls.object.position.copy(controls.target).add(eye);
+                controls.update();
+            }
+
+            lastPinchDistance = distance;
+            return; // Skip look logic
+        }
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === lookId) {
+                const touch = e.changedTouches[i];
+                const dx = touch.clientX - lookOrigin.x;
+                const dy = touch.clientY - lookOrigin.y;
+
+                // Update Look
+                const sensitivity = 0.005;
+                if (cameraMode === "first") {
+                    player.yaw -= dx * sensitivity;
+                    player.pitch -= dy * sensitivity;
+                    player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+
+                    camera.rotation.set(player.pitch, player.yaw, 0, "YXZ");
+                    if (avatarGroup && avatarGroup.children[3]) {
+                        avatarGroup.children[3].rotation.set(player.pitch, 0, 0);
+                    }
+                } else {
+                    // Third person orbit
+                    if (controls && controls.enabled) {
+                        controls.rotateLeft(dx * sensitivity);
+                        controls.rotateUp(dy * sensitivity);
+                        controls.update();
+                    }
+                }
+
+                lookOrigin = { x: touch.clientX, y: touch.clientY };
+
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                    lookMoved = true;
+                }
+                break;
+            }
+        }
+    }, { passive: false });
+
+    const endLook = (e) => {
+        e.preventDefault();
+
+        // Reset pinch if fingers lifted
+        if (e.touches.length < 2) {
+            lastPinchDistance = 0;
+        }
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === lookId) {
+                const touch = e.changedTouches[i];
+                const duration = Date.now() - lookStartTime;
+
+                if (!lookMoved && duration < 300) {
+                    // Short Tap - Interact / Use
+                    const item = INVENTORY[selectedHotIndex];
+                    let button = 2; // Default to Right Click (Place/Interact)
+
+                    // If item is a gun (121, 126) or consumable (122), use Left Click (Button 0)
+                    // because Right Click with hand_attachable items triggers 'drop' logic.
+                    // Guns and honey are usually 0 to fire/eat.
+                    if (item && (item.id === 121 || item.id === 126 || item.id === 122)) {
+                        button = 0;
+                    }
+
+                    onPointerDown({
+                        button: button,
+                        preventDefault: () => {}
+                    });
+                }
+
+                // Reset
+                lookId = null;
+                clearInterval(breakInterval);
+                breakInterval = null;
+                break;
+            }
+        }
+    };
+
+    let breakInterval = null;
+    lookZone.addEventListener("touchstart", (e) => {
+        // Start holding timer
+        if (breakInterval) clearInterval(breakInterval);
+        breakInterval = setTimeout(() => {
+            if (!lookMoved) {
+                // Long press - Break/Attack (Left Click equivalent)
+                onPointerDown({
+                    button: 0, // Left click / Break
+                    preventDefault: () => {}
+                });
+                // Repeated breaking if holding? The prompt says "tapped and held down for a moment", implying single action or continuous?
+                // Standard minecraft is continuous. Let's make it continuous if held?
+                // For now, let's just trigger one action or set a flag.
+                // onPointerDown handles one hit.
+
+                // Let's set a repeated attack interval
+                breakInterval = setInterval(() => {
+                     if (!lookMoved) {
+                        onPointerDown({
+                            button: 0,
+                            preventDefault: () => {}
+                        });
+                     }
+                }, 250); // 4 hits per second
+            }
+        }, 300); // 300ms threshold
+    }, { passive: false });
+
+    lookZone.addEventListener("touchend", (e) => {
+        // Clear interval on end
+        if (breakInterval) {
+            clearTimeout(breakInterval);
+            clearInterval(breakInterval);
+            breakInterval = null;
+        }
+        endLook(e);
+    }, { passive: false });
+
+    lookZone.addEventListener("touchcancel", (e) => {
+        if (breakInterval) {
+            clearTimeout(breakInterval);
+            clearInterval(breakInterval);
+            breakInterval = null;
+        }
+        endLook(e);
+    }, { passive: false });
+
+
+    // Buttons
+    document.getElementById("mobileJumpBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        playerJump();
+    });
+
+    document.getElementById("mobileSprintBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        isSprinting = !isSprinting;
+        addMessage(isSprinting ? "Sprinting enabled" : "Sprinting disabled", 1000);
+    });
+
+    document.getElementById("mobileInventoryBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        toggleInventory();
+    });
+
+    document.getElementById("mobileCamBtn").addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        toggleCameraMode();
+    });
+}
 
 function updateLoginUI() {
     try {
-        debugLog('UI', 'updateLoginUI started, knownWorlds: ' + knownWorlds.size + ', knownUsers: ' + knownUsers.size);
+        console.log("[Debug] updateLoginUI started, knownWorlds:", knownWorlds.size, "knownUsers:", knownUsers.size);
         var e = document.getElementById("worldNameInput"),
             t = document.getElementById("userInput"),
             o = document.getElementById("worldSuggestions"),
             a = document.getElementById("userSuggestions");
-        if (!(e && t && o && a)) return console.error("[UI] Input or suggestion elements not found in DOM"), void addMessage("UI initialization failed: elements missing", 3e3);
+        if (!(e && t && o && a)) return console.error("[Debug] Input or suggestion elements not found in DOM"), void addMessage("UI initialization failed: elements missing", 3e3);
 
         function n() {
             var t = e.value.toLowerCase(),
@@ -3101,22 +3420,25 @@ function updateLoginUI() {
         function r() {
             var e = t.value.toLowerCase(),
                 o = Array.from(knownUsers.keys()).filter((t => t.toLowerCase().startsWith(e))).slice(0, 10);
-            a.innerHTML = o.map((e => `<div data-value="${e}">${e}</div>`)).join(""), a.style.display = o.length > 0 && e ? "block" : "none"
+            a.innerHTML = o.map((e => `<div data-value="${e}">${e}</div>`)).join(""), a.style.display = o.length > 0 && e ? "block" : "none", console.log("[LoginUI] User suggestions updated:", o.length)
         }
 
         function s() {
             n(), r()
         }
         e.addEventListener("input", n), t.addEventListener("input", r), setTimeout(s, 1e3), s(), o.addEventListener("click", (function (t) {
-            t.target.dataset.value && (e.value = t.target.dataset.value, o.style.display = "none")
+            t.target.dataset.value && (e.value = t.target.dataset.value, o.style.display = "none", console.log("[LoginUI] Selected world:", t.target.dataset.value))
         })), a.addEventListener("click", (function (e) {
-            e.target.dataset.value && (t.value = e.target.dataset.value, a.style.display = "none")
+            e.target.dataset.value && (t.value = e.target.dataset.value, a.style.display = "none", console.log("[LoginUI] Selected user:", e.target.dataset.value))
         })), document.addEventListener("click", (function (n) {
             e.contains(n.target) || o.contains(n.target) || (o.style.display = "none"), t.contains(n.target) || a.contains(n.target) || (a.style.display = "none")
-        }))
-        debugLog('UI', 'updateLoginUI completed');
+        })), console.log("[Debug] updateLoginUI completed"), a.addEventListener("click", (function (e) {
+            e.target.dataset.value && (t.value = e.target.dataset.value, a.style.display = "none", console.log("[LoginUI] Selected user:", e.target.dataset.value))
+        })), document.addEventListener("click", (function (n) {
+            e.contains(n.target) || o.contains(n.target) || (o.style.display = "none"), t.contains(n.target) || a.contains(n.target) || (a.style.display = "none")
+        })), console.log("[Debug] updateLoginUI completed")
     } catch (i) {
-        console.error("[UI] Error in updateLoginUI:", i), addMessage("Failed to initialize login UI", 3e3)
+        console.error("[Debug] Error in updateLoginUI:", i), addMessage("Failed to initialize login UI", 3e3)
     }
 }
 async function populateSpawnChunks() {
@@ -3179,19 +3501,19 @@ async function populateSpawnChunks() {
     }
 }
 async function startGame() {
+    // Guard to prevent double game initialization
     if (gameStarted) {
-        debugLog('LOGIN', 'Game already started, skipping duplicate initialization');
+        console.log("[LOGIN] Game already started, skipping duplicate initialization");
         return;
     }
     gameStarted = true;
 
     var e = document.getElementById("startBtn");
-    e && e.blur();
-    debugLog('LOGIN', 'Start game triggered');
-    isPromptOpen = !1;
+    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
 
+    // Validate inputs - use helper function to avoid repetitive gameStarted reset
     function validateAndReset(condition, message) {
         if (condition) {
             gameStarted = false;
@@ -3249,31 +3571,24 @@ async function startGame() {
     document.getElementById("worldLabel").textContent = worldName;
     document.getElementById("seedLabel").textContent = "User " + userName;
     updateHudButtons();
-    debugLog('LOGIN', 'Initializing Three.js');
+    console.log("[LOGIN] Initializing Three.js");
     try {
         await initAudio()
     } catch (e) {
-        console.error("[Audio] Failed to initialize:", e);
-        addMessage("Could not initialize audio, continuing without it.", 3e3);
+        console.error("Failed to initialize audio:", e), addMessage("Could not initialize audio, continuing without it.", 3e3)
     }
-    debugLog('LOGIN', 'Initializing Three.js after audio');
-    initThree();
-    initMusicPlayer();
-    initVideoPlayer();
-    INVENTORY[0] = { id: 120, count: 8 };
-    INVENTORY[1] = { id: 121, count: 1 };
-    selectedHotIndex = 0;
-    selectedBlockId = 120;
-    initHotbar();
-    updateHotbarUI();
-    debugLog('LOGIN', 'Creating ChunkManager');
-    chunkManager = new ChunkManager(worldSeed);
-    populateSpawnChunks();
-    debugLog('LOGIN', 'Calculating spawn point');
+    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
+        id: 120,
+        count: 8
+    }, INVENTORY[1] = {
+        id: 121,
+        count: 1
+    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var s = calculateSpawnPoint(r);
 
+    // Check for initial teleport location to avoid double-hop
     if (initialTeleportLocation) {
-        debugLog('LOGIN', 'Using initial teleport location');
+        console.log("[LOGIN] Using initial teleport location:", initialTeleportLocation);
         s = { x: initialTeleportLocation.x, y: initialTeleportLocation.y, z: initialTeleportLocation.z };
     }
 
@@ -3297,10 +3612,12 @@ async function startGame() {
     var i = Math.floor(s.x / CHUNK_SIZE),
         l = Math.floor(s.z / CHUNK_SIZE);
 
+    // Assign home spawn ownership for the local player
     const homeChunkKey = makeChunkKey(worldName, i, l);
     updateChunkOwnership(homeChunkKey, userName, Date.now(), 'home');
-    debugLog('Ownership', `Home spawn chunk ${homeChunkKey} assigned to ${userName}`);
+    console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName}`);
 
+    // Update local spawnChunks map with key format: username@worldname
     const spawnKey = userName + "@" + worldName;
     spawnChunks.set(spawnKey, {
         cx: i,
@@ -3310,32 +3627,21 @@ async function startGame() {
         spawn: s
     });
 
-    debugLog('LOGIN', 'Preloading initial chunks');
-    chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS);
-    setupMobile();
-    initMinimap();
-    updateHotbarUI();
-    cameraMode = "first";
-    controls.enabled = !1;
-    avatarGroup.visible = !1;
-    camera.position.set(player.x, player.y + 1.62, player.z);
-    camera.rotation.set(0, 0, 0, "YXZ");
-    if (!isMobile()) {
+    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) {
         try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
             addMessage("Pointer lock failed. Serve over HTTPS or ensure allow-pointer-lock is set in iframe.", 3e3)
         }
     } else {
+        // Mobile start
         if (cameraMode === "first") {
             document.getElementById("crosshair").style.display = "block";
         }
     }
     player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
     registerKeyEvents();
-    debugLog('LOGIN', 'Starting game loop');
-    requestAnimationFrame(gameLoop);
-    addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
+    console.log("[LOGIN] Starting game loop"), requestAnimationFrame(gameLoop), addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
     var d = document.getElementById("health");
     d && (d.innerText = player.health);
     var c = document.getElementById("score");
@@ -3701,11 +4007,12 @@ function saveCurrentWorldStoneData(currentWorldName) {
         calligraphyStones: savedCalligraphyStones
     });
 
-    debugLog('WorldSwitch', `Saved ${Object.keys(savedMagicianStones).length} magician stone(s) and ${Object.keys(savedCalligraphyStones).length} calligraphy stone(s) for world: ${currentWorldName}`);
+    console.log(`[WorldSwitch] Saved ${Object.keys(savedMagicianStones).length} magician stone(s) and ${Object.keys(savedCalligraphyStones).length} calligraphy stone(s) for world: ${currentWorldName}`);
 }
 
 /**
  * Restores stone metadata from WORLD_STONE_DATA for the specified world.
+ * This recreates stone meshes and media when the player returns to a previously visited world.
  * Called automatically after switching to a world.
  * @param {string} targetWorldName - The name of the world being entered
  */
@@ -3714,24 +4021,27 @@ function restoreWorldStoneData(targetWorldName) {
 
     const savedData = WORLD_STONE_DATA.get(targetWorldName);
     if (!savedData) {
-        debugLog('WorldSwitch', `No saved stone data for world: ${targetWorldName}`);
+        console.log(`[WorldSwitch] No saved stone data for world: ${targetWorldName}`);
         return;
     }
 
+    // Restore magician stones
     if (savedData.magicianStones) {
         const stoneCount = Object.keys(savedData.magicianStones).length;
-        debugLog('WorldSwitch', `Restoring ${stoneCount} magician stone(s) for world: ${targetWorldName}`);
+        console.log(`[WorldSwitch] Restoring ${stoneCount} magician stone(s) for world: ${targetWorldName}`);
         for (const key in savedData.magicianStones) {
             if (Object.hasOwnProperty.call(savedData.magicianStones, key)) {
                 const stoneData = savedData.magicianStones[key];
+                // Recreate the stone screen with its saved configuration
                 createMagicianStoneScreen(stoneData);
             }
         }
     }
 
+    // Restore calligraphy stones
     if (savedData.calligraphyStones) {
         const stoneCount = Object.keys(savedData.calligraphyStones).length;
-        debugLog('WorldSwitch', `Restoring ${stoneCount} calligraphy stone(s) for world: ${targetWorldName}`);
+        console.log(`[WorldSwitch] Restoring ${stoneCount} calligraphy stone(s) for world: ${targetWorldName}`);
         for (const key in savedData.calligraphyStones) {
             if (Object.hasOwnProperty.call(savedData.calligraphyStones, key)) {
                 const stoneData = savedData.calligraphyStones[key];

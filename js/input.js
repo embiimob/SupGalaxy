@@ -3,27 +3,6 @@
  * Manages keyboard events, mobile touch controls, and joystick input
  */
 
-// Debug flag: Set to true to enable verbose console logging
-// In production, this should be false to reduce console noise
-window.DEBUG_MODE = false;
-
-/**
- * Helper function for debug logging
- * Only outputs to console when DEBUG_MODE is enabled
- * @param {string} category - Log category (e.g., 'INPUT', 'MOBILE')
- * @param {string} message - Log message
- * @param {...any} args - Additional arguments to log
- */
-function debugLog(category, message, ...args) {
-    if (window.DEBUG_MODE) {
-        console.log(`[${category}] ${message}`, ...args);
-    }
-}
-
-// Expose debugLog globally for use in other modules
-window.debugLog = debugLog;
-
-// Key state tracking object
 var keys = {};
 
 /**
@@ -115,13 +94,9 @@ function registerKeyEvents() {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     
-    debugLog('INPUT', 'Keyboard event listeners registered');
-    
-    // Return cleanup function
     return function() {
         window.removeEventListener("keydown", onKeyDown);
         window.removeEventListener("keyup", onKeyUp);
-        debugLog('INPUT', 'Keyboard event listeners removed');
     };
 }
 
@@ -143,21 +118,14 @@ function isMobile() {
     return /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
 }
 
-/**
- * Setup mobile touch controls including joystick and look zone
- */
 function setupMobile() {
     if (!isMobile()) return;
 
-    debugLog('MOBILE', 'Setting up mobile controls');
-
-    // Joystick variables
     const joystickZone = document.getElementById("mobileJoystickZone");
     const joystickKnob = document.getElementById("mobileJoystickKnob");
     let joystickOrigin = { x: 0, y: 0 };
     let joystickId = null;
 
-    // Joystick Event Handlers
     joystickZone.addEventListener("touchstart", (e) => {
         e.preventDefault();
         const touch = e.changedTouches[0];
@@ -404,6 +372,4 @@ function setupMobile() {
         e.preventDefault();
         toggleCameraMode();
     });
-
-    debugLog('MOBILE', 'Mobile controls setup complete');
 }

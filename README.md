@@ -158,10 +158,6 @@ SupGalaxy is entirely browser-based—no bundlers, node modules, or build steps.
 | `js/video-player.js` | Video player functionality |
 | `js/worker.js` | Background worker for polling |
 
-### Debug Mode
-
-Set `window.DEBUG_MODE = true` in the browser console or in `js/input.js` to enable verbose logging. This is useful for development and troubleshooting.
-
 ### Extend SupGalaxy
 
 #### Add a Block
