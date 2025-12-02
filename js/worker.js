@@ -741,7 +741,7 @@ self.onmessage = async function(e) {
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
                             console.log('[Worker] Skipping already processed chunk message:', msg.TransactionId);
-                            continue; // Skip already processed, but continue to check newer ones
+                            continue; // Skip already processed, continue checking remaining messages
                         }
                         if (!msg.TransactionId) continue;
                         var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
