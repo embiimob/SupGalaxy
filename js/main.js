@@ -351,8 +351,13 @@ async function applySaveFile(e, t, o) {
         var c = await GetProfileByAddress(t),
             u = c && c.URN ? c.URN : "anonymous",
             p = Date.now();
-        const blockDate = new Date(o).getTime();
+        // Use blockDate from file if present, otherwise use provided parameter o, otherwise fall back to current time
+        // This ensures backward compatibility with legacy files while supporting proper BlockDate ordering
+        const blockDate = e.blockDate || (o ? new Date(o).getTime() : p);
         const blockAge = p - blockDate;
+        
+        console.log(`[IPFS Load] BlockDate: ${new Date(blockDate).toISOString()}, Age: ${Math.floor(blockAge / 86400000)} days, Source: ${e.blockDate ? 'file' : (o ? 'parameter' : 'fallback')}`);
+
 
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
@@ -3024,6 +3029,7 @@ async function downloadSinglePlayerSession() {
         seed: worldSeed,
         user: userName,
         savedAt: (new Date).toISOString(),
+        blockDate: Date.now(), // Add BlockDate timestamp for proper IPFS versioning
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
@@ -4863,7 +4869,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var o = new FileReader;
                 o.onload = function (e) {
                     try {
-                        applySaveFile(JSON.parse(e.target.result), "local", (new Date).toISOString())
+                        // Pass null as blockDate parameter to use the blockDate embedded in the file
+                        applySaveFile(JSON.parse(e.target.result), "local", null)
                     } catch (e) {
                         console.error("Error parsing session file:", e), addMessage("Sorry, file malformed.", 3e3)
                     }
@@ -4887,7 +4894,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var reader = new FileReader();
                 reader.onload = function(e) {
                     try {
-                        applySaveFile(JSON.parse(e.target.result), "local", new Date().toISOString());
+                        // Pass null as blockDate parameter to use the blockDate embedded in the file
+                        applySaveFile(JSON.parse(e.target.result), "local", null);
                     } catch (err) {
                         console.error("Error parsing session file:", err);
                         addMessage("Sorry, file malformed.", 3000);
