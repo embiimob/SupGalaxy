@@ -3784,18 +3784,12 @@ async function toggleCamera() {
         addMessage("Could not access camera", 3e3), console.error("Error accessing camera:", e)
     }
 }
+// initAudio is now a no-op - microphone permission is requested lazily
+// when the first peer connection is established (in web-rtc.js)
 async function initAudio() {
-    try {
-        localAudioStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                echoCancellation: !0,
-                noiseSuppression: !0,
-                autoGainControl: !0
-            }
-        })
-    } catch (e) {
-        console.error("Error accessing microphone:", e), addMessage("Microphone access denied. Proximity chat will be disabled.", 5e3)
-    }
+    // This function is intentionally empty
+    // Microphone permission is requested on first peer connection via ensureAudioInitialized()
+    console.log("[Audio] initAudio called - microphone will be requested on first peer connection");
 }
 
 function animateAttack() {

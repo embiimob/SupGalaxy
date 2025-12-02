@@ -41,6 +41,10 @@ async function connectToServer(e, t, o) {
         return t.hostUser === e
     }))) return addMessage("No server found for " + e, 3e3), void console.log("[WebRTC] No server found for:", e);
     console.log("[WebRTC] Initiating connection to server:", e), connectionAttempts.set(e, Date.now());
+    
+    // Lazy audio initialization - request microphone permission on first peer connection
+    await ensureAudioInitialized();
+    
     const a = await getTurnCredentials();
     var r = new RTCPeerConnection({
         iceServers: a
@@ -1565,6 +1569,10 @@ async function acceptPendingOffers() {
     activateHost();
     const e = document.querySelectorAll(".selectOffer:checked");
     if (0 === e.length) return void addMessage("No offers selected", 3e3);
+    
+    // Lazy audio initialization - request microphone permission on first peer connection (host accepting)
+    await ensureAudioInitialized();
+    
     const t = [],
         o = [];
     for (const a of e) {
@@ -2190,18 +2198,51 @@ async function toggleCamera() {
         addMessage("Could not access camera", 3e3), console.error("Error accessing camera:", e)
     }
 }
-async function initAudio() {
-    try {
-        localAudioStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                echoCancellation: !0,
-                noiseSuppression: !0,
-                autoGainControl: !0
-            }
-        })
-    } catch (e) {
-        console.error("Error accessing microphone:", e), addMessage("Microphone access denied. Proximity chat will be disabled.", 5e3)
+// Flag to track if audio initialization has been attempted
+var audioInitialized = false;
+var audioInitPromise = null;
+
+// Lazy audio initialization - only requests microphone permission on first peer connection
+async function ensureAudioInitialized() {
+    // If already initialized or initialization in progress, return the existing promise
+    if (audioInitPromise) {
+        return audioInitPromise;
     }
+    
+    // If already initialized (stream exists or we already tried), return immediately
+    if (audioInitialized) {
+        return localAudioStream;
+    }
+    
+    console.log("[WebRTC] Requesting microphone permission for peer connection...");
+    audioInitPromise = (async () => {
+        try {
+            localAudioStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            console.log("[WebRTC] Microphone permission granted");
+            audioInitialized = true;
+            return localAudioStream;
+        } catch (e) {
+            console.error("Error accessing microphone:", e);
+            addMessage("Microphone access denied. Proximity chat will be disabled.", 5000);
+            audioInitialized = true; // Mark as initialized even on failure to avoid repeated prompts
+            return null;
+        }
+    })();
+    
+    return audioInitPromise;
+}
+
+// Legacy function for backwards compatibility (no longer prompts at startup)
+async function initAudio() {
+    // This function is now a no-op at startup
+    // Microphone permission is requested lazily when first peer connection is established
+    console.log("[WebRTC] initAudio called - microphone will be requested on first peer connection");
 }
 
 function updateProximityVideo() {
