@@ -4605,9 +4605,22 @@ function gameLoop(e) {
                 }
 
                 if (mediaElement && stone.autoplay) {
-                    if (distance <= stone.distance) {
+                    // Don't attempt to play if autoplay is paused due to browser restrictions
+                    if (isAutoplayPaused) {
+                        if (!mediaElement.paused) {
+                            mediaElement.pause();
+                        }
+                    } else if (distance <= stone.distance) {
                         if (mediaElement.paused) {
-                            mediaElement.play().catch(e => console.error("Autoplay failed:", e));
+                            mediaElement.play().catch(err => {
+                                // Check if this is an autoplay restriction error
+                                if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
+                                    isAutoplayPaused = true;
+                                    console.log('[AutoplayPause] Magician stone media blocked by browser, waiting for user interaction');
+                                } else {
+                                    console.error("Autoplay failed:", err);
+                                }
+                            });
                         }
                         // Proximity-based volume for audio
                         if (stone.audioElement) {

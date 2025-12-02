@@ -690,6 +690,9 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     OWNED_CHUNKS = new Map,
     apiCallTimestamps = [],
     audioErrorLogged = !1,
+    // Autoplay pause state: when true, audio/video playback is paused due to browser autoplay restrictions
+    // This prevents retry loops and waits for user interaction to resume
+    isAutoplayPaused = !1,
     textureCache = new Map,
     torchRegistry = new Map,
     torchLights = new Map,
