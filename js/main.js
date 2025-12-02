@@ -246,7 +246,8 @@ async function applySaveFile(e, t, o) {
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
         if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
-            console.log("[LOGIN] Loading magician stones from session");
+            const stoneKeys = Object.keys(t.magicianStones);
+            console.log(`[LOGIN] Loading ${stoneKeys.length} magician stones from session`);
             // Clean up any existing magician stones before loading new ones
             for (const existingKey in magicianStones) {
                 if (magicianStones[existingKey]) {
@@ -254,10 +255,18 @@ async function applySaveFile(e, t, o) {
                 }
             }
             magicianStones = {}; // Clear existing stones
+            
+            // Collect all load promises for parallel loading with error isolation
+            const loadPromises = [];
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = { ...t.magicianStones[key], source: 'local' };
-                    createMagicianStoneScreen(stoneData);
+                    // Fire off the load without awaiting - collect promise for parallel execution
+                    loadPromises.push(
+                        createMagicianStoneScreen(stoneData).catch(err => {
+                            console.error(`[LOGIN] Failed to load magician stone at ${key}:`, err);
+                        })
+                    );
 
                     // Defer block placement until the chunk is loaded
                     const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
@@ -272,14 +281,29 @@ async function applySaveFile(e, t, o) {
                     chunkManager.addPendingDeltas(chunkKey, [delta]);
                 }
             }
+            // Wait for all loads to complete (or fail individually) using Promise.allSettled
+            // This ensures one failure doesn't block others
+            Promise.allSettled(loadPromises).then(results => {
+                const successful = results.filter(r => r.status === 'fulfilled').length;
+                const failed = results.filter(r => r.status === 'rejected').length;
+                console.log(`[LOGIN] Magician stones loading complete: ${successful} succeeded, ${failed} failed`);
+            });
         }
         if (t.calligraphyStones) {
-            console.log("[LOGIN] Loading calligraphy stones from session");
+            const stoneKeys = Object.keys(t.calligraphyStones);
+            console.log(`[LOGIN] Loading ${stoneKeys.length} calligraphy stones from session`);
             calligraphyStones = {}; // Clear existing stones
+            
+            // Collect all load promises for parallel loading with error isolation
+            const loadPromises = [];
             for (const key in t.calligraphyStones) {
                 if (Object.hasOwnProperty.call(t.calligraphyStones, key)) {
                     const stoneData = { ...t.calligraphyStones[key], source: 'local' };
-                    createCalligraphyStoneScreen(stoneData);
+                    loadPromises.push(
+                        createCalligraphyStoneScreen(stoneData).catch(err => {
+                            console.error(`[LOGIN] Failed to load calligraphy stone at ${key}:`, err);
+                        })
+                    );
 
                     // Defer block placement until the chunk is loaded
                     const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
@@ -294,6 +318,11 @@ async function applySaveFile(e, t, o) {
                     chunkManager.addPendingDeltas(chunkKey, [delta]);
                 }
             }
+            Promise.allSettled(loadPromises).then(results => {
+                const successful = results.filter(r => r.status === 'fulfilled').length;
+                const failed = results.filter(r => r.status === 'rejected').length;
+                console.log(`[LOGIN] Calligraphy stones loading complete: ${successful} succeeded, ${failed} failed`);
+            });
         } else if (t.deltas) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
             reconstructCalligraphyStonesFromDeltas(t.deltas);
@@ -381,18 +410,44 @@ async function applySaveFile(e, t, o) {
             }
         }
         if (e.magicianStones) {
+            const stoneKeys = Object.keys(e.magicianStones);
+            console.log(`[IPFS] Loading ${stoneKeys.length} magician stones from IPFS session`);
+            // Collect all load promises for parallel loading with error isolation
+            const loadPromises = [];
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {
-                    createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
+                    loadPromises.push(
+                        createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' }).catch(err => {
+                            console.error(`[IPFS] Failed to load magician stone at ${key}:`, err);
+                        })
+                    );
                 }
             }
+            // Wait for all loads to complete (or fail individually) using Promise.allSettled
+            Promise.allSettled(loadPromises).then(results => {
+                const successful = results.filter(r => r.status === 'fulfilled').length;
+                const failed = results.filter(r => r.status === 'rejected').length;
+                console.log(`[IPFS] Magician stones loading complete: ${successful} succeeded, ${failed} failed`);
+            });
         }
         if (e.calligraphyStones) {
+            const stoneKeys = Object.keys(e.calligraphyStones);
+            console.log(`[IPFS] Loading ${stoneKeys.length} calligraphy stones from IPFS session`);
+            const loadPromises = [];
             for (const key in e.calligraphyStones) {
                 if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
-                    createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
+                    loadPromises.push(
+                        createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' }).catch(err => {
+                            console.error(`[IPFS] Failed to load calligraphy stone at ${key}:`, err);
+                        })
+                    );
                 }
             }
+            Promise.allSettled(loadPromises).then(results => {
+                const successful = results.filter(r => r.status === 'fulfilled').length;
+                const failed = results.filter(r => r.status === 'rejected').length;
+                console.log(`[IPFS] Calligraphy stones loading complete: ${successful} succeeded, ${failed} failed`);
+            });
         } else if (e.deltas) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
             reconstructCalligraphyStonesFromDeltas(e.deltas);
@@ -1151,7 +1206,25 @@ function createChestInventorySlot(index) {
 }
 
 async function createMagicianStoneScreen(stoneData) {
+    // Defensive check: validate stoneData is an object with required fields
+    if (!stoneData || typeof stoneData !== 'object') {
+        console.warn('[MagicianStone] Skipping invalid stoneData: not an object');
+        return;
+    }
+    
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance } = stoneData;
+    
+    // Defensive check: validate required numeric coordinates
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+        console.warn('[MagicianStone] Skipping invalid stoneData: missing or invalid coordinates', stoneData);
+        return;
+    }
+    
+    // Defensive check: validate URL is present and is a string
+    if (!url || typeof url !== 'string') {
+        console.warn(`[MagicianStone] Skipping invalid stoneData at ${x},${y},${z}: missing or invalid URL`);
+        return;
+    }
     
     // Entity-based deduplication key: uses world position (x,y,z) as the unique identifier.
     // This key is independent of the underlying file extension (.glb, .gltf, .gif, .mp4, etc.)
@@ -1172,12 +1245,16 @@ async function createMagicianStoneScreen(stoneData) {
     // Mark as loading to prevent duplicate loads during async operations.
     // This guard applies to ALL asset types, not just .glb files.
     magicianStonesLoading.add(key);
+    
+    console.log(`[MagicianStone] Starting load for key ${key}, URL: ${url.substring(0, 50)}...`);
 
     if (url.startsWith('IPFS:')) {
         try {
+            console.log(`[MagicianStone] Resolving IPFS URL for key ${key}...`);
             url = await resolveIPFS(url);
+            console.log(`[MagicianStone] IPFS URL resolved for key ${key}`);
         } catch (error) {
-            console.error('Error resolving IPFS URL for in-world screen:', error);
+            console.error(`[MagicianStone] Error resolving IPFS URL for key ${key}:`, error);
             magicianStonesLoading.delete(key); // Remove from loading set on error
             return; // Don't create a screen if the URL is invalid
         }
@@ -1267,12 +1344,13 @@ async function createMagicianStoneScreen(stoneData) {
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false };
                 magicianStonesLoading.delete(key); // Remove from loading set after successful creation
                 scene.add(screenMesh);
+                console.log(`[MagicianStone] Successfully loaded GLB/GLTF model for key ${key}`);
             },
             function(progress) {
-                // Loading progress
+                // Loading progress - optionally log for debugging
             },
             function(error) {
-                console.error('Error loading GLB/GLTF for in-world display:', error);
+                console.error(`[MagicianStone] Error loading GLB/GLTF for key ${key}:`, error);
                 // Create an error placeholder
                 const canvas = document.createElement('canvas');
                 canvas.width = 256;
@@ -1507,21 +1585,35 @@ async function createMagicianStoneScreen(stoneData) {
 }
 
 function createCalligraphyStoneScreen(stoneData) {
+    // Defensive check: validate stoneData is an object with required fields
+    if (!stoneData || typeof stoneData !== 'object') {
+        console.warn('[CalligraphyStone] Skipping invalid stoneData: not an object');
+        return Promise.resolve(); // Return resolved promise for consistency with Promise.allSettled
+    }
+    
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
+    
+    // Defensive check: validate required numeric coordinates
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+        console.warn('[CalligraphyStone] Skipping invalid stoneData: missing or invalid coordinates', stoneData);
+        return Promise.resolve();
+    }
+    
     const key = `${x},${y},${z}`;
 
     // Deduplication: Skip if this stone is already loaded or currently loading
     if (calligraphyStones[key] && calligraphyStones[key].mesh) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
-        return;
+        return Promise.resolve();
     }
     if (calligraphyStonesLoading.has(key)) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
-        return;
+        return Promise.resolve();
     }
 
     // Mark as loading to prevent duplicate loads
     calligraphyStonesLoading.add(key);
+    console.log(`[CalligraphyStone] Creating calligraphy stone at key ${key}`);
 
     // Create canvas for text rendering
     const pixelsPerBlock = 128; // Resolution per block
@@ -1635,6 +1727,8 @@ function createCalligraphyStoneScreen(stoneData) {
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
+    console.log(`[CalligraphyStone] Successfully created calligraphy stone at key ${key}`);
+    return Promise.resolve(); // Return resolved promise for consistency with Promise.allSettled
 }
 
 function dropSelectedItem(dropAll = false) {
