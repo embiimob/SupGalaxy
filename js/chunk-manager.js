@@ -708,15 +708,56 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
                             chunkDeltas: new Map(),
-                            foreignBlockOrigins: new Map()
+                            foreignBlockOrigins: new Map(),
+                            ipfsTruncatedDates: new Map()
                         });
                     }
                     const worldState = WORLD_STATES.get(worldNameFromChunk);
+                    // Ensure ipfsTruncatedDates exists for backward compatibility
+                    if (!worldState.ipfsTruncatedDates) {
+                        worldState.ipfsTruncatedDates = new Map();
+                    }
                     if (!worldState.chunkDeltas.has(r)) {
                         worldState.chunkDeltas.set(r, []);
                     }
-                    const changesWithSource = s.map(change => ({ ...change, source: 'ipfs' }));
-                    worldState.chunkDeltas.get(r).push(...changesWithSource);
+                    
+                    // Compute truncated unix date for monotonic ordering of IPFS updates
+                    const incomingTruncatedDate = computeIpfsTruncatedDate(blockDate);
+                    
+                    // Parse chunk coordinates for world position calculation
+                    const parsedChunk = parseChunkKey(r);
+                    const cx = parsedChunk ? parsedChunk.cx : 0;
+                    const cz = parsedChunk ? parsedChunk.cz : 0;
+                    
+                    // Filter changes using monotonic ordering check
+                    const acceptedChanges = [];
+                    for (const change of s) {
+                        // Calculate world position for this block
+                        const worldX = cx * CHUNK_SIZE + change.x;
+                        const worldY = change.y;
+                        const worldZ = cz * CHUNK_SIZE + change.z;
+                        const blockPosKey = `${worldX},${worldY},${worldZ}`;
+                        
+                        // Get existing truncated date for this block
+                        const existingTruncatedDate = worldState.ipfsTruncatedDates.get(blockPosKey) || 0;
+                        
+                        // Apply monotonic ordering check
+                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDate)) {
+                            acceptedChanges.push({ ...change, source: 'ipfs' });
+                            // Store the new truncated date for this block
+                            worldState.ipfsTruncatedDates.set(blockPosKey, incomingTruncatedDate);
+                        } else {
+                            console.log(`[IPFS Ordering] Skipped update for block at ${blockPosKey}: incoming truncated date (${incomingTruncatedDate}) <= existing (${existingTruncatedDate})`);
+                        }
+                    }
+                    
+                    // Only add accepted changes to deltas
+                    if (acceptedChanges.length > 0) {
+                        worldState.chunkDeltas.get(r).push(...acceptedChanges);
+                    }
+                    
+                    // Use filtered changes for applying to chunk
+                    s = acceptedChanges.map(c => ({ x: c.x, y: c.y, z: c.z, b: c.b }));
                 }
 
                 // Set ownership based on BlockDate and owner

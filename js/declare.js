@@ -14,6 +14,9 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     OWNERSHIP_EXPIRY = 31536e6,
     IPFS_MATURITY_PERIOD = 30 * 24 * 60 * 60 * 1000,
     IPFS_MAX_OWNERSHIP_PERIOD = 365 * 24 * 60 * 60 * 1000,
+    // Custom epoch for IPFS truncated unix date versioning: 2025-09-21 00:00:00 UTC
+    // This provides a compact integer representing seconds since this epoch for ordering block updates
+    IPFS_EPOCH_2025_09_21 = Math.floor(Date.UTC(2025, 8, 21, 0, 0, 0) / 1000),
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
     // Render distance configuration:
@@ -751,6 +754,50 @@ const lightManager = {
             } else this.lights[e].intensity = 0
     }
 };
+
+/**
+ * Computes a truncated unix date for IPFS Loading updates.
+ * The truncated date is the number of seconds since 2025-09-21 00:00:00 UTC (IPFS_EPOCH_2025_09_21).
+ * This provides a compact integer for monotonic ordering of block updates.
+ * 
+ * @param {number} blockTimestampMs - The BlockDate timestamp in milliseconds (standard JS Date.getTime())
+ * @returns {number} Truncated unix date (seconds since 2025-09-21), or 0 if invalid/before epoch
+ */
+function computeIpfsTruncatedDate(blockTimestampMs) {
+    if (!blockTimestampMs || typeof blockTimestampMs !== 'number' || isNaN(blockTimestampMs)) {
+        return 0;
+    }
+    // Convert milliseconds to seconds
+    const blockTimestampSeconds = Math.floor(blockTimestampMs / 1000);
+    const truncatedDate = blockTimestampSeconds - IPFS_EPOCH_2025_09_21;
+    // Clamp to 0 if the block is before the epoch
+    return truncatedDate > 0 ? truncatedDate : 0;
+}
+
+/**
+ * Determines whether an IPFS Loading update should be applied to a block.
+ * Implements monotonic ordering: updates are only accepted if the incoming
+ * truncated unix date is strictly greater than the existing one.
+ * 
+ * This ensures that block changes remain in correct chronological order
+ * even if IPFS files arrive or are processed out of order.
+ * 
+ * @param {number|null|undefined} existingTruncated - The existing truncated date on the block (0, null, or undefined means no previous timestamp)
+ * @param {number|null|undefined} incomingTruncated - The incoming truncated date from the IPFS update
+ * @returns {boolean} True if the update should be applied, false if it should be skipped
+ */
+function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
+    // Invalid incoming timestamp: reject the update
+    if (!incomingTruncated || incomingTruncated <= 0) {
+        return false;
+    }
+    // No existing timestamp or zero: accept the first IPFS update
+    if (!existingTruncated || existingTruncated <= 0) {
+        return true;
+    }
+    // Only accept if incoming is strictly greater than existing
+    return incomingTruncated > existingTruncated;
+}
 
 /**
  * Cleans up all resources associated with a magician stone.
