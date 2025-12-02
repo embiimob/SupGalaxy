@@ -114,6 +114,7 @@
 
         /**
          * Adds an IPFS update to the chunk's message history and checks for out-of-order arrivals.
+         * Returns an object with isDuplicate and isOutOfOrder flags.
          */
         function addToChunkHistory(chunkKey, timestamp, transactionId, changes, address) {
             const normalized = chunkKey.replace(/^#/, "");
@@ -126,7 +127,7 @@
             
             // Check for duplicates
             if (history.some(h => h.transactionId === transactionId)) {
-                return false;
+                return { isDuplicate: true, isOutOfOrder: false };
             }
             
             // Find the latest timestamp in the history
@@ -151,10 +152,10 @@
             
             if (isOutOfOrder) {
                 reprocessChunkUpdatesInOrder(normalized);
-                return true;
+                return { isDuplicate: false, isOutOfOrder: true };
             }
             
-            return false;
+            return { isDuplicate: false, isOutOfOrder: false };
         }
 
         /**
@@ -168,9 +169,14 @@
                 createMockChunk(normalized);
             }
             
-            const isOutOfOrder = addToChunkHistory(normalized, timestamp, transactionId, changes, 'test_address');
+            const result = addToChunkHistory(normalized, timestamp, transactionId, changes, 'test_address');
             
-            if (!isOutOfOrder) {
+            if (result.isDuplicate) {
+                // Duplicate transaction - skip processing entirely
+                return;
+            }
+            
+            if (!result.isOutOfOrder) {
                 // Apply changes normally
                 const history = IPFS_CHUNK_MESSAGE_HISTORY.get(normalized);
                 if (history) {
