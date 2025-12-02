@@ -7,6 +7,11 @@
  * The truncated unix date system ensures that IPFS Loading updates to blocks
  * are only accepted if they have a strictly newer timestamp, preventing
  * out-of-order updates from overwriting newer state.
+ * 
+ * BlockDate Field:
+ * All exported JSON files include a blockDate timestamp that represents when
+ * the blocks were originally created. This ensures proper ordering even when
+ * files are uploaded manually or processed out of order.
  */
 
 /**
@@ -105,9 +110,9 @@ function runIpfsVersioningTests() {
         assertTrue(shouldApplyIpfsUpdate(1, 1000000), 'Should accept large difference');
     });
     
-    // Test 8: shouldApplyIpfsUpdate rejects equal or smaller incoming timestamp
-    test('shouldApplyIpfsUpdate rejects equal or smaller incoming timestamp', function() {
-        assertFalse(shouldApplyIpfsUpdate(1000, 1000), 'Should reject equal timestamps');
+    // Test 8: shouldApplyIpfsUpdate accepts equal timestamps (allows multiple updates in same block)
+    test('shouldApplyIpfsUpdate accepts equal timestamps, rejects smaller', function() {
+        assertTrue(shouldApplyIpfsUpdate(1000, 1000), 'Should accept equal timestamps (same block)');
         assertFalse(shouldApplyIpfsUpdate(1000, 999), 'Should reject smaller incoming');
         assertFalse(shouldApplyIpfsUpdate(1000, 1), 'Should reject much smaller incoming');
     });
@@ -141,6 +146,34 @@ function runIpfsVersioningTests() {
         
         // Fourth update arrives (day 1 again - should be rejected)
         assertFalse(shouldApplyIpfsUpdate(storedTimestamp, day1), 'Repeat day 1 should be rejected');
+    });
+    
+    // Test 11: Multi-edit scenario - three files with different BlockDates
+    test('Integration: Three edits processed - middle edit with older BlockDate should NOT override newer', function() {
+        // Simulates the user's test scenario:
+        // - Edit 1: Day 5 (newer)
+        // - Edit 2: Day 3 (older - should NOT win)
+        // - Edit 3: Day 7 (newest - should win)
+        
+        let blockTimestamp = 0;
+        
+        // Process Edit 1 first (Day 5)
+        const edit1Date = computeIpfsTruncatedDate(Date.UTC(2025, 9, 5, 0, 0, 0));
+        assertTrue(shouldApplyIpfsUpdate(blockTimestamp, edit1Date), 'Edit 1 (Day 5) should apply');
+        blockTimestamp = edit1Date;
+        
+        // Process Edit 2 (Day 3 - OLDER than Edit 1)
+        const edit2Date = computeIpfsTruncatedDate(Date.UTC(2025, 9, 3, 0, 0, 0));
+        assertFalse(shouldApplyIpfsUpdate(blockTimestamp, edit2Date), 'Edit 2 (Day 3) should be REJECTED - older than current');
+        // blockTimestamp stays as edit1Date because edit2 was rejected
+        
+        // Process Edit 3 (Day 7 - NEWER than all)
+        const edit3Date = computeIpfsTruncatedDate(Date.UTC(2025, 9, 7, 0, 0, 0));
+        assertTrue(shouldApplyIpfsUpdate(blockTimestamp, edit3Date), 'Edit 3 (Day 7) should apply - newest');
+        blockTimestamp = edit3Date;
+        
+        // Verify final state is from Edit 3 (newest)
+        assertEqual(blockTimestamp, edit3Date, 'Final block timestamp should be from Edit 3 (Day 7)');
     });
     
     console.log(`\n=== Test Results: ${passed} passed, ${failed} failed ===`);

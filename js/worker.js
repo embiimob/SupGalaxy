@@ -742,6 +742,8 @@ self.onmessage = async function(e) {
                                 console.log('[Worker] Invalid CID in chunk message:', hash, 'txId:', msg.TransactionId);
                                 continue;
                             }
+                            // Add delay before IPFS fetch to respect rate limiting
+                            await new Promise(resolve => setTimeout(resolve, apiDelay));
                             var data = await fetchIPFS(hash);
                             var processData = data;
                             if (data && data.playerData) {
@@ -883,6 +885,8 @@ self.onmessage = async function(e) {
                                     console.log('[Worker] Invalid CID in user_update message:', hash, 'txId:', msg.TransactionId);
                                     continue;
                                 }
+                                // Add delay before IPFS fetch to respect rate limiting
+                                await new Promise(resolve => setTimeout(resolve, apiDelay));
                                 var data = await fetchIPFS(hash);
                                 if (data) {
                                     self.postMessage({ type: "user_update", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
@@ -953,6 +957,8 @@ self.onmessage = async function(e) {
                                 console.log('[Worker] Invalid CID in server message:', hash, 'txId:', msg.TransactionId);
                                 continue;
                             }
+                            // Add delay before IPFS fetch to respect rate limiting
+                            await new Promise(resolve => setTimeout(resolve, apiDelay));
                             var data = await fetchIPFS(hash);
                             if (data && data.world === worldName) {
                                 servers.push({
@@ -1012,6 +1018,8 @@ self.onmessage = async function(e) {
                                     hash = match[1];
                                     var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                                     if (cidRegex.test(hash)) {
+                                        // Add delay before IPFS fetch to respect rate limiting
+                                        await new Promise(resolve => setTimeout(resolve, apiDelay));
                                         data = await fetchIPFS(hash);
                                         if (data && data.user) {
                                             clientUser = data.user.replace(/^"|"$/g, "").trim();
@@ -1162,6 +1170,8 @@ self.onmessage = async function(e) {
                                     console.log('[Worker] Invalid CID in answer message:', hash, 'txId:', msg.TransactionId);
                                     continue;
                                 }
+                                // Add delay before IPFS fetch to respect rate limiting
+                                await new Promise(resolve => setTimeout(resolve, apiDelay));
                                 var data = await fetchIPFS(hash);
                                 if (data && (data.answer || data.batch) && data.world === worldName) {
                                     answers.push({

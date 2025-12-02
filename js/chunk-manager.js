@@ -736,6 +736,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     
                     // Filter changes using monotonic ordering check
                     const acceptedChanges = [];
+                    const rejectedChanges = [];
                     for (const change of s) {
                         // Calculate world position for this block
                         const worldX = cx * CHUNK_SIZE + change.x;
@@ -751,13 +752,15 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                             acceptedChanges.push({ ...change, source: 'ipfs' });
                             // Store the new truncated date for this block
                             worldState.ipfsTruncatedDates.set(blockPosKey, incomingTruncatedDate);
+                        } else {
+                            // Track rejected changes for detailed logging
+                            rejectedChanges.push({
+                                blockId: change.b,
+                                position: blockPosKey,
+                                existingTruncated: existingTruncatedDate,
+                                incomingTruncated: incomingTruncatedDate
+                            });
                         }
-                    }
-                    
-                    // Log summary of skipped updates to avoid log spam
-                    const skippedCount = s.length - acceptedChanges.length;
-                    if (skippedCount > 0) {
-                        console.log(`[IPFS Ordering] Skipped ${skippedCount} block update(s) in chunk ${r}: incoming truncated date (${incomingTruncatedDate}) not newer than existing`);
                     }
                     
                     // Only add accepted changes to deltas
@@ -797,9 +800,6 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
                         if (shouldUpdate) {
                             updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership set to ${ownerUsername}, blockDate: ${new Date(blockDate).toISOString()}`);
-                        } else {
-                            console.log(`[Ownership] IPFS chunk ${normalized} ownership not updated - existing ownership takes precedence`);
                         }
                     }
                 }
@@ -924,7 +924,6 @@ function isChunkMutationAllowed(chunkKey, username) {
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
                 // This chunk is a home spawn chunk in this world
                 if (spawnData.username !== username) {
-                    console.log(`[Ownership] Chunk ${normalized} denied: home spawn of ${spawnData.username} in world ${parsed.world}`);
                     return false;
                 }
                 return true; // Own home spawn
@@ -942,19 +941,16 @@ function isChunkMutationAllowed(chunkKey, username) {
     
     // Check if ownership is pending (immature IPFS claim < 30 days)
     if (ownership.pending) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim pending (<30d), anyone can edit`);
         return true; // Pending chunks are editable by anyone
     }
     
     // Check if ownership has expired (> 1 year)
     if (ownership.expiryDate && now > ownership.expiryDate) {
-        console.log(`[Ownership] Chunk ${normalized} allowed: claim expired (>1y), anyone can edit`);
         return true; // Expired chunks are editable by anyone
     }
     
     // Check if owned by different user (mature ownership 30d-1y)
     if (ownership.username !== username) {
-        console.log(`[Ownership] Chunk ${normalized} denied: owned by ${ownership.username}`);
         return false;
     }
     
@@ -980,7 +976,6 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
                 claimDate: claimDate || now,
                 type: 'home'
             });
-            console.log(`[Ownership] Home spawn chunk ${normalized} assigned to ${username}`);
         } else if (ownershipType === 'ipfs') {
             // IPFS ownership: check maturity and set expiry
             const age = now - blockDate;
@@ -994,8 +989,6 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
                 type: 'ipfs',
                 pending: isPending
             });
-            
-            console.log(`[Ownership] IPFS chunk ${normalized} assigned to ${username}, pending: ${isPending}, expires: ${new Date(expiryDate).toISOString()}`);
         }
     } catch (e) {
         console.error("[ChunkManager] Failed to update chunk ownership:", e);

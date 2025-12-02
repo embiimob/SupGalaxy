@@ -14,6 +14,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     OWNERSHIP_EXPIRY = 31536e6,
     IPFS_MATURITY_PERIOD = 30 * 24 * 60 * 60 * 1000,
     IPFS_MAX_OWNERSHIP_PERIOD = 365 * 24 * 60 * 60 * 1000,
+    MS_PER_DAY = 24 * 60 * 60 * 1000, // Milliseconds in one day
     // Custom epoch for IPFS truncated unix date versioning: 2025-09-21 00:00:00 UTC
     // This provides a compact integer representing seconds since this epoch for ordering block updates
     // Note: JavaScript months are 0-indexed, so month 8 = September
@@ -30,7 +31,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     MAX_LOADED_CHUNKS = 420,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v1.0.1",
+    VERSION = "SupGalaxy v1.0.2",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
@@ -796,8 +797,9 @@ function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
     if (!existingTruncated || existingTruncated <= 0) {
         return true;
     }
-    // Only accept if incoming is strictly greater than existing
-    return incomingTruncated > existingTruncated;
+    // Accept if incoming is greater than or equal to existing
+    // Equal dates are accepted to allow multiple updates in the same block
+    return incomingTruncated >= existingTruncated;
 }
 
 /**

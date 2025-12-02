@@ -351,7 +351,10 @@ async function applySaveFile(e, t, o) {
         var c = await GetProfileByAddress(t),
             u = c && c.URN ? c.URN : "anonymous",
             p = Date.now();
-        const blockDate = new Date(o).getTime();
+        // For manually uploaded files (local changes not yet published to blockchain),
+        // use current time as BlockDate. Published chunks get their BlockDate from
+        // GetPublicMessagesByAddress when loaded via keyword search.
+        let blockDate = p; // Default to current time
         const blockAge = p - blockDate;
 
         for (var r of e.deltas) {
@@ -4863,7 +4866,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var o = new FileReader;
                 o.onload = function (e) {
                     try {
-                        applySaveFile(JSON.parse(e.target.result), "local", (new Date).toISOString())
+                        // Manual file upload uses current time as BlockDate (for local-only changes)
+                        applySaveFile(JSON.parse(e.target.result), "local", null)
                     } catch (e) {
                         console.error("Error parsing session file:", e), addMessage("Sorry, file malformed.", 3e3)
                     }
@@ -4887,7 +4891,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 var reader = new FileReader();
                 reader.onload = function(e) {
                     try {
-                        applySaveFile(JSON.parse(e.target.result), "local", new Date().toISOString());
+                        // Manual file upload uses current time as BlockDate (for local-only changes)
+                        applySaveFile(JSON.parse(e.target.result), "local", null);
                     } catch (err) {
                         console.error("Error parsing session file:", err);
                         addMessage("Sorry, file malformed.", 3000);
