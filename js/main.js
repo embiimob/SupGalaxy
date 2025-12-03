@@ -2933,6 +2933,72 @@ async function downloadHostSession() {
         }];
     });
 
+    // Serialize magician stones (same logic as single player session)
+    const serializableMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            if (stone.source !== 'local') continue;
+            serializableMagicianStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                loop: stone.loop,
+                autoplay: stone.autoplay,
+                distance: stone.distance,
+                direction: stone.direction
+            };
+        }
+    }
+
+    // Serialize calligraphy stones (same logic as single player session)
+    const serializableCalligraphyStones = {};
+    for (const key in calligraphyStones) {
+        if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+            const stone = calligraphyStones[key];
+            if (stone.source !== 'local') continue;
+            serializableCalligraphyStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor,
+                transparent: stone.transparent,
+                fontFamily: stone.fontFamily,
+                fontSize: stone.fontSize,
+                fontWeight: stone.fontWeight,
+                fontColor: stone.fontColor,
+                text: stone.text,
+                link: stone.link,
+                direction: stone.direction
+            };
+        }
+    }
+
+    // Serialize chests (same logic as single player session)
+    const serializableChests = {};
+    for (const key in chests) {
+        if (chests[key]) {
+            serializableChests[key] = {
+                x: chests[key].x,
+                y: chests[key].y,
+                z: chests[key].z,
+                rotation: chests[key].rotation,
+                items: chests[key].items
+            };
+        }
+    }
+
     const hostSessionData = {
         isHostSession: true,
         worldStates: serializableWorldStates,
@@ -2950,6 +3016,11 @@ async function downloadHostSession() {
                 score: player.score,
                 inventory: INVENTORY
             },
+            magicianStones: serializableMagicianStones,
+            calligraphyStones: serializableCalligraphyStones,
+            chests: serializableChests,
+            musicPlaylist: musicPlaylist,
+            videoPlaylist: videoPlaylist
         }
     };
 
