@@ -26,7 +26,8 @@ Built with ❤️ by **embii4u**, **Grok (xAI)**, **Jules**, **kattacomi**, **Ch
 - Chunk deltas stored as JSON on **IPFS**  
 - Indexes via **P2FK** (Pay-to-Future-Key) on Bitcoin testnet3  
 - Optional world ownership (1-year renewable)  
-- Global sync without centralized servers  
+- Global sync without centralized servers
+- Save and reload game session via file  
 
 ### 👥 WebRTC Multiplayer + PvP
 - Peer-to-peer multiplayer (TURN recommended)  
