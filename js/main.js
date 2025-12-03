@@ -4736,13 +4736,14 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
+            this.blur();
             isPromptOpen = !0;
             var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
                 o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
-            document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block", this.blur()
+            document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
         })), document.getElementById("usersBtn").addEventListener("click", (function () {
             openUsersModal(), this.blur()
         })), document.getElementById("closeCraft").addEventListener("click", (function () {
