@@ -2933,12 +2933,12 @@ async function downloadHostSession() {
         }];
     });
 
-    // Serialize magician stones (same logic as single player session)
+    // Serialize magician stones (include ALL stones for host session, not just local)
     const serializableMagicianStones = {};
     for (const key in magicianStones) {
         if (Object.hasOwnProperty.call(magicianStones, key)) {
             const stone = magicianStones[key];
-            if (stone.source !== 'local') continue;
+            // Host session saves ALL stones regardless of source
             serializableMagicianStones[key] = {
                 x: stone.x,
                 y: stone.y,
@@ -2957,12 +2957,12 @@ async function downloadHostSession() {
         }
     }
 
-    // Serialize calligraphy stones (same logic as single player session)
+    // Serialize calligraphy stones (include ALL stones for host session, not just local)
     const serializableCalligraphyStones = {};
     for (const key in calligraphyStones) {
         if (Object.hasOwnProperty.call(calligraphyStones, key)) {
             const stone = calligraphyStones[key];
-            if (stone.source !== 'local') continue;
+            // Host session saves ALL stones regardless of source
             serializableCalligraphyStones[key] = {
                 x: stone.x,
                 y: stone.y,
