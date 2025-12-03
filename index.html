@@ -168,6 +168,25 @@
             <button id="closeDownloadModal">Close</button>
         </div>
     </div>
+    <div id="saveOptionsModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
+        <div style="background: var(--panel); padding: 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); width: 90%; max-width: 500px;">
+            <h3 style="margin: 0 0 12px 0; text-align: center;">Choose Save Option</h3>
+            <p style="text-align: center; margin-bottom: 20px; font-size: 14px; opacity: 0.85;">Select what you would like to save:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button id="saveFullSessionBtn" style="padding: 16px; background: var(--accent); color: #111; border: 0; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 15px;">
+                    <div style="font-size: 16px; margin-bottom: 4px;">💾 Save Entire Game Session</div>
+                    <div style="font-size: 12px; font-weight: normal; opacity: 0.8;">Save all found structures, chunk changes, and all players' states</div>
+                </button>
+                <button id="savePlayerChangesBtn" style="padding: 16px; background: #0f2a3a; color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 15px;">
+                    <div style="font-size: 16px; margin-bottom: 4px;">📦 Save Only My Changes and State</div>
+                    <div style="font-size: 12px; font-weight: normal; opacity: 0.8;">Save your personal changes, inventory, and player state</div>
+                </button>
+            </div>
+            <div style="margin-top: 16px; text-align: center;">
+                <button id="closeSaveOptionsModal" style="padding: 8px 20px; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;">Cancel</button>
+            </div>
+        </div>
+    </div>
     <div id="teleportModal">
         <h3>Teleport to Coordinates</h3>
         <p>Enter X, Y, Z coordinates:</p>

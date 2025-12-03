@@ -2901,15 +2901,27 @@ function performAttack() {
     }
 }
 async function downloadSession() {
-    if (isHost) {
-        if (confirm("Save the entire multiplayer session? (Host only)")) {
-            downloadHostSession();
-        } else {
-            downloadSinglePlayerSession();
-        }
-    } else {
-        downloadSinglePlayerSession();
-    }
+    // Show the save options modal for all players (host and peer)
+    isPromptOpen = true;
+    document.getElementById("saveOptionsModal").style.display = "flex";
+}
+
+function saveFullSession() {
+    // Close the modal
+    document.getElementById("saveOptionsModal").style.display = "none";
+    isPromptOpen = false;
+    
+    // Trigger the full session save
+    downloadHostSession();
+}
+
+function savePlayerChangesOnly() {
+    // Close the modal
+    document.getElementById("saveOptionsModal").style.display = "none";
+    isPromptOpen = false;
+    
+    // Trigger the player-specific save
+    downloadSinglePlayerSession();
 }
 
 async function downloadHostSession() {
@@ -2920,6 +2932,72 @@ async function downloadHostSession() {
             ipfsTruncatedDates: Array.from((data.ipfsTruncatedDates || new Map()).entries())
         }];
     });
+
+    // Serialize magician stones (include ALL stones for host session, not just local)
+    const serializableMagicianStones = {};
+    for (const key in magicianStones) {
+        if (Object.hasOwnProperty.call(magicianStones, key)) {
+            const stone = magicianStones[key];
+            // Host session saves ALL stones regardless of source
+            serializableMagicianStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                loop: stone.loop,
+                autoplay: stone.autoplay,
+                distance: stone.distance,
+                direction: stone.direction
+            };
+        }
+    }
+
+    // Serialize calligraphy stones (include ALL stones for host session, not just local)
+    const serializableCalligraphyStones = {};
+    for (const key in calligraphyStones) {
+        if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+            const stone = calligraphyStones[key];
+            // Host session saves ALL stones regardless of source
+            serializableCalligraphyStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor,
+                transparent: stone.transparent,
+                fontFamily: stone.fontFamily,
+                fontSize: stone.fontSize,
+                fontWeight: stone.fontWeight,
+                fontColor: stone.fontColor,
+                text: stone.text,
+                link: stone.link,
+                direction: stone.direction
+            };
+        }
+    }
+
+    // Serialize chests (same logic as single player session)
+    const serializableChests = {};
+    for (const key in chests) {
+        if (chests[key]) {
+            serializableChests[key] = {
+                x: chests[key].x,
+                y: chests[key].y,
+                z: chests[key].z,
+                rotation: chests[key].rotation,
+                items: chests[key].items
+            };
+        }
+    }
 
     const hostSessionData = {
         isHostSession: true,
@@ -2938,6 +3016,11 @@ async function downloadHostSession() {
                 score: player.score,
                 inventory: INVENTORY
             },
+            magicianStones: serializableMagicianStones,
+            calligraphyStones: serializableCalligraphyStones,
+            chests: serializableChests,
+            musicPlaylist: musicPlaylist,
+            videoPlaylist: videoPlaylist
         }
     };
 
@@ -4724,8 +4807,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
-            this.blur(), isPromptOpen = !0, document.getElementById("teleportX").value = "", document.getElementById("teleportY").value = "", document.getElementById("teleportZ").value = ""
-        })), document.getElementById("saveChangesBtn").addEventListener("click", downloadSession), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
+            this.blur();
             isPromptOpen = !0;
             var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
@@ -4745,6 +4827,12 @@ document.addEventListener("DOMContentLoaded", (async function () {
             isPromptOpen = !1, isConnecting = !1, document.getElementById("joinScriptModal").style.display = "none", this.blur()
         })), document.getElementById("closeDownloadModal").addEventListener("click", (function () {
             isPromptOpen = !1, document.getElementById("downloadModal").style.display = "none", this.blur()
+        })), document.getElementById("closeSaveOptionsModal").addEventListener("click", (function () {
+            isPromptOpen = !1, document.getElementById("saveOptionsModal").style.display = "none", this.blur()
+        })), document.getElementById("saveFullSessionBtn").addEventListener("click", (function () {
+            saveFullSession(), this.blur()
+        })), document.getElementById("savePlayerChangesBtn").addEventListener("click", (function () {
+            savePlayerChangesOnly(), this.blur()
         })), document.getElementById("teleportCancel").addEventListener("click", (function () {
             isPromptOpen = !1, document.getElementById("teleportModal").style.display = "none", this.blur()
         })), document.getElementById("teleportOk").addEventListener("click", (function () {
