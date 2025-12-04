@@ -308,169 +308,123 @@
         <source src="sounds/pick2.ogg" type="audio/ogg">
     </audio>
     <div id="magicianStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
-        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 15px;">
-            <h3>Magician's Stone Configuration</h3>
+        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 10px;">
+            <h3 style="margin: 0 0 5px 0;">Magician's Stone</h3>
             <div>
-                <label for="magicianStoneUrl">URL ( IPFS:HASH\artifact.glb .jpg .mp4 ... )</label>
-                <input type="text" id="magicianStoneUrl" placeholder="Enter a valid Sup URL" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                <label for="magicianStoneUrl" style="font-size: 13px;">URL</label>
+                <input type="text" id="magicianStoneUrl" placeholder="IPFS:HASH\file.glb or https://..." style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
             </div>
-            <div id="magicianStonePreview" style="min-height: 100px; background: #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 10px;">
-                <!-- Preview will be generated here -->
-                <span>URL Preview</span>
+            <div id="magicianStonePreview" style="display: none;"></div>
+            <div class="responsive-grid-2" style="gap: 8px;">
+                <div>
+                    <label style="font-size: 13px;">Size</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" placeholder="Width" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="magicianStoneHeight" value="2" min="1" max="16" placeholder="Height" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Position (X, Y, Z)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                        <input type="number" id="magicianStoneOffsetX" value="0" min="-16" max="16" placeholder="X" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="magicianStoneOffsetY" value="2" min="-16" max="16" placeholder="Y" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="magicianStoneOffsetZ" value="0" min="-16" max="16" placeholder="Z" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                    </div>
+                </div>
             </div>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Playback Options</legend>
-                <div class="responsive-grid-2">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label><input type="checkbox" id="magicianStoneLoop"> Loop</label>
-                        <label><input type="checkbox" id="magicianStoneAutoplay" checked> Autoplay Media</label>
-                        <label><input type="checkbox" id="magicianStoneAutoplayAnimation" checked> Autoplay Animation</label>
-                    </div>
-                    <div>
-                        <label for="magicianStoneDistance">Distance (blocks)</label>
-                        <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
+            <div class="responsive-grid-2" style="gap: 8px;">
+                <div>
+                    <label for="magicianStoneDistance" style="font-size: 13px;">Distance</label>
+                    <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                 </div>
-            </fieldset>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Behavior</legend>
-                <div class="responsive-grid-2">
-                    <div style="display: flex; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="magicianStoneCollision" checked>
-                            Enable Collision
-                        </label>
-                    </div>
-                    <div>
-                        <label for="magicianStoneDamage">Damage (HP)</label>
-                        <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
+                <div>
+                    <label for="magicianStoneDamage" style="font-size: 13px;">Damage</label>
+                    <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                 </div>
-            </fieldset>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Size & Position</legend>
-                <div class="responsive-grid-3">
-                    <div>
-                        <label for="magicianStoneWidth">Width</label>
-                        <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="magicianStoneHeight">Height</label>
-                        <input type="number" id="magicianStoneHeight" value="2" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                </div>
-                <div class="responsive-grid-3" style="margin-top: 10px;">
-                    <div>
-                        <label for="magicianStoneOffsetX">Offset X</label>
-                        <input type="number" id="magicianStoneOffsetX" value="0" min="-16" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="magicianStoneOffsetY">Offset Y</label>
-                        <input type="number" id="magicianStoneOffsetY" value="2" min="-16" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="magicianStoneOffsetZ">Offset Z</label>
-                        <input type="number" id="magicianStoneOffsetZ" value="0" min="-16" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                </div>
-            </fieldset>
-            <div style="text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
-                <button id="magicianStoneCancel">Cancel</button>
-                <button id="magicianStoneSave" style="background: var(--accent); color: #111;">Place</button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px;">
+                <label><input type="checkbox" id="magicianStoneLoop"> Loop</label>
+                <label><input type="checkbox" id="magicianStoneAutoplay" checked> Autoplay</label>
+                <label><input type="checkbox" id="magicianStoneAutoplayAnimation" checked> Anim</label>
+                <label><input type="checkbox" id="magicianStoneCollision" checked> Collision</label>
+            </div>
+            <div style="text-align:right; display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px;">
+                <button id="magicianStoneCancel" style="padding: 6px 12px; font-size: 13px;">Cancel</button>
+                <button id="magicianStoneSave" style="background: var(--accent); color: #111; padding: 6px 12px; font-size: 13px;">Place</button>
             </div>
         </div>
     </div>
     <!-- Calligraphy Stone Configuration Modal -->
     <div id="calligraphyStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
-        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 15px;">
-            <h3>Calligraphy Stone Configuration</h3>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Display Settings</legend>
-                <div class="responsive-grid-3">
-                    <div>
-                        <label for="calligraphyStoneWidth">Width (blocks)</label>
-                        <input type="number" id="calligraphyStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="calligraphyStoneHeight">Height (blocks)</label>
-                        <input type="number" id="calligraphyStoneHeight" value="2" min="1" max="16" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                </div>
-                <div class="responsive-grid-3" style="margin-top: 10px;">
-                    <div>
-                        <label for="calligraphyStoneOffsetX">Offset X (Left/Right)</label>
-                        <input type="number" id="calligraphyStoneOffsetX" value="0" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="calligraphyStoneOffsetY">Offset Y (Up/Down)</label>
-                        <input type="number" id="calligraphyStoneOffsetY" value="2" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="calligraphyStoneOffsetZ">Offset Z (Forward/Back)</label>
-                        <input type="number" id="calligraphyStoneOffsetZ" value="0" min="-16" max="16" step="0.1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 10px;">
+            <h3 style="margin: 0 0 5px 0;">Calligraphy Stone</h3>
+            <div>
+                <label for="calligraphyStoneText" style="font-size: 13px;">Text</label>
+                <textarea id="calligraphyStoneText" placeholder="Enter text..." rows="3" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; resize: vertical; font-size: 13px;"></textarea>
+            </div>
+            <div class="responsive-grid-2" style="gap: 8px;">
+                <div>
+                    <label style="font-size: 13px;">Size (W × H)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <input type="number" id="calligraphyStoneWidth" value="3" min="1" max="16" placeholder="Width" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="calligraphyStoneHeight" value="2" min="1" max="16" placeholder="Height" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                     </div>
                 </div>
-            </fieldset>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Background</legend>
-                <div class="responsive-grid-2">
-                    <div>
-                        <label for="calligraphyStoneBgColor">Background Color</label>
-                        <input type="color" id="calligraphyStoneBgColor" value="#ffffff" style="width: 100%; height: 40px; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
-                    </div>
-                    <div style="display: flex; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="calligraphyStoneTransparent">
-                            Transparent Background
-                        </label>
+                <div>
+                    <label style="font-size: 13px;">Position (X, Y, Z)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                        <input type="number" id="calligraphyStoneOffsetX" value="0" min="-16" max="16" step="0.1" placeholder="X" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="calligraphyStoneOffsetY" value="2" min="-16" max="16" step="0.1" placeholder="Y" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="calligraphyStoneOffsetZ" value="0" min="-16" max="16" step="0.1" placeholder="Z" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                     </div>
                 </div>
-            </fieldset>
-            <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
-                <legend>Font Settings</legend>
-                <div class="responsive-grid-2">
-                    <div>
-                        <label for="calligraphyStoneFontFamily">Font Family</label>
-                        <select id="calligraphyStoneFontFamily" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                            <option value="Arial">Arial</option>
-                            <option value="Helvetica">Helvetica</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Georgia">Georgia</option>
-                            <option value="Courier New">Courier New</option>
-                            <option value="Verdana">Verdana</option>
-                            <option value="Comic Sans MS">Comic Sans MS</option>
-                            <option value="Impact">Impact</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="calligraphyStoneFontSize">Font Size</label>
-                        <input type="number" id="calligraphyStoneFontSize" value="24" min="8" max="200" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
-                    </div>
-                    <div>
-                        <label for="calligraphyStoneFontWeight">Font Weight</label>
-                        <select id="calligraphyStoneFontWeight" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+            </div>
+            <div class="responsive-grid-2" style="gap: 8px;">
+                <div>
+                    <label for="calligraphyStoneFontFamily" style="font-size: 13px;">Font</label>
+                    <select id="calligraphyStoneFontFamily" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Comic Sans MS">Comic Sans MS</option>
+                        <option value="Impact">Impact</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Size & Weight</label>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 6px;">
+                        <input type="number" id="calligraphyStoneFontSize" value="24" min="8" max="200" placeholder="Size" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <select id="calligraphyStoneFontWeight" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                             <option value="normal">Normal</option>
                             <option value="bold">Bold</option>
-                            <option value="lighter">Lighter</option>
+                            <option value="lighter">Light</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="calligraphyStoneFontColor">Font Color</label>
-                        <input type="color" id="calligraphyStoneFontColor" value="#000000" style="width: 100%; height: 40px; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                </div>
+            </div>
+            <div class="responsive-grid-2" style="gap: 8px;">
+                <div>
+                    <label for="calligraphyStoneFontColor" style="font-size: 13px;">Text Color</label>
+                    <input type="color" id="calligraphyStoneFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                </div>
+                <div>
+                    <label for="calligraphyStoneBgColor" style="font-size: 13px;">Background</label>
+                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center;">
+                        <input type="color" id="calligraphyStoneBgColor" value="#ffffff" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                        <label style="font-size: 12px; white-space: nowrap;"><input type="checkbox" id="calligraphyStoneTransparent"> None</label>
                     </div>
                 </div>
-            </fieldset>
-            <div>
-                <label for="calligraphyStoneText">Text Content</label>
-                <textarea id="calligraphyStoneText" placeholder="Enter your text here..." rows="4" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; resize: vertical;"></textarea>
             </div>
             <div>
-                <label for="calligraphyStoneUrl">Link URL (optional)</label>
-                <input type="text" id="calligraphyStoneUrl" placeholder="https://example.com" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                <label for="calligraphyStoneUrl" style="font-size: 13px;">Link (optional)</label>
+                <input type="text" id="calligraphyStoneUrl" placeholder="https://..." style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
             </div>
-            <div style="text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
-                <button id="calligraphyStoneCancel">Cancel</button>
-                <button id="calligraphyStoneSave" style="background: var(--accent); color: #111;">Place</button>
+            <div style="text-align:right; display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px;">
+                <button id="calligraphyStoneCancel" style="padding: 6px 12px; font-size: 13px;">Cancel</button>
+                <button id="calligraphyStoneSave" style="background: var(--accent); color: #111; padding: 6px 12px; font-size: 13px;">Place</button>
             </div>
         </div>
     </div>
