@@ -1162,11 +1162,7 @@ function createChestInventorySlot(index) {
 }
 
 async function createMagicianStoneScreen(stoneData) {
-    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision, damage } = stoneData;
-    
-    // Set defaults for collision and damage if not provided (for backward compatibility)
-    if (collision === undefined) collision = true;
-    if (damage === undefined) damage = 0;
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision = true, damage = 0 } = stoneData;
     
     // Entity-based deduplication key: uses world position (x,y,z) as the unique identifier.
     // This key is independent of the underlying file extension (.glb, .gltf, .gif, .mp4, etc.)
@@ -1277,7 +1273,7 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
-                magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false };
+                magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false, lastDamageTime: 0 };
                 magicianStonesLoading.delete(key); // Remove from loading set after successful creation
                 scene.add(screenMesh);
             },
@@ -1327,7 +1323,7 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
-                magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+                magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
                 magicianStonesLoading.delete(key); // Remove from loading set after error handling
                 scene.add(screenMesh);
             }
@@ -1514,7 +1510,7 @@ async function createMagicianStoneScreen(stoneData) {
     const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
     screenMesh.lookAt(lookAtTarget);
 
-    magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false };
+    magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
     magicianStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
 }
@@ -4270,39 +4266,36 @@ function gameLoop(e) {
                 new THREE.Vector3(player.width, player.height, player.depth)
             );
             
-            for (const key in magicianStones) {
-                if (Object.hasOwnProperty.call(magicianStones, key)) {
-                    const stone = magicianStones[key];
-                    // Only apply damage if stone has damage > 0 and has a mesh
-                    if (stone.damage && stone.damage > 0 && stone.mesh) {
-                        const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
-                        if (playerBox.intersectsBox(stoneBox)) {
-                            // Initialize lastDamageTime for this stone if not set
-                            if (!stone.lastDamageTime) {
-                                stone.lastDamageTime = 0;
+            // Check each magician stone for damage - allow only one damage source per frame
+            let damageApplied = false;
+            for (const stone of Object.values(magicianStones)) {
+                if (damageApplied) break; // Only process one damage source per frame
+                
+                // Only apply damage if stone has damage > 0 and has a mesh
+                if (stone.damage && stone.damage > 0 && stone.mesh) {
+                    const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
+                    if (playerBox.intersectsBox(stoneBox)) {
+                        // Apply damage with 500ms interval (same as lava)
+                        if (e - stone.lastDamageTime > 500) {
+                            player.health = Math.max(0, player.health - stone.damage);
+                            stone.lastDamageTime = e;
+                            document.getElementById("health").innerText = player.health;
+                            updateHealthBar();
+                            addMessage("Damaged by object! -" + stone.damage + " HP", 1e3);
+                            flashDamageEffect();
+                            
+                            // Apply knockback similar to getting hit
+                            const stonePos = new THREE.Vector3(stone.x, stone.y, stone.z);
+                            const playerPos = new THREE.Vector3(player.x, player.y, player.z);
+                            const knockbackDir = new THREE.Vector3().subVectors(playerPos, stonePos).normalize();
+                            player.vx += knockbackDir.x * 2;
+                            player.vz += knockbackDir.z * 2;
+                            player.vy = 0.15;
+                            
+                            if (player.health <= 0) {
+                                handlePlayerDeath();
                             }
-                            // Apply damage with 500ms interval (same as lava)
-                            if (e - stone.lastDamageTime > 500) {
-                                player.health = Math.max(0, player.health - stone.damage);
-                                stone.lastDamageTime = e;
-                                document.getElementById("health").innerText = player.health;
-                                updateHealthBar();
-                                addMessage("Damaged by object! -" + stone.damage + " HP", 1e3);
-                                flashDamageEffect();
-                                
-                                // Apply knockback similar to getting hit
-                                const stonePos = new THREE.Vector3(stone.x, stone.y, stone.z);
-                                const playerPos = new THREE.Vector3(player.x, player.y, player.z);
-                                const knockbackDir = new THREE.Vector3().subVectors(playerPos, stonePos).normalize();
-                                player.vx += knockbackDir.x * 2;
-                                player.vz += knockbackDir.z * 2;
-                                player.vy = 0.15;
-                                
-                                if (player.health <= 0) {
-                                    handlePlayerDeath();
-                                }
-                                break; // Only process one damage source per frame
-                            }
+                            damageApplied = true; // Mark that damage was applied this frame
                         }
                     }
                 }
