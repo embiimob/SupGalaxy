@@ -5164,14 +5164,14 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         const img = document.createElement('img');
         img.src = url;
         img.style.maxWidth = '100%';
-        img.style.maxHeight = '60px';
+        img.style.maxHeight = '80px';
         img.style.objectFit = 'contain';
         previewContainer.appendChild(img);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
         video.src = url;
         video.style.maxWidth = '100%';
-        video.style.maxHeight = '60px';
+        video.style.maxHeight = '80px';
         video.controls = true;
         video.muted = true;
         previewContainer.appendChild(video);

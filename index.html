@@ -8,17 +8,17 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@embii4u">
     <meta name="twitter:title" content="🌌 SupGalaxy: Decentralized Voxel Adventure on Bitcoin">
-    <meta name="twitter:description" content="SupGalaxy v1.0.3: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
+    <meta name="twitter:description" content="SupGalaxy v1.0.4: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
     <meta name="twitter:image" content="https://supgalaxy.org/SupGalaxy.jpg">
     <meta name="twitter:image:alt" content="SupGalaxy thumbnail: A cosmic voxel world with starry skies, procedural terrain, and player-built structures on the blockchain.">
 
     <!-- Open Graph Meta Tags (Bonus for Facebook, LinkedIn, etc.) -->
     <meta property="og:title" content="🌌 SupGalaxy: Infinite Decentralized Voxel Adventure on Blockchain">
-    <meta property="og:description" content="SupGalaxy v1.0.3: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
+    <meta property="og:description" content="SupGalaxy v1.0.4: an open-source voxel universe inspired by Minecraft, where every chunk can be owned, modified, and anchored on Bitcoin! Explore cosmic biomes, battle mobs, craft wonders, and multiplayer via WebRTC. No servers, just eternal on-chain worlds. A gift to the cosmos! ✨">
     <meta property="og:image" content="https://supgalaxy.org/SupGalaxy.jpg">
     <meta property="og:url" content="https://supgalaxy.org">
     <meta property="og:type" content="website">
-    <title>SupGalaxy v1.0.3</title>
+    <title>SupGalaxy v1.0.4</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -111,7 +111,7 @@
     <div id="hotbar" style="display:none;"></div>
     <div id="rightPanel" style="display:none;">
         <canvas id="minimap"></canvas>
-        <div id="versionLabel">SupGalaxy v1.0.3</div>
+        <div id="versionLabel">SupGalaxy v1.0.4</div>
         <div id="musicPlayer" style="margin-top: 8px; width: 100%;">
             <div id="currentTrack" style="font-size: 10px; text-align: center; color: #eaf6ff; opacity: 0.9; word-wrap: break-word;">No music loaded</div>
             <div style="display: flex; justify-content: space-around; margin-top: 4px;">
@@ -308,20 +308,20 @@
         <source src="sounds/pick2.ogg" type="audio/ogg">
     </audio>
     <div id="magicianStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
-        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 12px;">
             <h3 style="margin: 0 0 5px 0;">Magician's Stone</h3>
             <div>
                 <label for="magicianStoneUrl" style="font-size: 13px;">URL</label>
                 <input type="text" id="magicianStoneUrl" placeholder="IPFS:HASH\file.glb or https://..." style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
             </div>
-            <div id="magicianStonePreview" style="min-height: 60px; max-height: 80px; background: #222; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; overflow: hidden;">
+            <div id="magicianStonePreview" style="min-height: 80px; max-height: 100px; background: #222; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; overflow: hidden;">
                 <!-- Preview will be generated here -->
                 <span style="color: #888; font-size: 12px;">URL Preview</span>
             </div>
-            <div class="responsive-grid-2" style="gap: 8px;">
+            <div class="responsive-grid-2" style="gap: 10px;">
                 <div>
                     <label style="font-size: 13px;">Size</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                         <div>
                             <label for="magicianStoneWidth" style="font-size: 11px; color: #999;">Width</label>
                             <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
@@ -334,7 +334,7 @@
                 </div>
                 <div>
                     <label style="font-size: 13px;">Position (X, Y, Z)</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
                         <input type="number" id="magicianStoneOffsetX" value="0" min="-16" max="16" placeholder="X" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                         <input type="number" id="magicianStoneOffsetY" value="2" min="-16" max="16" placeholder="Y" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                         <input type="number" id="magicianStoneOffsetZ" value="0" min="-16" max="16" placeholder="Z" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
@@ -343,7 +343,7 @@
             </div>
             <div>
                 <label style="font-size: 13px;">Damage / Distance</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
                     <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" placeholder="Damage" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                     <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" placeholder="Distance" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                 </div>
@@ -411,17 +411,18 @@
                     </div>
                 </div>
             </div>
-            <div class="responsive-grid-2" style="gap: 8px;">
-                <div>
-                    <label for="calligraphyStoneFontColor" style="font-size: 13px;">Text Color</label>
-                    <input type="color" id="calligraphyStoneFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
-                </div>
-                <div>
-                    <label for="calligraphyStoneBgColor" style="font-size: 13px;">Background</label>
-                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center;">
-                        <input type="color" id="calligraphyStoneBgColor" value="#ffffff" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
-                        <label style="font-size: 12px; white-space: nowrap;"><input type="checkbox" id="calligraphyStoneTransparent"> None</label>
+            <div>
+                <label style="font-size: 13px;">Colors & Transparency</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;">
+                    <div>
+                        <label for="calligraphyStoneFontColor" style="font-size: 11px; color: #999;">Text</label>
+                        <input type="color" id="calligraphyStoneFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
                     </div>
+                    <div>
+                        <label for="calligraphyStoneBgColor" style="font-size: 11px; color: #999;">Background</label>
+                        <input type="color" id="calligraphyStoneBgColor" value="#ffffff" style="width: 100%; height: 32px; padding: 2px; border-radius: 4px; border: 1px solid #333; background: #222; cursor: pointer;">
+                    </div>
+                    <label style="font-size: 12px; white-space: nowrap; padding-bottom: 4px;"><input type="checkbox" id="calligraphyStoneTransparent"> None</label>
                 </div>
             </div>
             <div>
