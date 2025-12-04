@@ -314,13 +314,22 @@
                 <label for="magicianStoneUrl" style="font-size: 13px;">URL</label>
                 <input type="text" id="magicianStoneUrl" placeholder="IPFS:HASH\file.glb or https://..." style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
             </div>
-            <div id="magicianStonePreview" style="display: none;"></div>
+            <div id="magicianStonePreview" style="min-height: 60px; max-height: 80px; background: #222; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; overflow: hidden;">
+                <!-- Preview will be generated here -->
+                <span style="color: #888; font-size: 12px;">URL Preview</span>
+            </div>
             <div class="responsive-grid-2" style="gap: 8px;">
                 <div>
                     <label style="font-size: 13px;">Size</label>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                        <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" placeholder="Width" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
-                        <input type="number" id="magicianStoneHeight" value="2" min="1" max="16" placeholder="Height" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <div>
+                            <label for="magicianStoneWidth" style="font-size: 11px; color: #999;">Width</label>
+                            <input type="number" id="magicianStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="magicianStoneHeight" style="font-size: 11px; color: #999;">Height</label>
+                            <input type="number" id="magicianStoneHeight" value="2" min="1" max="16" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -332,18 +341,15 @@
                     </div>
                 </div>
             </div>
-            <div class="responsive-grid-2" style="gap: 8px;">
-                <div>
-                    <label for="magicianStoneDistance" style="font-size: 13px;">Distance</label>
-                    <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
-                </div>
-                <div>
-                    <label for="magicianStoneDamage" style="font-size: 13px;">Damage</label>
-                    <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+            <div>
+                <label style="font-size: 13px;">Damage / Distance</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                    <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" placeholder="Damage" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                    <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" placeholder="Distance" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
                 </div>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px;">
-                <label><input type="checkbox" id="magicianStoneLoop"> Loop</label>
+                <label><input type="checkbox" id="magicianStoneLoop" checked> Loop</label>
                 <label><input type="checkbox" id="magicianStoneAutoplay" checked> Autoplay</label>
                 <label><input type="checkbox" id="magicianStoneAutoplayAnimation" checked> Anim</label>
                 <label><input type="checkbox" id="magicianStoneCollision" checked> Collision</label>

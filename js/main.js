@@ -5056,13 +5056,15 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneOffsetX').value = '0';
     document.getElementById('magicianStoneOffsetY').value = '0';
     document.getElementById('magicianStoneOffsetZ').value = '0';
-    document.getElementById('magicianStoneLoop').checked = false;
-    document.getElementById('magicianStoneAutoplay').checked = false;
+    document.getElementById('magicianStoneLoop').checked = true;
+    document.getElementById('magicianStoneAutoplay').checked = true;
     document.getElementById('magicianStoneAutoplayAnimation').checked = true;
     document.getElementById('magicianStoneDistance').value = '10';
     document.getElementById('magicianStoneCollision').checked = true;
     document.getElementById('magicianStoneDamage').value = '0';
-    document.getElementById('magicianStonePreview').innerHTML = '<span>URL Preview</span>';
+    const preview = document.getElementById('magicianStonePreview');
+    preview.innerHTML = '<span style="color: #888; font-size: 12px;">URL Preview</span>';
+    preview.style.display = 'flex';
 }
 
 document.getElementById('magicianStoneCancel').addEventListener('click', function() {
@@ -5146,12 +5148,12 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
     previewContainer.innerHTML = ''; // Clear previous preview
 
     if (url.startsWith('IPFS:')) {
-        previewContainer.innerHTML = '<span>Resolving IPFS link...</span>';
+        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Resolving IPFS link...</span>';
         try {
             url = await resolveIPFS(url);
         } catch (error) {
             console.error('Error resolving IPFS URL:', error);
-            previewContainer.innerHTML = '<span>Failed to resolve IPFS URL.</span>';
+            previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Failed to resolve IPFS URL.</span>';
             return;
         }
     }
@@ -5162,13 +5164,14 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         const img = document.createElement('img');
         img.src = url;
         img.style.maxWidth = '100%';
-        img.style.maxHeight = '150px';
+        img.style.maxHeight = '60px';
+        img.style.objectFit = 'contain';
         previewContainer.appendChild(img);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
         video.src = url;
         video.style.maxWidth = '100%';
-        video.style.maxHeight = '150px';
+        video.style.maxHeight = '60px';
         video.controls = true;
         video.muted = true;
         previewContainer.appendChild(video);
@@ -5176,10 +5179,12 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         const audio = document.createElement('audio');
         audio.src = url;
         audio.controls = true;
+        audio.style.width = '100%';
+        audio.style.height = '30px';
         previewContainer.appendChild(audio);
     } else if (['glb', 'gltf'].includes(fileExtension)) {
         // Show loading indicator while checking GLB/GLTF file
-        previewContainer.innerHTML = '<span style="color: #888;">Loading 3D model...</span>';
+        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Loading 3D model...</span>';
 
         // Validate the GLB/GLTF file by attempting to load it
         const loader = new THREE.GLTFLoader();
@@ -5190,14 +5195,14 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
                 const animationCount = gltf.animations.length;
                 const modelName = url.split('/').pop();
 
-                let infoHTML = '<div style="padding: 10px; background: #2a2a2a; border-radius: 4px;">';
-                infoHTML += '<div style="color: #4CAF50; font-size: 18px; margin-bottom: 8px;">✓ 3D Model Ready</div>';
-                infoHTML += '<div style="color: #ccc; font-size: 12px; margin-bottom: 4px;">File: ' + modelName + '</div>';
+                let infoHTML = '<div style="text-align: center; width: 100%;">';
+                infoHTML += '<div style="color: #4CAF50; font-size: 14px; margin-bottom: 4px;">✓ 3D Model</div>';
+                infoHTML += '<div style="color: #999; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + modelName + '</div>';
 
                 if (animationCount > 0) {
-                    infoHTML += '<div style="color: #64B5F6; font-size: 12px;">🎬 ' + animationCount + ' animation(s) detected</div>';
+                    infoHTML += '<div style="color: #64B5F6; font-size: 11px; margin-top: 2px;">🎬 ' + animationCount + ' anim(s)</div>';
                 } else {
-                    infoHTML += '<div style="color: #888; font-size: 12px;">Static model (no animations)</div>';
+                    infoHTML += '<div style="color: #666; font-size: 11px; margin-top: 2px;">Static</div>';
                 }
 
                 infoHTML += '</div>';
@@ -5208,11 +5213,11 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
             },
             function(error) {
                 console.error('Error loading GLB/GLTF:', error);
-                previewContainer.innerHTML = '<span style="color: #ff6666;">Failed to load 3D model</span>';
+                previewContainer.innerHTML = '<span style="color: #ff6666; font-size: 12px;">Failed to load 3D model</span>';
             }
         );
     } else {
-        previewContainer.innerHTML = '<span>URL Preview</span>';
+        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">URL Preview</span>';
     }
 });
 
