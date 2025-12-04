@@ -2949,8 +2949,8 @@ async function downloadHostSession() {
                 autoplay: stone.autoplay,
                 autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
-                collision: stone.collision !== undefined ? stone.collision : true,
-                damage: stone.damage || 0,
+                collision: stone.collision ?? true,
+                damage: stone.damage ?? 0,
                 direction: stone.direction
             };
         }
@@ -3058,8 +3058,8 @@ async function downloadSinglePlayerSession() {
                 autoplay: stone.autoplay,
                 autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
-                collision: stone.collision !== undefined ? stone.collision : true,
-                damage: stone.damage || 0,
+                collision: stone.collision ?? true,
+                damage: stone.damage ?? 0,
                 direction: stone.direction
             };
         }
@@ -4062,8 +4062,8 @@ function saveCurrentWorldStoneData(currentWorldName) {
                 autoplay: stone.autoplay,
                 autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
-                collision: stone.collision !== undefined ? stone.collision : true,
-                damage: stone.damage || 0,
+                collision: stone.collision ?? true,
+                damage: stone.damage ?? 0,
                 direction: stone.direction,
                 source: stone.source
             };
@@ -4281,7 +4281,7 @@ function gameLoop(e) {
                             stone.lastDamageTime = e;
                             document.getElementById("health").innerText = player.health;
                             updateHealthBar();
-                            addMessage("Damaged by object! -" + stone.damage + " HP", 1e3);
+                            addMessage("Damaged by magician stone! -" + stone.damage + " HP", 1e3);
                             flashDamageEffect();
                             
                             // Apply knockback similar to getting hit
