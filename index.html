@@ -332,6 +332,18 @@
                     <input type="number" id="magicianStoneDistance" value="64" min="1" max="128" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
                 </div>
             </div>
+            <div class="responsive-grid-2">
+                <div>
+                    <label>Collision & Damage</label>
+                    <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 5px;">
+                        <label><input type="checkbox" id="magicianStoneCollision" checked> Collision (player cannot pass through)</label>
+                    </div>
+                </div>
+                <div>
+                    <label for="magicianStoneDamage">Damage (HP per contact)</label>
+                    <input type="number" id="magicianStoneDamage" value="0" min="0" max="100" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                </div>
+            </div>
             <fieldset style="border: 1px solid #444; border-radius: 4px; padding: 10px;">
                 <legend>Projection Settings</legend>
                 <div class="responsive-grid-3">

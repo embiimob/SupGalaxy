@@ -1162,7 +1162,11 @@ function createChestInventorySlot(index) {
 }
 
 async function createMagicianStoneScreen(stoneData) {
-    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance } = stoneData;
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision, damage } = stoneData;
+    
+    // Set defaults for collision and damage if not provided (for backward compatibility)
+    if (collision === undefined) collision = true;
+    if (damage === undefined) damage = 0;
     
     // Entity-based deduplication key: uses world position (x,y,z) as the unique identifier.
     // This key is independent of the underlying file extension (.glb, .gltf, .gif, .mp4, etc.)
@@ -2620,13 +2624,9 @@ function checkMeshCollision(x, y, z) {
 
     for (const stone of stones) {
         if (!stone.mesh) continue;
-
-        // Skip screens/images that shouldn't have collision?
-        // User asked for "models imported via minimap" to have collision.
-        // Usually these are GLBs. Images (planes) might be annoying.
-        // But for now, check everything with a mesh.
-        // We can check if it's a PlaneGeometry to skip?
-        // Let's assume user wants all "Magician Stone" content to be collidable.
+        
+        // Skip collision check if collision is disabled for this stone
+        if (stone.collision === false) continue;
 
         const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
         if (!playerBox.intersectsBox(stoneBox)) continue;
@@ -2951,7 +2951,10 @@ async function downloadHostSession() {
                 offsetZ: stone.offsetZ,
                 loop: stone.loop,
                 autoplay: stone.autoplay,
+                autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
+                collision: stone.collision !== undefined ? stone.collision : true,
+                damage: stone.damage || 0,
                 direction: stone.direction
             };
         }
@@ -3057,7 +3060,10 @@ async function downloadSinglePlayerSession() {
                 offsetZ: stone.offsetZ,
                 loop: stone.loop,
                 autoplay: stone.autoplay,
+                autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
+                collision: stone.collision !== undefined ? stone.collision : true,
+                damage: stone.damage || 0,
                 direction: stone.direction
             };
         }
@@ -4060,6 +4066,8 @@ function saveCurrentWorldStoneData(currentWorldName) {
                 autoplay: stone.autoplay,
                 autoplayAnimation: stone.autoplayAnimation,
                 distance: stone.distance,
+                collision: stone.collision !== undefined ? stone.collision : true,
+                damage: stone.damage || 0,
                 direction: stone.direction,
                 source: stone.source
             };
@@ -4254,6 +4262,52 @@ function gameLoop(e) {
             } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isHost || 0 === peers.size) {
                 16 === getBlockAt(player.x, player.y + .5, player.z) && e - lastDamageTime > 500 && (player.health = Math.max(0, player.health - 1), lastDamageTime = e, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Burning in lava! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             }
+        
+        // Check for damage from magician stones
+        if (isHost || 0 === peers.size) {
+            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
+                new THREE.Vector3(player.width, player.height, player.depth)
+            );
+            
+            for (const key in magicianStones) {
+                if (Object.hasOwnProperty.call(magicianStones, key)) {
+                    const stone = magicianStones[key];
+                    // Only apply damage if stone has damage > 0 and has a mesh
+                    if (stone.damage && stone.damage > 0 && stone.mesh) {
+                        const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
+                        if (playerBox.intersectsBox(stoneBox)) {
+                            // Initialize lastDamageTime for this stone if not set
+                            if (!stone.lastDamageTime) {
+                                stone.lastDamageTime = 0;
+                            }
+                            // Apply damage with 500ms interval (same as lava)
+                            if (e - stone.lastDamageTime > 500) {
+                                player.health = Math.max(0, player.health - stone.damage);
+                                stone.lastDamageTime = e;
+                                document.getElementById("health").innerText = player.health;
+                                updateHealthBar();
+                                addMessage("Damaged by object! -" + stone.damage + " HP", 1e3);
+                                flashDamageEffect();
+                                
+                                // Apply knockback similar to getting hit
+                                const stonePos = new THREE.Vector3(stone.x, stone.y, stone.z);
+                                const playerPos = new THREE.Vector3(player.x, player.y, player.z);
+                                const knockbackDir = new THREE.Vector3().subVectors(playerPos, stonePos).normalize();
+                                player.vx += knockbackDir.x * 2;
+                                player.vz += knockbackDir.z * 2;
+                                player.vy = 0.15;
+                                
+                                if (player.health <= 0) {
+                                    handlePlayerDeath();
+                                }
+                                break; // Only process one damage source per frame
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (isHost)
             for (const [t, o] of peers.entries())
                 if (userPositions[t]) {
@@ -4628,66 +4682,74 @@ function gameLoop(e) {
                 // Update GIF animation
                 if (stone.gifData && stone.gifData.reader) {
                     const gif = stone.gifData;
-                    gif.accumulatedTime += t * 1000; // Convert dt (seconds) to ms
+                    
+                    // Only animate GIF if within the configured distance (similar to video autoplay behavior)
+                    // When outside distance, GIF should remain static (show current frame without advancing)
+                    if (distance <= stone.distance) {
+                        gif.accumulatedTime += t * 1000; // Convert dt (seconds) to ms
 
-                    let frameInfo = gif.reader.frameInfo(gif.currentFrame);
-                    let delay = frameInfo.delay * 10; // Delay is in 100ths of a second
-                    if (delay === 0) delay = 100; // Default delay if 0
+                        let frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                        let delay = frameInfo.delay * 10; // Delay is in 100ths of a second
+                        if (delay === 0) delay = 100; // Default delay if 0
 
-                    while (gif.accumulatedTime >= delay) {
-                        gif.accumulatedTime -= delay;
+                        while (gif.accumulatedTime >= delay) {
+                            gif.accumulatedTime -= delay;
 
-                        // Handle disposal of the CURRENT frame (that we are about to overwrite)
-                        // If disposal method was 2 (Restore to Background), we must clear its area in our persistent buffer.
-                        // Note: frameInfo currently points to the frame we just displayed.
-                        if (frameInfo.disposal === 2) {
-                             // Clear the rect in the persistent buffer
-                             const data = gif.tempImageData.data;
-                             const width = gif.reader.width; // Buffer is always full width
+                            // Handle disposal of the CURRENT frame (that we are about to overwrite)
+                            // If disposal method was 2 (Restore to Background), we must clear its area in our persistent buffer.
+                            // Note: frameInfo currently points to the frame we just displayed.
+                            if (frameInfo.disposal === 2) {
+                                 // Clear the rect in the persistent buffer
+                                 const data = gif.tempImageData.data;
+                                 const width = gif.reader.width; // Buffer is always full width
 
-                             // Bounds to clear
-                             const cx = frameInfo.x;
-                             const cy = frameInfo.y;
-                             const cw = frameInfo.width;
-                             const ch = frameInfo.height;
+                                 // Bounds to clear
+                                 const cx = frameInfo.x;
+                                 const cy = frameInfo.y;
+                                 const cw = frameInfo.width;
+                                 const ch = frameInfo.height;
 
-                             // Iterate and clear to 0
-                             for (let y = cy; y < cy + ch; y++) {
-                                 for (let x = cx; x < cx + cw; x++) {
-                                     // Safety check for bounds
-                                     if (x >= 0 && x < width && y >= 0 && y < gif.reader.height) {
-                                         const offset = (y * width + x) * 4;
-                                         data[offset] = 0;
-                                         data[offset + 1] = 0;
-                                         data[offset + 2] = 0;
-                                         data[offset + 3] = 0;
+                                 // Iterate and clear to 0
+                                 for (let y = cy; y < cy + ch; y++) {
+                                     for (let x = cx; x < cx + cw; x++) {
+                                         // Safety check for bounds
+                                         if (x >= 0 && x < width && y >= 0 && y < gif.reader.height) {
+                                             const offset = (y * width + x) * 4;
+                                             data[offset] = 0;
+                                             data[offset + 1] = 0;
+                                             data[offset + 2] = 0;
+                                             data[offset + 3] = 0;
+                                         }
                                      }
                                  }
-                             }
+                            }
+
+                            // Advance to next frame
+                            gif.currentFrame = (gif.currentFrame + 1) % gif.numFrames;
+
+                            // If we looped back to 0, we might need to clear if the whole animation expects a fresh start?
+                            // However, disposal logic usually handles this frame-by-frame.
+                            // Standard GIF behavior relies on frame 0 being drawn over whatever (or cleared if frame n-1 said so).
+
+                            // Decode NEXT frame into the persistent buffer
+                            // decodeAndBlitFrameRGBA writes new pixels into the buffer.
+                            // It skips transparent pixels, so previous data is preserved (compositing).
+                            // CRITICAL: The buffer MUST be the size of the full logical screen (gif.reader.width/height)
+                            // because omggif calculates offsets based on global width.
+                            gif.reader.decodeAndBlitFrameRGBA(gif.currentFrame, gif.tempImageData.data);
+
+                            // Push the updated full buffer to the canvas
+                            gif.ctx.putImageData(gif.tempImageData, 0, 0);
+                            gif.texture.needsUpdate = true;
+
+                            // Update info for next loop check
+                            frameInfo = gif.reader.frameInfo(gif.currentFrame);
+                            delay = frameInfo.delay * 10;
+                            if (delay === 0) delay = 100;
                         }
-
-                        // Advance to next frame
-                        gif.currentFrame = (gif.currentFrame + 1) % gif.numFrames;
-
-                        // If we looped back to 0, we might need to clear if the whole animation expects a fresh start?
-                        // However, disposal logic usually handles this frame-by-frame.
-                        // Standard GIF behavior relies on frame 0 being drawn over whatever (or cleared if frame n-1 said so).
-
-                        // Decode NEXT frame into the persistent buffer
-                        // decodeAndBlitFrameRGBA writes new pixels into the buffer.
-                        // It skips transparent pixels, so previous data is preserved (compositing).
-                        // CRITICAL: The buffer MUST be the size of the full logical screen (gif.reader.width/height)
-                        // because omggif calculates offsets based on global width.
-                        gif.reader.decodeAndBlitFrameRGBA(gif.currentFrame, gif.tempImageData.data);
-
-                        // Push the updated full buffer to the canvas
-                        gif.ctx.putImageData(gif.tempImageData, 0, 0);
-                        gif.texture.needsUpdate = true;
-
-                        // Update info for next loop check
-                        frameInfo = gif.reader.frameInfo(gif.currentFrame);
-                        delay = frameInfo.delay * 10;
-                        if (delay === 0) delay = 100;
+                    } else {
+                        // Outside distance: reset accumulated time so animation doesn't "jump" when entering range
+                        gif.accumulatedTime = 0;
                     }
                 }
 
@@ -5005,6 +5067,8 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneAutoplay').checked = false;
     document.getElementById('magicianStoneAutoplayAnimation').checked = true;
     document.getElementById('magicianStoneDistance').value = '10';
+    document.getElementById('magicianStoneCollision').checked = true;
+    document.getElementById('magicianStoneDamage').value = '0';
     document.getElementById('magicianStonePreview').innerHTML = '<span>URL Preview</span>';
 }
 
@@ -5180,6 +5244,8 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         autoplay: document.getElementById('magicianStoneAutoplay').checked,
         autoplayAnimation: document.getElementById('magicianStoneAutoplayAnimation').checked,
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
+        collision: document.getElementById('magicianStoneCollision').checked,
+        damage: parseFloat(document.getElementById('magicianStoneDamage').value) || 0,
         direction: magicianStonePlacement.direction // Use the direction saved on placement
     , source: 'local'
     };
