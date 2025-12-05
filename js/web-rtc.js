@@ -344,6 +344,25 @@ function setupDataChannel(e, t) {
                 e.send(JSON.stringify(calligraphyStonesSync));
             }
 
+            // Sync browsite stones to new player
+            if (Object.keys(browsiteStones).length > 0) {
+                const browsiteStonesSync = {
+                    type: "browsite_stones_sync",
+                    stones: {}
+                };
+                for (const key in browsiteStones) {
+                    const stone = browsiteStones[key];
+                    browsiteStonesSync.stones[key] = {
+                        x: stone.x, y: stone.y, z: stone.z,
+                        url: stone.url,
+                        width: stone.width, height: stone.height,
+                        offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                        direction: stone.direction
+                    };
+                }
+                e.send(JSON.stringify(browsiteStonesSync));
+            }
+
             // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
             if (isHost) {
                 console.log(`[WEBRTC] Host recalculating spawn chunks for all peers in world ${worldName}`);
@@ -1065,6 +1084,39 @@ function setupDataChannel(e, t) {
                                 disposeObject(calligraphyStones[key].mesh);
                             }
                             delete calligraphyStones[key];
+                        }
+                    }
+                    break;
+                case "browsite_stone_placed":
+                    // When the host receives this message from a client, it needs to both
+                    // create the screen locally AND relay the message to all other clients.
+                    if (isHost) {
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
+                    createBrowsiteStoneScreen({ ...s.stoneData, source: 'network' });
+                    break;
+                case "browsite_stones_sync":
+                    if (!isHost) {
+                        for (const key in s.stones) {
+                            if (Object.hasOwnProperty.call(s.stones, key)) {
+                                createBrowsiteStoneScreen({ ...s.stones[key], source: 'network' });
+                            }
+                        }
+                    }
+                    break;
+                case "browsite_stone_removed":
+                    if (!isHost) {
+                        const key = s.key;
+                        if (browsiteStones[key]) {
+                            if (browsiteStones[key].mesh) {
+                                scene.remove(browsiteStones[key].mesh);
+                                disposeObject(browsiteStones[key].mesh);
+                            }
+                            delete browsiteStones[key];
                         }
                     }
                     break;

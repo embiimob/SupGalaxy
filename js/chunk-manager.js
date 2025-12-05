@@ -690,6 +690,13 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                 }
             }
+            if (e.browsiteStones) {
+                for (const key in e.browsiteStones) {
+                    if (Object.hasOwnProperty.call(e.browsiteStones, key)) {
+                        createBrowsiteStoneScreen({ ...e.browsiteStones[key], source: 'ipfs' });
+                    }
+                }
+            }
         }
 
         const showProgress = chunksArray.length > 5;

@@ -710,6 +710,7 @@ self.onmessage = async function(e) {
             var ownershipByChunk = new Map();
             var magicianStonesUpdates = [];
             var calligraphyStonesUpdates = [];
+            var browsiteStonesUpdates = [];
             for (var chunkKey of chunkKeys) {
                 try {
                     var normalizedChunkKey = chunkKey.replace(/^#/, "");
@@ -803,13 +804,37 @@ self.onmessage = async function(e) {
                                     }
                                 }
 
+                                if (processData.browsiteStones) {
+                                     browsiteStonesUpdates.push({ stones: processData.browsiteStones, transactionId: msg.TransactionId });
+                                     for (const key in processData.browsiteStones) {
+                                        if (Object.hasOwnProperty.call(processData.browsiteStones, key)) {
+                                            const stone = processData.browsiteStones[key];
+                                            const cx = Math.floor((stone.x % 16384 + 16384) % 16384 / 16);
+                                            const cz = Math.floor((stone.z % 16384 + 16384) % 16384 / 16);
+
+                                            const chunkKey = "" + processData.world + ":" + cx + ":" + cz;
+                                            const newDelta = {
+                                                chunk: chunkKey,
+                                                changes: [{
+                                                    x: (stone.x % 16 + 16) % 16,
+                                                    y: stone.y,
+                                                    z: (stone.z % 16 + 16) % 16,
+                                                    b: 132
+                                                }]
+                                            };
+                                            normalizedDeltas.push(newDelta);
+                                        }
+                                    }
+                                }
+
                                 updatesByTransaction.set(msg.TransactionId, {
                                     changes: normalizedDeltas,
                                     address: msg.FromAddress,
                                     timestamp: new Date(msg.BlockDate).getTime(),
                                     transactionId: msg.TransactionId,
                                     magicianStones: processData.magicianStones || null,
-                                    calligraphyStones: processData.calligraphyStones || null
+                                    calligraphyStones: processData.calligraphyStones || null,
+                                    browsiteStones: processData.browsiteStones || null
                                 });
                                 for (var delta of normalizedDeltas) {
                                     var chunk = delta.chunk;
@@ -839,7 +864,7 @@ self.onmessage = async function(e) {
                 for (var entry of updatesByTransaction) {
                     var transactionId = entry[0];
                     var update = entry[1];
-                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones }] });
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, browsiteStones: update.browsiteStones }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
@@ -850,6 +875,11 @@ self.onmessage = async function(e) {
             if (calligraphyStonesUpdates.length > 0) {
                 for (var update of calligraphyStonesUpdates) {
                     self.postMessage({ type: 'calligraphy_stones_update', stones: update.stones, transactionId: update.transactionId });
+                }
+            }
+            if (browsiteStonesUpdates.length > 0) {
+                for (var update of browsiteStonesUpdates) {
+                    self.postMessage({ type: 'browsite_stones_update', stones: update.stones, transactionId: update.transactionId });
                 }
             }
             if (ownershipByChunk.size > 0) {
@@ -1434,6 +1464,25 @@ self.onmessage = async function(e) {
                     if (isHost) {
                         const message = JSON.stringify({
                             type: 'calligraphy_stones_sync',
+                            stones: data.stones
+                        });
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(message);
+                            }
+                        }
+                    }
+                }
+            } else if (data.type === 'browsite_stones_update') {
+                if (data.stones) {
+                    for (const key in data.stones) {
+                        if (Object.hasOwnProperty.call(data.stones, key)) {
+                            createBrowsiteStoneScreen(data.stones[key]);
+                        }
+                    }
+                    if (isHost) {
+                        const message = JSON.stringify({
+                            type: 'browsite_stones_sync',
                             stones: data.stones
                         });
                         for (const [, peer] of peers.entries()) {

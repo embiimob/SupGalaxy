@@ -435,6 +435,51 @@
             </div>
         </div>
     </div>
+    <!-- Browsite Stone Configuration Modal -->
+    <div id="browsiteStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
+        <div class="modal-panel" style="display: flex; flex-direction: column; gap: 12px;">
+            <h3 style="margin: 0 0 5px 0;">Browsite</h3>
+            <div>
+                <label for="browsiteStoneUrl" style="font-size: 13px;">Website URL</label>
+                <input type="text" id="browsiteStoneUrl" placeholder="https://example.com" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+            </div>
+            <div class="responsive-grid-2" style="gap: 10px;">
+                <div>
+                    <label style="font-size: 13px;">Size</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label for="browsiteStoneWidth" style="font-size: 11px; color: #999;">Width</label>
+                            <input type="number" id="browsiteStoneWidth" value="3" min="1" max="16" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="browsiteStoneHeight" style="font-size: 11px; color: #999;">Height</label>
+                            <input type="number" id="browsiteStoneHeight" value="2" min="1" max="16" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size: 13px;">Position (X, Y, Z)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                        <input type="number" id="browsiteStoneOffsetX" value="0" min="-16" max="16" placeholder="X" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="browsiteStoneOffsetY" value="2" min="-16" max="16" placeholder="Y" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                        <input type="number" id="browsiteStoneOffsetZ" value="0" min="-16" max="16" placeholder="Z" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;">
+                    </div>
+                </div>
+            </div>
+            <div style="text-align:right; display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px;">
+                <button id="browsiteStoneCancel" style="padding: 6px 12px; font-size: 13px;">Cancel</button>
+                <button id="browsiteStoneSave" style="background: var(--accent); color: #111; padding: 6px 12px; font-size: 13px;">Place</button>
+            </div>
+        </div>
+    </div>
+    <!-- Browsite Browser Overlay -->
+    <div id="browsiteBrowserOverlay" style="display: none; position: fixed; inset: 0; z-index: 250; background: rgba(0,0,0,0.95); flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #111; border-bottom: 1px solid #333;">
+            <span id="browsiteBrowserTitle" style="color: #fff; font-size: 14px;">Browsite Browser</span>
+            <button id="browsiteBrowserClose" style="padding: 6px 12px; font-size: 13px; cursor: pointer;">Close (ESC)</button>
+        </div>
+        <iframe id="browsiteBrowserFrame" style="flex: 1; width: 100%; border: none; background: #fff;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+    </div>
     <script src="js/declare.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
