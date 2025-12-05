@@ -1761,42 +1761,123 @@ function createBrowsiteStoneScreen(stoneData) {
     screenMesh.userData.browsiteUrl = url;
     screenMesh.userData.browsiteKey = key;
 
-    browsiteStones[key] = { ...stoneData, mesh: screenMesh };
+    // Create iframe overlay element for this browsite
+    const iframeContainer = document.createElement('div');
+    iframeContainer.id = `browsite-${key}`;
+    iframeContainer.style.position = 'absolute';
+    iframeContainer.style.display = 'none'; // Hidden by default
+    iframeContainer.style.pointerEvents = 'none'; // No interaction when not active
+    iframeContainer.style.zIndex = '200';
+    iframeContainer.style.border = '2px solid #4169E1';
+    iframeContainer.style.boxShadow = '0 0 10px rgba(65, 105, 225, 0.5)';
+    iframeContainer.style.background = '#000';
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+    iframe.src = url;
+    
+    iframeContainer.appendChild(iframe);
+    document.body.appendChild(iframeContainer);
+
+    browsiteStones[key] = { 
+        ...stoneData, 
+        mesh: screenMesh, 
+        iframeContainer: iframeContainer,
+        iframe: iframe,
+        isActive: false,
+        width: width,
+        height: height
+    };
     browsiteStonesLoading.delete(key); // Remove from loading set after successful creation
     scene.add(screenMesh);
 }
 
-// Browsite browser overlay management
-let browsiteBrowserOpen = false;
+// Browsite browser management
+let activeBrowsiteKey = null;
 
-function openBrowsiteBrowser(url) {
-    if (browsiteBrowserOpen) return;
+function openBrowsiteBrowser(key) {
+    // Close any currently active browsite
+    if (activeBrowsiteKey && browsiteStones[activeBrowsiteKey]) {
+        closeBrowsiteBrowser();
+    }
     
-    browsiteBrowserOpen = true;
-    const overlay = document.getElementById('browsiteBrowserOverlay');
-    const iframe = document.getElementById('browsiteBrowserFrame');
+    const stone = browsiteStones[key];
+    if (!stone || !stone.iframeContainer) return;
     
-    iframe.src = url;
-    overlay.style.display = 'flex';
+    stone.isActive = true;
+    stone.iframeContainer.style.display = 'block';
+    stone.iframeContainer.style.pointerEvents = 'auto'; // Enable interaction
+    activeBrowsiteKey = key;
     
-    // Lock pointer and keyboard to game (prevents camera movement while browsing)
+    // Lock game controls
     isPromptOpen = true;
     
-    addMessage("Press ESC to close browser", 2000);
+    addMessage("Press ESC to close Browsite", 2000);
 }
 
 function closeBrowsiteBrowser() {
-    if (!browsiteBrowserOpen) return;
+    if (!activeBrowsiteKey) return;
     
-    browsiteBrowserOpen = false;
-    const overlay = document.getElementById('browsiteBrowserOverlay');
-    const iframe = document.getElementById('browsiteBrowserFrame');
+    const stone = browsiteStones[activeBrowsiteKey];
+    if (stone && stone.iframeContainer) {
+        stone.isActive = false;
+        stone.iframeContainer.style.display = 'none';
+        stone.iframeContainer.style.pointerEvents = 'none';
+    }
     
-    overlay.style.display = 'none';
-    iframe.src = 'about:blank'; // Clear the iframe
+    activeBrowsiteKey = null;
     
-    // Unlock pointer and keyboard
+    // Unlock game controls
     isPromptOpen = false;
+}
+
+// Update browsite iframe positions to match their 3D mesh positions
+function updateBrowsitePositions() {
+    if (!camera || !renderer) return;
+    
+    for (const key in browsiteStones) {
+        const stone = browsiteStones[key];
+        if (!stone || !stone.mesh || !stone.iframeContainer || !stone.isActive) continue;
+        
+        // Get the mesh's world position
+        const meshPos = stone.mesh.position.clone();
+        
+        // Project 3D position to 2D screen coordinates
+        const screenPos = meshPos.clone().project(camera);
+        
+        // Convert to screen pixels
+        const widthHalf = renderer.domElement.clientWidth / 2;
+        const heightHalf = renderer.domElement.clientHeight / 2;
+        
+        const x = (screenPos.x * widthHalf) + widthHalf;
+        const y = -(screenPos.y * heightHalf) + heightHalf;
+        
+        // Calculate the size based on distance and mesh size
+        const distance = camera.position.distanceTo(meshPos);
+        const fov = camera.fov * (Math.PI / 180); // Convert to radians
+        const frustumHeight = 2 * distance * Math.tan(fov / 2);
+        const frustumWidth = frustumHeight * camera.aspect;
+        
+        // Calculate pixel size based on world size
+        const pixelHeight = (stone.height / frustumHeight) * renderer.domElement.clientHeight;
+        const pixelWidth = (stone.width / frustumWidth) * renderer.domElement.clientWidth;
+        
+        // Position and size the iframe container
+        stone.iframeContainer.style.left = `${x - pixelWidth / 2}px`;
+        stone.iframeContainer.style.top = `${y - pixelHeight / 2}px`;
+        stone.iframeContainer.style.width = `${pixelWidth}px`;
+        stone.iframeContainer.style.height = `${pixelHeight}px`;
+        
+        // Hide if behind camera or too far
+        if (screenPos.z > 1 || distance > 100) {
+            stone.iframeContainer.style.display = 'none';
+        } else if (stone.isActive) {
+            stone.iframeContainer.style.display = 'block';
+        }
+    }
 }
 
 function dropSelectedItem(dropAll = false) {
@@ -2115,10 +2196,11 @@ function onPointerDown(e) {
 
         if (intersectedStone && intersectedStone.url && typeof intersectedStone.url === 'string') {
             const url = intersectedStone.url.trim();
+            const key = intersectedStone.userData?.browsiteKey || `${intersectedStone.x},${intersectedStone.y},${intersectedStone.z}`;
             // Only open http:// or https:// links
             if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                openBrowsiteBrowser(url);
-                addMessage("Opening Browsite...", 1500);
+                openBrowsiteBrowser(key);
+                addMessage("Click inside to interact, ESC to close", 2000);
             } else if (url) {
                 addMessage("Invalid URL (must start with http:// or https://)", 2000);
             } else {
@@ -2486,6 +2568,17 @@ function removeBlockAt(e, t, o, breaker) {
         if (a === 132) {
             const key = `${e},${t},${o}`;
             if (browsiteStones[key]) {
+                // Close if this browsite is currently active
+                if (activeBrowsiteKey === key) {
+                    closeBrowsiteBrowser();
+                }
+                
+                // Remove iframe container from DOM
+                if (browsiteStones[key].iframeContainer) {
+                    document.body.removeChild(browsiteStones[key].iframeContainer);
+                }
+                
+                // Remove mesh
                 if (browsiteStones[key].mesh) {
                     scene.remove(browsiteStones[key].mesh);
                     disposeObject(browsiteStones[key].mesh);
@@ -3025,7 +3118,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && browsiteBrowserOpen && closeBrowsiteBrowser(), "Escape" === e.key && mouseLocked && !browsiteBrowserOpen && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, "Escape" === e.key && activeBrowsiteKey && closeBrowsiteBrowser(), "Escape" === e.key && mouseLocked && !activeBrowsiteKey && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -5072,6 +5165,7 @@ function gameLoop(e) {
                 }
             }
         }
+        updateBrowsitePositions(); // Update browsite iframe positions
         renderer.render(scene, camera)
     }
     requestAnimationFrame(gameLoop)
@@ -5698,6 +5792,3 @@ document.getElementById('browsiteStoneSave').addEventListener('click', function(
     isPromptOpen = false;
     browsiteStonePlacement = null;
 });
-
-// Browsite browser close button
-document.getElementById('browsiteBrowserClose').addEventListener('click', closeBrowsiteBrowser);

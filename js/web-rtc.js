@@ -1112,6 +1112,17 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         const key = s.key;
                         if (browsiteStones[key]) {
+                            // Close if this browsite is currently active
+                            if (activeBrowsiteKey === key) {
+                                closeBrowsiteBrowser();
+                            }
+                            
+                            // Remove iframe container from DOM
+                            if (browsiteStones[key].iframeContainer) {
+                                document.body.removeChild(browsiteStones[key].iframeContainer);
+                            }
+                            
+                            // Remove mesh
                             if (browsiteStones[key].mesh) {
                                 scene.remove(browsiteStones[key].mesh);
                                 disposeObject(browsiteStones[key].mesh);
