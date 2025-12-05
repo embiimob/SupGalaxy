@@ -41,6 +41,9 @@ A special block capable of adding **images, video, audio and animated 3d models*
 ### 🪧 The Calligraphy Stone
 A special block capable of adding **colored or transparent signs with clickable web links** into the game world.
 
+### 🌐 The Browsite Stone
+A special block that embeds **browsable web pages** directly into the game world. Click to open an in-game browser and surf the web without leaving SupGalaxy!
+
 ### 🎙 Proximity Video & Voice
 See and hear players based on distance—natural spatial communication.
 

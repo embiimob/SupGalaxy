@@ -307,6 +307,29 @@ async function applySaveFile(e, t, o) {
             reconstructCalligraphyStonesFromDeltas(t.deltas);
         }
 
+        if (t.browsiteStones) {
+            console.log("[LOGIN] Loading browsite stones from session");
+            browsiteStones = {}; // Clear existing stones
+            for (const key in t.browsiteStones) {
+                if (Object.hasOwnProperty.call(t.browsiteStones, key)) {
+                    const stoneData = { ...t.browsiteStones[key], source: 'local' };
+                    createBrowsiteStoneScreen(stoneData);
+
+                    // Defer block placement until the chunk is loaded
+                    const cx = Math.floor(modWrap(stoneData.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(stoneData.z, MAP_SIZE) / CHUNK_SIZE);
+                    const chunkKey = makeChunkKey(worldName, cx, cz);
+                    const delta = {
+                        x: modWrap(stoneData.x, CHUNK_SIZE),
+                        y: stoneData.y,
+                        z: modWrap(stoneData.z, CHUNK_SIZE),
+                        b: 132
+                    };
+                    chunkManager.addPendingDeltas(chunkKey, [delta]);
+                }
+            }
+        }
+
         if (t.chests) {
             console.log("[LOGIN] Loading chests from session");
             chests = {};
@@ -402,6 +425,13 @@ async function applySaveFile(e, t, o) {
             for (const key in e.calligraphyStones) {
                 if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
                     createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
+                }
+            }
+        }
+        if (e.browsiteStones) {
+            for (const key in e.browsiteStones) {
+                if (Object.hasOwnProperty.call(e.browsiteStones, key)) {
+                    createBrowsiteStoneScreen({ ...e.browsiteStones[key], source: 'ipfs' });
                 }
             }
         } else if (e.deltas) {
@@ -1646,6 +1676,210 @@ function createCalligraphyStoneScreen(stoneData) {
     scene.add(screenMesh);
 }
 
+function createBrowsiteStoneScreen(stoneData) {
+    let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, direction } = stoneData;
+    const key = `${x},${y},${z}`;
+
+    // Deduplication: Skip if this stone is already loaded or currently loading
+    if (browsiteStones[key] && browsiteStones[key].mesh) {
+        console.log(`[BrowsiteStone] Skipping duplicate creation for key ${key} - already exists`);
+        return;
+    }
+    if (browsiteStonesLoading.has(key)) {
+        console.log(`[BrowsiteStone] Skipping duplicate creation for key ${key} - already loading`);
+        return;
+    }
+
+    // Mark as loading to prevent duplicate loads
+    browsiteStonesLoading.add(key);
+
+    // Create canvas for preview/placeholder
+    const pixelsPerBlock = 128;
+    const canvasWidth = width * pixelsPerBlock;
+    const canvasHeight = height * pixelsPerBlock;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const context = canvas.getContext('2d');
+
+    // Draw background with browser icon
+    context.fillStyle = '#4169E1';
+    context.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Draw a simple browser icon/text
+    context.fillStyle = '#ffffff';
+    context.font = 'bold 48px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('🌐', canvasWidth / 2, canvasHeight / 2 - 30);
+    
+    context.font = '24px Arial';
+    context.fillText('Browsite', canvasWidth / 2, canvasHeight / 2 + 30);
+
+    // Create texture
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    // Create plane geometry
+    const planeGeometry = new THREE.PlaneGeometry(width, height);
+    const material = new THREE.MeshBasicMaterial({
+        side: THREE.DoubleSide,
+        map: texture,
+        transparent: false
+    });
+    const screenMesh = new THREE.Mesh(planeGeometry, material);
+
+    // Orientation and Position
+    let playerDirection;
+    if (direction) {
+        playerDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
+    } else {
+        // Fallback for old stones saved without direction
+        playerDirection = new THREE.Vector3();
+        camera.getWorldDirection(playerDirection);
+        playerDirection.y = 0;
+        playerDirection.normalize();
+    }
+
+    const forward = playerDirection.clone();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    const position = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5) // Center of the block
+        .add(right.clone().multiplyScalar(offsetX))
+        .add(up.clone().multiplyScalar(offsetY))
+        .add(forward.clone().multiplyScalar(offsetZ));
+
+    screenMesh.position.copy(position);
+
+    // Set rotation to face the player direction
+    const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
+    screenMesh.lookAt(lookAtTarget);
+
+    // Store URL in userData for click handling
+    screenMesh.userData.browsiteUrl = url;
+    screenMesh.userData.browsiteKey = key;
+
+    // Create iframe overlay element for this browsite
+    const iframeContainer = document.createElement('div');
+    iframeContainer.id = `browsite-${key}`;
+    iframeContainer.style.position = 'absolute';
+    iframeContainer.style.display = 'none'; // Hidden by default
+    iframeContainer.style.pointerEvents = 'none'; // No interaction when not active
+    iframeContainer.style.zIndex = '200';
+    iframeContainer.style.border = '2px solid #4169E1';
+    iframeContainer.style.boxShadow = '0 0 10px rgba(65, 105, 225, 0.5)';
+    iframeContainer.style.background = '#000';
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+    iframe.src = url;
+    
+    iframeContainer.appendChild(iframe);
+    document.body.appendChild(iframeContainer);
+
+    browsiteStones[key] = { 
+        ...stoneData, 
+        mesh: screenMesh, 
+        iframeContainer: iframeContainer,
+        iframe: iframe,
+        isActive: false,
+        width: width,
+        height: height
+    };
+    browsiteStonesLoading.delete(key); // Remove from loading set after successful creation
+    scene.add(screenMesh);
+}
+
+// Browsite browser management
+let activeBrowsiteKey = null;
+
+function openBrowsiteBrowser(key) {
+    // Close any currently active browsite
+    if (activeBrowsiteKey && browsiteStones[activeBrowsiteKey]) {
+        closeBrowsiteBrowser();
+    }
+    
+    const stone = browsiteStones[key];
+    if (!stone || !stone.iframeContainer) return;
+    
+    stone.isActive = true;
+    stone.iframeContainer.style.display = 'block';
+    stone.iframeContainer.style.pointerEvents = 'auto'; // Enable interaction
+    activeBrowsiteKey = key;
+    
+    // Lock game controls
+    isPromptOpen = true;
+    
+    addMessage("Press ESC to close Browsite", 2000);
+}
+
+function closeBrowsiteBrowser() {
+    if (!activeBrowsiteKey) return;
+    
+    const stone = browsiteStones[activeBrowsiteKey];
+    if (stone && stone.iframeContainer) {
+        stone.isActive = false;
+        stone.iframeContainer.style.display = 'none';
+        stone.iframeContainer.style.pointerEvents = 'none';
+    }
+    
+    activeBrowsiteKey = null;
+    
+    // Unlock game controls
+    isPromptOpen = false;
+}
+
+// Update browsite iframe positions to match their 3D mesh positions
+function updateBrowsitePositions() {
+    if (!camera || !renderer) return;
+    
+    for (const key in browsiteStones) {
+        const stone = browsiteStones[key];
+        if (!stone || !stone.mesh || !stone.iframeContainer || !stone.isActive) continue;
+        
+        // Get the mesh's world position
+        const meshPos = stone.mesh.position.clone();
+        
+        // Project 3D position to 2D screen coordinates
+        const screenPos = meshPos.clone().project(camera);
+        
+        // Convert to screen pixels
+        const widthHalf = renderer.domElement.clientWidth / 2;
+        const heightHalf = renderer.domElement.clientHeight / 2;
+        
+        const x = (screenPos.x * widthHalf) + widthHalf;
+        const y = -(screenPos.y * heightHalf) + heightHalf;
+        
+        // Calculate the size based on distance and mesh size
+        const distance = camera.position.distanceTo(meshPos);
+        const fov = camera.fov * (Math.PI / 180); // Convert to radians
+        const frustumHeight = 2 * distance * Math.tan(fov / 2);
+        const frustumWidth = frustumHeight * camera.aspect;
+        
+        // Calculate pixel size based on world size
+        const pixelHeight = (stone.height / frustumHeight) * renderer.domElement.clientHeight;
+        const pixelWidth = (stone.width / frustumWidth) * renderer.domElement.clientWidth;
+        
+        // Position and size the iframe container
+        stone.iframeContainer.style.left = `${x - pixelWidth / 2}px`;
+        stone.iframeContainer.style.top = `${y - pixelHeight / 2}px`;
+        stone.iframeContainer.style.width = `${pixelWidth}px`;
+        stone.iframeContainer.style.height = `${pixelHeight}px`;
+        
+        // Hide if behind camera or too far
+        if (screenPos.z > 1 || distance > 100) {
+            stone.iframeContainer.style.display = 'none';
+        } else if (stone.isActive) {
+            stone.iframeContainer.style.display = 'block';
+        }
+    }
+}
+
 function dropSelectedItem(dropAll = false) {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
@@ -1946,6 +2180,31 @@ function onPointerDown(e) {
                 addMessage("Invalid URL (must start with http:// or https://)", 2000);
             } else {
                 addMessage("No link set for this sign", 1500);
+            }
+        }
+        return;
+    }
+
+    // Handle browsite stone clicks (open in-game browser)
+    const browsiteStoneMeshes = Object.values(browsiteStones).map(s => s.mesh).filter(m => m);
+    const browsiteStoneIntersects = raycaster.intersectObjects(browsiteStoneMeshes, true);
+
+    if (browsiteStoneIntersects.length > 0) {
+        let intersectedObject = browsiteStoneIntersects[0].object;
+        let parentMesh = intersectedObject.parent instanceof THREE.Group ? intersectedObject.parent : intersectedObject;
+        const intersectedStone = Object.values(browsiteStones).find(s => s.mesh === parentMesh);
+
+        if (intersectedStone && intersectedStone.url && typeof intersectedStone.url === 'string') {
+            const url = intersectedStone.url.trim();
+            const key = intersectedStone.userData?.browsiteKey || `${intersectedStone.x},${intersectedStone.y},${intersectedStone.z}`;
+            // Only open http:// or https:// links
+            if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                openBrowsiteBrowser(key);
+                addMessage("Click inside to interact, ESC to close", 2000);
+            } else if (url) {
+                addMessage("Invalid URL (must start with http:// or https://)", 2000);
+            } else {
+                addMessage("No URL set for this Browsite", 1500);
             }
         }
         return;
@@ -2306,6 +2565,38 @@ function removeBlockAt(e, t, o, breaker) {
             }
         }
 
+        if (a === 132) {
+            const key = `${e},${t},${o}`;
+            if (browsiteStones[key]) {
+                // Close if this browsite is currently active
+                if (activeBrowsiteKey === key) {
+                    closeBrowsiteBrowser();
+                }
+                
+                // Remove iframe container from DOM
+                if (browsiteStones[key].iframeContainer) {
+                    document.body.removeChild(browsiteStones[key].iframeContainer);
+                }
+                
+                // Remove mesh
+                if (browsiteStones[key].mesh) {
+                    scene.remove(browsiteStones[key].mesh);
+                    disposeObject(browsiteStones[key].mesh);
+                }
+                delete browsiteStones[key];
+
+                const message = JSON.stringify({
+                    type: 'browsite_stone_removed',
+                    key: key
+                });
+                for (const [username, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(message);
+                    }
+                }
+            }
+        }
+
         if (a === 123 || a === 122) {
             setTimeout(() => checkAndDeactivateHive(e, t, o), 100);
         }
@@ -2372,6 +2663,21 @@ function placeBlockAt(e, t, o, a) {
                             direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
                         };
                         document.getElementById('calligraphyStoneModal').style.display = 'flex';
+                        isPromptOpen = true;
+                        return;
+                    }
+
+                    // Special handling for Browsite Stone
+                    if (a === 132) {
+                        const playerDirection = new THREE.Vector3();
+                        camera.getWorldDirection(playerDirection);
+                        playerDirection.y = 0;
+                        playerDirection.normalize();
+                        browsiteStonePlacement = {
+                            x: e, y: t, z: o,
+                            direction: { x: playerDirection.x, y: playerDirection.y, z: playerDirection.z }
+                        };
+                        document.getElementById('browsiteStoneModal').style.display = 'flex';
                         isPromptOpen = true;
                         return;
                     }
@@ -2812,7 +3118,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, "Escape" === e.key && activeBrowsiteKey && closeBrowsiteBrowser(), "Escape" === e.key && mouseLocked && !activeBrowsiteKey && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -2984,6 +3290,27 @@ async function downloadHostSession() {
         }
     }
 
+    // Serialize browsite stones (include ALL stones for host session, not just local)
+    const serializableBrowsiteStones = {};
+    for (const key in browsiteStones) {
+        if (Object.hasOwnProperty.call(browsiteStones, key)) {
+            const stone = browsiteStones[key];
+            // Host session saves ALL stones regardless of source
+            serializableBrowsiteStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                direction: stone.direction
+            };
+        }
+    }
+
     // Serialize chests (same logic as single player session)
     const serializableChests = {};
     for (const key in chests) {
@@ -3017,6 +3344,7 @@ async function downloadHostSession() {
             },
             magicianStones: serializableMagicianStones,
             calligraphyStones: serializableCalligraphyStones,
+            browsiteStones: serializableBrowsiteStones,
             chests: serializableChests,
             musicPlaylist: musicPlaylist,
             videoPlaylist: videoPlaylist
@@ -3092,6 +3420,26 @@ async function downloadSinglePlayerSession() {
         }
     }
 
+    const serializableBrowsiteStones = {};
+    for (const key in browsiteStones) {
+        if (Object.hasOwnProperty.call(browsiteStones, key)) {
+            const stone = browsiteStones[key];
+            if (stone.source !== 'local') continue;
+            serializableBrowsiteStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                direction: stone.direction
+            };
+        }
+    }
+
     const serializableChests = {};
     for (const key in chests) {
         if (chests[key]) {
@@ -3114,6 +3462,7 @@ async function downloadSinglePlayerSession() {
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
+        browsiteStones: serializableBrowsiteStones,
         chests: serializableChests,
         profile: {
             x: player.x,
@@ -4098,13 +4447,35 @@ function saveCurrentWorldStoneData(currentWorldName) {
         }
     }
 
+    // Serialize browsite stones (exclude mesh, keep config data)
+    const savedBrowsiteStones = {};
+    for (const key in browsiteStones) {
+        if (Object.hasOwnProperty.call(browsiteStones, key)) {
+            const stone = browsiteStones[key];
+            savedBrowsiteStones[key] = {
+                x: stone.x,
+                y: stone.y,
+                z: stone.z,
+                url: stone.url,
+                width: stone.width,
+                height: stone.height,
+                offsetX: stone.offsetX,
+                offsetY: stone.offsetY,
+                offsetZ: stone.offsetZ,
+                direction: stone.direction,
+                source: stone.source
+            };
+        }
+    }
+
     // Store in per-world map
     WORLD_STONE_DATA.set(currentWorldName, {
         magicianStones: savedMagicianStones,
-        calligraphyStones: savedCalligraphyStones
+        calligraphyStones: savedCalligraphyStones,
+        browsiteStones: savedBrowsiteStones
     });
 
-    console.log(`[WorldSwitch] Saved ${Object.keys(savedMagicianStones).length} magician stone(s) and ${Object.keys(savedCalligraphyStones).length} calligraphy stone(s) for world: ${currentWorldName}`);
+    console.log(`[WorldSwitch] Saved ${Object.keys(savedMagicianStones).length} magician stone(s), ${Object.keys(savedCalligraphyStones).length} calligraphy stone(s), and ${Object.keys(savedBrowsiteStones).length} browsite stone(s) for world: ${currentWorldName}`);
 }
 
 /**
@@ -4144,6 +4515,19 @@ function restoreWorldStoneData(targetWorldName) {
                 const stoneData = savedData.calligraphyStones[key];
                 // Recreate the stone screen with its saved configuration
                 createCalligraphyStoneScreen(stoneData);
+            }
+        }
+    }
+
+    // Restore browsite stones
+    if (savedData.browsiteStones) {
+        const stoneCount = Object.keys(savedData.browsiteStones).length;
+        console.log(`[WorldSwitch] Restoring ${stoneCount} browsite stone(s) for world: ${targetWorldName}`);
+        for (const key in savedData.browsiteStones) {
+            if (Object.hasOwnProperty.call(savedData.browsiteStones, key)) {
+                const stoneData = savedData.browsiteStones[key];
+                // Recreate the stone screen with its saved configuration
+                createBrowsiteStoneScreen(stoneData);
             }
         }
     }
@@ -4781,6 +5165,7 @@ function gameLoop(e) {
                 }
             }
         }
+        updateBrowsitePositions(); // Update browsite iframe positions
         renderer.render(scene, camera)
     }
     requestAnimationFrame(gameLoop)
@@ -5342,4 +5727,68 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     document.getElementById('calligraphyStoneModal').style.display = 'none';
     isPromptOpen = false;
     calligraphyStonePlacement = null;
+});
+
+// Browsite Stone event handlers
+document.getElementById('browsiteStoneCancel').addEventListener('click', function() {
+    document.getElementById('browsiteStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    browsiteStonePlacement = null;
+});
+
+document.getElementById('browsiteStoneSave').addEventListener('click', function() {
+    const url = document.getElementById('browsiteStoneUrl').value;
+    if (!url) {
+        addMessage("URL is required.", 3000);
+        return;
+    }
+
+    // Validate URL format
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        addMessage("URL must start with http:// or https://", 3000);
+        return;
+    }
+
+    const stoneData = {
+        x: browsiteStonePlacement.x,
+        y: browsiteStonePlacement.y,
+        z: browsiteStonePlacement.z,
+        url: url,
+        width: parseFloat(document.getElementById('browsiteStoneWidth').value),
+        height: parseFloat(document.getElementById('browsiteStoneHeight').value),
+        offsetX: parseFloat(document.getElementById('browsiteStoneOffsetX').value),
+        offsetY: parseFloat(document.getElementById('browsiteStoneOffsetY').value),
+        offsetZ: parseFloat(document.getElementById('browsiteStoneOffsetZ').value),
+        direction: browsiteStonePlacement.direction // Use the direction saved on placement
+    , source: 'local'
+    };
+
+    createBrowsiteStoneScreen(stoneData);
+
+    const n = INVENTORY[selectedHotIndex];
+    if (browsiteStonePlacement && n && n.id === 132) {
+        chunkManager.setBlockGlobal(browsiteStonePlacement.x, browsiteStonePlacement.y, browsiteStonePlacement.z, 132, true, n.originSeed);
+
+        n.count -= 1;
+        if (n.count <= 0) {
+            INVENTORY[selectedHotIndex] = null;
+        }
+        updateHotbarUI();
+        safePlayAudio(soundPlace);
+
+        // Send browsite stone data to other peers
+        const message = JSON.stringify({
+            type: 'browsite_stone_placed',
+            stoneData: stoneData
+        });
+        for (const [username, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(message);
+            }
+        }
+    }
+
+    document.getElementById('browsiteStoneModal').style.display = 'none';
+    isPromptOpen = false;
+    browsiteStonePlacement = null;
 });

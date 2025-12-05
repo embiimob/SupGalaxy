@@ -298,6 +298,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#654321",
             strength: 2,
             transparent: !0
+        },
+        132: {
+            name: "Browsite",
+            color: "#4169E1",
+            strength: 3
         }
     },
     BIOMES = [{
@@ -612,6 +617,15 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             129: 8
         }
+    }, {
+        id: "browsite",
+        out: {
+            id: 132,
+            count: 1
+        },
+        requires: {
+            5: 3
+        }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
@@ -731,11 +745,14 @@ var volcanoes = [],
     calligraphyStonePlacement = null,
     calligraphyStones = {},
     calligraphyStonesLoading = new Set(), // Entity-based deduplication: tracks calligraphy stones by position key during loading
+    browsiteStonePlacement = null,
+    browsiteStones = {},
+    browsiteStonesLoading = new Set(), // Entity-based deduplication: tracks browsite stones by position key during loading
     chests = {},
     currentChestKey = null,
-    // Per-world stone data storage: Stores magician and calligraphy stone metadata per world.
+    // Per-world stone data storage: Stores magician, calligraphy, and browsite stone metadata per world.
     // This allows stone media/behaviors to be preserved and restored when switching worlds.
-    // Key: worldName, Value: { magicianStones: {}, calligraphyStones: {}, chests: {} }
+    // Key: worldName, Value: { magicianStones: {}, calligraphyStones: {}, browsiteStones: {}, chests: {} }
     WORLD_STONE_DATA = new Map();
 const lightManager = {
     lights: [],
