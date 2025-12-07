@@ -202,6 +202,49 @@ Run tests in the browser console: `runIpfsVersioningTests()`
 
 ---
 
+# 🔌 Local Mode (Sup!? Win Frame Integration)
+
+SupGalaxy supports **Local Mode** for optimized IPFS content loading when launched inside a Sup!? win frame.
+
+### Query Parameters
+
+When either of these query parameters are present, the app enters Local Mode:
+- `transactionid` — Transaction ID from Sup!?
+- `viewername` — Username to prefill in the login prompt
+
+### Local Mode Behavior
+
+**Normal Mode** (default):
+- Fetches all IPFS content from public gateway: `https://ipfs.io/ipfs/<hash>`
+- Only the IPFS hash is required in URLs
+
+**Local Mode** (with query params):
+- First attempts to fetch from local path: `../ipfs/<hash>/<filename>`
+- Falls back to public gateway if local fetch fails
+- Automatically prefills the username input with the `viewername` parameter value
+
+### Example Usage
+
+```
+# Normal mode - public gateway only
+https://supgalaxy.org/
+
+# Local mode with viewername prefill
+https://supgalaxy.org/?viewername=Alice
+
+# Local mode with transaction tracking
+https://supgalaxy.org/?transactionid=abc123&viewername=Bob
+```
+
+### Implementation Details
+
+- Local IPFS path format requires **full filename** in the URL
+- Audio/video streaming URLs (hash-only) automatically use public gateway
+- Local mode is detected on page load and communicated to all modules
+- No auto-login occurs; only the username field is prefilled
+
+---
+
 # 🌐 Local Decentralized Setup (Advanced)
 
 Run your own **Sup!?** + **p2fk.io** stack for full independence.

@@ -4802,7 +4802,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
             c = i.get("loc");
         
         // Prefill world name if world-seed parameter is present
-        if (l && (document.getElementById("worldNameInput").value = l));
+        if (l) {
+            document.getElementById("worldNameInput").value = l;
+        }
         
         // Prefill username: use viewername if present, otherwise use user-name
         if (viewerName) {

@@ -9,7 +9,7 @@ var addressByKeywordCache = new Map();
  * the app enters "local mode" and tries to fetch IPFS content from
  * a local source first before falling back to the public gateway.
  * 
- * Local mode path format: ../ipfs/<filename>
+ * Local mode path format: ../ipfs/<hash>/<filename>
  * Example: ../ipfs/QmAbc123/chunk_0001.json
  * 
  * Normal mode: Only uses public gateway https://ipfs.io/ipfs/<hash>

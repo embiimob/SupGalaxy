@@ -607,7 +607,7 @@ async function fetchIPFS(hash) {
                 
                 // Try local mode first if enabled and hash contains a filename
                 if (localMode && hash.includes('/')) {
-                    const localPath = \`../ipfs/\${hash}\`;
+                    const localPath = '../ipfs/' + hash;
                     try {
                         console.log('[Worker LocalMode] Attempting to fetch JSON from:', localPath);
                         var localResponse = await fetch(localPath);
