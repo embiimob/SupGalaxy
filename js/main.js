@@ -4808,8 +4808,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
         
         // Prefill username: use viewername if present, otherwise use user-name
         if (viewerName) {
-            document.getElementById("userInput").value = viewerName;
-            console.log("[SYSTEM] Prefilled username from viewername parameter:", viewerName);
+            // Basic sanitization: remove HTML tags and limit length to 20 chars (matching game validation)
+            const sanitizedViewerName = viewerName.replace(/<[^>]*>/g, '').slice(0, 20);
+            document.getElementById("userInput").value = sanitizedViewerName;
+            console.log("[SYSTEM] Prefilled username from viewername parameter:", sanitizedViewerName);
         } else if (d) {
             document.getElementById("userInput").value = d;
         }

@@ -51,6 +51,7 @@ async function GetPublicAddressByKeyword(keyword) {
  * In local mode, attempts to fetch from ../ipfs/<filename> first before falling back to public gateway
  * 
  * @param {string} url - IPFS URL in format IPFS:hash\filename or IPFS:hash
+ *                       Note: Backslashes (\) in the IPFS URL are converted to forward slashes (/) for local path
  * @returns {Promise<string>} - Blob URL for the fetched content
  */
 async function resolveIPFS(url) {
@@ -61,6 +62,7 @@ async function resolveIPFS(url) {
     const fullMatch = match[0].split('IPFS:')[1];
     const parts = fullMatch.split('\\');
     const hash = parts[0];
+    // Convert backslash separators to forward slashes for local file paths
     const filename = parts.length > 1 ? parts.slice(1).join('/') : null;
     
     // Try local mode first if enabled and filename is present
