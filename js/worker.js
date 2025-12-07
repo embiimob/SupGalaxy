@@ -7,23 +7,10 @@ const BLOCK_AIR = 0;
 
 /**
  * Local Mode Detection for Worker
- * When transactionid or viewername query parameters are present,
- * the worker will try to fetch IPFS content from local source first.
+ * The worker receives the localMode flag from the parent via a message.
+ * When localMode is true, the worker will try to fetch IPFS content from local source first.
  */
 var localMode = false;
-(function detectLocalMode() {
-    try {
-        const params = new URLSearchParams(self.location.search);
-        if (params.has('transactionid') || params.has('viewername')) {
-            localMode = true;
-            console.log('[Worker LocalMode] Enabled - IPFS content will be fetched from local source first');
-        } else {
-            console.log('[Worker LocalMode] Disabled - Using public IPFS gateway only');
-        }
-    } catch (e) {
-        console.log('[Worker LocalMode] Could not detect query params, using public gateway only');
-    }
-})();
 
 const ARCHETYPES = {
     'Earth': {
@@ -650,6 +637,13 @@ async function fetchIPFS(hash) {
 self.onmessage = async function(e) {
         var data = e.data;
         var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+
+        // Handle localMode setting message
+        if (type === 'set_local_mode') {
+            localMode = data.localMode;
+            console.log('[Worker LocalMode] Set to:', localMode);
+            return;
+        }
 
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);

@@ -3743,7 +3743,15 @@ async function startGame() {
     c && (c.innerText = player.score), await initServers(), worker.postMessage({
         type: "sync_processed",
         ids: Array.from(processedMessages)
-    }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3);
+    }), startWorker();
+    
+    // Send localMode flag to worker
+    worker.postMessage({
+        type: "set_local_mode",
+        localMode: localMode
+    });
+    
+    setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3);
     handleResizeAndOrientation();
 }
 
