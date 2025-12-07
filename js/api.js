@@ -155,7 +155,7 @@ async function GetKeywordByPublicAddress(address) {
 }
 /**
  * Fetch JSON data from IPFS
- * In local mode, attempts to fetch from ../ipfs/<filename> first before falling back to public gateway
+ * In local mode, attempts to fetch from ../ipfs/<hash> first before falling back to public gateway
  * Note: This function expects JSON data and parses the response
  * 
  * @param {string} hash - IPFS hash or hash/filename path
@@ -165,8 +165,9 @@ async function fetchIPFS(hash) {
     try {
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
         
-        // Try local mode first if enabled and hash contains a filename
-        if (localMode && hash.includes('/')) {
+        // Try local mode first if enabled
+        if (localMode) {
+            // Try local path: if hash contains filename use it, otherwise just use the hash
             const localPath = `../ipfs/${hash}`;
             try {
                 console.log('[LocalMode] Attempting to fetch JSON from:', localPath);
