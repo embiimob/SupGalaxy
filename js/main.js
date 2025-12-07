@@ -4790,8 +4790,21 @@ document.addEventListener("DOMContentLoaded", (async function () {
         const i = new URLSearchParams(window.location.search),
             l = i.get("world-seed"),
             d = i.get("user-name"),
+            viewerName = i.get("viewername"),
             c = i.get("loc");
-        if (l && (document.getElementById("worldNameInput").value = l), d && (document.getElementById("userInput").value = d), c) {
+        
+        // Prefill world name if world-seed parameter is present
+        if (l && (document.getElementById("worldNameInput").value = l));
+        
+        // Prefill username: use viewername if present, otherwise use user-name
+        if (viewerName) {
+            document.getElementById("userInput").value = viewerName;
+            console.log("[SYSTEM] Prefilled username from viewername parameter:", viewerName);
+        } else if (d) {
+            document.getElementById("userInput").value = d;
+        }
+        
+        if (c) {
             const e = c.split(",");
             if (3 === e.length) {
                 const t = parseFloat(e[0]),

@@ -5,6 +5,26 @@ const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
 
+/**
+ * Local Mode Detection for Worker
+ * When transactionid or viewername query parameters are present,
+ * the worker will try to fetch IPFS content from local source first.
+ */
+var localMode = false;
+(function detectLocalMode() {
+    try {
+        const params = new URLSearchParams(self.location.search);
+        if (params.has('transactionid') || params.has('viewername')) {
+            localMode = true;
+            console.log('[Worker LocalMode] Enabled - IPFS content will be fetched from local source first');
+        } else {
+            console.log('[Worker LocalMode] Disabled - Using public IPFS gateway only');
+        }
+    } catch (e) {
+        console.log('[Worker LocalMode] Could not detect query params, using public gateway only');
+    }
+})();
+
 const ARCHETYPES = {
     'Earth': {
         name: 'Earth',
@@ -597,7 +617,25 @@ async function fetchIPFS(hash) {
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
-                var response = await fetch("https://ipfs.io/ipfs/" + hash);
+                
+                // Try local mode first if enabled and hash contains a filename
+                if (localMode && hash.includes('/')) {
+                    const localPath = \`../ipfs/\${hash}\`;
+                    try {
+                        console.log('[Worker LocalMode] Attempting to fetch JSON from:', localPath);
+                        var localResponse = await fetch(localPath);
+                        if (localResponse.ok) {
+                            console.log('[Worker LocalMode] Successfully fetched JSON from local source');
+                            return await localResponse.json();
+                        }
+                    } catch (localError) {
+                        console.log('[Worker LocalMode] Local JSON fetch failed, falling back to public gateway:', localError.message);
+                    }
+                }
+                
+                // Fallback to public gateway (use only the hash part, not filename)
+                const hashOnly = hash.split('/')[0];
+                var response = await fetch("https://ipfs.io/ipfs/" + hashOnly);
                 if (response.ok) {
                     return await response.json();
                 }
