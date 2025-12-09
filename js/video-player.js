@@ -8,7 +8,6 @@ var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
 // Sup!? local mode IPFS URL helper
-// Sup!? local mode IPFS URL helper
 function buildIPFSUrl(hash, filename = null) {
     if (checkSupLocalMode() && filename) {
         // Return local file:// URL using LOCAL_IPFS_ROOT constant
