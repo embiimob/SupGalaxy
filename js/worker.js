@@ -1,9 +1,12 @@
-        var worker = new Worker(URL.createObjectURL(new Blob([`
+        var worker = new Worker(URL.createObjectURL(new Blob([\`
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
+// Local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
+// Note: Use forward slashes even on Windows for file:// URLs
+const LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
 
 const ARCHETYPES = {
     'Earth': {
@@ -603,8 +606,8 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         // If running in Sup!? local mode and filename is provided, try local path first
         if (checkSupLocalMode() && filename) {
             try {
-                // Use /ipfs/ as an absolute path from the root, not ../ipfs/
-                const localPath = \`/ipfs/\${hash}/\${filename}\`;
+                // Use file:// URL with LOCAL_IPFS_ROOT constant
+                const localPath = \`file:///\${LOCAL_IPFS_ROOT}/\${hash}/\${filename}\`;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {

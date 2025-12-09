@@ -19,6 +19,9 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // This provides a compact integer representing seconds since this epoch for ordering block updates
     // Note: JavaScript months are 0-indexed, so month 8 = September
     IPFS_EPOCH_2025_09_21 = Math.floor(Date.UTC(2025, 8, 21, 0, 0, 0) / 1000),
+    // Local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
+    // Note: Use forward slashes even on Windows for file:// URLs
+    LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
     // Render distance configuration:

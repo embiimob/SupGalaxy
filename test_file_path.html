@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><title>File Path Test</title></head>
+<body>
+<h1>File:// Path Test</h1>
+<div id="output"></div>
+<script>
+const LOCAL_IPFS_ROOT = 'C:\\Sup\\ipfs';
+const hash = 'QmTest123';
+const filename = 'video.mp4';
+
+const urlParams = new URLSearchParams(window.location.search);
+const hasTransactionId = urlParams.has('transactionid');
+
+const output = document.getElementById('output');
+output.innerHTML = `
+<p><strong>Has transactionid:</strong> ${hasTransactionId}</p>
+<p><strong>LOCAL_IPFS_ROOT:</strong> ${LOCAL_IPFS_ROOT}</p>
+<p><strong>File URL constructed:</strong></p>
+<p style="color: green; font-family: monospace;">file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}</p>
+<p><strong>Evaluated:</strong> <code>file:///C:\\Sup\\ipfs/QmTest123/video.mp4</code></p>
+<p><strong>Expected on Windows:</strong> <code>file:///C:/Sup/ipfs/QmTest123/video.mp4</code></p>
+`;
+</script>
+</body>
+</html>
