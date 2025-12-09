@@ -604,13 +604,16 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         if (checkSupLocalMode() && filename) {
             try {
                 const localPath = \`../ipfs/\${hash}/\${filename}\`;
+                console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {
+                    console.log('[Worker IPFS] Successfully fetched from local path');
                     return response;
                 }
+                console.log('[Worker IPFS] Local fetch failed with status:', response.status);
             } catch (e) {
                 // Local fetch failed, will fallback to ipfs.io
-                console.log('[Worker] Local IPFS path not found, falling back to ipfs.io');
+                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
             }
         }
         
