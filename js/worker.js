@@ -809,7 +809,8 @@ self.onmessage = async function(e) {
                                     timestamp: new Date(msg.BlockDate).getTime(),
                                     transactionId: msg.TransactionId,
                                     magicianStones: processData.magicianStones || null,
-                                    calligraphyStones: processData.calligraphyStones || null
+                                    calligraphyStones: processData.calligraphyStones || null,
+                                    foreignBlockOrigins: processData.foreignBlockOrigins || null
                                 });
                                 for (var delta of normalizedDeltas) {
                                     var chunk = delta.chunk;
@@ -839,7 +840,7 @@ self.onmessage = async function(e) {
                 for (var entry of updatesByTransaction) {
                     var transactionId = entry[0];
                     var update = entry[1];
-                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones }] });
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, foreignBlockOrigins: update.foreignBlockOrigins }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
@@ -1398,7 +1399,8 @@ self.onmessage = async function(e) {
                     var fullData = {
                         deltas: update.changes,
                         magicianStones: update.magicianStones || null,
-                        calligraphyStones: update.calligraphyStones || null
+                        calligraphyStones: update.calligraphyStones || null,
+                        foreignBlockOrigins: update.foreignBlockOrigins || null
                     };
                     // sourceUsername is undefined to indicate this is from local worker (IPFS fetch)
                     applyChunkUpdates(fullData, update.address, update.timestamp, update.transactionId, undefined);

@@ -221,6 +221,10 @@ async function applySaveFile(e, t, o) {
         updateHotbarUI();
         console.log("[LOGIN] Creating ChunkManager from session");
         chunkManager = new ChunkManager(worldSeed);
+        if (t.foreignBlockOrigins) {
+            getCurrentWorldState().foreignBlockOrigins = new Map(t.foreignBlockOrigins);
+            console.log(`[LOGIN] Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign block origins before applying deltas`);
+        }
         if (t.deltas) {
             showLoadingIndicator(0, "Loading File...");
             await new Promise(r => setTimeout(r, 50)); // Allow UI to render
@@ -244,6 +248,9 @@ async function applySaveFile(e, t, o) {
                 }
             }
             hideLoadingIndicator();
+            if (t.foreignBlockOrigins && t.foreignBlockOrigins.length > 0) {
+                addMessage(`Loaded ${t.foreignBlockOrigins.length} foreign blocks.`, 2e3);
+            }
         }
         populateSpawnChunks(), spawnPoint = {
             x: player.x,
