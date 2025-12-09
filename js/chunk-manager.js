@@ -676,7 +676,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
         // Handle metadata if 'e' is the full export object
         if (!Array.isArray(e)) {
-            if (e.foreignBlockOrigins) {
+            if (e.foreignBlockOrigins && e.foreignBlockOrigins.length > 0) {
                 // foreignBlockOrigins is an array of [key, seed] pairs - convert to Map
                 const worldState = getCurrentWorldState();
                 for (const [blockKey, originSeed] of e.foreignBlockOrigins) {
