@@ -593,21 +593,9 @@ async function getKeywordByPublicAddress(address) {
         }
 }
 // Sup!? local mode detection and IPFS path utilities
-var isSupLocalMode = null;
+var isSupLocalMode = false; // Will be set by main context
 
 function checkSupLocalMode() {
-        if (isSupLocalMode === null) {
-            // In a web worker, we need to parse location from the parent context
-            // Since we don't have direct access, we'll check if the worker was initialized with this info
-            // For now, we'll try to detect from the worker's own context
-            try {
-                const urlParams = new URLSearchParams(self.location.search);
-                isSupLocalMode = urlParams.has('transactionid');
-            } catch (e) {
-                // If we can't access location in worker, default to false
-                isSupLocalMode = false;
-            }
-        }
         return isSupLocalMode;
 }
 
@@ -650,6 +638,12 @@ async function fetchIPFS(hash) {
 self.onmessage = async function(e) {
         var data = e.data;
         var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+
+        if (type === 'configure_sup_local_mode') {
+            isSupLocalMode = data.isSupLocalMode || false;
+            console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode);
+            return;
+        }
 
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);
