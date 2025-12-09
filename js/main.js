@@ -245,6 +245,10 @@ async function applySaveFile(e, t, o) {
             }
             hideLoadingIndicator();
         }
+        if (t.foreignBlockOrigins) {
+            getCurrentWorldState().foreignBlockOrigins = new Map(t.foreignBlockOrigins);
+            addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3);
+        }
         populateSpawnChunks(), spawnPoint = {
             x: player.x,
             y: player.y,
