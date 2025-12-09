@@ -11,7 +11,7 @@ var showingPlaylist = false;
 
 // Sup!? local mode IPFS URL helper
 function buildIPFSUrl(hash, filename = null) {
-    if (checkSupLocalMode && checkSupLocalMode() && filename) {
+    if (checkSupLocalMode() && filename) {
         // Return local path for Sup!? local mode
         return `../ipfs/${hash}/${filename}`;
     }
