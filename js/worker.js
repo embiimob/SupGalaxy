@@ -592,12 +592,50 @@ async function getKeywordByPublicAddress(address) {
             return null;
         }
 }
+// Sup!? local mode detection and IPFS path utilities
+var isSupLocalMode = null;
+
+function checkSupLocalMode() {
+        if (isSupLocalMode === null) {
+            // In a web worker, we need to parse location from the parent context
+            // Since we don't have direct access, we'll check if the worker was initialized with this info
+            // For now, we'll try to detect from the worker's own context
+            try {
+                const urlParams = new URLSearchParams(self.location.search);
+                isSupLocalMode = urlParams.has('transactionid');
+            } catch (e) {
+                // If we can't access location in worker, default to false
+                isSupLocalMode = false;
+            }
+        }
+        return isSupLocalMode;
+}
+
+async function fetchIPFSWithFallback(hash, filename = null) {
+        // If running in Sup!? local mode and filename is provided, try local path first
+        if (checkSupLocalMode() && filename) {
+            try {
+                const localPath = \`../ipfs/\${hash}/\${filename}\`;
+                const response = await fetch(localPath);
+                if (response.ok) {
+                    return response;
+                }
+            } catch (e) {
+                // Local fetch failed, will fallback to ipfs.io
+                console.log('[Worker] Local IPFS path not found, falling back to ipfs.io');
+            }
+        }
+        
+        // Fallback to ipfs.io (doesn't include filename, just hash)
+        return await fetch("https://ipfs.io/ipfs/" + hash);
+}
+
 async function fetchIPFS(hash) {
         let attempts = 0;
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
-                var response = await fetch("https://ipfs.io/ipfs/" + hash);
+                var response = await fetchIPFSWithFallback(hash);
                 if (response.ok) {
                     return await response.json();
                 }

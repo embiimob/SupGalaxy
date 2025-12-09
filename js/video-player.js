@@ -7,6 +7,15 @@ var isVideoMuted = true;
 var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
+// Sup!? local mode IPFS URL helper
+function buildIPFSUrl(hash, filename = null) {
+    if (checkSupLocalMode && checkSupLocalMode() && filename) {
+        // Return local path for Sup!? local mode
+        return `../ipfs/${hash}/${filename}`;
+    }
+    // Fallback to ipfs.io
+    return `https://ipfs.io/ipfs/${hash}`;
+}
 
 // Video Player Logic
 function initVideoPlayer() {
@@ -135,7 +144,7 @@ async function fetchAndPlayVideos(searchTerm = 'game') {
                 if (!videoPlaylist.some(track => track.url.includes(hash))) {
                     videoPlaylist.push({
                         name: filename,
-                        url: `https://ipfs.io/ipfs/${hash}`
+                        url: buildIPFSUrl(hash, filename)
                     });
                 }
             }
@@ -363,7 +372,7 @@ async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
                 addButton.onclick = () => {
                     const track = {
                         name: sanitizedFilename,
-                        url: `https://ipfs.io/ipfs/${hash}`
+                        url: buildIPFSUrl(hash, sanitizedFilename)
                     };
                     if (!videoPlaylist.some(t => t.url === track.url)) {
                         if (videoPlaylist.length >= 10) {

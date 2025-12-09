@@ -9,6 +9,16 @@ var previewAudio = new Audio();
 var currentPreviewUrl = null;
 var showingPlaylist = false;
 
+// Sup!? local mode IPFS URL helper
+function buildIPFSUrl(hash, filename = null) {
+    if (checkSupLocalMode && checkSupLocalMode() && filename) {
+        // Return local path for Sup!? local mode
+        return `../ipfs/${hash}/${filename}`;
+    }
+    // Fallback to ipfs.io
+    return `https://ipfs.io/ipfs/${hash}`;
+}
+
 // Helper function to detect if an error is caused by autoplay restrictions
 function isAutoplayError(error) {
     if (!error) return false;
@@ -177,7 +187,7 @@ async function fetchAndPlayMusic() {
                 if (!musicPlaylist.some(track => track.url.includes(hash))) {
                     musicPlaylist.push({
                         name: sanitizedFilename,
-                        url: `https://ipfs.io/ipfs/${hash}`
+                        url: buildIPFSUrl(hash, sanitizedFilename)
                     });
                 }
             }
@@ -385,7 +395,7 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
                 playButton.innerText = '▶';
                 playButton.className = 'preview-play-btn';
                 playButton.style.fontSize = '10px';
-                const songUrl = `https://ipfs.io/ipfs/${hash}`;
+                const songUrl = buildIPFSUrl(hash, sanitizedFilename);
                 playButton.onclick = () => togglePreview(playButton, songUrl);
                 buttonContainer.appendChild(playButton);
 
@@ -396,7 +406,7 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
                 addButton.onclick = () => {
                     const track = {
                         name: sanitizedFilename,
-                        url: `https://ipfs.io/ipfs/${hash}`
+                        url: buildIPFSUrl(hash, sanitizedFilename)
                     };
                     if (!musicPlaylist.some(t => t.url === track.url)) {
                         if (musicPlaylist.length >= 10) {
