@@ -13,7 +13,8 @@ var showingPlaylist = false;
 function buildIPFSUrl(hash, filename = null) {
     if (checkSupLocalMode() && filename) {
         // Return local path for Sup!? local mode
-        return `../ipfs/${hash}/${filename}`;
+        // Use /ipfs/ as an absolute path from the root, not ../ipfs/
+        return `/ipfs/${hash}/${filename}`;
     }
     // Fallback to ipfs.io
     return `https://ipfs.io/ipfs/${hash}`;
