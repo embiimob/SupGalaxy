@@ -2818,21 +2818,51 @@ document.getElementById("trashCancel").addEventListener("click", (function () {
 }));
 var keys = {};
 
+/**
+ * Check if any modal input field is currently focused
+ * This prevents game commands from being triggered while typing in modals.
+ * Uses document.activeElement to avoid race conditions with focus/blur events.
+ * @returns {boolean} true if any modal input has focus
+ */
+function isModalInputActive() {
+    // Check if the currently focused element is a modal input
+    const activeElement = document.activeElement;
+    if (!activeElement) return false;
+    
+    // Check if the active element is within either modal
+    const magicianModal = document.getElementById('magicianStoneModal');
+    const calligraphyModal = document.getElementById('calligraphyStoneModal');
+    
+    const isInMagicianModal = magicianModal && magicianModal.contains(activeElement);
+    const isInCalligraphyModal = calligraphyModal && calligraphyModal.contains(activeElement);
+    
+    // Return true if active element is an input/textarea/select within either modal
+    if (isInMagicianModal || isInCalligraphyModal) {
+        const tagName = activeElement.tagName.toLowerCase();
+        return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    }
+    
+    return false;
+}
+
 function registerKeyEvents() {
     function e(e) {
         // Check if chat input is focused - if so, don't process game controls
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
         
+        // Check if any modal input is focused - if so, don't process game controls
+        const modalInputActive = isModalInputActive();
+        
         // Handle "/" key to open chat (only if no modal is open)
-        if (e.key === "/" && !isPromptOpen && !chatInputActive) {
+        if (e.key === "/" && !isPromptOpen && !chatInputActive && !modalInputActive) {
             if (typeof handleSlashKeyForChat === 'function') {
                 handleSlashKeyForChat(e);
             }
             return;
         }
         
-        // Don't process game controls if chat is active
-        if (chatInputActive) {
+        // Don't process game controls if chat or modal input is active
+        if (chatInputActive || modalInputActive) {
             return;
         }
         
@@ -2851,9 +2881,10 @@ function registerKeyEvents() {
     }
 
     function t(e) {
-        // Don't process keyup if chat is active
+        // Don't process keyup if chat or modal input is active
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
-        if (chatInputActive) {
+        const modalInputActive = isModalInputActive();
+        if (chatInputActive || modalInputActive) {
             return;
         }
         keys[e.key.toLowerCase()] = !1
@@ -5392,3 +5423,18 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     isPromptOpen = false;
     calligraphyStonePlacement = null;
 });
+
+/**
+ * Initialize focus tracking for modal inputs
+ * This prevents game commands from being triggered while typing in modal text fields
+ * Note: Focus tracking is now handled dynamically by isModalInputActive() checking
+ * document.activeElement, so we only need to log initialization for debugging.
+ */
+function initModalInputFocusTracking() {
+    if (typeof console !== 'undefined' && console.log) {
+        console.log('[Input] Modal input focus tracking initialized');
+    }
+}
+
+// Initialize modal input focus tracking when the page loads
+initModalInputFocusTracking();
