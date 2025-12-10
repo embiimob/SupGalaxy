@@ -618,8 +618,8 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             }
         }
         
-        // Fallback 1: Try ipfs.io with hash and filename
-        if (localMode && filename) {
+        // Fallback 1: Try ipfs.io with hash and filename (if filename is available)
+        if (filename) {
             try {
                 const fallbackUrl = 'https://ipfs.io/ipfs/' + hash + '/' + filename;
                 console.log('[Worker IPFS] Attempting fallback fetch from:', fallbackUrl);

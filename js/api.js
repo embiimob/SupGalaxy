@@ -33,8 +33,8 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         }
     }
     
-    // Fallback 1: Try ipfs.io with hash and filename
-    if (localMode && filename) {
+    // Fallback 1: Try ipfs.io with hash and filename (if filename is available)
+    if (filename) {
         try {
             await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
             const fallbackUrl = `https://ipfs.io/ipfs/${hash}/${filename}`;
