@@ -7,7 +7,8 @@ var isVideoMuted = true;
 var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
-// Local mode IPFS URL helper - uses global localMode and baseLocalIpfsPath from api.js
+// Local mode IPFS URL helper
+// Note: Depends on global variables localMode and baseLocalIpfsPath from api.js (loaded via index.html)
 function buildIPFSUrl(hash, filename = null) {
     if (localMode && baseLocalIpfsPath && filename) {
         // Return local file:// URL using dynamic baseLocalIpfsPath

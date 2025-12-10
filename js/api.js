@@ -33,10 +33,12 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         }
     }
     
+    // Apply rate limiting for public gateway requests
+    await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+    
     // Fallback 1: Try ipfs.io with hash and filename (if filename is available)
     if (filename) {
         try {
-            await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
             const fallbackUrl = `https://ipfs.io/ipfs/${hash}/${filename}`;
             console.log('[IPFS] Attempting fallback fetch from:', fallbackUrl);
             const response = await fetch(fallbackUrl);
@@ -51,7 +53,6 @@ async function fetchIPFSWithFallback(hash, filename = null) {
     }
     
     // Fallback 2: Try ipfs.io with hash only (final fallback)
-    await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
     console.log('[IPFS] Final fallback: fetching from https://ipfs.io/ipfs/' + hash);
     return await fetch('https://ipfs.io/ipfs/' + hash);
 }
