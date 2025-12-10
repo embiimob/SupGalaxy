@@ -2818,16 +2818,31 @@ document.getElementById("trashCancel").addEventListener("click", (function () {
 }));
 var keys = {};
 
-// Track focus state for modal inputs to prevent game command conflicts
-var isModalInputFocused = false;
-
 /**
  * Check if any modal input field is currently focused
- * This prevents game commands from being triggered while typing in modals
+ * This prevents game commands from being triggered while typing in modals.
+ * Uses document.activeElement to avoid race conditions with focus/blur events.
  * @returns {boolean} true if any modal input has focus
  */
 function isModalInputActive() {
-    return isModalInputFocused;
+    // Check if the currently focused element is a modal input
+    const activeElement = document.activeElement;
+    if (!activeElement) return false;
+    
+    // Check if the active element is within either modal
+    const magicianModal = document.getElementById('magicianStoneModal');
+    const calligraphyModal = document.getElementById('calligraphyStoneModal');
+    
+    const isInMagicianModal = magicianModal && magicianModal.contains(activeElement);
+    const isInCalligraphyModal = calligraphyModal && calligraphyModal.contains(activeElement);
+    
+    // Return true if active element is an input/textarea/select within either modal
+    if (isInMagicianModal || isInCalligraphyModal) {
+        const tagName = activeElement.tagName.toLowerCase();
+        return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    }
+    
+    return false;
 }
 
 function registerKeyEvents() {
@@ -5412,53 +5427,13 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
 /**
  * Initialize focus tracking for modal inputs
  * This prevents game commands from being triggered while typing in modal text fields
+ * Note: Focus tracking is now handled dynamically by isModalInputActive() checking
+ * document.activeElement, so we only need to log initialization for debugging.
  */
 function initModalInputFocusTracking() {
-    // List of all input/textarea/select elements in Magician Stone modal
-    const magicianStoneInputs = [
-        'magicianStoneUrl',
-        'magicianStoneWidth',
-        'magicianStoneHeight',
-        'magicianStoneOffsetX',
-        'magicianStoneOffsetY',
-        'magicianStoneOffsetZ',
-        'magicianStoneDamage',
-        'magicianStoneDistance'
-    ];
-
-    // List of all input/textarea/select elements in Calligraphy Stone modal
-    const calligraphyStoneInputs = [
-        'calligraphyStoneText',
-        'calligraphyStoneWidth',
-        'calligraphyStoneHeight',
-        'calligraphyStoneOffsetX',
-        'calligraphyStoneOffsetY',
-        'calligraphyStoneOffsetZ',
-        'calligraphyStoneFontFamily',
-        'calligraphyStoneFontSize',
-        'calligraphyStoneFontWeight',
-        'calligraphyStoneFontColor',
-        'calligraphyStoneBgColor',
-        'calligraphyStoneUrl'
-    ];
-
-    // Combine all modal inputs
-    const allModalInputs = [...magicianStoneInputs, ...calligraphyStoneInputs];
-
-    // Add focus and blur event listeners to track focus state
-    allModalInputs.forEach(inputId => {
-        const element = document.getElementById(inputId);
-        if (element) {
-            element.addEventListener('focus', () => {
-                isModalInputFocused = true;
-            });
-            element.addEventListener('blur', () => {
-                isModalInputFocused = false;
-            });
-        }
-    });
-
-    console.log('[Input] Modal input focus tracking initialized');
+    if (typeof console !== 'undefined' && console.log) {
+        console.log('[Input] Modal input focus tracking initialized');
+    }
 }
 
 // Initialize modal input focus tracking when the page loads
