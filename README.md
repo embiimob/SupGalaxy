@@ -44,6 +44,9 @@ A special block capable of adding **colored or transparent signs with clickable 
 ### 🎙 Proximity Video & Voice
 See and hear players based on distance—natural spatial communication.
 
+### 💬 Global Player Chat
+Real-time text chat with all connected players via WebRTC. Press `/` to open chat, send messages instantly, and view chat history.
+
 ### 🎵 IPFS Music and Video Streamer
 - Discovers audio and video tracks tagged `#game` across the p2fk.io network  
 - Loads the 10 latest `.mp3`/`.wav`/ `.mp4`/`.avi` files  
@@ -103,12 +106,14 @@ Spawn, explore, build, fight, survive.
 | Craft | `R` | — |
 | Teleport | `P` | — |
 | Save | `X` | — |
+| **Open Chat** | **`/`** | **📢 button** |
 
 **Tips:**  
 - 2 sand → 4 glass  
 - +10 score per mob defeated  
 - Players & mobs spawn in loaded chunks  
 - TURN server recommended for multiplayer  
+- Press `/` to open chat and talk with other players in your world  
 
 ---
 
