@@ -1,4 +1,4 @@
-        var worker = new Worker(URL.createObjectURL(new Blob([\`
+        var worker = new Worker(URL.createObjectURL(new Blob([`
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
@@ -607,7 +607,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         if (checkSupLocalMode() && filename) {
             try {
                 // Use file:// URL with LOCAL_IPFS_ROOT constant
-                const localPath = \`file:///\${LOCAL_IPFS_ROOT}/\${hash}/\${filename}\`;
+                const localPath = 'file:///' + LOCAL_IPFS_ROOT + '/' + hash + '/' + filename;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {
