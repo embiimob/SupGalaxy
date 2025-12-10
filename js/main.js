@@ -4798,6 +4798,15 @@ document.addEventListener("DOMContentLoaded", (async function () {
             l = i.get("world-seed"),
             d = i.get("user-name"),
             c = i.get("loc");
+        
+        // Configure worker for Sup!? local mode
+        if (typeof worker !== 'undefined') {
+            worker.postMessage({
+                type: 'configure_sup_local_mode',
+                isSupLocalMode: i.has('transactionid')
+            });
+        }
+        
         if (l && (document.getElementById("worldNameInput").value = l), d && (document.getElementById("userInput").value = d), c) {
             const e = c.split(",");
             if (3 === e.length) {

@@ -4,6 +4,9 @@ const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
+// Local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
+// Note: Use forward slashes even on Windows for file:// URLs
+const LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
 
 const ARCHETYPES = {
     'Earth': {
@@ -592,12 +595,42 @@ async function getKeywordByPublicAddress(address) {
             return null;
         }
 }
+// Sup!? local mode detection and IPFS path utilities
+var isSupLocalMode = false; // Will be set by main context
+
+function checkSupLocalMode() {
+        return isSupLocalMode;
+}
+
+async function fetchIPFSWithFallback(hash, filename = null) {
+        // If running in Sup!? local mode and filename is provided, try local path first
+        if (checkSupLocalMode() && filename) {
+            try {
+                // Use file:// URL with LOCAL_IPFS_ROOT constant
+                const localPath = 'file:///' + LOCAL_IPFS_ROOT + '/' + hash + '/' + filename;
+                console.log('[Worker IPFS] Attempting local fetch from:', localPath);
+                const response = await fetch(localPath);
+                if (response.ok) {
+                    console.log('[Worker IPFS] Successfully fetched from local path');
+                    return response;
+                }
+                console.log('[Worker IPFS] Local fetch failed with status:', response.status);
+            } catch (e) {
+                // Local fetch failed, will fallback to ipfs.io
+                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+            }
+        }
+        
+        // Fallback to ipfs.io (doesn't include filename, just hash)
+        return await fetch("https://ipfs.io/ipfs/" + hash);
+}
+
 async function fetchIPFS(hash) {
         let attempts = 0;
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
-                var response = await fetch("https://ipfs.io/ipfs/" + hash);
+                var response = await fetchIPFSWithFallback(hash);
                 if (response.ok) {
                     return await response.json();
                 }
@@ -612,6 +645,12 @@ async function fetchIPFS(hash) {
 self.onmessage = async function(e) {
         var data = e.data;
         var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+
+        if (type === 'configure_sup_local_mode') {
+            isSupLocalMode = data.isSupLocalMode || false;
+            console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode);
+            return;
+        }
 
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);

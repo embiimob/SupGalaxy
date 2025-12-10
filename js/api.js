@@ -3,6 +3,41 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 
+// Sup!? local mode detection and IPFS path utilities
+var isSupLocalMode = null;
+
+function checkSupLocalMode() {
+    if (isSupLocalMode === null) {
+        const urlParams = new URLSearchParams(window.location.search);
+        isSupLocalMode = urlParams.has('transactionid');
+    }
+    return isSupLocalMode;
+}
+
+async function fetchIPFSWithFallback(hash, filename = null) {
+    // If running in Sup!? local mode and filename is provided, try local path first
+    if (checkSupLocalMode() && filename) {
+        try {
+            // Use file:// URL with LOCAL_IPFS_ROOT constant
+            const localPath = `file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}`;
+            console.log('[IPFS] Attempting local fetch from:', localPath);
+            const response = await fetch(localPath);
+            if (response.ok) {
+                console.log('[IPFS] Successfully fetched from local path');
+                return response;
+            }
+            console.log('[IPFS] Local fetch failed with status:', response.status);
+        } catch (e) {
+            // Local fetch failed, will fallback to ipfs.io
+            console.log('[IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+        }
+    }
+    
+    // Fallback to ipfs.io (doesn't include filename, just hash)
+    await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+    return await fetch('https://ipfs.io/ipfs/' + hash);
+}
+
 async function GetPublicAddressByKeyword(keyword) {
     try {
         if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
@@ -27,8 +62,12 @@ async function resolveIPFS(url) {
     if (!match) {
         throw new Error('Invalid IPFS URL format.');
     }
-    const hash = match[0].split('IPFS:')[1].split('\\')[0];
-    const response = await fetch('https://ipfs.io/ipfs/' + hash);
+    const fullMatch = match[0].split('IPFS:')[1];
+    const parts = fullMatch.split('\\');
+    const hash = parts[0];
+    const filename = parts.length > 1 ? parts[1] : null;
+    
+    const response = await fetchIPFSWithFallback(hash, filename);
     if (!response.ok) {
         throw new Error('Failed to fetch from IPFS.');
     }
@@ -101,8 +140,7 @@ async function GetKeywordByPublicAddress(address) {
 }
 async function fetchIPFS(hash) {
     try {
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://ipfs.io/ipfs/' + hash);
+        const response = await fetchIPFSWithFallback(hash);
         if (!response.ok) {
             addMessage('Failed to fetch IPFS data');
             return null;
