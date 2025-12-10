@@ -4818,11 +4818,15 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 localMode: localMode,
                 baseLocalIpfsPath: baseLocalIpfsPath
             });
+        } else {
+            console.warn('[LocalMode] worker not found, skipping worker configuration');
         }
         
         // Configure API layer for local mode
         if (typeof window.setLocalMode === 'function') {
             window.setLocalMode(localMode, baseLocalIpfsPath);
+        } else {
+            console.warn('[LocalMode] window.setLocalMode not found, skipping API configuration');
         }
         
         // Prefill world seed and username from query parameters
