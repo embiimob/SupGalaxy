@@ -599,8 +599,9 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         // Always try local path first if filename is provided
         if (filename) {
             try {
-                // Construct relative path to ipfs folder (assumes ipfs/ is sibling to index.html)
-                const localPath = 'ipfs/' + hash + '/' + filename;
+                // Construct path to ipfs folder relative to the page origin
+                // Workers created from Blobs need absolute URLs or self.location-relative paths
+                const localPath = new URL('ipfs/' + hash + '/' + filename, self.location.origin + '/').href;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {
