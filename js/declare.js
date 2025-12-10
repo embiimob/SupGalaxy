@@ -34,7 +34,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     MAX_LOADED_CHUNKS = 420,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v1.0.6",
+    VERSION = "SupGalaxy v1.0.7",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 10,
     BLOCKS = {
