@@ -19,9 +19,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
     if (localMode && baseLocalIpfsPath && filename) {
         try {
             // Construct relative path (no file:// protocol to avoid CORS issues)
-            // URL-encode the filename to handle special characters
-            const encodedFilename = encodeURIComponent(filename);
-            const localPath = `${baseLocalIpfsPath}/${hash}/${encodedFilename}`;
+            const localPath = `${baseLocalIpfsPath}/${hash}/${filename}`;
             console.log('[IPFS] Attempting local fetch from:', localPath);
             const response = await fetch(localPath);
             if (response.ok) {
@@ -70,7 +68,15 @@ async function resolveIPFS(url) {
     const fullMatch = match[0].split('IPFS:')[1];
     const parts = fullMatch.split('\\');
     const hash = parts[0];
-    const filename = parts.length > 1 ? parts[1] : null;
+    let filename = parts.length > 1 ? parts[1] : null;
+    
+    // Strip metadata suffix (pattern: >><<-number>>) from filename if present
+    if (filename) {
+        const metadataIndex = filename.indexOf('>><<');
+        if (metadataIndex !== -1) {
+            filename = filename.substring(0, metadataIndex);
+        }
+    }
     
     const response = await fetchIPFSWithFallback(hash, filename);
     if (!response.ok) {
