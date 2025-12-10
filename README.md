@@ -230,27 +230,14 @@ By default, SupGalaxy looks for local IPFS files in `C:/Sup/ipfs` when running i
 **Examples:**
 ```
 # Use default C:/Sup/ipfs
-https://supgalaxy.org/?transactionid=1&world-seed=myworld
+http://127.0.0.1:18332/?transactionid=ABCD
 
 # Use custom Windows path
-https://supgalaxy.org/?transactionid=1&world-seed=myworld&ipfs-path=D:/MyIPFS
+http://127.0.0.1:18332/?transactionid=ABCD&ipfs-path=D:/MyIPFS
 
 # Use custom Unix path  
-https://supgalaxy.org/?transactionid=1&world-seed=myworld&ipfs-path=/home/user/ipfs
+http://127.0.0.1:18332/?transactionid=ABCD&ipfs-path=/home/user/ipfs
 ```
-
-**How it works:**
-- When `ipfs-path` is present and non-empty, SupGalaxy uses that path for all local IPFS file operations
-- If not specified, defaults to `C:/Sup/ipfs`
-- Only affects Sup!? local mode (requires `transactionid` parameter)
-- Supports both Windows-style (`C:/path`) and Unix-style (`/path`) paths
-- The path is cached on first access for performance
-
-**Use cases:**
-- Multiple IPFS repositories on different drives
-- Testing with separate IPFS data directories
-- Network/shared drives for collaborative setups
-- Custom installation paths
 
 **Note:** The path should use forward slashes (`/`) even on Windows for proper `file:///` URL construction.
   
