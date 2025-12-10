@@ -1158,6 +1158,20 @@ body.is-mobile-mode #messages {
     transform: scale(0.95);
 }
 
+/* Mobile Mode Toggle Button Styles */
+#mobileModeToggle {
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+#mobileModeToggle:hover {
+    opacity: 1 !important;
+    transform: scale(1.1);
+}
+
+#mobileModeToggle:active {
+    transform: scale(0.95);
+}
+
 #chatPanel {
     box-shadow: 0 10px 30px rgba(0,0,0,0.6);
 }
@@ -1227,13 +1241,25 @@ body.is-mobile-mode #messages {
     #chatButton {
         font-size: 28px; /* Larger hit area on mobile */
         bottom: 80px; /* Move up to avoid hotbar overlap */
+        left: 12px; /* Maintain horizontal position from HTML */
+    }
+    
+    #mobileModeToggle {
+        font-size: 28px; /* Larger hit area on mobile */
+        bottom: 80px; /* Move up to avoid hotbar overlap */
+        left: 52px; /* 12px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
 
-/* Ensure chat button doesn't overlap with hotbar on mobile */
+/* Ensure bottom-left buttons don't overlap with hotbar on mobile */
 @media (max-width: 700px) {
     #chatButton {
         bottom: 16px;
         left: 16px;
+    }
+    
+    #mobileModeToggle {
+        bottom: 16px;
+        left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
