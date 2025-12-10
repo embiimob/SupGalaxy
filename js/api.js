@@ -19,7 +19,9 @@ async function fetchIPFSWithFallback(hash, filename = null) {
     if (localMode && baseLocalIpfsPath && filename) {
         try {
             // Construct relative path (no file:// protocol to avoid CORS issues)
-            const localPath = `${baseLocalIpfsPath}/${hash}/${filename}`;
+            // URL-encode the filename to handle special characters
+            const encodedFilename = encodeURIComponent(filename);
+            const localPath = `${baseLocalIpfsPath}/${hash}/${encodedFilename}`;
             console.log('[IPFS] Attempting local fetch from:', localPath);
             const response = await fetch(localPath);
             if (response.ok) {

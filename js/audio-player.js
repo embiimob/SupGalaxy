@@ -14,7 +14,9 @@ var showingPlaylist = false;
 function buildIPFSUrl(hash, filename = null) {
     if (typeof localMode !== 'undefined' && typeof baseLocalIpfsPath !== 'undefined' && localMode && baseLocalIpfsPath && filename) {
         // Return relative path (no file:// protocol to avoid CORS issues)
-        return `${baseLocalIpfsPath}/${hash}/${filename}`;
+        // URL-encode the filename to handle special characters
+        const encodedFilename = encodeURIComponent(filename);
+        return `${baseLocalIpfsPath}/${hash}/${encodedFilename}`;
     }
     // Fallback to ipfs.io public gateway (does not support hash/filename format)
     return `https://ipfs.io/ipfs/${hash}`;
