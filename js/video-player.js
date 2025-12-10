@@ -10,7 +10,7 @@ var showingVideoPlaylist = false;
 // Local mode IPFS URL helper
 // Note: Depends on global variables localMode and baseLocalIpfsPath from api.js (loaded via index.html)
 function buildIPFSUrl(hash, filename = null) {
-    if (localMode && baseLocalIpfsPath && filename) {
+    if (typeof localMode !== 'undefined' && typeof baseLocalIpfsPath !== 'undefined' && localMode && baseLocalIpfsPath && filename) {
         // Return local file:// URL using dynamic baseLocalIpfsPath
         return `file:///${baseLocalIpfsPath}/${hash}/${filename}`;
     }
