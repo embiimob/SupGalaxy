@@ -4863,11 +4863,12 @@ document.addEventListener("DOMContentLoaded", (async function () {
             d = i.get("user-name"),
             c = i.get("loc");
         
-        // Configure worker for Sup!? local mode
+        // Configure worker for Sup!? local mode and pass effective IPFS root
         if (typeof worker !== 'undefined') {
             worker.postMessage({
                 type: 'configure_sup_local_mode',
-                isSupLocalMode: i.has('transactionid')
+                isSupLocalMode: i.has('transactionid'),
+                localIpfsRoot: getLocalIpfsRoot()
             });
         }
         

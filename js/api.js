@@ -18,8 +18,9 @@ async function fetchIPFSWithFallback(hash, filename = null) {
     // If running in Sup!? local mode and filename is provided, try local path first
     if (checkSupLocalMode() && filename) {
         try {
-            // Use file:// URL with LOCAL_IPFS_ROOT constant
-            const localPath = `file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}`;
+            // Use file:// URL with effective local IPFS root (respects ipfs-path query parameter)
+            const localIpfsRoot = getLocalIpfsRoot();
+            const localPath = `file:///${localIpfsRoot}/${hash}/${filename}`;
             console.log('[IPFS] Attempting local fetch from:', localPath);
             const response = await fetch(localPath);
             if (response.ok) {

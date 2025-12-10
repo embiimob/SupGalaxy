@@ -12,8 +12,9 @@ var showingPlaylist = false;
 // Sup!? local mode IPFS URL helper
 function buildIPFSUrl(hash, filename = null) {
     if (checkSupLocalMode() && filename) {
-        // Return local file:// URL using LOCAL_IPFS_ROOT constant
-        return `file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}`;
+        // Return local file:// URL using effective local IPFS root (respects ipfs-path query parameter)
+        const localIpfsRoot = getLocalIpfsRoot();
+        return `file:///${localIpfsRoot}/${hash}/${filename}`;
     }
     // Fallback to ipfs.io
     return `https://ipfs.io/ipfs/${hash}`;
