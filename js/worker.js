@@ -595,19 +595,16 @@ async function getKeywordByPublicAddress(address) {
             return null;
         }
 }
-// Sup!? local mode detection and IPFS path utilities
-var isSupLocalMode = false; // Will be set by main context
-
-function checkSupLocalMode() {
-        return isSupLocalMode;
-}
+// Local mode detection and IPFS path utilities
+var localMode = false;
+var baseLocalIpfsPath = null;
 
 async function fetchIPFSWithFallback(hash, filename = null) {
-        // If running in Sup!? local mode and filename is provided, try local path first
-        if (checkSupLocalMode() && filename) {
+        // If running in local mode and filename is provided, try local path first
+        if (localMode && baseLocalIpfsPath && filename) {
             try {
-                // Use file:// URL with LOCAL_IPFS_ROOT constant
-                const localPath = 'file:///' + LOCAL_IPFS_ROOT + '/' + hash + '/' + filename;
+                // Construct local path using the base path from configuration
+                const localPath = 'file:///' + baseLocalIpfsPath + '/' + hash + '/' + filename;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {
@@ -616,12 +613,29 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 }
                 console.log('[Worker IPFS] Local fetch failed with status:', response.status);
             } catch (e) {
-                // Local fetch failed, will fallback to ipfs.io
-                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+                // Local fetch failed, will fallback to public gateway
+                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to public gateway');
             }
         }
         
-        // Fallback to ipfs.io (doesn't include filename, just hash)
+        // Fallback 1: Try ipfs.io with hash and filename
+        if (localMode && filename) {
+            try {
+                const fallbackUrl = 'https://ipfs.io/ipfs/' + hash + '/' + filename;
+                console.log('[Worker IPFS] Attempting fallback fetch from:', fallbackUrl);
+                const response = await fetch(fallbackUrl);
+                if (response.ok) {
+                    console.log('[Worker IPFS] Successfully fetched from public gateway with filename');
+                    return response;
+                }
+                console.log('[Worker IPFS] Public gateway with filename failed with status:', response.status);
+            } catch (e) {
+                console.log('[Worker IPFS] Public gateway with filename error:', e.message);
+            }
+        }
+        
+        // Fallback 2: Try ipfs.io with hash only (final fallback)
+        console.log('[Worker IPFS] Final fallback: fetching from https://ipfs.io/ipfs/' + hash);
         return await fetch("https://ipfs.io/ipfs/" + hash);
 }
 
@@ -646,9 +660,10 @@ self.onmessage = async function(e) {
         var data = e.data;
         var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
 
-        if (type === 'configure_sup_local_mode') {
-            isSupLocalMode = data.isSupLocalMode || false;
-            console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode);
+        if (type === 'configure_local_mode') {
+            localMode = data.localMode || false;
+            baseLocalIpfsPath = data.baseLocalIpfsPath || null;
+            console.log('[Worker] Configured local mode:', { localMode, baseLocalIpfsPath });
             return;
         }
 

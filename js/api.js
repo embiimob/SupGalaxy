@@ -3,23 +3,23 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 
-// Sup!? local mode detection and IPFS path utilities
-var isSupLocalMode = null;
+// Local mode detection and IPFS path utilities
+var localMode = false;
+var baseLocalIpfsPath = null;
 
-function checkSupLocalMode() {
-    if (isSupLocalMode === null) {
-        const urlParams = new URLSearchParams(window.location.search);
-        isSupLocalMode = urlParams.has('transactionid');
-    }
-    return isSupLocalMode;
-}
+// Function to set local mode configuration from external code (e.g., main.js)
+window.setLocalMode = function(enabled, basePath) {
+    localMode = enabled;
+    baseLocalIpfsPath = basePath;
+    console.log('[LocalMode] API configured:', { localMode, baseLocalIpfsPath });
+};
 
 async function fetchIPFSWithFallback(hash, filename = null) {
-    // If running in Sup!? local mode and filename is provided, try local path first
-    if (checkSupLocalMode() && filename) {
+    // If running in local mode and filename is provided, try local path first
+    if (localMode && baseLocalIpfsPath && filename) {
         try {
-            // Use file:// URL with LOCAL_IPFS_ROOT constant
-            const localPath = `file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}`;
+            // Construct local path using the base path from query parameter
+            const localPath = `file:///${baseLocalIpfsPath}/${hash}/${filename}`;
             console.log('[IPFS] Attempting local fetch from:', localPath);
             const response = await fetch(localPath);
             if (response.ok) {
@@ -28,13 +28,31 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             }
             console.log('[IPFS] Local fetch failed with status:', response.status);
         } catch (e) {
-            // Local fetch failed, will fallback to ipfs.io
-            console.log('[IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+            // Local fetch failed, will fallback to public gateway
+            console.log('[IPFS] Local fetch error:', e.message, '- falling back to public gateway');
         }
     }
     
-    // Fallback to ipfs.io (doesn't include filename, just hash)
+    // Fallback 1: Try ipfs.io with hash and filename
+    if (localMode && filename) {
+        try {
+            await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+            const fallbackUrl = `https://ipfs.io/ipfs/${hash}/${filename}`;
+            console.log('[IPFS] Attempting fallback fetch from:', fallbackUrl);
+            const response = await fetch(fallbackUrl);
+            if (response.ok) {
+                console.log('[IPFS] Successfully fetched from public gateway with filename');
+                return response;
+            }
+            console.log('[IPFS] Public gateway with filename failed with status:', response.status);
+        } catch (e) {
+            console.log('[IPFS] Public gateway with filename error:', e.message);
+        }
+    }
+    
+    // Fallback 2: Try ipfs.io with hash only (final fallback)
     await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+    console.log('[IPFS] Final fallback: fetching from https://ipfs.io/ipfs/' + hash);
     return await fetch('https://ipfs.io/ipfs/' + hash);
 }
 

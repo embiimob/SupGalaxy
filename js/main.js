@@ -4797,16 +4797,35 @@ document.addEventListener("DOMContentLoaded", (async function () {
         const i = new URLSearchParams(window.location.search),
             l = i.get("world-seed"),
             d = i.get("user-name"),
-            c = i.get("loc");
+            c = i.get("loc"),
+            ipfsPath = i.get("ipfs-path"),
+            viewerName = i.get("viewername");
         
-        // Configure worker for Sup!? local mode
+        // Detect local mode based on ipfs-path parameter
+        const localMode = ipfsPath !== null && ipfsPath.trim() !== '';
+        let baseLocalIpfsPath = null;
+        
+        if (localMode) {
+            // Normalize path: convert backslashes to forward slashes
+            baseLocalIpfsPath = ipfsPath.replace(/\\/g, '/');
+            console.log('[LocalMode] Enabled with base path:', baseLocalIpfsPath);
+        }
+        
+        // Configure worker for local mode
         if (typeof worker !== 'undefined') {
             worker.postMessage({
-                type: 'configure_sup_local_mode',
-                isSupLocalMode: i.has('transactionid')
+                type: 'configure_local_mode',
+                localMode: localMode,
+                baseLocalIpfsPath: baseLocalIpfsPath
             });
         }
         
+        // Configure API layer for local mode
+        if (typeof window.setLocalMode === 'function') {
+            window.setLocalMode(localMode, baseLocalIpfsPath);
+        }
+        
+        // Prefill world seed and username from query parameters
         if (l && (document.getElementById("worldNameInput").value = l), d && (document.getElementById("userInput").value = d), c) {
             const e = c.split(",");
             if (3 === e.length) {
@@ -4819,6 +4838,12 @@ document.addEventListener("DOMContentLoaded", (async function () {
                     z: a
                 })
             }
+        }
+        
+        // Prefill username from viewername parameter if provided
+        if (viewerName && viewerName.trim() !== '') {
+            document.getElementById("userInput").value = viewerName.trim();
+            console.log('[ViewerName] Prefilled username from viewername parameter');
         }
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
