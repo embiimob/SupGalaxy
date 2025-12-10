@@ -1246,7 +1246,7 @@ body.is-mobile-mode #messages {
     #mobileModeToggle {
         font-size: 28px; /* Larger hit area on mobile */
         bottom: 80px; /* Move up to avoid hotbar overlap */
-        left: 52px; /* Positioned to the right of chat button */
+        left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
 
@@ -1259,6 +1259,6 @@ body.is-mobile-mode #messages {
     
     #mobileModeToggle {
         bottom: 16px;
-        left: 52px; /* Adjusted to be right next to chat button on mobile */
+        left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
