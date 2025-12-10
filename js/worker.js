@@ -623,22 +623,37 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         return await fetch("https://ipfs.io/ipfs/" + hash);
 }
 
-async function fetchIPFS(hash) {
+async function fetchIPFS(hash, filename = null) {
         let attempts = 0;
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
-                var response = await fetchIPFSWithFallback(hash);
+                var response = await fetchIPFSWithFallback(hash, filename);
                 if (response.ok) {
                     return await response.json();
                 }
-                console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
+                console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'filename:', filename, 'status:', response.status);
             } catch (e) {
-                console.error('[Worker] Error fetching IPFS for hash:', hash, e);
+                console.error('[Worker] Error fetching IPFS for hash:', hash, 'filename:', filename, e);
             }
             attempts++;
         }
         return null;
+}
+
+// Helper function to parse IPFS identifier and extract hash and filename
+function parseIPFSIdentifier(ipfsString) {
+    // Match pattern: IPFS:hash\filename or IPFS:hash
+    const match = ipfsString.match(/IPFS:(?:Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]+)(?:\\(.*))?/);
+    if (!match) {
+        return null;
+    }
+    const fullMatch = match[0].split('IPFS:')[1];
+    const parts = fullMatch.split('\\');
+    return {
+        hash: parts[0],
+        filename: parts.length > 1 ? parts[1] : null
+    };
 }
 self.onmessage = async function(e) {
         var data = e.data;
@@ -772,9 +787,10 @@ self.onmessage = async function(e) {
                             break; // Stop processing as all remaining messages are older
                         }
                         if (!msg.TransactionId) continue;
-                        var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                        if (match) {
-                            var hash = match[1];
+                        var ipfsInfo = parseIPFSIdentifier(msg.Message);
+                        if (ipfsInfo) {
+                            var hash = ipfsInfo.hash;
+                            var filename = ipfsInfo.filename;
                             var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                             if (!cidRegex.test(hash)) {
                                 console.log('[Worker] Invalid CID in chunk message:', hash, 'txId:', msg.TransactionId);
@@ -782,7 +798,7 @@ self.onmessage = async function(e) {
                             }
                             // Add delay before IPFS fetch to respect rate limiting
                             await new Promise(resolve => setTimeout(resolve, apiDelay));
-                            var data = await fetchIPFS(hash);
+                            var data = await fetchIPFS(hash, filename);
                             var processData = data;
                             if (data && data.playerData) {
                                 processData = data.playerData;
@@ -916,9 +932,10 @@ self.onmessage = async function(e) {
                             break; // Stop processing as all remaining messages are older
                         }
                         if (msg.FromAddress === userAddress && !processedMessages.has(msg.TransactionId)) {
-                            var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                            if (match) {
-                                var hash = match[1];
+                            var ipfsInfo = parseIPFSIdentifier(msg.Message);
+                            if (ipfsInfo) {
+                                var hash = ipfsInfo.hash;
+                                var filename = ipfsInfo.filename;
                                 var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                                 if (!cidRegex.test(hash)) {
                                     console.log('[Worker] Invalid CID in user_update message:', hash, 'txId:', msg.TransactionId);
@@ -926,7 +943,7 @@ self.onmessage = async function(e) {
                                 }
                                 // Add delay before IPFS fetch to respect rate limiting
                                 await new Promise(resolve => setTimeout(resolve, apiDelay));
-                                var data = await fetchIPFS(hash);
+                                var data = await fetchIPFS(hash, filename);
                                 if (data) {
                                     self.postMessage({ type: "user_update", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
                                 } else {
@@ -988,9 +1005,10 @@ self.onmessage = async function(e) {
                             console.log('[Worker] Skipping server message, invalid creators for user:', hostUser, 'txId:', msg.TransactionId);
                             continue;
                         }
-                        var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                        if (match) {
-                            var hash = match[1];
+                        var ipfsInfo = parseIPFSIdentifier(msg.Message);
+                        if (ipfsInfo) {
+                            var hash = ipfsInfo.hash;
+                            var filename = ipfsInfo.filename;
                             var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                             if (!cidRegex.test(hash)) {
                                 console.log('[Worker] Invalid CID in server message:', hash, 'txId:', msg.TransactionId);
@@ -998,7 +1016,7 @@ self.onmessage = async function(e) {
                             }
                             // Add delay before IPFS fetch to respect rate limiting
                             await new Promise(resolve => setTimeout(resolve, apiDelay));
-                            var data = await fetchIPFS(hash);
+                            var data = await fetchIPFS(hash, filename);
                             if (data && data.world === worldName) {
                                 servers.push({
                                     hostUser: data.user || hostUser,
@@ -1051,15 +1069,17 @@ self.onmessage = async function(e) {
                                 var clientUser = 'anonymous';
                                 var data = null;
                                 var hash = null;
-                                var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
+                                var filename = null;
+                                var ipfsInfo = parseIPFSIdentifier(msg.Message);
 
-                                if (match) {
-                                    hash = match[1];
+                                if (ipfsInfo) {
+                                    hash = ipfsInfo.hash;
+                                    filename = ipfsInfo.filename;
                                     var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                                     if (cidRegex.test(hash)) {
                                         // Add delay before IPFS fetch to respect rate limiting
                                         await new Promise(resolve => setTimeout(resolve, apiDelay));
-                                        data = await fetchIPFS(hash);
+                                        data = await fetchIPFS(hash, filename);
                                         if (data && data.user) {
                                             clientUser = data.user.replace(/^"|"$/g, "").trim();
                                         }
@@ -1198,12 +1218,13 @@ self.onmessage = async function(e) {
                                     console.log('[Worker] Skipping answer message, invalid creators for user:', hostUser, 'txId:', msg.TransactionId);
                                     continue;
                                 }
-                                var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
-                                if (!match) {
+                                var ipfsInfo = parseIPFSIdentifier(msg.Message);
+                                if (!ipfsInfo) {
                                     console.log('[Worker] No IPFS hash in answer message:', msg.Message, 'txId:', msg.TransactionId);
                                     continue;
                                 }
-                                var hash = match[1];
+                                var hash = ipfsInfo.hash;
+                                var filename = ipfsInfo.filename;
                                 var cidRegex = /^[A-Za-z0-9]{46}$|^[A-Za-z0-9]{59}$|^[a-z0-9]+$/;
                                 if (!cidRegex.test(hash)) {
                                     console.log('[Worker] Invalid CID in answer message:', hash, 'txId:', msg.TransactionId);
@@ -1211,7 +1232,7 @@ self.onmessage = async function(e) {
                                 }
                                 // Add delay before IPFS fetch to respect rate limiting
                                 await new Promise(resolve => setTimeout(resolve, apiDelay));
-                                var data = await fetchIPFS(hash);
+                                var data = await fetchIPFS(hash, filename);
                                 if (data && (data.answer || data.batch) && data.world === worldName) {
                                     answers.push({
                                         hostUser: data.user || hostUser,
