@@ -595,16 +595,12 @@ async function getKeywordByPublicAddress(address) {
             return null;
         }
 }
-// Local mode detection and IPFS path utilities
-var localMode = false;
-var baseLocalIpfsPath = null;
-
 async function fetchIPFSWithFallback(hash, filename = null) {
-        // If running in local mode and filename is provided, try local path first
-        if (localMode && baseLocalIpfsPath && filename) {
+        // Always try local path first if filename is provided
+        if (filename) {
             try {
-                // Construct relative path (no file:// protocol to avoid CORS issues)
-                const localPath = baseLocalIpfsPath + '/' + hash + '/' + filename;
+                // Construct relative path to ipfs folder (assumes ipfs/ is sibling to index.html)
+                const localPath = 'ipfs/' + hash + '/' + filename;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {
@@ -667,12 +663,7 @@ self.onmessage = async function(e) {
         var data = e.data;
         var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
 
-        if (type === 'configure_local_mode') {
-            localMode = data.localMode || false;
-            baseLocalIpfsPath = data.baseLocalIpfsPath || null;
-            console.log('[Worker] Configured local mode:', { localMode, baseLocalIpfsPath });
-            return;
-        }
+
 
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);

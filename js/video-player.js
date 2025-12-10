@@ -7,12 +7,11 @@ var isVideoMuted = true;
 var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
-// Local mode IPFS URL helper
-// Note: Depends on global variables localMode and baseLocalIpfsPath from api.js (loaded via index.html)
+// IPFS URL helper - always tries local first, then fallbacks to public gateway
 function buildIPFSUrl(hash, filename = null) {
-    if (typeof localMode !== 'undefined' && typeof baseLocalIpfsPath !== 'undefined' && localMode && baseLocalIpfsPath && filename) {
-        // Return relative path (no file:// protocol to avoid CORS issues)
-        return `${baseLocalIpfsPath}/${hash}/${filename}`;
+    if (filename) {
+        // Return relative path to ipfs folder (assumes ipfs/ is sibling to index.html)
+        return `ipfs/${hash}/${filename}`;
     }
     // Fallback to ipfs.io public gateway (does not support hash/filename format)
     return `https://ipfs.io/ipfs/${hash}`;

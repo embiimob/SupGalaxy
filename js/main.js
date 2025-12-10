@@ -4798,39 +4798,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             l = i.get("world-seed"),
             d = i.get("user-name"),
             c = i.get("loc"),
-            ipfsPath = i.get("ipfs-path"),
             viewerName = i.get("viewername");
-        
-        // Detect local mode based on ipfs-path parameter
-        const localMode = ipfsPath !== null && ipfsPath.trim() !== '';
-        let baseLocalIpfsPath = null;
-        
-        if (localMode) {
-            // Use relative path for local mode to avoid CORS issues
-            // Assumes website runs from C:\SUP\root\<transactionid>\index.html
-            // and IPFS files are at C:\SUP\ipfs\<hash>\<filename>
-            // So relative path is ../../ipfs
-            baseLocalIpfsPath = '../../ipfs';
-            console.log('[LocalMode] Enabled with relative base path:', baseLocalIpfsPath);
-        }
-        
-        // Configure worker for local mode
-        if (typeof worker !== 'undefined') {
-            worker.postMessage({
-                type: 'configure_local_mode',
-                localMode: localMode,
-                baseLocalIpfsPath: baseLocalIpfsPath
-            });
-        } else {
-            console.warn('[LocalMode] worker not found, skipping worker configuration');
-        }
-        
-        // Configure API layer for local mode
-        if (typeof window.setLocalMode === 'function') {
-            window.setLocalMode(localMode, baseLocalIpfsPath);
-        } else {
-            console.warn('[LocalMode] window.setLocalMode not found, skipping API configuration');
-        }
         
         // Prefill world seed and username from query parameters
         if (l && (document.getElementById("worldNameInput").value = l), d && (document.getElementById("userInput").value = d), c) {

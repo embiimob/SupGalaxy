@@ -3,23 +3,12 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 
-// Local mode detection and IPFS path utilities
-var localMode = false;
-var baseLocalIpfsPath = null;
-
-// Function to set local mode configuration from external code (e.g., main.js)
-window.setLocalMode = function(enabled, basePath) {
-    localMode = enabled;
-    baseLocalIpfsPath = basePath;
-    console.log('[LocalMode] API configured:', { localMode, baseLocalIpfsPath });
-};
-
 async function fetchIPFSWithFallback(hash, filename = null) {
-    // If running in local mode and filename is provided, try local path first
-    if (localMode && baseLocalIpfsPath && filename) {
+    // Always try local path first if filename is provided
+    if (filename) {
         try {
-            // Construct relative path (no file:// protocol to avoid CORS issues)
-            const localPath = `${baseLocalIpfsPath}/${hash}/${filename}`;
+            // Construct relative path to ipfs folder (assumes ipfs/ is sibling to index.html)
+            const localPath = `ipfs/${hash}/${filename}`;
             console.log('[IPFS] Attempting local fetch from:', localPath);
             const response = await fetch(localPath);
             if (response.ok) {
