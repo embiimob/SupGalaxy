@@ -603,8 +603,8 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         // If running in local mode and filename is provided, try local path first
         if (localMode && baseLocalIpfsPath && filename) {
             try {
-                // Construct local path using the base path from configuration
-                const localPath = 'file:///' + baseLocalIpfsPath + '/' + hash + '/' + filename;
+                // Construct relative path (no file:// protocol to avoid CORS issues)
+                const localPath = baseLocalIpfsPath + '/' + hash + '/' + filename;
                 console.log('[Worker IPFS] Attempting local fetch from:', localPath);
                 const response = await fetch(localPath);
                 if (response.ok) {

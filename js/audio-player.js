@@ -13,8 +13,8 @@ var showingPlaylist = false;
 // Note: Depends on global variables localMode and baseLocalIpfsPath from api.js (loaded via index.html)
 function buildIPFSUrl(hash, filename = null) {
     if (typeof localMode !== 'undefined' && typeof baseLocalIpfsPath !== 'undefined' && localMode && baseLocalIpfsPath && filename) {
-        // Return local file:// URL using dynamic baseLocalIpfsPath
-        return `file:///${baseLocalIpfsPath}/${hash}/${filename}`;
+        // Return relative path (no file:// protocol to avoid CORS issues)
+        return `${baseLocalIpfsPath}/${hash}/${filename}`;
     }
     // Fallback to ipfs.io public gateway (does not support hash/filename format)
     return `https://ipfs.io/ipfs/${hash}`;

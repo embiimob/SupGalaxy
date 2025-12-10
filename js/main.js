@@ -4806,9 +4806,12 @@ document.addEventListener("DOMContentLoaded", (async function () {
         let baseLocalIpfsPath = null;
         
         if (localMode) {
-            // Normalize path: convert backslashes to forward slashes
-            baseLocalIpfsPath = ipfsPath.replace(/\\/g, '/');
-            console.log('[LocalMode] Enabled with base path:', baseLocalIpfsPath);
+            // Use relative path for local mode to avoid CORS issues
+            // Assumes website runs from C:\SUP\root\<transactionid>\index.html
+            // and IPFS files are at C:\SUP\ipfs\<hash>\<filename>
+            // So relative path is ../../ipfs
+            baseLocalIpfsPath = '../../ipfs';
+            console.log('[LocalMode] Enabled with relative base path:', baseLocalIpfsPath);
         }
         
         // Configure worker for local mode
