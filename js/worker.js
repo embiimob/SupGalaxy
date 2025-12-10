@@ -643,9 +643,10 @@ async function fetchIPFS(hash, filename = null) {
 
 // Helper function to parse IPFS identifier and extract hash and filename
 function parseIPFSIdentifier(ipfsString) {
-    // Match pattern: IPFS:hash\filename or IPFS:hash
+    // Match pattern: IPFS:hash\\filename or IPFS:hash
     // Capture groups: (1) hash, (2) optional filename after backslash
-    const match = ipfsString.match(/IPFS:(Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]{46,59})(?:\\(.*))?/);
+    // Note: Double backslash needed because this is inside a template literal
+    const match = ipfsString.match(/IPFS:(Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]{46,59})(?:\\\\(.*))?/);
     if (!match) {
         return null;
     }
