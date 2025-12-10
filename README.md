@@ -230,13 +230,13 @@ By default, SupGalaxy looks for local IPFS files in `C:/Sup/ipfs` when running i
 **Examples:**
 ```
 # Use default C:/Sup/ipfs
-http://127.0.0.1:18332/?transactionid=ABCD
+http://127.0.0.1:8080/?transactionid=ABCD
 
 # Use custom Windows path
-http://127.0.0.1:18332/?transactionid=ABCD&ipfs-path=D:/MyIPFS
+http://127.0.0.1:8080/?transactionid=ABCD&ipfs-path=D:/MyIPFS
 
 # Use custom Unix path  
-http://127.0.0.1:18332/?transactionid=ABCD&ipfs-path=/home/user/ipfs
+http://127.0.0.1:8080/?transactionid=ABCD&ipfs-path=/home/user/ipfs
 ```
 
 **Note:** The path should use forward slashes (`/`) even on Windows for proper `file:///` URL construction.
