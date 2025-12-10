@@ -1241,12 +1241,13 @@ body.is-mobile-mode #messages {
     #chatButton {
         font-size: 28px; /* Larger hit area on mobile */
         bottom: 80px; /* Move up to avoid hotbar overlap */
+        left: 12px; /* Maintain horizontal position from HTML */
     }
     
     #mobileModeToggle {
         font-size: 28px; /* Larger hit area on mobile */
         bottom: 80px; /* Move up to avoid hotbar overlap */
-        left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
+        left: 52px; /* 12px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
 
