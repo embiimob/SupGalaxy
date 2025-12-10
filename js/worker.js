@@ -644,15 +644,14 @@ async function fetchIPFS(hash, filename = null) {
 // Helper function to parse IPFS identifier and extract hash and filename
 function parseIPFSIdentifier(ipfsString) {
     // Match pattern: IPFS:hash\filename or IPFS:hash
-    const match = ipfsString.match(/IPFS:(?:Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]+)(?:\\(.*))?/);
+    // Capture groups: (1) hash, (2) optional filename after backslash
+    const match = ipfsString.match(/IPFS:(Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]{46,59})(?:\\(.*))?/);
     if (!match) {
         return null;
     }
-    const fullMatch = match[0].split('IPFS:')[1];
-    const parts = fullMatch.split('\\');
     return {
-        hash: parts[0],
-        filename: parts.length > 1 ? parts[1] : null
+        hash: match[1],
+        filename: match[2] || null
     };
 }
 self.onmessage = async function(e) {
