@@ -4,9 +4,10 @@ const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
 const MAP_SIZE = 16384;
 const BLOCK_AIR = 0;
-// Local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
+// Local IPFS root path for Sup!? local mode - will be set by main context via configure_sup_local_mode
+// Defaults to C:/Sup/ipfs on Windows if not overridden
 // Note: Use forward slashes even on Windows for file:// URLs
-const LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
+var LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
 
 const ARCHETYPES = {
     'Earth': {
@@ -648,7 +649,13 @@ self.onmessage = async function(e) {
 
         if (type === 'configure_sup_local_mode') {
             isSupLocalMode = data.isSupLocalMode || false;
-            console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode);
+            // Update LOCAL_IPFS_ROOT if provided by main context
+            if (data.localIpfsRoot) {
+                LOCAL_IPFS_ROOT = data.localIpfsRoot;
+                console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode, 'with IPFS root:', LOCAL_IPFS_ROOT);
+            } else {
+                console.log('[Worker] Configured Sup!? local mode:', isSupLocalMode);
+            }
             return;
         }
 

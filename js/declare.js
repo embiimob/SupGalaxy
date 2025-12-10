@@ -19,9 +19,9 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // This provides a compact integer representing seconds since this epoch for ordering block updates
     // Note: JavaScript months are 0-indexed, so month 8 = September
     IPFS_EPOCH_2025_09_21 = Math.floor(Date.UTC(2025, 8, 21, 0, 0, 0) / 1000),
-    // Local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
+    // Default local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
     // Note: Use forward slashes even on Windows for file:// URLs
-    LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
+    DEFAULT_LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
     // Render distance configuration:
@@ -759,6 +759,45 @@ const lightManager = {
             } else this.lights[e].intensity = 0
     }
 };
+
+/**
+ * Cached effective local IPFS root path - determined once from URL query parameter.
+ * Initialized to null and set on first call to getLocalIpfsRoot().
+ */
+var effectiveLocalIpfsRoot = null;
+
+/**
+ * Gets the effective local IPFS root path for the current session.
+ * On first call, reads the 'ipfs-path' query parameter from the URL and caches it.
+ * If not present or empty, falls back to DEFAULT_LOCAL_IPFS_ROOT.
+ * 
+ * This allows runtime override of the local IPFS path via URL querystring,
+ * enabling users to specify custom IPFS directories without code changes.
+ * 
+ * @returns {string} The effective local IPFS root path to use
+ */
+function getLocalIpfsRoot() {
+    if (effectiveLocalIpfsRoot === null) {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const ipfsPathParam = urlParams.get('ipfs-path');
+            
+            // Use the parameter if it's present and non-empty/non-whitespace
+            if (ipfsPathParam && ipfsPathParam.trim()) {
+                effectiveLocalIpfsRoot = ipfsPathParam.trim();
+                console.log('[IPFS Config] Using custom IPFS root from URL parameter:', effectiveLocalIpfsRoot);
+            } else {
+                effectiveLocalIpfsRoot = DEFAULT_LOCAL_IPFS_ROOT;
+                console.log('[IPFS Config] Using default IPFS root:', effectiveLocalIpfsRoot);
+            }
+        } catch (e) {
+            // Fallback to default if there's any error reading URL parameters
+            console.warn('[IPFS Config] Error reading ipfs-path parameter, using default:', e);
+            effectiveLocalIpfsRoot = DEFAULT_LOCAL_IPFS_ROOT;
+        }
+    }
+    return effectiveLocalIpfsRoot;
+}
 
 /**
  * Computes a truncated unix date for IPFS Loading updates.
