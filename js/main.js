@@ -2818,21 +2818,36 @@ document.getElementById("trashCancel").addEventListener("click", (function () {
 }));
 var keys = {};
 
+// Track focus state for modal inputs to prevent game command conflicts
+var isModalInputFocused = false;
+
+/**
+ * Check if any modal input field is currently focused
+ * This prevents game commands from being triggered while typing in modals
+ * @returns {boolean} true if any modal input has focus
+ */
+function isModalInputActive() {
+    return isModalInputFocused;
+}
+
 function registerKeyEvents() {
     function e(e) {
         // Check if chat input is focused - if so, don't process game controls
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
         
+        // Check if any modal input is focused - if so, don't process game controls
+        const modalInputActive = isModalInputActive();
+        
         // Handle "/" key to open chat (only if no modal is open)
-        if (e.key === "/" && !isPromptOpen && !chatInputActive) {
+        if (e.key === "/" && !isPromptOpen && !chatInputActive && !modalInputActive) {
             if (typeof handleSlashKeyForChat === 'function') {
                 handleSlashKeyForChat(e);
             }
             return;
         }
         
-        // Don't process game controls if chat is active
-        if (chatInputActive) {
+        // Don't process game controls if chat or modal input is active
+        if (chatInputActive || modalInputActive) {
             return;
         }
         
@@ -2851,9 +2866,10 @@ function registerKeyEvents() {
     }
 
     function t(e) {
-        // Don't process keyup if chat is active
+        // Don't process keyup if chat or modal input is active
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
-        if (chatInputActive) {
+        const modalInputActive = isModalInputActive();
+        if (chatInputActive || modalInputActive) {
             return;
         }
         keys[e.key.toLowerCase()] = !1
@@ -5392,3 +5408,58 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     isPromptOpen = false;
     calligraphyStonePlacement = null;
 });
+
+/**
+ * Initialize focus tracking for modal inputs
+ * This prevents game commands from being triggered while typing in modal text fields
+ */
+function initModalInputFocusTracking() {
+    // List of all input/textarea/select elements in Magician Stone modal
+    const magicianStoneInputs = [
+        'magicianStoneUrl',
+        'magicianStoneWidth',
+        'magicianStoneHeight',
+        'magicianStoneOffsetX',
+        'magicianStoneOffsetY',
+        'magicianStoneOffsetZ',
+        'magicianStoneDamage',
+        'magicianStoneDistance'
+    ];
+
+    // List of all input/textarea/select elements in Calligraphy Stone modal
+    const calligraphyStoneInputs = [
+        'calligraphyStoneText',
+        'calligraphyStoneWidth',
+        'calligraphyStoneHeight',
+        'calligraphyStoneOffsetX',
+        'calligraphyStoneOffsetY',
+        'calligraphyStoneOffsetZ',
+        'calligraphyStoneFontFamily',
+        'calligraphyStoneFontSize',
+        'calligraphyStoneFontWeight',
+        'calligraphyStoneFontColor',
+        'calligraphyStoneBgColor',
+        'calligraphyStoneUrl'
+    ];
+
+    // Combine all modal inputs
+    const allModalInputs = [...magicianStoneInputs, ...calligraphyStoneInputs];
+
+    // Add focus and blur event listeners to track focus state
+    allModalInputs.forEach(inputId => {
+        const element = document.getElementById(inputId);
+        if (element) {
+            element.addEventListener('focus', () => {
+                isModalInputFocused = true;
+            });
+            element.addEventListener('blur', () => {
+                isModalInputFocused = false;
+            });
+        }
+    });
+
+    console.log('[Input] Modal input focus tracking initialized');
+}
+
+// Initialize modal input focus tracking when the page loads
+initModalInputFocusTracking();
