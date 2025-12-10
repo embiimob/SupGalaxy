@@ -16,10 +16,7 @@ function buildIPFSUrl(hash, filename = null) {
         // Return local file:// URL using dynamic baseLocalIpfsPath
         return `file:///${baseLocalIpfsPath}/${hash}/${filename}`;
     }
-    // Fallback to ipfs.io public gateway
-    if (filename) {
-        return `https://ipfs.io/ipfs/${hash}/${filename}`;
-    }
+    // Fallback to ipfs.io public gateway (does not support hash/filename format)
     return `https://ipfs.io/ipfs/${hash}`;
 }
 

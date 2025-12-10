@@ -618,24 +618,8 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             }
         }
         
-        // Fallback 1: Try ipfs.io with hash and filename (if filename is available)
-        if (filename) {
-            try {
-                const fallbackUrl = 'https://ipfs.io/ipfs/' + hash + '/' + filename;
-                console.log('[Worker IPFS] Attempting fallback fetch from:', fallbackUrl);
-                const response = await fetch(fallbackUrl);
-                if (response.ok) {
-                    console.log('[Worker IPFS] Successfully fetched from public gateway with filename');
-                    return response;
-                }
-                console.log('[Worker IPFS] Public gateway with filename failed with status:', response.status);
-            } catch (e) {
-                console.log('[Worker IPFS] Public gateway with filename error:', e.message);
-            }
-        }
-        
-        // Fallback 2: Try ipfs.io with hash only (final fallback)
-        console.log('[Worker IPFS] Final fallback: fetching from https://ipfs.io/ipfs/' + hash);
+        // Fallback to ipfs.io with hash only (public gateway does not support hash/filename format)
+        console.log('[Worker IPFS] Fallback: fetching from https://ipfs.io/ipfs/' + hash);
         return await fetch("https://ipfs.io/ipfs/" + hash);
 }
 
