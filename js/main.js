@@ -349,6 +349,12 @@ async function applySaveFile(e, t, o) {
         }
         player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
         registerKeyEvents();
+        
+        // Initialize chat system
+        if (typeof initChat === 'function') {
+            initChat();
+        }
+        
         return console.log("[LOGIN] Starting game loop from session"), requestAnimationFrame(gameLoop), addMessage("Loaded session for " + userName + " in " + worldName, 3e3), updateHud(), initServers(), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
@@ -2814,6 +2820,22 @@ var keys = {};
 
 function registerKeyEvents() {
     function e(e) {
+        // Check if chat input is focused - if so, don't process game controls
+        const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
+        
+        // Handle "/" key to open chat (only if no modal is open)
+        if (e.key === "/" && !isPromptOpen && !chatInputActive) {
+            if (typeof handleSlashKeyForChat === 'function') {
+                handleSlashKeyForChat(e);
+            }
+            return;
+        }
+        
+        // Don't process game controls if chat is active
+        if (chatInputActive) {
+            return;
+        }
+        
         const t = e.key.toLowerCase();
         if ("w" === t && !keys[t]) {
             const e = performance.now();
@@ -2829,6 +2851,11 @@ function registerKeyEvents() {
     }
 
     function t(e) {
+        // Don't process keyup if chat is active
+        const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
+        if (chatInputActive) {
+            return;
+        }
         keys[e.key.toLowerCase()] = !1
     }
     return window.addEventListener("keydown", e), window.addEventListener("keyup", t),
@@ -3743,6 +3770,12 @@ async function startGame() {
     }
     player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
     registerKeyEvents();
+    
+    // Initialize chat system
+    if (typeof initChat === 'function') {
+        initChat();
+    }
+    
     console.log("[LOGIN] Starting game loop"), requestAnimationFrame(gameLoop), addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
     var d = document.getElementById("health");
     d && (d.innerText = player.health);

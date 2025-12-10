@@ -720,6 +720,12 @@ function setupDataChannel(e, t) {
                 case "health_update":
                     isHost && userPositions[s.username] && (userPositions[s.username].health = s.health);
                     break;
+                case "chat":
+                    // Handle incoming chat message
+                    if (typeof handleIncomingChatMessage === 'function') {
+                        handleIncomingChatMessage(s);
+                    }
+                    break;
                 case "laser_fired_batch":
                 case "laser_fired":
                 case "item_dropped":

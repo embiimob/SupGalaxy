@@ -1143,3 +1143,97 @@
 body.is-mobile-mode #messages {
     pointer-events: none;
 }
+
+/* Chat System Styles */
+#chatButton {
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+#chatButton:hover {
+    opacity: 1 !important;
+    transform: scale(1.1);
+}
+
+#chatButton:active {
+    transform: scale(0.95);
+}
+
+#chatPanel {
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+
+#chatHistory {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+}
+
+#chatHistory::-webkit-scrollbar {
+    width: 8px;
+}
+
+#chatHistory::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+#chatHistory::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+#chatHistory::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.chat-message {
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 13px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.chat-username {
+    font-weight: bold;
+    color: var(--accent);
+    margin-right: 4px;
+}
+
+.chat-text {
+    color: #eaf6ff;
+}
+
+/* Mobile responsiveness for chat */
+@media (max-width: 700px) and (orientation: portrait) {
+    #chatPanel {
+        width: 100%;
+        max-width: 100%;
+        max-height: 80vh;
+        padding: 10px;
+        border-radius: 8px;
+    }
+
+    #chatHistory {
+        min-height: 150px;
+        max-height: 300px;
+    }
+
+    #chatInput {
+        font-size: 16px; /* Prevent auto-zoom on iOS */
+    }
+
+    #chatButton {
+        font-size: 28px; /* Larger hit area on mobile */
+        bottom: 80px; /* Move up to avoid hotbar overlap */
+    }
+}
+
+/* Ensure chat button doesn't overlap with hotbar on mobile */
+@media (max-width: 700px) {
+    #chatButton {
+        bottom: 16px;
+        left: 16px;
+    }
+}

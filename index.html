@@ -232,6 +232,10 @@
             <button id="closePending">Close</button>
         </div>
     </div>
+    <!-- Chat Button (Bottom-Left Corner) -->
+    <div id="chatButton" style="position: fixed; bottom: 12px; left: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;" title="Open Chat (/)">📢</div>
+    
+    <!-- Bottom-Right Buttons -->
     <div id="mobileModeToggle" style="position: fixed; bottom: 12px; right: 84px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📱</div>
     <div id="tvIcon" style="position: fixed; bottom: 12px; right: 48px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="cameraBtn" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📷</div>
@@ -435,6 +439,20 @@
             </div>
         </div>
     </div>
+    
+    <!-- Chat Panel -->
+    <div id="chatPanel" style="display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 230; background: var(--panel); padding: 14px; border-radius: 10px; width: 95%; max-width: 500px; max-height: 70vh; flex-direction: column;">
+        <h3 style="margin: 0 0 10px 0; text-align: center;">Global Chat</h3>
+        <div id="chatHistory" style="flex: 1; overflow-y: auto; margin-bottom: 10px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; min-height: 200px; max-height: 400px;"></div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="chatInput" placeholder="Type a message... (/ to open, Enter to send)" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: #0d1620; color: #fff; font-size: 14px;">
+            <button id="chatSend" style="padding: 8px 16px; background: var(--accent); color: #111; border: 0; border-radius: 6px; cursor: pointer; font-weight: 700;">Send</button>
+        </div>
+        <div style="text-align: right; margin-top: 10px;">
+            <button id="chatClose" style="padding: 6px 12px; background: #0f2a3a; border: 1px solid rgba(255,255,255,0.04); color: #fff; border-radius: 6px; cursor: pointer;">Close (Esc)</button>
+        </div>
+    </div>
+    
     <script src="js/declare.js"></script>
     <script src="js/api.js"></script>
     <script src="js/audio-player.js"></script>
@@ -442,6 +460,7 @@
     <script src="js/worker.js"></script>
     <script src="js/mobs.js"></script>
     <script src="js/web-rtc.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/chunk-manager.js"></script>
     <script src="js/world-generation.js"></script>
     <script src="js/main.js"></script>
