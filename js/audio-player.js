@@ -9,13 +9,16 @@ var previewAudio = new Audio();
 var currentPreviewUrl = null;
 var showingPlaylist = false;
 
-// Sup!? local mode IPFS URL helper
+// Local mode IPFS URL helper - uses global localMode and baseLocalIpfsPath from api.js
 function buildIPFSUrl(hash, filename = null) {
-    if (checkSupLocalMode() && filename) {
-        // Return local file:// URL using LOCAL_IPFS_ROOT constant
-        return `file:///${LOCAL_IPFS_ROOT}/${hash}/${filename}`;
+    if (typeof localMode !== 'undefined' && localMode && baseLocalIpfsPath && filename) {
+        // Return local file:// URL using dynamic baseLocalIpfsPath
+        return `file:///${baseLocalIpfsPath}/${hash}/${filename}`;
     }
-    // Fallback to ipfs.io
+    // Fallback to ipfs.io public gateway
+    if (filename) {
+        return `https://ipfs.io/ipfs/${hash}/${filename}`;
+    }
     return `https://ipfs.io/ipfs/${hash}`;
 }
 
