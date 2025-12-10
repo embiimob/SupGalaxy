@@ -1143,3 +1143,41 @@
 body.is-mobile-mode #messages {
     pointer-events: none;
 }
+
+/* Chat UI */
+#chatBtn {
+    transition: transform 0.1s;
+}
+#chatBtn:active {
+    transform: scale(0.9);
+}
+
+.chat-entry {
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    word-wrap: break-word;
+}
+.chat-entry .username {
+    font-weight: bold;
+    color: var(--accent);
+    margin-right: 4px;
+}
+.chat-entry .timestamp {
+    font-size: 0.8em;
+    opacity: 0.5;
+    margin-left: auto;
+    float: right;
+}
+
+@media (max-width: 700px) {
+    #chatPanel {
+        width: 90% !important;
+        left: 5% !important;
+        bottom: 80px !important; /* Above typical bottom controls */
+    }
+    #chatBtn {
+        bottom: 80px !important;
+        left: 12px !important;
+    }
+}
