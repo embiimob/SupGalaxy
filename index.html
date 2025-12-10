@@ -235,6 +235,15 @@
     <div id="mobileModeToggle" style="position: fixed; bottom: 12px; right: 84px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📱</div>
     <div id="tvIcon" style="position: fixed; bottom: 12px; right: 48px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📺</div>
     <div id="cameraBtn" style="position: fixed; bottom: 12px; right: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.5;">📷</div>
+    <div id="chatBtn" style="position: fixed; bottom: 12px; left: 12px; z-index: 200; cursor: pointer; font-size: 24px; opacity: 0.8;">📢</div>
+    <div id="chatPanel" style="display: none; position: fixed; bottom: 50px; left: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff; flex-direction: column;">
+        <div id="chatHistory" style="height: 200px; overflow-y: auto; margin-bottom: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 4px;"></div>
+        <div style="display: flex; gap: 4px;">
+            <input id="chatInput" type="text" placeholder="Type a message... (/ to open)" style="flex-grow: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; font-size: 13px;" autocomplete="off">
+            <button id="chatSendBtn" style="padding: 6px 10px; border-radius: 4px; background: var(--accent); color: #111; border: 0; cursor: pointer; font-weight: bold;">Send</button>
+        </div>
+        <button id="closeChatBtn" style="margin-top: 8px; width: 100%; padding: 4px; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #ccc; border-radius: 4px; cursor: pointer; font-size: 11px;">Close</button>
+    </div>
     <div id="videoPlayer" style="display: none; position: fixed; bottom: 48px; right: 12px; z-index: 210; width: 320px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 10px; color: #fff;">
         <video id="videoElement" style="width: 100%; border-radius: 8px;" autoplay muted playsinline></video>
         <div id="videoInfo" style="font-size: 12px; text-align: center; margin: 8px 0; word-wrap: break-word;">No video loaded</div>

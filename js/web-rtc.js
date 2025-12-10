@@ -724,11 +724,21 @@ function setupDataChannel(e, t) {
                 case "laser_fired":
                 case "item_dropped":
                 case "item_picked_up":
+                case "chat_message":
                     if (isHost) {
                         for (const [t, o] of peers.entries()) {
                             const peerWorld = userPositions[t] ? userPositions[t].world : null;
-                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
-                                o.dc.send(e.data);
+                            // For chat, we might want to relay to all worlds? Requirement says "global player chat".
+                            // "global basically replaying whatever anyone messages to all players"
+                            // So we relay to ALL peers regardless of world.
+                            if (s.type === "chat_message") {
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState) {
+                                    o.dc.send(e.data);
+                                }
+                            } else {
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
+                                    o.dc.send(e.data);
+                                }
                             }
                         }
                     }
@@ -743,6 +753,10 @@ function setupDataChannel(e, t) {
                         if (-1 !== f) {
                             scene.remove(droppedItems[f].mesh);
                             droppedItems.splice(f, 1);
+                        }
+                    } else if (s.type === "chat_message") {
+                        if (typeof onChatMessageReceived === "function") {
+                            onChatMessageReceived(s.username, s.text, s.timestamp);
                         }
                     }
                     break;

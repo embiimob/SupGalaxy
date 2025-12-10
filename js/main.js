@@ -673,6 +673,107 @@ function hexToRgb(e) {
 }
 
 var minimapCtx, trashIndex = -1;
+var chatMessages = []; // Stores chat history {username, text, timestamp}
+
+function toggleChat() {
+    const chatPanel = document.getElementById("chatPanel");
+    const isVisible = chatPanel.style.display === "flex";
+
+    if (isVisible) {
+        chatPanel.style.display = "none";
+        isPromptOpen = false;
+        // Blur input to prevent typing sticking
+        document.getElementById("chatInput").blur();
+    } else {
+        chatPanel.style.display = "flex";
+        isPromptOpen = true;
+        updateChatHistoryUI();
+        // Focus input
+        setTimeout(() => document.getElementById("chatInput").focus(), 50);
+    }
+}
+
+function updateChatHistoryUI() {
+    const historyDiv = document.getElementById("chatHistory");
+    historyDiv.innerHTML = "";
+
+    // Show last 100
+    const history = chatMessages.slice(-100);
+
+    history.forEach(msg => {
+        const div = document.createElement("div");
+        div.className = "chat-entry";
+
+        const userSpan = document.createElement("span");
+        userSpan.className = "username";
+        userSpan.innerText = msg.username + ":";
+
+        const textSpan = document.createElement("span");
+        textSpan.innerText = " " + msg.text;
+
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "timestamp";
+        timeSpan.innerText = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        div.appendChild(userSpan);
+        div.appendChild(textSpan);
+        div.appendChild(timeSpan);
+
+        historyDiv.appendChild(div);
+    });
+
+    // Scroll to bottom
+    historyDiv.scrollTop = historyDiv.scrollHeight;
+}
+
+function handleChatSubmit() {
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if (!text) return;
+
+    // Add local message
+    onChatMessageReceived(userName, text);
+
+    // Send via WebRTC
+    const msg = JSON.stringify({
+        type: "chat_message",
+        username: userName,
+        text: text,
+        timestamp: Date.now()
+    });
+
+    for (const [key, peer] of peers.entries()) {
+        if (peer.dc && peer.dc.readyState === "open") {
+            peer.dc.send(msg);
+        }
+    }
+
+    input.value = "";
+    // Keep focus
+    input.focus();
+}
+
+// Global handler exposed for WebRTC
+window.onChatMessageReceived = function(user, text, timestamp) {
+    const msgObj = {
+        username: user,
+        text: text,
+        timestamp: timestamp || Date.now()
+    };
+
+    chatMessages.push(msgObj);
+    if (chatMessages.length > 200) {
+        chatMessages.shift(); // Keep size reasonable
+    }
+
+    // Update UI if open
+    if (document.getElementById("chatPanel").style.display === "flex") {
+        updateChatHistoryUI();
+    }
+
+    // Show transient notification in main area
+    addMessage(`${user}: ${text}`, 5000);
+};
 
 function attemptCraft(e) {
     const t = {},
@@ -2819,7 +2920,27 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0;
+        if ("Escape" === e.key) {
+            if (document.getElementById("chatPanel").style.display === "flex") {
+                toggleChat();
+                return;
+            }
+            if (mouseLocked) {
+                document.exitPointerLock();
+                mouseLocked = !1;
+            }
+        }
+
+        if ("/" === e.key && !isPromptOpen) {
+            e.preventDefault();
+            toggleChat();
+            return;
+        }
+
+        if (isPromptOpen) return; // Block game controls when prompt is open (like chat)
+
+        "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -5153,6 +5274,26 @@ document.getElementById('mobileModeToggle').addEventListener('click', function()
     mobileModeActive = !mobileModeActive;
     this.style.opacity = mobileModeActive ? '1' : '0.5';
     handleResizeAndOrientation();
+});
+
+document.getElementById("chatBtn").addEventListener("click", function() {
+    toggleChat();
+    this.blur();
+});
+
+document.getElementById("closeChatBtn").addEventListener("click", function() {
+    toggleChat();
+});
+
+document.getElementById("chatSendBtn").addEventListener("click", function() {
+    handleChatSubmit();
+});
+
+document.getElementById("chatInput").addEventListener("keydown", function(e) {
+    e.stopPropagation(); // Prevent game keys from firing
+    if (e.key === "Enter") {
+        handleChatSubmit();
+    }
 });
 
 window.addEventListener('resize', handleResizeAndOrientation);
