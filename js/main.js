@@ -69,7 +69,23 @@ async function onInternalUnlock() {
         window.internalPrivKeyBytes = privBytes;
         if (pwdInput) pwdInput.value = '';
         renderInternalWalletUi();
+
+        const urnProfile = await GetProfileByAddress(addr);
+        let handle = addr;
+        if (urnProfile && urnProfile.URN) {
+            handle = urnProfile.URN;
+        } else {
+            const keys = await GetKeywordByPublicAddress(addr);
+            if (keys) {
+                 handle = keys.split(',')[0].replace(/^"|"$/g, '').split('@')[0];
+            }
+        }
+        const userInput = document.getElementById("userInput");
+        if (userInput && !userInput.value) {
+            userInput.value = handle;
+        }
         addMessage(`Unlocked — ${addr}`, 3e3);
+
     } catch (error) {
         addMessage(error?.message || 'Unlock failed — wrong password?', 3e3);
     }
@@ -5245,32 +5261,6 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }(), updateLoginUI(), setupEmojiPicker();
 
 
-        var fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.json';
-        fileInput.style.display = 'none';
-        document.body.appendChild(fileInput);
-
-        s.addEventListener('dblclick', function() {
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', function(event) {
-            var file = event.target.files[0];
-            if (file) {
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        // Manual file upload uses current time as BlockDate (for local-only changes)
-                        applySaveFile(JSON.parse(e.target.result), "local", null);
-                    } catch (err) {
-                        console.error("Error parsing session file:", err);
-                        addMessage("Sorry, file malformed.", 3000);
-                    }
-                };
-                reader.readAsText(file);
-            }
-        });
 
         console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
     } catch (e) {

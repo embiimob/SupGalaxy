@@ -70,10 +70,7 @@
             <button type="button" id="internalExportKeyBtn">Export key</button>
             <button type="button" id="internalForgetBtn">Forget key</button>
           </div>
-            <div id="pingSection" style="margin-top: 20px;">
-                <input id="pingUserInput" placeholder="Ping user name" autocomplete="off" />
-                <button id="pingUserBtn" style="margin-top: 10px;">Ping Player</button>
-            </div>
+
 
         </div>
     </div>
@@ -114,7 +111,15 @@
                     <div class="progress-circle-label">0%</div>
                 </div>
             </div>
+
+
+
             <div style="text-align:right;">
+            <div id="pingSection" style="margin-right: 15px; display: inline-block;">
+                <input id="pingUserInput" placeholder="Ping User" style="width:100px; padding:2px; font-size:10px; background:#111; color:#fff; border:1px solid #333;" autocomplete="off" />
+                <button id="pingUserBtn" style="padding: 2px 5px; font-size: 10px; background: #ffd166; color: #111; border: none; cursor: pointer;">Ping</button>
+            </div>
+
                 <div>Score <span id="score">0</span></div>
                 <div style="margin-top:6px;">HP <span id="health">20</span></div>
                 <div id="healthBar"><div id="healthBarInner" style="width:100%"></div></div>
