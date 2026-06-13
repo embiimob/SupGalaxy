@@ -1,3 +1,38 @@
+
+async function broadcastP2fkSignal(sdpObject, targetKeyword) {
+    if (!window.internalPrivKeyBytes) {
+        addMessage('Unlock wallet to connect via WebRTC (p2fk testnet3)', 3e3);
+        return false;
+    }
+    try {
+        const sdpJson = JSON.stringify(sdpObject);
+        // Upload to IPFS
+        const hash = await window.uploadToIpfs(sdpJson);
+        const messageText = 'IPFS:' + hash;
+
+        const addr = await window.privKeyToTestnetAddr(window.internalPrivKeyBytes);
+
+        const { outputs, cost } = await window.buildP2fkRecipientsAndCost({
+            messageText,
+            attachments: [],
+            extraRecipients: [],
+            fromAddress: addr,
+            amountPerRecipient: window.COMPOSER_AMOUNT_PER_RECIPIENT || (546 / 1e8)
+        });
+
+        const targetAddr = await GetPublicAddressByKeyword(targetKeyword);
+        if (targetAddr) {
+            outputs.push({address: targetAddr, amount: window.COMPOSER_AMOUNT_PER_RECIPIENT || (546 / 1e8)});
+        }
+
+        const txHex = await window.sendManyWithWallet(outputs);
+        console.log("Broadcasted signal", txHex);
+        return true;
+    } catch(e) {
+        console.error("Signal broadcast failed", e);
+        return false;
+    }
+}
 var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;

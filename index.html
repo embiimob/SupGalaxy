@@ -49,9 +49,32 @@
                     <img src="https://brand.github.com/_next/static/media/logo-04.9a1517f0.png" alt="GitHub" style="height: 32px; filter: invert(1);">
                 </a>
             </div>
-            <div id="dropZone" style="border: 2px dashed rgb(204, 204, 204); padding: 20px; text-align: center; margin-top: 20px; color: white;">
-                Drag & Drop Session File
+            <div class="internal-wallet-section" id="internalWalletSection">
+          <p class="internal-wallet-note" id="internalWalletNote">Testnet3 legacy (m/n) only. Password minimum is 12 characters. Keys are AES-256-GCM encrypted and stored only in this browser — nothing is ever sent to any server.</p>
+          <div class="compose-row" id="internalImportRow">
+            <input id="internalWifInput" type="password" autocomplete="off" placeholder="WIF private key (testnet3)" />
+            <button type="button" id="internalImportBtn">Import</button>
+            <button type="button" id="internalGenerateBtn">Generate testnet3 address</button>
+          </div>
+          <div class="compose-row" id="internalImportPwdRow">
+            <input id="internalPasswordInput" type="password" autocomplete="new-password" placeholder="Set encryption password" />
+          </div>
+          <div class="compose-row" id="internalUnlockRow">
+            <input id="internalUnlockPassword" type="password" autocomplete="current-password" placeholder="Password to unlock saved key" />
+            <button type="button" id="internalUnlockBtn">Unlock</button>
+          </div>
+          <div class="compose-row" id="internalActionsRow">
+            <button type="button" id="internalLockBtn">Lock</button>
+            <button type="button" id="internalConsolidateBtn">Consolidate change</button>
+            <button type="button" id="internalConsolidateMessagingBtn">Consolidate for messaging</button>
+            <button type="button" id="internalExportKeyBtn">Export key</button>
+            <button type="button" id="internalForgetBtn">Forget key</button>
+          </div>
+            <div id="pingSection" style="margin-top: 20px;">
+                <input id="pingUserInput" placeholder="Ping user name" autocomplete="off" />
+                <button id="pingUserBtn" style="margin-top: 10px;">Ping Player</button>
             </div>
+
         </div>
     </div>
 
@@ -463,6 +486,7 @@
     <script src="js/chat.js"></script>
     <script src="js/chunk-manager.js"></script>
     <script src="js/world-generation.js"></script>
-    <script src="js/main.js"></script>
+        <script src="js/wallet.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>

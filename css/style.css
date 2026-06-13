@@ -1263,3 +1263,20 @@ body.is-mobile-mode #messages {
         left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
+.internal-wallet-section {
+    display: none;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #333;
+}
+.compose-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.internal-wallet-note {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 10px;
+}
