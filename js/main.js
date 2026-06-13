@@ -5594,3 +5594,32 @@ if (typeof worker !== 'undefined') {
         }
     });
 }
+
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (loginOverlay.style.display !== 'none') {
+        e.dataTransfer.dropEffect = 'copy';
+    }
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (loginOverlay.style.display !== 'none') {
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.json')) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.worldName && data.worldSeed) {
+                        applySaveFile(data, true);
+                    }
+                } catch(e) {
+                    console.error('Invalid save file', e);
+                }
+            };
+            reader.readAsText(file);
+        }
+    }
+});
