@@ -7,7 +7,7 @@ function renderInternalWalletUi() {
     if (!section) return;
     section.style.display = 'grid';
 
-    const hasStored = Boolean(localStorage.getItem(INTERNAL_WALLET_STORAGE_KEY));
+    const hasStored = Boolean(localStorage.getItem(window.INTERNAL_WALLET_STORAGE_KEY));
     const unlocked = Boolean(window.internalPrivKeyBytes);
     const needsPasswordEntry = !unlocked;
 
@@ -44,7 +44,7 @@ async function onInternalImport() {
         const privBytes = await wifToPrivKeyBytes(wif);
         const addr = await privKeyToTestnetAddr(privBytes);
         const enc = await encryptPrivKey(privBytes, pwd);
-        localStorage.setItem(INTERNAL_WALLET_STORAGE_KEY, JSON.stringify(enc));
+        localStorage.setItem(window.INTERNAL_WALLET_STORAGE_KEY, JSON.stringify(enc));
         window.internalPrivKeyBytes = privBytes;
         if (wifInput) wifInput.value = '';
         if (pwdInput) pwdInput.value = '';
@@ -62,7 +62,7 @@ async function onInternalUnlock() {
 
     addMessage('Deriving key — this takes a moment...', 3e3);
     try {
-        const stored = JSON.parse(localStorage.getItem(INTERNAL_WALLET_STORAGE_KEY) || 'null');
+        const stored = JSON.parse(localStorage.getItem(window.INTERNAL_WALLET_STORAGE_KEY) || 'null');
         if (!stored) throw new Error('No key stored — import one first');
         const privBytes = await decryptPrivKey(stored, pwd);
         const addr = await privKeyToTestnetAddr(privBytes);
@@ -91,6 +91,7 @@ async function onInternalUnlock() {
     }
 }
 
+
 async function onGenerateNewKey() {
     addMessage('Generating a testnet3 address...', 3e3);
     try {
@@ -102,8 +103,8 @@ async function onGenerateNewKey() {
             attempts += 1;
             privBytes = crypto.getRandomValues(new Uint8Array(32));
             if (bytesToBigInt(privBytes) === 0n || bytesToBigInt(privBytes) >= SECP_N) continue;
-            wif = await privKeyToTestnetWif(privBytes);
-            addr = await privKeyToTestnetAddr(privBytes);
+            wif = await window.privKeyToTestnetWif(privBytes);
+            addr = await window.privKeyToTestnetAddr(privBytes);
         } while (
             attempts < 64
             && (!wif || !addr || hasP2fkDelimiterNumberPair(wif) || hasP2fkDelimiterNumberPair(addr))
@@ -121,6 +122,7 @@ async function onGenerateNewKey() {
         addMessage(error?.message || 'Key generation failed', 3e3);
     }
 }
+
 
 async function onPingPlayer() {
     const targetUser = document.getElementById('pingUserInput')?.value;
@@ -170,7 +172,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('internalForgetBtn')?.addEventListener('click', () => {
-        localStorage.removeItem(INTERNAL_WALLET_STORAGE_KEY);
+        localStorage.removeItem(window.INTERNAL_WALLET_STORAGE_KEY);
         window.internalPrivKeyBytes = null;
         renderInternalWalletUi();
     });

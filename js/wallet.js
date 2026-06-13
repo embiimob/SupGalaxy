@@ -1607,8 +1607,6 @@ async function sha256HexFromText(text) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-const P2FK_SIGNATURE_VERSION_MARKER = "2";
-const P2FK_DEFAULT_VERSION_BYTE = 111; // testnet
 
 async function encodeP2fkAddresses(dataString, versionByte) {
     const encoder = new TextEncoder();
@@ -1749,3 +1747,29 @@ window.uploadToIpfs = async function uploadToIpfs(jsonData) {
     const result = await res.json();
     return result.Hash;
 }
+
+
+async function generateTestnet3Address() {
+    const privBytes = new Uint8Array(32);
+    crypto.getRandomValues(privBytes);
+
+    // WIF encoding
+    const payload = new Uint8Array(34);
+    payload[0] = 0xef; // testnet WIF version
+    payload.set(privBytes, 1);
+    payload[33] = 0x01; // compressed
+    const wif = await encodeBase58Check(payload);
+
+    // Address encoding
+    const publicKey = await secp256k1PublicKeyCreate(privBytes, true);
+    const pubKeyHash = await hash160(publicKey);
+    const addrPayload = new Uint8Array(21);
+    addrPayload[0] = 0x6f; // testnet address version
+    addrPayload.set(pubKeyHash, 1);
+    const address = await encodeBase58Check(addrPayload);
+
+    return { wif, address };
+}
+window.generateTestnet3Address = generateTestnet3Address;
+
+window.privKeyToTestnetWif = typeof privKeyToTestnetWif !== 'undefined' ? privKeyToTestnetWif : undefined;
