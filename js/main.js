@@ -70,20 +70,26 @@ async function onInternalUnlock() {
         if (pwdInput) pwdInput.value = '';
         renderInternalWalletUi();
 
+
         const urnProfile = await GetProfileByAddress(addr);
         let handle = addr;
         if (urnProfile && urnProfile.URN) {
             handle = urnProfile.URN;
         } else {
             const keys = await GetKeywordByPublicAddress(addr);
-            if (keys) {
+            if (keys && /^"[a-zA-Z0-9_@.,-]+"/i.test(keys)) {
                  handle = keys.split(',')[0].replace(/^"|"$/g, '').split('@')[0];
             }
         }
+
+        // Remove non-alphanumeric characters for username input to prevent startup crash
+        handle = handle.replace(/[^a-zA-Z0-9]/g, '');
+
         const userInput = document.getElementById("userInput");
         if (userInput && !userInput.value) {
             userInput.value = handle;
         }
+
         addMessage(`Unlocked — ${addr}`, 3e3);
 
     } catch (error) {
