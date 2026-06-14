@@ -533,6 +533,21 @@ async function getPublicMessagesByAddress(address, skip, qty) {
                 return [];
             }
             var messages = await response.json();
+        try {
+            if (typeof fetchUnconfirmedP2fkMessages !== 'undefined') {
+                const unconfirmed = await fetchUnconfirmedP2fkMessages(address);
+                if (unconfirmed && unconfirmed.length > 0) {
+                     messages = unconfirmed.concat(messages);
+                     // dedup
+                     const seen = new Set();
+                     messages = messages.filter(m => {
+                         if (seen.has(m.TransactionId)) return false;
+                         seen.add(m.TransactionId);
+                         return true;
+                     });
+                }
+            }
+        } catch(e) {}
             return messages;
         } catch (e) {
             console.error('[Worker] Error fetching messages for address:', address, e);
@@ -923,6 +938,13 @@ self.onmessage = async function(e) {
                             console.log('[Worker] Stopping user_update processing at cached ID:', msg.TransactionId);
                             break; // Stop processing as all remaining messages are older
                         }
+                        if (!processedMessages.has(msg.TransactionId)) {
+                            var pingMatch = msg.Message.match(/SUP_PING:(.+)/);
+                            if (pingMatch) {
+                                self.postMessage({type: 'ping_received', pingedWorld: pingMatch[1]});
+                            }
+                        }
+
                         if (msg.FromAddress === userAddress && !processedMessages.has(msg.TransactionId)) {
                             var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
                             if (match) {

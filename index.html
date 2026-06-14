@@ -49,11 +49,30 @@
                     <img src="https://brand.github.com/_next/static/media/logo-04.9a1517f0.png" alt="GitHub" style="height: 32px; filter: invert(1);">
                 </a>
             </div>
-            <div id="dropZone" style="border: 2px dashed rgb(204, 204, 204); padding: 20px; text-align: center; margin-top: 20px; color: white;">
-                Drag & Drop Session File
-            </div>
+            <div class="internal-wallet-section" id="internalWalletSection">
+          <p class="internal-wallet-note" id="internalWalletNote">Testnet3 legacy (m/n) only. Password minimum is 12 characters. Keys are AES-256-GCM encrypted and stored only in this browser — nothing is ever sent to any server.</p>
+          <div class="compose-row" id="internalImportRow" style="display: none;">
+            <input id="internalWifInput" type="password" autocomplete="off" placeholder="WIF private key (testnet3)" />
+            <button type="button" id="internalImportBtn">Import</button>
+            <button type="button" id="internalGenerateBtn">Generate testnet3 address</button>
+          </div>
+          <div class="compose-row" id="internalImportPwdRow" style="display: none;">
+            <input id="internalPasswordInput" type="password" autocomplete="new-password" placeholder="Set encryption password" />
+          </div>
+          <div class="compose-row" id="internalUnlockRow" style="display: none;">
+            <input id="internalUnlockPassword" type="password" autocomplete="current-password" placeholder="Password to unlock saved key" />
+            <button type="button" id="internalUnlockBtn">Unlock</button>
+          </div>
+          <div class="compose-row" id="internalActionsRow" style="display: none;">
+            <button type="button" id="internalLockBtn">Lock</button>
+            <button type="button" id="internalConsolidateBtn">Consolidate change</button>
+            <button type="button" id="internalConsolidateMessagingBtn">Consolidate for messaging</button>
+            <button type="button" id="internalExportKeyBtn">Export key</button>
+            <button type="button" id="internalForgetBtn">Forget key</button>
+          </div>
         </div>
     </div>
+</div>
 
     <div id="videoMenuModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 230; background: rgba(0,0,0,0.7);">
         <div class="modal-panel">
@@ -91,7 +110,15 @@
                     <div class="progress-circle-label">0%</div>
                 </div>
             </div>
+
+
+
             <div style="text-align:right;">
+            <div id="pingSection" style="margin-right: 15px; display: inline-block;">
+                <input id="pingUserInput" placeholder="Ping User" style="width:100px; padding:2px; font-size:10px; background:#111; color:#fff; border:1px solid #333;" autocomplete="off" />
+                <button id="pingUserBtn" style="padding: 2px 5px; font-size: 10px; background: #ffd166; color: #111; border: none; cursor: pointer;">Ping</button>
+            </div>
+
                 <div>Score <span id="score">0</span></div>
                 <div style="margin-top:6px;">HP <span id="health">20</span></div>
                 <div id="healthBar"><div id="healthBarInner" style="width:100%"></div></div>
@@ -463,6 +490,7 @@
     <script src="js/chat.js"></script>
     <script src="js/chunk-manager.js"></script>
     <script src="js/world-generation.js"></script>
-    <script src="js/main.js"></script>
+        <script src="js/wallet.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>

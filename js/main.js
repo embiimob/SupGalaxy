@@ -1,4 +1,195 @@
 
+let walletSettingsOpen = true;
+window.internalPrivKeyBytes = null;
+
+function renderInternalWalletUi() {
+    const section = document.getElementById('internalWalletSection');
+    if (!section) return;
+    section.style.display = 'grid';
+
+    const hasStored = Boolean(localStorage.getItem(window.INTERNAL_WALLET_STORAGE_KEY));
+    const unlocked = Boolean(window.internalPrivKeyBytes);
+    const needsPasswordEntry = !unlocked;
+
+    const dom = {
+        internalWalletNote: document.getElementById('internalWalletNote'),
+        internalImportRow: document.getElementById('internalImportRow'),
+        internalImportPwdRow: document.getElementById('internalImportPwdRow'),
+        internalUnlockRow: document.getElementById('internalUnlockRow'),
+        internalActionsRow: document.getElementById('internalActionsRow'),
+        internalExportKeyBtn: document.getElementById('internalExportKeyBtn'),
+        internalWifInput: document.getElementById('internalWifInput')
+    };
+
+    if (dom.internalWalletNote) dom.internalWalletNote.style.display = needsPasswordEntry ? '' : 'none';
+    if (dom.internalImportRow) dom.internalImportRow.style.display = !hasStored ? '' : 'none';
+    if (dom.internalImportPwdRow) dom.internalImportPwdRow.style.display = !hasStored ? '' : 'none';
+    if (dom.internalUnlockRow) dom.internalUnlockRow.style.display = hasStored && !unlocked ? '' : 'none';
+    if (dom.internalActionsRow) dom.internalActionsRow.style.display = unlocked && walletSettingsOpen ? '' : 'none';
+    if (dom.internalExportKeyBtn) dom.internalExportKeyBtn.style.display = unlocked ? '' : 'none';
+    if (dom.internalWifInput) dom.internalWifInput.type = 'password';
+}
+
+async function onInternalImport() {
+    const wifInput = document.getElementById('internalWifInput');
+    const pwdInput = document.getElementById('internalPasswordInput');
+    const wif = normalize(wifInput?.value || '');
+    const pwd = normalize(pwdInput?.value || '');
+
+    if (!wif) { addMessage('Enter your WIF private key', 3e3); return; }
+    if (pwd.length < 12) { addMessage('Enter a password (min 12 chars)', 3e3); return; }
+
+    addMessage('Deriving key — this takes a moment...', 3e3);
+    try {
+        const privBytes = await wifToPrivKeyBytes(wif);
+        const addr = await privKeyToTestnetAddr(privBytes);
+        const enc = await encryptPrivKey(privBytes, pwd);
+        localStorage.setItem(window.INTERNAL_WALLET_STORAGE_KEY, JSON.stringify(enc));
+        window.internalPrivKeyBytes = privBytes;
+        if (wifInput) wifInput.value = '';
+        if (pwdInput) pwdInput.value = '';
+        renderInternalWalletUi();
+        addMessage(`Imported & unlocked — ${addr}`, 3e3);
+    } catch (error) {
+        addMessage(error?.message || 'Import failed', 3e3);
+    }
+}
+
+async function onInternalUnlock() {
+    const pwdInput = document.getElementById('internalUnlockPassword');
+    const pwd = normalize(pwdInput?.value || '');
+    if (!pwd) { addMessage('Enter your password', 3e3); return; }
+
+    addMessage('Deriving key — this takes a moment...', 3e3);
+    try {
+        const stored = JSON.parse(localStorage.getItem(window.INTERNAL_WALLET_STORAGE_KEY) || 'null');
+        if (!stored) throw new Error('No key stored — import one first');
+        const privBytes = await decryptPrivKey(stored, pwd);
+        const addr = await privKeyToTestnetAddr(privBytes);
+        window.internalPrivKeyBytes = privBytes;
+        if (pwdInput) pwdInput.value = '';
+        renderInternalWalletUi();
+
+
+        const urnProfile = await GetProfileByAddress(addr);
+        let handle = addr;
+        if (urnProfile && urnProfile.URN) {
+            handle = urnProfile.URN;
+        } else {
+            const keys = await GetKeywordByPublicAddress(addr);
+            if (keys && /^"[a-zA-Z0-9_@.,-]+"/i.test(keys)) {
+                 handle = keys.split(',')[0].replace(/^"|"$/g, '').split('@')[0];
+            }
+        }
+
+        // Remove non-alphanumeric characters for username input to prevent startup crash
+        handle = handle.replace(/[^a-zA-Z0-9]/g, '');
+
+        const userInput = document.getElementById("userInput");
+        if (userInput && !userInput.value) {
+            userInput.value = handle;
+        }
+
+        addMessage(`Unlocked — ${addr}`, 3e3);
+
+    } catch (error) {
+        addMessage(error?.message || 'Unlock failed — wrong password?', 3e3);
+    }
+}
+
+
+async function onGenerateNewKey() {
+    addMessage('Generating a testnet3 address...', 3e3);
+    try {
+        let privBytes;
+        let wif = '';
+        let addr = '';
+        let attempts = 0;
+        do {
+            attempts += 1;
+            privBytes = crypto.getRandomValues(new Uint8Array(32));
+            if (bytesToBigInt(privBytes) === 0n || bytesToBigInt(privBytes) >= SECP_N) continue;
+            wif = await window.privKeyToTestnetWif(privBytes);
+            addr = await window.privKeyToTestnetAddr(privBytes);
+        } while (
+            attempts < 64
+            && (!wif || !addr || hasP2fkDelimiterNumberPair(wif) || hasP2fkDelimiterNumberPair(addr))
+        );
+        if (!wif || !addr || hasP2fkDelimiterNumberPair(wif) || hasP2fkDelimiterNumberPair(addr)) {
+            throw new Error('Could not generate a delimiter-safe testnet3 address; try again');
+        }
+        const wifInput = document.getElementById('internalWifInput');
+        if (wifInput) {
+            wifInput.value = wif;
+            wifInput.type = 'password';
+        }
+        addMessage(`New testnet3 address generated. Your private key is masked. Set a password and click Import.`, 3e3);
+    } catch (error) {
+        addMessage(error?.message || 'Key generation failed', 3e3);
+    }
+}
+
+
+async function onPingPlayer() {
+    const targetUser = document.getElementById('pingUserInput')?.value;
+    if (!targetUser) { addMessage('Enter a user to ping', 3e3); return; }
+    if (!window.internalPrivKeyBytes) { addMessage('Unlock wallet to ping players', 3e3); return; }
+
+    addMessage(`Pinging ${targetUser}...`, 3e3);
+    const targetKeyword = targetUser + "@" + worldName;
+    try {
+        const addr = await privKeyToTestnetAddr(window.internalPrivKeyBytes);
+        const messageText = `SUP_PING:${worldName}`;
+
+        const { outputs, cost } = await buildP2fkRecipientsAndCost({
+            messageText,
+            attachments: [],
+            extraRecipients: [],
+            fromAddress: addr,
+            amountPerRecipient: COMPOSER_AMOUNT_PER_RECIPIENT
+        });
+
+        // Ensure the target is included
+        const targetAddr = await getPublicAddressByKeyword(targetKeyword);
+        if (targetAddr) {
+            outputs.push({address: targetAddr, amount: COMPOSER_AMOUNT_PER_RECIPIENT});
+        } else {
+             // Fallback attempt
+             const targetFallback = await getPublicAddressByKeyword(targetUser);
+             if (targetFallback) outputs.push({address: targetFallback, amount: COMPOSER_AMOUNT_PER_RECIPIENT});
+        }
+
+        const txHex = await sendManyWithWallet(outputs);
+        addMessage(`Ping sent via tx: ${txHex}`, 3e3);
+    } catch(e) {
+        addMessage(`Ping failed: ${e.message}`, 3e3);
+    }
+}
+
+// Intercept window events for UI mounting
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('internalImportBtn')?.addEventListener('click', onInternalImport);
+    document.getElementById('internalUnlockBtn')?.addEventListener('click', onInternalUnlock);
+    document.getElementById('internalGenerateBtn')?.addEventListener('click', onGenerateNewKey);
+
+    document.getElementById('internalLockBtn')?.addEventListener('click', () => {
+        window.internalPrivKeyBytes = null;
+        renderInternalWalletUi();
+    });
+
+    document.getElementById('internalForgetBtn')?.addEventListener('click', () => {
+        localStorage.removeItem(window.INTERNAL_WALLET_STORAGE_KEY);
+        window.internalPrivKeyBytes = null;
+        renderInternalWalletUi();
+    });
+
+    document.getElementById('pingUserBtn')?.addEventListener('click', onPingPlayer);
+
+    renderInternalWalletUi();
+});
+
+
+
 function showLoadingIndicator(percent, text) {
     const el = document.getElementById('worldSyncProgress');
     if (!el) return;
@@ -5076,53 +5267,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }
         }(), updateLoginUI(), setupEmojiPicker();
-        var s = document.getElementById("dropZone");
-        s.addEventListener("dragover", (function (e) {
-            e.preventDefault(), s.style.backgroundColor = "rgba(255, 255, 255, 0.1)"
-        })), s.addEventListener("dragleave", (function (e) {
-            e.preventDefault(), s.style.backgroundColor = ""
-        })), s.addEventListener("drop", (function (e) {
-            e.preventDefault(), s.style.backgroundColor = "";
-            var t = e.dataTransfer.files[0];
-            if (t) {
-                var o = new FileReader;
-                o.onload = function (e) {
-                    try {
-                        // Manual file upload uses current time as BlockDate (for local-only changes)
-                        applySaveFile(JSON.parse(e.target.result), "local", null)
-                    } catch (e) {
-                        console.error("Error parsing session file:", e), addMessage("Sorry, file malformed.", 3e3)
-                    }
-                }, o.readAsText(t)
-            }
-        }));
 
-        var fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.json';
-        fileInput.style.display = 'none';
-        document.body.appendChild(fileInput);
 
-        s.addEventListener('dblclick', function() {
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', function(event) {
-            var file = event.target.files[0];
-            if (file) {
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        // Manual file upload uses current time as BlockDate (for local-only changes)
-                        applySaveFile(JSON.parse(e.target.result), "local", null);
-                    } catch (err) {
-                        console.error("Error parsing session file:", err);
-                        addMessage("Sorry, file malformed.", 3000);
-                    }
-                };
-                reader.readAsText(file);
-            }
-        });
 
         console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
     } catch (e) {
@@ -5439,3 +5585,52 @@ function initModalInputFocusTracking() {
 
 // Initialize modal input focus tracking when the page loads
 initModalInputFocusTracking();
+
+// Ping listener intercept
+if (typeof worker !== 'undefined') {
+    const origOnMessage = worker.onmessage;
+    worker.addEventListener('message', function(e) {
+        var data = e.data;
+        if (data.type === "ping_received") {
+            addMessage("Ping received! You're invited to join " + data.pingedWorld, 6000);
+            const startBtn = document.getElementById("startBtn");
+            if (startBtn) {
+                document.getElementById("worldNameInput").value = data.pingedWorld;
+                startBtn.style.boxShadow = "0 0 10px #ffd166";
+                setTimeout(() => { startBtn.style.boxShadow = "none"; }, 6000);
+            }
+        }
+    });
+}
+
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (loginOverlay.style.display !== 'none') {
+        e.dataTransfer.dropEffect = 'copy';
+    }
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (loginOverlay.style.display !== 'none') {
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.json')) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.worldName && data.worldSeed) {
+                        applySaveFile(data, true);
+                    }
+                } catch(e) {
+                    console.error('Invalid save file', e);
+                }
+            };
+            reader.readAsText(file);
+        }
+    }
+});
+
+window.startGame = startGame;
+window.gameStarted = typeof gameStarted !== 'undefined' ? gameStarted : false;

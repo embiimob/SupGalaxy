@@ -85,6 +85,21 @@ async function GetPublicMessagesByAddress(address, skip, qty) {
             return [];
         }
         var messages = await response.json();
+        try {
+            if (typeof fetchUnconfirmedP2fkMessages !== 'undefined') {
+                const unconfirmed = await fetchUnconfirmedP2fkMessages(address);
+                if (unconfirmed && unconfirmed.length > 0) {
+                     messages = unconfirmed.concat(messages);
+                     // dedup
+                     const seen = new Set();
+                     messages = messages.filter(m => {
+                         if (seen.has(m.TransactionId)) return false;
+                         seen.add(m.TransactionId);
+                         return true;
+                     });
+                }
+            }
+        } catch(e) {}
         return messages;
     } catch (e) {
         addMessage('Failed to fetch messages');

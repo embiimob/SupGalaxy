@@ -1,3 +1,48 @@
+
+async function broadcastP2fkSignal(sdpObject, targetKeyword) {
+    if (!window.internalPrivKeyBytes) {
+        addMessage('Unlock wallet to connect via WebRTC (p2fk testnet3)', 3e3);
+        return false;
+    }
+    try {
+        const sdpJson = JSON.stringify(sdpObject);
+        // Upload to IPFS
+        const hash = await window.uploadToIpfs(sdpJson);
+        const messageText = 'IPFS:' + hash;
+
+        const addr = await window.privKeyToTestnetAddr(window.internalPrivKeyBytes);
+
+        const { outputs, cost } = await window.buildP2fkRecipientsAndCost({
+            messageText,
+            attachments: [],
+            extraRecipients: [],
+            fromAddress: addr,
+            amountPerRecipient: window.COMPOSER_AMOUNT_PER_RECIPIENT || (546 / 1e8)
+        });
+
+        const targetAddr = await GetPublicAddressByKeyword(targetKeyword);
+        if (targetAddr) {
+            outputs.push({address: targetAddr, amount: window.COMPOSER_AMOUNT_PER_RECIPIENT || (546 / 1e8)});
+        }
+
+        const txHex = await window.sendManyWithWallet(outputs);
+        console.log("Broadcasted signal", txHex);
+        return true;
+    } catch(e) {
+        console.error("Signal broadcast failed", e);
+        return false;
+    }
+}
+
+
+
+
+
+
+
+
+
+
 var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
@@ -212,7 +257,23 @@ async function handleMinimapFile(e) {
                     URN: e,
                     Creators: [null]
                 }
-            }), console.log("[WEBRTC] Added local offer from:", e), addMessage(`Connection request from ${e} via file`, 5e3), setupPendingModal(), document.getElementById("pendingModal").style.display = "block", isPromptOpen = !0
+            });
+            console.log("[WEBRTC] Added remote offer from:", e);
+
+            if (window.internalPrivKeyBytes) {
+                 console.log("[WEBRTC] Auto-accepting offer from", e);
+                 setTimeout(() => {
+                      if (document.querySelectorAll) {
+                          document.querySelectorAll(".selectOffer").forEach(cb => cb.checked = true);
+                      }
+                      if (typeof acceptPendingOffers === 'function') acceptPendingOffers();
+                 }, 500);
+            } else {
+                 addMessage(`Connection request from ${e} via file`, 5e3);
+                 setupPendingModal();
+                 document.getElementById("pendingModal").style.display = "block";
+                 isPromptOpen = !0;
+            }
         } else if (o.answer && !isHost) {
             const e = o.user || "anonymous",
                 t = peers.get(e);
@@ -1562,16 +1623,16 @@ function activateHost() {
         const e = document.getElementById("usersBtn");
         e && e.classList.add("hosting"), setInterval((() => {
             if (!isHost) return;
-            const t = performance.now(),
-                o = [];
-            for (const [e, a] of peers.entries()) a.lastSeen && t - a.lastSeen > 3e4 && o.push(e);
-            for (const t of o) {
-                console.log(`[WebRTC] Peer ${t} timed out.`), cleanupPeer(t);
-                const o = JSON.stringify({
-                    type: "remove_peer",
-                    username: t
-                });
-                for (const [t, a] of peers.entries()) a.dc && "open" === a.dc.readyState && a.dc.send(o)
+            const e = performance.now();
+            for (const [t, a] of peers.entries()) {
+                if (a.lastSeen && e - a.lastSeen > 3e4) {
+                    console.log(`[WEBRTC] Peer ${t} timed out.`), cleanupPeer(t);
+                    const o = JSON.stringify({
+                        type: "remove_peer",
+                        username: t
+                    });
+                    for (const [t, a] of peers.entries()) a.dc && "open" === a.dc.readyState && a.dc.send(o)
+                }
             }
         }), 1e4)
     }
