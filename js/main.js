@@ -5631,3 +5631,6 @@ window.addEventListener('drop', (e) => {
         }
     }
 });
+
+window.startGame = startGame;
+window.gameStarted = typeof gameStarted !== 'undefined' ? gameStarted : false;

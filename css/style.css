@@ -828,9 +828,7 @@
                 display: flex;
             }
 
-            #hud {
-                display: none !important;
-            }
+
 
             #hotbar {
                 flex-wrap: wrap;
