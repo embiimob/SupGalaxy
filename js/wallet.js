@@ -612,11 +612,7 @@ function renderWalletUI(container, balance=null){
       <div class="btn-row" style="margin-bottom:16px;">
         <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
         <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
-      </div>
-      <hr class="divider">
-      <div class="f-field"><label class="f-label">Unlock saved wallet</label><input class="f-input" id="wUnlockPass" type="password" autocomplete="current-password" placeholder="Unlock password"></div>
-      <button class="btn btn-acc btn-sm" onclick="unlockWallet()">Unlock</button>
-      <div class="f-status warn" style="margin-top:10px;">No stored wallet found — import or generate one first.</div>`;
+      </div>`;
     }
   }
   html+=`<div id="walletMsg" class="f-status hidden" style="margin-top:10px;"></div>`;
