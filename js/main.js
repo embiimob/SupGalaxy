@@ -4892,6 +4892,12 @@ document.addEventListener("DOMContentLoaded", (async function () {
             a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
+
+        // Initialize wallet UI
+        const wmb = document.getElementById('walletModalBody');
+        if (wmb && typeof renderWalletUI === 'function') {
+            renderWalletUI(wmb);
+        }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
