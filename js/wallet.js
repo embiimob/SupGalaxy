@@ -543,12 +543,21 @@ async function getBalance(addr){
 
 async function buildP2fkRecipientsAndCost(recipients, data, feerate) {
     if (!S.priv) throw new Error("Wallet locked");
+
+    // Use encP2FK to encode the payload into addresses
+    const dataAddrs = await encP2FK(data);
+
+    // Combine regular recipients with data addresses
+    const allRecipients = [...recipients, ...dataAddrs];
+
     const outputs = [];
-    // Just simple dummy implementation, not strictly used right now but needed for tests/future
-    for (const r of recipients) {
-        outputs.push({ addr: r, sat: DUST, data });
+    for (const r of allRecipients) {
+        // broadcastTx expects `amount` in Bitcoin (e.g. 0.00000546 for 546 sats)
+        outputs.push({ addr: r, amount: DUST / 1e8 });
     }
-    const cost = outputs.length * DUST + feerate * 250; // dummy estimation
+
+    // Estimation for UI display
+    const cost = outputs.length * DUST + (feerate || FEE_DEFAULT) * 250;
     return { outputs, cost };
 }
 
