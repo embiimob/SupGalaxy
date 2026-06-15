@@ -2964,6 +2964,14 @@ function performAttack() {
 async function downloadSession() {
     // Show the save options modal for all players (host and peer)
     isPromptOpen = true;
+    const testnetBtn = document.getElementById("saveToTestnetBtn");
+    if (testnetBtn) {
+        if (typeof S !== 'undefined' && S.priv) {
+            testnetBtn.style.display = "block";
+        } else {
+            testnetBtn.style.display = "none";
+        }
+    }
     document.getElementById("saveOptionsModal").style.display = "flex";
 }
 
@@ -2983,6 +2991,126 @@ function savePlayerChangesOnly() {
     
     // Trigger the player-specific save
     downloadSinglePlayerSession();
+}
+
+async function saveToTestnet3() {
+    // Close the modal
+    document.getElementById("saveOptionsModal").style.display = "none";
+    isPromptOpen = false;
+
+    try {
+        const worldState = getCurrentWorldState();
+        const serializableMagicianStones = {};
+        for (const key in magicianStones) {
+            if (Object.hasOwnProperty.call(magicianStones, key)) {
+                const stone = magicianStones[key];
+                if (stone.source !== 'local') continue;
+                serializableMagicianStones[key] = {
+                    x: stone.x,
+                    y: stone.y,
+                    z: stone.z,
+                    url: stone.url,
+                    width: stone.width,
+                    height: stone.height,
+                    offsetX: stone.offsetX,
+                    offsetY: stone.offsetY,
+                    offsetZ: stone.offsetZ,
+                    loop: stone.loop,
+                    autoplay: stone.autoplay,
+                    autoplayAnimation: stone.autoplayAnimation,
+                    distance: stone.distance,
+                    volume: stone.volume
+                };
+            }
+        }
+
+        const serializableChests = {};
+        for (const key in chests) {
+            if (Object.hasOwnProperty.call(chests, key)) {
+                const chest = chests[key];
+                if (chest.source !== 'local') continue;
+                serializableChests[key] = {
+                    x: chest.x,
+                    y: chest.y,
+                    z: chest.z,
+                    items: chest.items,
+                    name: chest.name || "Chest"
+                };
+            }
+        }
+
+        const playerSessionData = {
+            isHostSession: false,
+            playerData: {
+                worldName: worldName,
+                inventory: inventory,
+                hotbar: hotbar,
+                position: { x: player.position.x, y: player.position.y, z: player.position.z },
+                pitch: player.pitch,
+                yaw: player.yaw,
+                spawnPoint: spawnPoint,
+                time: time,
+                health: currentHealth,
+                magicianStones: serializableMagicianStones,
+                chests: serializableChests,
+                musicPlaylist: musicPlaylist,
+                videoPlaylist: videoPlaylist
+            },
+            deltas: Array.from(worldState.chunkDeltas.entries()).map(([chunkKey, changes]) => ({
+                chunk: chunkKey,
+                changes: Array.from(changes.entries())
+            }))
+        };
+
+        playerSessionData.hash = simpleHash(JSON.stringify(playerSessionData.playerData));
+        const jsonStr = JSON.stringify(playerSessionData);
+
+        // 100 MB limit
+        if (jsonStr.length > 100 * 1024 * 1024) {
+            addMessage("Save file > 100MB. Please use 'Save Only My Changes' and attach in Sup!?", 4000);
+            return;
+        }
+
+        addMessage("Uploading session to IPFS...", 3000);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const filename = `${worldName}_${userName}_session_${Date.now()}.json`;
+
+        const cid = await uploadToIPFS(blob, filename);
+        const urn = `IPFS:${cid}/${filename}`;
+
+        let kwStr = `${userName}-GS`;
+        if (userName.length > 18) {
+            kwStr = `${userName.substring(0, 17)}-GS`; // max 20 chars
+        }
+        kwStr = "#" + kwStr;
+
+        addMessage("Resolving keyword address...", 3000);
+        const keywordAddr = await GetPublicAddressByKeyword(kwStr);
+        if (!keywordAddr) {
+            throw new Error("Could not resolve keyword address");
+        }
+
+        addMessage("Preparing Testnet3 transaction...", 3000);
+
+        // Since we need to broadcast a Sup!? message with URN, we construct the payload properly
+        const payload = JSON.stringify({ URN: urn, U: urn }); // standard minimal profile URN format
+
+        addMessage("Broadcasting save to Testnet3...", 3000);
+
+        const p2fkAddrs = await window.encP2FK(payload);
+        const allOuts = [ { addr: keywordAddr, amount: 546 / 1e8 } ];
+        for(const a of p2fkAddrs) {
+            allOuts.push({ addr: a, amount: 546 / 1e8 });
+        }
+
+        const txid = await window.sendManyWithWallet(allOuts);
+        addMessage(`Saved successfully! TXID: ${txid}`, 5000);
+        console.log("Save TXID:", txid);
+
+    } catch (e) {
+        console.error("Save to Testnet3 failed:", e);
+        addMessage(`Failed to save to Testnet3: ${e.message}`, 4000);
+    }
 }
 
 async function downloadHostSession() {
@@ -4975,6 +5103,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             saveFullSession(), this.blur()
         })), document.getElementById("savePlayerChangesBtn").addEventListener("click", (function () {
             savePlayerChangesOnly(), this.blur()
+        })), document.getElementById("saveToTestnetBtn").addEventListener("click", (function () {
+            saveToTestnet3(), this.blur()
         })), document.getElementById("teleportCancel").addEventListener("click", (function () {
             isPromptOpen = !1, document.getElementById("teleportModal").style.display = "none", this.blur()
         })), document.getElementById("teleportOk").addEventListener("click", (function () {

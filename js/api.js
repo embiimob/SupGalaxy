@@ -39,6 +39,25 @@ async function fetchIPFSWithFallback(hash, filename = null) {
     return await fetch('https://ipfs.io/ipfs/' + hash);
 }
 
+async function uploadToIPFS(blob, filename) {
+    const formData = new FormData();
+    formData.append('file', blob, filename);
+    try {
+        const response = await fetch('https://p2fk.io/api/v0/add', {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data.Hash;
+    } catch (e) {
+        console.error('[IPFS] Upload error:', e);
+        throw e;
+    }
+}
+
 async function GetPublicAddressByKeyword(keyword) {
     try {
         if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);

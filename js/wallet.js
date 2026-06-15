@@ -567,6 +567,7 @@ async function signWithWallet(text) {
 window.buildP2fkRecipientsAndCost = buildP2fkRecipientsAndCost;
 window.sendManyWithWallet = sendManyWithWallet;
 window.signWithWallet = signWithWallet;
+window.encP2FK = encP2FK;
 
 function renderWalletUI(container, balance=null){
   const locked=!S.priv;
@@ -714,6 +715,7 @@ async function afterUnlock(){
   try{ S.keyring=await buildKeyring(S.priv); }catch{}
 
   // load own profile
+  let resolvedUserName = S.addr;
   try {
       if (typeof GetProfileByAddress !== 'undefined') {
           const profile = await GetProfileByAddress(S.addr);
@@ -721,9 +723,12 @@ async function afterUnlock(){
           if (userInput) {
               if (profile && profile.URN) {
                   userInput.value = profile.URN;
+                  resolvedUserName = profile.URN;
               } else {
                   userInput.value = S.addr;
               }
+          } else if (profile && profile.URN) {
+              resolvedUserName = profile.URN;
           }
       } else {
           const userInput = document.getElementById('userInput');
@@ -733,6 +738,53 @@ async function afterUnlock(){
       console.warn("Failed to get profile by address", e);
       const userInput = document.getElementById('userInput');
       if (userInput && !userInput.value) userInput.value = S.addr;
+  }
+
+  // Auto-load testnet3 saved session
+  try {
+      if (typeof GetPublicAddressByKeyword !== 'undefined' && typeof GetPublicMessagesByAddress !== 'undefined' && typeof applySaveFile === 'function') {
+          let kwStr = `${resolvedUserName}-GS`;
+          if (resolvedUserName.length > 18) {
+              kwStr = `${resolvedUserName.substring(0, 17)}-GS`;
+          }
+          kwStr = "#" + kwStr;
+
+          const keywordAddr = await GetPublicAddressByKeyword(kwStr);
+          if (keywordAddr) {
+              const messages = await GetPublicMessagesByAddress(keywordAddr, 0, 10);
+              if (messages && messages.length > 0) {
+                  // Find most recent IPFS message
+                  let latestIpfsMsg = null;
+                  for (const msg of messages) {
+                      if (msg.Message && msg.Message.URN && msg.Message.URN.startsWith("IPFS:")) {
+                          latestIpfsMsg = msg.Message.URN;
+                          break;
+                      }
+                      if (msg.Message && msg.Message.U && msg.Message.U.startsWith("IPFS:")) {
+                          latestIpfsMsg = msg.Message.U;
+                          break;
+                      }
+                  }
+
+                  if (latestIpfsMsg) {
+                      const hashStr = latestIpfsMsg.substring(5).split('/')[0];
+                      if (hashStr && typeof fetchIPFSWithFallback === 'function') {
+                          console.log("[WALLET] Found auto-save on testnet3, downloading from IPFS:", hashStr);
+                          const res = await fetchIPFSWithFallback(hashStr);
+                          if (res.ok) {
+                              const jsonText = await res.text();
+                              const parsedData = JSON.parse(jsonText);
+                              // Background load it via applySaveFile
+                              applySaveFile(parsedData, "local", null);
+                              console.log("[WALLET] Successfully applied auto-save from Testnet3.");
+                          }
+                      }
+                  }
+              }
+          }
+      }
+  } catch(e) {
+      console.warn("Failed to auto-load testnet3 save:", e);
   }
 
   // render wallet views
