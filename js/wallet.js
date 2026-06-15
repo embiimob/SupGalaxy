@@ -567,3 +567,294 @@ async function signWithWallet(text) {
 window.buildP2fkRecipientsAndCost = buildP2fkRecipientsAndCost;
 window.sendManyWithWallet = sendManyWithWallet;
 window.signWithWallet = signWithWallet;
+
+function renderWalletUI(container, balance=null){
+  const locked=!S.priv;
+  let html='';
+  if(!locked){
+    html+=`<div class="wallet-address-card">
+      <div class="wallet-addr-title">Wallet addresses (main + change)</div>
+      <div class="wallet-addr-val mono">${esc(S.addr)}</div>
+      <div class="wallet-balances" id="walletBalances">
+        <span style="color:var(--muted);font-size:.82rem;">Loading balances…</span>
+      </div>
+    </div>
+    <div class="f-status info" id="walletStatusMsg" style="margin-bottom:12px;">Wallet unlocked ✓ (main + ${S.keyring?.changes?.length || 0} change addresses)</div>
+    <div class="btn-row" style="margin-bottom:16px;">
+      <button class="btn btn-out btn-sm" onclick="exportWif()">Export WIF</button>
+      <button class="btn btn-pri btn-sm" onclick="consolidateChange()">Consolidate</button>
+      <button class="btn btn-pri btn-sm" onclick="consolidateForMessaging()">Consolidate for messaging</button>
+      <button class="btn btn-out btn-sm" onclick="lockWallet()">Lock</button>
+      <button class="btn btn-dng btn-sm" onclick="forgetWallet()">Forget key</button>
+    </div>
+    <div class="f-field hidden" id="wifExportFallback" style="margin-bottom:12px;">
+      <label class="f-label">Clipboard blocked — copy your WIF manually</label>
+      <textarea class="f-input mono" id="wifExportBox" rows="3" readonly autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
+    </div>`;
+  } else {
+    const stored=localStorage.getItem(WALLET_KEY);
+    if(stored){
+      html+=`<div class="f-field"><label class="f-label">Unlock saved wallet</label><input class="f-input" id="wUnlockPass" type="password" autocomplete="current-password" placeholder="Unlock password"></div>
+      <button class="btn btn-acc btn-sm" onclick="unlockWallet()">Unlock</button>
+      <hr class="divider">
+      <button type="button" class="btn btn-out btn-sm" style="margin-bottom:8px;" onclick="(function(btn){const sec=btn.closest('#walletModalBody,#walletViewBody').querySelector('#wImportSection');const open=sec.style.display!=='none';sec.style.display=open?'none':'block';btn.textContent=open?'Change accounts ▸':'Change accounts ▴';})(this)">Change accounts ▸</button>
+      <div id="wImportSection" style="display:none;">
+        <div class="f-field"><label class="f-label">WIF private key (testnet3)</label><input class="f-input" id="wWif" type="password" placeholder="c… or 9… testnet3 WIF" autocomplete="off"></div>
+        <div class="f-field"><label class="f-label">Encryption password (min ${WALLET_MIN_PASS} chars)</label><input class="f-input" id="wPass" type="password" autocomplete="new-password"></div>
+        <div class="btn-row" style="margin-bottom:16px;">
+          <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
+          <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
+        </div>
+      </div>`;
+    } else {
+      html+=`<div class="f-field"><label class="f-label">WIF private key (testnet3)</label><input class="f-input" id="wWif" type="password" placeholder="c… or 9… testnet3 WIF" autocomplete="off"></div>
+      <div class="f-field"><label class="f-label">Encryption password (min ${WALLET_MIN_PASS} chars)</label><input class="f-input" id="wPass" type="password" autocomplete="new-password"></div>
+      <div class="btn-row" style="margin-bottom:16px;">
+        <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
+        <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
+      </div>
+      <hr class="divider">
+      <div class="f-field"><label class="f-label">Unlock saved wallet</label><input class="f-input" id="wUnlockPass" type="password" autocomplete="current-password" placeholder="Unlock password"></div>
+      <button class="btn btn-acc btn-sm" onclick="unlockWallet()">Unlock</button>
+      <div class="f-status warn" style="margin-top:10px;">No stored wallet found — import or generate one first.</div>`;
+    }
+  }
+  html+=`<div id="walletMsg" class="f-status hidden" style="margin-top:10px;"></div>`;
+  container.innerHTML=html;
+  container.querySelector('#wWif')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
+  container.querySelector('#wPass')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
+  container.querySelector('#wUnlockPass')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();unlockWallet();}});
+  if(!locked) refreshBalance();
+}
+async function refreshBalance(){
+  if(!S.addr||!S.priv) return;
+  try{
+    // Use cached keyring (same derivation as SupTV/SupRadio)
+    const kr=S.keyring||await buildKeyring(S.priv);
+    if(!S.keyring) S.keyring=kr;
+    // Fetch balances for main + all change addresses in parallel
+    const bals=await Promise.all(kr.all.map(sg=>getBalance(sg.addr).catch(()=>({confirmed:0,unconfirmed:0}))));
+    const total=bals.reduce((acc,b)=>({confirmed:acc.confirmed+(b.confirmed||0),unconfirmed:acc.unconfirmed+(b.unconfirmed||0)}),{confirmed:0,unconfirmed:0});
+    // Build per-address detail
+    const addrLines=kr.all.map((sg,i)=>{const b=bals[i];return b.confirmed||b.unconfirmed?`<div style="font-size:.75rem;color:var(--muted);margin-top:2px;">${esc(sg.label)}: ${(b.confirmed/1e8).toFixed(8)} confirmed</div>`:''}).join('');
+    const bws=document.querySelectorAll('.wallet-balances, #walletBalances');
+    bws.forEach(bw => {
+      bw.innerHTML=`<span class="balance-chip balance-confirmed">✓ ${(total.confirmed/1e8).toFixed(8)} tBTC confirmed</span><span class="balance-chip balance-unconf">⏳ ${(total.unconfirmed/1e8).toFixed(8)} tBTC unconfirmed</span>${addrLines}`;
+    });
+  }catch{}
+}
+function activeWalletContainer(preferEl=null){
+  if(preferEl){
+    const parent=preferEl.closest('#walletModalBody, #walletViewBody');
+    if(parent) return parent;
+  }
+  const wm=document.getElementById('modalWallet');
+  if(wm&&!wm.classList.contains('hidden')){
+    const body=document.getElementById('walletModalBody');
+    if(body) return body;
+  }
+  return document.getElementById('walletViewBody')||document.getElementById('walletModalBody');
+}
+function walletField(id,preferEl=null){
+  const container=activeWalletContainer(preferEl);
+  return container?.querySelector(`#${id}`)||document.querySelector(`#${id}`);
+}
+function walletMsg(msg,kind='info',preferEl=null){
+  const container=activeWalletContainer(preferEl);
+  const el=container?.querySelector('#walletMsg')||document.getElementById('walletMsg');
+  if(el) showStatus(el,msg,kind);
+}
+function walletWifFallback(wif='',preferEl=null){
+  const container=activeWalletContainer(preferEl);
+  const wrap=container?.querySelector('#wifExportFallback');
+  const box=container?.querySelector('#wifExportBox');
+  if(!wrap||!box) return;
+  if(wif){
+    box.value=wif;
+    wrap.classList.remove('hidden');
+    box.focus();
+    box.select();
+  }else{
+    box.value='';
+    wrap.classList.add('hidden');
+  }
+}
+
+function updateWalletMini(){
+  const mini=document.getElementById('walletMini');
+  if(!S.addr){if(mini)mini.classList.add('hidden');return;}
+  if(mini){
+    mini.classList.remove('hidden');
+    const avi=document.getElementById('walletMiniAvi'),nm=document.getElementById('walletMiniName'),ad=document.getElementById('walletMiniAddr');
+    if(S.myProfile&&avi){const cands=profileImgCandidates(S.myProfile.image);if(cands.length){avi.src=cands[0];avi.dataset.cands=JSON.stringify([...cands.slice(1),FALLBACK_AVI]);avi.onerror=()=>window.pi_err(avi);}else avi.src=FALLBACK_AVI;}
+    else if(avi) avi.src=FALLBACK_AVI;
+    let pendingBadge = '';
+    if (S.myProfile?.isPending) {
+      let pStatus = 'Confirming...';
+      for (const [txid, pTx] of S.pendingTxs.entries()) {
+        if (pTx.type === 'profile' && pTx.root && pTx.root.fromAddr === S.addr) {
+          pStatus = pTx.status === 'broadcasting' ? 'Broadcasting...' : 'Confirming...';
+          break;
+        }
+      }
+      pendingBadge = ` <span class="badge-v badge-unoff" style="font-size:0.6rem;padding:2px 4px;">⏳ ${pStatus}</span>`;
+    }
+    if(nm) nm.innerHTML=(S.myProfile?.displayName?esc(S.myProfile.displayName):shortAddr(S.addr)) + pendingBadge;
+    if(ad) ad.textContent=shortAddr(S.addr);
+  }
+  // also update inline compose avi with cascade
+  const ica=document.getElementById('inlineComposeAvi'),cma=document.getElementById('cmAvi');
+  const cands=S.myProfile?profileImgCandidates(S.myProfile.image):[];
+  const src=cands.length?cands[0]:FALLBACK_AVI;
+  const fb=JSON.stringify([...cands.slice(1),FALLBACK_AVI]);
+  [ica,cma].forEach(el=>{if(!el)return;el.src=src;el.dataset.cands=fb;el.onerror=()=>window.pi_err(el);});
+  // show inline compose
+  const ic=document.getElementById('inlineCompose');
+  if(ic) ic.classList.toggle('hidden',!S.addr);
+}
+
+
+async function afterUnlock(){
+  try{ S.keyring=await buildKeyring(S.priv); }catch{}
+
+  // load own profile
+  try {
+      if (typeof GetProfileByAddress !== 'undefined') {
+          const profile = await GetProfileByAddress(S.addr);
+          const userInput = document.getElementById('userInput');
+          if (userInput) {
+              if (profile && profile.URN) {
+                  userInput.value = profile.URN;
+              } else {
+                  userInput.value = S.addr;
+              }
+          }
+      } else {
+          const userInput = document.getElementById('userInput');
+          if (userInput) userInput.value = S.addr;
+      }
+  } catch(e) {
+      console.warn("Failed to get profile by address", e);
+      const userInput = document.getElementById('userInput');
+      if (userInput && !userInput.value) userInput.value = S.addr;
+  }
+
+  // render wallet views
+  const wmb=document.getElementById('walletModalBody');
+  if(wmb) renderWalletUI(wmb);
+}
+
+
+
+async function generateKey(){
+  walletMsg('Generating…');
+  try{
+    let pb,wif='',addr='';
+    const hasBadPair=v=>/[\\/:*?"|<>][0-9]/.test(String(v||'').slice(0,120));
+    let attempts=0;
+    do{
+      attempts++;
+      pb=crypto.getRandomValues(new Uint8Array(32));
+      if(b2bi(pb)===0n||b2bi(pb)>=N) continue;
+      wif=await priv2wif(pb);addr=await priv2addr(pb);
+    }while(attempts<64&&(!wif||!addr||hasBadPair(wif)||hasBadPair(addr)));
+    if(!wif) throw new Error('Try again');
+    const el=walletField('wWif');if(el) el.value=wif;
+    walletMsg(`Generated ${addr}. Set a password and click Import + unlock.`,'good');
+  }catch(e){walletMsg(e.message||'Failed','danger');}
+}
+async function importWallet(){
+  const wifEl=walletField('wWif'),passEl=walletField('wPass');
+  const wif=norm((wifEl||{}).value||''),pass=norm((passEl||{}).value||'');
+  if(!wif) return walletMsg('Enter a testnet3 WIF key','warn');
+  if(pass.length<WALLET_MIN_PASS) return walletMsg(`Password must be ≥ ${WALLET_MIN_PASS} chars`,'warn');
+  walletMsg('Encrypting…');
+  try{
+    const pb=await wif2priv(wif);
+    const addr=await priv2addr(pb);
+    const enc=await encryptPriv(pb,pass);
+    localStorage.setItem(WALLET_KEY,JSON.stringify(enc));
+    S.priv=pb;S.addr=addr;
+    if(wifEl)wifEl.value='';if(passEl)passEl.value='';
+    walletMsg(`Unlocked: ${addr}`,'good');
+    await afterUnlock();
+  }catch(e){walletMsg(e.message||'Import failed','danger');}
+}
+async function unlockWallet(){
+  const passEl=walletField('wUnlockPass');
+  const pass=norm((passEl||{}).value||'');
+  if(!pass) return walletMsg('Enter password','warn');
+  walletMsg('Unlocking…');
+  try{
+    const stored=JSON.parse(localStorage.getItem(WALLET_KEY)||'null');
+    if(!stored) throw new Error('No stored wallet — import first');
+    const pb=await decryptPriv(stored,pass);
+    const addr=await priv2addr(pb);
+    S.priv=pb;S.addr=addr;
+    if(passEl)passEl.value='';
+    walletMsg(`Unlocked: ${addr}`,'good');
+    await afterUnlock();
+  }catch(e){walletMsg(e.message||'Unlock failed','danger');}
+}
+async function exportWif(){
+  if(!S.priv) return walletMsg('Unlock wallet first','warn');
+  let wif='';
+  try{
+    wif=await priv2wif(S.priv);
+    if(!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+    await navigator.clipboard.writeText(wif);
+    walletWifFallback('');
+    walletMsg('WIF copied to clipboard','good');
+  }catch(e){
+    if(wif){
+      walletWifFallback(wif);
+      walletMsg('Clipboard unavailable on this device — copy WIF from the box below.','warn');
+      return;
+    }
+    walletMsg(e.message||'Copy failed','danger');
+  }
+}
+function lockWallet(){
+  S.priv=null;S.addr='';S.myProfile=null;S.keyring=null;
+  updateWalletMini();
+  const wvb=document.getElementById('walletViewBody');if(wvb) renderWalletUI(wvb);
+  const wmb=document.getElementById('walletModalBody');if(wmb) renderWalletUI(wmb);
+  const ic=document.getElementById('inlineCompose');if(ic)ic.classList.add('hidden');
+}
+function forgetWallet(){
+  localStorage.removeItem(WALLET_KEY);
+  lockWallet();
+  walletMsg('Wallet forgotten','warn');
+}
+window.consolidateChange=async function(){
+  walletMsg('Consolidating change funds…','info');
+  try{
+    const txid=await consolidateChangeFunds();
+    walletMsg(`Consolidated to main address. txid: ${txid}`,'good');
+    refreshBalance();
+  }catch(e){walletMsg(e.message||'Consolidation failed','danger');}
+};
+
+
+
+window.S = S;
+window.b2h = b2h;
+window.h2b = h2b;
+window.sha256 = sha256;
+window.priv2addr = priv2addr;
+window.deriveKeywordAddress = deriveKeywordAddress;
+window.kwAddr = kwAddr;
+window.renderWalletUI = renderWalletUI;
+window.generateKey = generateKey;
+window.importWallet = importWallet;
+window.unlockWallet = unlockWallet;
+window.exportWif = exportWif;
+window.lockWallet = lockWallet;
+window.forgetWallet = forgetWallet;
+window.consolidateChange = consolidateChange;
+window.WALLET_KEY = WALLET_KEY;
+window.INTERNAL_WALLET_STORAGE_KEY = INTERNAL_WALLET_STORAGE_KEY;
+window.signMsg = signMsg;
+window.buildP2fkRecipientsAndCost = buildP2fkRecipientsAndCost;
+window.sendManyWithWallet = sendManyWithWallet;
+window.signWithWallet = signWithWallet;
