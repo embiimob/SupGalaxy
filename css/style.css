@@ -1263,3 +1263,27 @@ body.is-mobile-mode #messages {
         left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
     }
 }
+
+/* Wallet UI Basic Styles */
+.f-field { margin-bottom: 12px; }
+.f-label { display: block; font-size: 0.85rem; color: #ccc; margin-bottom: 4px; }
+.f-input { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+.btn-sm { font-size: 0.85rem; }
+.btn-acc { background-color: #28a745; color: white; }
+.btn-out { background-color: transparent; color: #ccc; border: 1px solid #555; }
+.btn-out:hover { background-color: #333; }
+.btn-pri { background-color: #007bff; color: white; }
+.btn-dng { background-color: #dc3545; color: white; }
+.f-status { padding: 8px; border-radius: 4px; font-size: 0.85rem; margin-top: 8px; }
+.f-status.info { background-color: #17a2b8; color: white; }
+.f-status.warn { background-color: #ffc107; color: black; }
+.f-status.danger { background-color: #dc3545; color: white; }
+.f-status.good { background-color: #28a745; color: white; }
+.hidden { display: none !important; }
+.divider { border: 0; height: 1px; background: #444; margin: 16px 0; }
+.wallet-address-card { background: #1a1a1a; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #333; }
+.wallet-addr-title { font-size: 0.8rem; color: #aaa; margin-bottom: 4px; }
+.wallet-addr-val { font-family: monospace; word-break: break-all; color: #fff; }
+.wallet-balances { margin-top: 8px; }
