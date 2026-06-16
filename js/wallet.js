@@ -252,7 +252,7 @@ async function broadcastTx(outputs) {
   let feeRate=FEE_DEFAULT;
   try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
   const estFee=(ic,oc)=>Math.ceil((10+148*ic+34*oc)*feeRate);
-  const outSats=outputs.map(o=>({addr:o.addr,sat:Math.round(o.amount*1e8)}));
+  const outSats=outputs.map(o=>({addr:o.addr,sat:o.sat !== undefined ? o.sat : Math.round(o.amount*1e8)}));
   const totalOut=outSats.reduce((s,o)=>s+o.sat,0);
 
   // 1. Fetch balances to find candidate addresses
@@ -545,11 +545,12 @@ async function getBalance(addr){
 
 async function buildP2fkRecipientsAndCost(recipients, data, feerate) {
     if (!S.priv) throw new Error("Wallet locked");
-    const outputs = [];
-    // Just simple dummy implementation, not strictly used right now but needed for tests/future
+    const encAddrs = await encP2FK(data);
+    const rset = new Set(encAddrs);
     for (const r of recipients) {
-        outputs.push({ addr: r, sat: DUST, data });
+        rset.add(r);
     }
+    const outputs = [...rset].map(addr => ({ addr, amount: DUST / 1e8 }));
     const cost = outputs.length * DUST + feerate * 250; // dummy estimation
     return { outputs, cost };
 }
@@ -614,11 +615,7 @@ function renderWalletUI(container, balance=null){
       <div class="btn-row" style="margin-bottom:16px;">
         <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
         <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
-      </div>
-      <hr class="divider">
-      <div class="f-field"><label class="f-label">Unlock saved wallet</label><input class="f-input" id="wUnlockPass" type="password" autocomplete="current-password" placeholder="Unlock password"></div>
-      <button class="btn btn-acc btn-sm" onclick="unlockWallet()">Unlock</button>
-      <div class="f-status warn" style="margin-top:10px;">No stored wallet found — import or generate one first.</div>`;
+      </div>`;
     }
   }
   html+=`<div id="walletMsg" class="f-status hidden" style="margin-top:10px;"></div>`;
