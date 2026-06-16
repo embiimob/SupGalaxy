@@ -84,6 +84,12 @@ You're in!
 
 ---
 
+## 🔐 Security & Privacy
+- **Local Execution:** For the highest level of security, running SupGalaxy locally (as described above) is recommended.
+- **Client-Side Keys:** Your testnet3 wallet private keys (WIF) never leave your browser. They are encrypted and stored locally in your browser's `localStorage` (`sup_iw_v1`). All transaction signing and P2FK encoding happens entirely client-side.
+
+---
+
 ## 🌍 World & Player Setup
 - **World Name**: max 8 chars  
 - **Username**: max 20 chars  
@@ -204,6 +210,20 @@ if (shouldApplyIpfsUpdate(existingTruncated, incomingTruncated)) {
 ```
 
 Run tests in the browser console: `runIpfsVersioningTests()`
+
+---
+
+# 👛 Testnet3 Wallet Integration
+
+SupGalaxy includes a built-in Bitcoin testnet3 wallet (`js/wallet.js`) to handle P2FK messaging and decentralized persistence.
+
+### Wallet Functions
+- **Login & Unlock:** You can generate a new testnet3 address or import an existing WIF (Wallet Import Format) private key. Your wallet is protected by a password and stored securely in your browser's local storage.
+- **Saving to Testnet3:** Game state and chunks are uploaded to IPFS (via `p2fk.io`), and the resulting URN is broadcasted on-chain using P2FK messages from your wallet.
+- **Consolidate Funds:** The wallet includes tools to consolidate funds from change addresses back to your main address (`consolidateChange()`) or prepare funds specifically for messaging (`consolidateForMessaging()`).
+- **Export WIF:** You can easily export your private key at any time to back it up or use it in other Sup!? sister projects (like SupSpace or SupRadio).
+
+All exported wallet functions (`generateKey`, `importWallet`, `unlockWallet`, `exportWif`, `consolidateChange`, `sendManyWithWallet`, `signWithWallet`, etc.) are globally accessible via the `window` object for seamless integration with the game logic.
 
 ---
 
