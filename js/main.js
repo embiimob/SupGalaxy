@@ -5080,6 +5080,11 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 wmb.style.display = "block";
                 testnetWifLoginBtn.style.display = "none";
             });
+            testnetWifLoginBtn.addEventListener("touchstart", (e) => {
+                e.preventDefault();
+                wmb.style.display = "block";
+                testnetWifLoginBtn.style.display = "none";
+            });
         }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
