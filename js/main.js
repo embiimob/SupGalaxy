@@ -5073,6 +5073,14 @@ document.addEventListener("DOMContentLoaded", (async function () {
         if (wmb && typeof renderWalletUI === 'function') {
             renderWalletUI(wmb);
         }
+
+        const testnetWifLoginBtn = document.getElementById("testnetWifLoginBtn");
+        if (testnetWifLoginBtn && wmb) {
+            testnetWifLoginBtn.addEventListener("click", () => {
+                wmb.style.display = "block";
+                testnetWifLoginBtn.style.display = "none";
+            });
+        }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
