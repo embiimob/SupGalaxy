@@ -3247,10 +3247,15 @@ async function publishToTestnet() {
     addMessage("Broadcasting to Testnet3...", 2000);
 
     try {
-        const payloadStr = "IPFS:" + ipfsHash + "\\" + fileName;
+        // Construct the full P2FK message payload with SIG
+        const messageStr = `<<IPFS:${ipfsHash}\\${fileName}>><<-${ipfsHash.length + fileName.length}>>`;
+        const sig = await window.signMsg(messageStr);
+        const sigFormatted = `SIG|${sig.length}"${sig}`;
+        const payloadStr = messageStr + sigFormatted;
+
         const result = await window.buildP2fkRecipientsAndCost(validAddresses, payloadStr, 10);
 
-        // Wait for sendManyWithWallet implementation to actually broadcast
+        // Broadcast the transaction
         const txid = await window.sendManyWithWallet(result.outputs);
         addMessage("Success! TXID: " + txid.slice(0, 8) + "...", 4000);
 

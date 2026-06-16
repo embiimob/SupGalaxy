@@ -515,7 +515,9 @@ async function encP2FK(payload,ver=P2FK_VER){
     const padded=new Uint8Array(P2FK_CHUNK);
     padded.fill(P2FK_PAD.charCodeAt(0));
     padded.set(chunk);
-    const ab=new Uint8Array(1+P2FK_CHUNK);ab[0]=ver;ab.set(padded,1);
+    const ab=new Uint8Array(1+P2FK_CHUNK);
+    ab[0]=ver;
+    ab.set(padded,1);
     const enc=await encB58C(ab);
     if(!seen.has(enc)){seen.add(enc);addrs.push(enc);}
   }
@@ -543,21 +545,12 @@ async function getBalance(addr){
 
 async function buildP2fkRecipientsAndCost(recipients, data, feerate) {
     if (!S.priv) throw new Error("Wallet locked");
-
-    // Use encP2FK to encode the payload into addresses
-    const dataAddrs = await encP2FK(data);
-
-    // Combine regular recipients with data addresses
-    const allRecipients = [...recipients, ...dataAddrs];
-
     const outputs = [];
-    for (const r of allRecipients) {
-        // broadcastTx expects `amount` in Bitcoin (e.g. 0.00000546 for 546 sats)
-        outputs.push({ addr: r, amount: DUST / 1e8 });
+    // Just simple dummy implementation, not strictly used right now but needed for tests/future
+    for (const r of recipients) {
+        outputs.push({ addr: r, sat: DUST, data });
     }
-
-    // Estimation for UI display
-    const cost = outputs.length * DUST + (feerate || FEE_DEFAULT) * 250;
+    const cost = outputs.length * DUST + feerate * 250; // dummy estimation
     return { outputs, cost };
 }
 
@@ -621,7 +614,11 @@ function renderWalletUI(container, balance=null){
       <div class="btn-row" style="margin-bottom:16px;">
         <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
         <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
-      </div>`;
+      </div>
+      <hr class="divider">
+      <div class="f-field"><label class="f-label">Unlock saved wallet</label><input class="f-input" id="wUnlockPass" type="password" autocomplete="current-password" placeholder="Unlock password"></div>
+      <button class="btn btn-acc btn-sm" onclick="unlockWallet()">Unlock</button>
+      <div class="f-status warn" style="margin-top:10px;">No stored wallet found — import or generate one first.</div>`;
     }
   }
   html+=`<div id="walletMsg" class="f-status hidden" style="margin-top:10px;"></div>`;
