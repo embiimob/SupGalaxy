@@ -6,7 +6,16 @@ const INTERNAL_WALLET_STORAGE_KEY = WALLET_KEY;
 const WALLET_MIN_PASS = 12;
 const WALLET_PBKDF2 = 600000;
 const CHANGE_PREFIX = 'sup:testnet3:change:';
+const P2FK_SIGVER = '88';
+const ADDR_RE = /^[mn][1-9A-HJ-NP-Za-km-z]{25,34}$/;
+
+const decHtml = t => norm(t).replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&quot;/gi,'"').replace(/&#0?39;|&apos;/gi,"'");
+const sanitize = msg => decHtml(norm(msg)).replace(/[<>]/g,' ');
+const utf8len = v => new TextEncoder().encode(String(v??'')).length;
+const isAddr = v => ADDR_RE.test(norm(v));
+const parseHashtags = msg => { const m=norm(msg).match(/(?:^|[^a-zA-Z0-9_&;])#[^\s]{1,20}/g)||[]; return [...new Set(m.map(t=>t.replace(/^[^#]+/, '').slice(1).trim()).filter(Boolean))]; };
 const DUST = 546;
+const AMOUNT_PER = DUST / 1e8;
 const FEE_DEFAULT = 10;
 const FEE_MIN = 2;
 const P2FK_VER = 0x6f;
@@ -252,7 +261,7 @@ async function broadcastTx(outputs) {
   let feeRate=FEE_DEFAULT;
   try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
   const estFee=(ic,oc)=>Math.ceil((10+148*ic+34*oc)*feeRate);
-  const outSats=outputs.map(o=>({addr:o.addr,sat:Math.round(o.amount*1e8)}));
+  const outSats=outputs.map(o=>({addr:o.addr,sat:o.sat !== undefined ? o.sat : Math.round(o.amount*1e8)}));
   const totalOut=outSats.reduce((s,o)=>s+o.sat,0);
 
   // 1. Fetch balances to find candidate addresses
@@ -515,7 +524,9 @@ async function encP2FK(payload,ver=P2FK_VER){
     const padded=new Uint8Array(P2FK_CHUNK);
     padded.fill(P2FK_PAD.charCodeAt(0));
     padded.set(chunk);
-    const ab=new Uint8Array(1+P2FK_CHUNK);ab[0]=ver;ab.set(padded,1);
+    const ab=new Uint8Array(1+P2FK_CHUNK);
+    ab[0]=ver;
+    ab.set(padded,1);
     const enc=await encB58C(ab);
     if(!seen.has(enc)){seen.add(enc);addrs.push(enc);}
   }
@@ -541,13 +552,36 @@ async function getBalance(addr){
 
 
 
+async function buildMsgOutputs({text,attachments=[],extras=[],fromAddr}){
+  const safe=sanitize(text);
+  const delim=randDelim();
+  const payload=`${safe}${attachments.map(a=>`<<${a}>>`).join('')}<<${randSalt()}>>`;
+  const unsObj=`${delim}${utf8len(payload)}${delim}${payload}`;
+  const sigHash=(await sha256hex(unsObj)).toUpperCase();
+  const sig=await signMsg(sigHash);
+  const signed=`SIG${delim}${P2FK_SIGVER}${delim}${sig}${unsObj}`;
+  const encAddrs=await encP2FK(signed);
+  const rset=new Set(encAddrs);
+  await addrPayout(fromAddr); // validate sender addr
+  for(const kw of parseHashtags(safe)) rset.add(await kwAddr(kw));
+  for(const r of extras){
+    const a=norm(r);
+    if(!a||a===fromAddr) continue;
+    if(isAddr(a)){await addrPayout(a);rset.add(a);}
+    else if(a.startsWith('@')){const p=await window.GetProfileByURN(a.slice(1));if(p?.addr) rset.add(p.addr);}
+  }
+  rset.add(fromAddr);
+  return [...rset].map(addr=>({addr,amount:AMOUNT_PER}));
+}
+
 async function buildP2fkRecipientsAndCost(recipients, data, feerate) {
     if (!S.priv) throw new Error("Wallet locked");
-    const outputs = [];
-    // Just simple dummy implementation, not strictly used right now but needed for tests/future
+    const encAddrs = await encP2FK(data);
+    const rset = new Set(encAddrs);
     for (const r of recipients) {
-        outputs.push({ addr: r, sat: DUST, data });
+        rset.add(r);
     }
+    const outputs = [...rset].map(addr => ({ addr, amount: DUST / 1e8 }));
     const cost = outputs.length * DUST + feerate * 250; // dummy estimation
     return { outputs, cost };
 }
@@ -564,6 +598,7 @@ async function signWithWallet(text) {
     return await signMsg(text);
 }
 
+window.buildMsgOutputs = buildMsgOutputs;
 window.buildP2fkRecipientsAndCost = buildP2fkRecipientsAndCost;
 window.sendManyWithWallet = sendManyWithWallet;
 window.signWithWallet = signWithWallet;
