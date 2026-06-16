@@ -1787,7 +1787,7 @@ async function acceptPendingOffers() {
         const addressPromises = t.map(async (answer) => {
             const recipientKeyword = worldName + "@" + answer.user;
             const recipientAddr = await GetPublicAddressByKeyword(recipientKeyword);
-            return recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword;
+            return (recipientAddr ? recipientAddr.trim() : null).replace(/"|'/g, "") || recipientKeyword;
         });
         const recipientAddresses = await Promise.all(addressPromises);
         const c = recipientAddresses.join(",");
@@ -2273,7 +2273,7 @@ function updateProximityVideo() {
     t.style.display = "block", currentProximityVideoIndex >= proximityVideoUsers.length && (currentProximityVideoIndex = 0);
     e - lastProximityVideoChangeTime > 3e4 && (lastProximityVideoChangeTime = e, currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length);
     const i = proximityVideoUsers[currentProximityVideoIndex],
-        c = i === userName ? localVideoStream : userVideoStreams.get(i)?.stream;
+        c = i === userName ? localVideoStream : (userVideoStreams.get(i) ? userVideoStreams.get(i).stream : null);
     o.srcObject !== c && (a.innerText = i, o.srcObject = c)
 
 }

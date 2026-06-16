@@ -4154,7 +4154,7 @@ function updateProximityVideo() {
     t.style.display = "block", currentProximityVideoIndex >= proximityVideoUsers.length && (currentProximityVideoIndex = 0);
     e - lastProximityVideoChangeTime > 3e4 && (lastProximityVideoChangeTime = e, currentProximityVideoIndex = (currentProximityVideoIndex + 1) % proximityVideoUsers.length);
     const i = proximityVideoUsers[currentProximityVideoIndex],
-        l = i === userName ? localVideoStream : userVideoStreams.get(i)?.stream;
+        l = i === userName ? localVideoStream : (userVideoStreams.get(i) ? userVideoStreams.get(i).stream : null);
     o.srcObject !== l && (a.innerText = i, o.srcObject = l)
 }
 
@@ -5076,15 +5076,13 @@ document.addEventListener("DOMContentLoaded", (async function () {
 
         const testnetWifLoginBtn = document.getElementById("testnetWifLoginBtn");
         if (testnetWifLoginBtn && wmb) {
-            testnetWifLoginBtn.addEventListener("click", () => {
+            const showWallet = function(e) {
+                if (e && e.type === 'touchstart') e.preventDefault();
                 wmb.style.display = "block";
                 testnetWifLoginBtn.style.display = "none";
-            });
-            testnetWifLoginBtn.addEventListener("touchstart", (e) => {
-                e.preventDefault();
-                wmb.style.display = "block";
-                testnetWifLoginBtn.style.display = "none";
-            });
+            };
+            testnetWifLoginBtn.addEventListener('click', showWallet);
+            testnetWifLoginBtn.addEventListener('touchstart', showWallet, { passive: false });
         }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {

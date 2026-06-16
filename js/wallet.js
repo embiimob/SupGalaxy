@@ -259,7 +259,7 @@ async function broadcastTx(outputs) {
   if(!S.keyring) S.keyring=kr;
 
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number((fp && fp.halfHourFee)||FEE_DEFAULT),FEE_MIN);}catch{}
   const estFee=(ic,oc)=>Math.ceil((10+148*ic+34*oc)*feeRate);
   const outSats=outputs.map(o=>({addr:o.addr,sat:o.sat !== undefined ? o.sat : Math.round(o.amount*1e8)}));
   const totalOut=outSats.reduce((s,o)=>s+o.sat,0);
@@ -288,7 +288,7 @@ async function broadcastTx(outputs) {
     const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
     if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
     const j=await r.json();
-    const utxos = j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
+    const utxos = j.filter(u=>(u.status && u.status.confirmed)).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
     fetchedUtxos.set(sg.addr, utxos);
     return utxos;
   };
@@ -408,7 +408,7 @@ async function consolidateForMessagingFunds() {
       const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
       if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
       const j=await r.json();
-      const utxos = j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
+      const utxos = j.filter(u=>(u.status && u.status.confirmed)).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
       allUtxos.push(...utxos);
     } catch(e) {}
   }));
@@ -433,7 +433,7 @@ async function consolidateForMessagingFunds() {
   const targetChange = validChanges[0];
 
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number((fp && fp.halfHourFee)||FEE_DEFAULT),FEE_MIN);}catch{}
   const fee=Math.ceil((10+148*allUtxos.length+34)*feeRate);
   const total=allUtxos.reduce((s,u)=>s+Number(u.value||0),0);
   const send=total-fee;
@@ -467,7 +467,7 @@ async function consolidateChangeFunds(){
       const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
       if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
       const j=await r.json();
-      return j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
+      return j.filter(u=>(u.status && u.status.confirmed)).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
     } catch(e) {
       return [];
     }
@@ -475,7 +475,7 @@ async function consolidateChangeFunds(){
   const utxos=utxoGroups.flat();
   if(!utxos.length) throw new Error('No confirmed change funds to consolidate');
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number((fp && fp.halfHourFee)||FEE_DEFAULT),FEE_MIN);}catch{}
   const fee=Math.ceil((10+148*utxos.length+34)*feeRate);
   const total=utxos.reduce((s,u)=>s+Number(u.value||0),0);
   const send=total-fee;
@@ -539,7 +539,7 @@ async function getBalance(addr){
   const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(addr)}`);
   if(!r.ok) throw new Error(`Balance lookup failed ${r.status}`);
   const p=await r.json();
-  const cs=p?.chain_stats||{},ms=p?.mempool_stats||{};
+  const cs=(p && p.chain_stats)||{},ms=(p && p.mempool_stats)||{};
 
   const confirmedAvailable = (Number(cs.funded_txo_sum||0)-Number(cs.spent_txo_sum||0)) - Number(ms.spent_txo_sum||0);
   const unconfirmedIncoming = Number(ms.funded_txo_sum||0);
@@ -568,7 +568,7 @@ async function buildMsgOutputs({text,attachments=[],extras=[],fromAddr}){
     const a=norm(r);
     if(!a||a===fromAddr) continue;
     if(isAddr(a)){await addrPayout(a);rset.add(a);}
-    else if(a.startsWith('@')){const p=await window.GetProfileByURN(a.slice(1));if(p?.addr) rset.add(p.addr);}
+    else if(a.startsWith('@')){const p=await window.GetProfileByURN(a.slice(1));if((p && p.addr)) rset.add(p.addr);}
   }
   rset.add(fromAddr);
   return [...rset].map(addr=>({addr,amount:AMOUNT_PER}));
@@ -614,7 +614,7 @@ function renderWalletUI(container, balance=null){
         <span style="color:var(--muted);font-size:.82rem;">Loading balances…</span>
       </div>
     </div>
-    <div class="f-status info" id="walletStatusMsg" style="margin-bottom:12px;">Wallet unlocked ✓ (main + ${S.keyring?.changes?.length || 0} change addresses)</div>
+    <div class="f-status info" id="walletStatusMsg" style="margin-bottom:12px;">Wallet unlocked ✓ (main + ${(S.keyring && S.keyring.changes ? S.keyring.changes.length : 0) || 0} change addresses)</div>
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn btn-out btn-sm" onclick="exportWif()">Export WIF</button>
       <button class="btn btn-pri btn-sm" onclick="consolidateChange()">Consolidate</button>
@@ -652,9 +652,9 @@ function renderWalletUI(container, balance=null){
   }
   html+=`<div id="walletMsg" class="f-status hidden" style="margin-top:10px;"></div>`;
   container.innerHTML=html;
-  container.querySelector('#wWif')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
-  container.querySelector('#wPass')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
-  container.querySelector('#wUnlockPass')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();unlockWallet();}});
+  var elWif = container.querySelector('#wWif'); if (elWif) elWif.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
+  var elPass = container.querySelector('#wPass'); if (elPass) elPass.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importWallet();}});
+  var elUnlockPass = container.querySelector('#wUnlockPass'); if (elUnlockPass) elUnlockPass.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();unlockWallet();}});
   if(!locked) refreshBalance();
 }
 async function refreshBalance(){
@@ -688,17 +688,17 @@ function activeWalletContainer(preferEl=null){
 }
 function walletField(id,preferEl=null){
   const container=activeWalletContainer(preferEl);
-  return container?.querySelector(`#${id}`)||document.querySelector(`#${id}`);
+  return (container ? container.querySelector(`#${id}`) : null)||document.querySelector(`#${id}`);
 }
 function walletMsg(msg,kind='info',preferEl=null){
   const container=activeWalletContainer(preferEl);
-  const el=container?.querySelector('#walletMsg')||document.getElementById('walletMsg');
+  const el=(container ? container.querySelector('#walletMsg') : null)||document.getElementById('walletMsg');
   if(el) showStatus(el,msg,kind);
 }
 function walletWifFallback(wif='',preferEl=null){
   const container=activeWalletContainer(preferEl);
-  const wrap=container?.querySelector('#wifExportFallback');
-  const box=container?.querySelector('#wifExportBox');
+  const wrap=(container ? container.querySelector('#wifExportFallback') : null);
+  const box=(container ? container.querySelector('#wifExportBox') : null);
   if(!wrap||!box) return;
   if(wif){
     box.value=wif;
@@ -720,7 +720,7 @@ function updateWalletMini(){
     if(S.myProfile&&avi){const cands=profileImgCandidates(S.myProfile.image);if(cands.length){avi.src=cands[0];avi.dataset.cands=JSON.stringify([...cands.slice(1),FALLBACK_AVI]);avi.onerror=()=>window.pi_err(avi);}else avi.src=FALLBACK_AVI;}
     else if(avi) avi.src=FALLBACK_AVI;
     let pendingBadge = '';
-    if (S.myProfile?.isPending) {
+    if ((S.myProfile && S.myProfile.isPending)) {
       let pStatus = 'Confirming...';
       for (const [txid, pTx] of S.pendingTxs.entries()) {
         if (pTx.type === 'profile' && pTx.root && pTx.root.fromAddr === S.addr) {
@@ -730,7 +730,7 @@ function updateWalletMini(){
       }
       pendingBadge = ` <span class="badge-v badge-unoff" style="font-size:0.6rem;padding:2px 4px;">⏳ ${pStatus}</span>`;
     }
-    if(nm) nm.innerHTML=(S.myProfile?.displayName?esc(S.myProfile.displayName):shortAddr(S.addr)) + pendingBadge;
+    if(nm) nm.innerHTML=((S.myProfile && S.myProfile.displayName)?esc(S.myProfile.displayName):shortAddr(S.addr)) + pendingBadge;
     if(ad) ad.textContent=shortAddr(S.addr);
   }
   // also update inline compose avi with cascade
@@ -832,7 +832,7 @@ async function exportWif(){
   let wif='';
   try{
     wif=await priv2wif(S.priv);
-    if(!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+    if(!(navigator.clipboard && navigator.clipboard.writeText)) throw new Error('Clipboard API unavailable');
     await navigator.clipboard.writeText(wif);
     walletWifFallback('');
     walletMsg('WIF copied to clipboard','good');

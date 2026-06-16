@@ -711,7 +711,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             var r = n.chunk,
                 s = n.changes;
             if (chunkManager) {
-                const worldNameFromChunk = parseChunkKey(r)?.world;
+                const worldNameFromChunk = (parseChunkKey(r) ? parseChunkKey(r).world : null);
                 if (worldNameFromChunk) {
                     if (!WORLD_STATES.has(worldNameFromChunk)) {
                         WORLD_STATES.set(worldNameFromChunk, {
