@@ -6,7 +6,16 @@ const INTERNAL_WALLET_STORAGE_KEY = WALLET_KEY;
 const WALLET_MIN_PASS = 12;
 const WALLET_PBKDF2 = 600000;
 const CHANGE_PREFIX = 'sup:testnet3:change:';
+const P2FK_SIGVER = '88';
+const ADDR_RE = /^[mn][1-9A-HJ-NP-Za-km-z]{25,34}$/;
+
+const decHtml = t => norm(t).replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&quot;/gi,'"').replace(/&#0?39;|&apos;/gi,"'");
+const sanitize = msg => decHtml(norm(msg)).replace(/[<>]/g,' ');
+const utf8len = v => new TextEncoder().encode(String(v??'')).length;
+const isAddr = v => ADDR_RE.test(norm(v));
+const parseHashtags = msg => { const m=norm(msg).match(/(?:^|[^a-zA-Z0-9_&;])#[^\s]{1,20}/g)||[]; return [...new Set(m.map(t=>t.replace(/^[^#]+/, '').slice(1).trim()).filter(Boolean))]; };
 const DUST = 546;
+const AMOUNT_PER = DUST / 1e8;
 const FEE_DEFAULT = 10;
 const FEE_MIN = 2;
 const P2FK_VER = 0x6f;
@@ -543,6 +552,28 @@ async function getBalance(addr){
 
 
 
+async function buildMsgOutputs({text,attachments=[],extras=[],fromAddr}){
+  const safe=sanitize(text);
+  const delim=randDelim();
+  const payload=`${safe}${attachments.map(a=>`<<${a}>>`).join('')}<<${randSalt()}>>`;
+  const unsObj=`${delim}${utf8len(payload)}${delim}${payload}`;
+  const sigHash=(await sha256hex(unsObj)).toUpperCase();
+  const sig=await signMsg(sigHash);
+  const signed=`SIG${delim}${P2FK_SIGVER}${delim}${sig}${unsObj}`;
+  const encAddrs=await encP2FK(signed);
+  const rset=new Set(encAddrs);
+  await addrPayout(fromAddr); // validate sender addr
+  for(const kw of parseHashtags(safe)) rset.add(await kwAddr(kw));
+  for(const r of extras){
+    const a=norm(r);
+    if(!a||a===fromAddr) continue;
+    if(isAddr(a)){await addrPayout(a);rset.add(a);}
+    else if(a.startsWith('@')){const p=await window.GetProfileByURN(a.slice(1));if(p?.addr) rset.add(p.addr);}
+  }
+  rset.add(fromAddr);
+  return [...rset].map(addr=>({addr,amount:AMOUNT_PER}));
+}
+
 async function buildP2fkRecipientsAndCost(recipients, data, feerate) {
     if (!S.priv) throw new Error("Wallet locked");
     const encAddrs = await encP2FK(data);
@@ -567,6 +598,7 @@ async function signWithWallet(text) {
     return await signMsg(text);
 }
 
+window.buildMsgOutputs = buildMsgOutputs;
 window.buildP2fkRecipientsAndCost = buildP2fkRecipientsAndCost;
 window.sendManyWithWallet = sendManyWithWallet;
 window.signWithWallet = signWithWallet;

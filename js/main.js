@@ -3247,16 +3247,19 @@ async function publishToTestnet() {
     addMessage("Broadcasting to Testnet3...", 2000);
 
     try {
-        // Construct the full P2FK message payload with SIG
-        const messageStr = `<<IPFS:${ipfsHash}\\${fileName}>><<-${ipfsHash.length + fileName.length}>>`;
-        const sig = await window.signMsg(messageStr);
-        const sigFormatted = `SIG|${sig.length}"${sig}`;
-        const payloadStr = messageStr + sigFormatted;
+        // Construct the attachment string for the IPFS save state
+        const attachmentStr = `IPFS:${ipfsHash}/${fileName}`;
 
-        const result = await window.buildP2fkRecipientsAndCost(validAddresses, payloadStr, 10);
+        // Use the centralized buildMsgOutputs to handle signatures, OP_RETURN equivalents, salts, and testnet recipients exactly as in SupSpace
+        const outputs = await window.buildMsgOutputs({
+            text: '',
+            attachments: [attachmentStr],
+            extras: validAddresses,
+            fromAddr: window.S.addr
+        });
 
         // Broadcast the transaction
-        const txid = await window.sendManyWithWallet(result.outputs);
+        const txid = await window.sendManyWithWallet(outputs);
         addMessage("Success! TXID: " + txid.slice(0, 8) + "...", 4000);
 
         // Mark local changes as non-local so they don't get republished
