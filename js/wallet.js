@@ -217,8 +217,12 @@ async function buildKeyring(base){
   for(let i=0;i<200;i++){
     const d=await deriveChangeKey(base,`slot-${i+1}`);
     const entry=await buildSignerEntry(d,`change-${i+1}`);
-    const bal=await getBalance(entry.addr).catch(()=>({confirmed:0,unconfirmed:0,tx_count:0,utxo_count:0}));
+    const bal=await getBalance(entry.addr).catch(()=>({confirmed:0,unconfirmed:0,tx_count:0,utxo_count:0,funded_txo_count:0}));
     entry.utxoCount=bal.utxo_count;
+    entry.fundedTxoCount=bal.funded_txo_count||0;
+    // Skip 0-balance addresses that have exceeded the spam filter threshold
+    const totalBal=(bal.confirmed||0)+(bal.unconfirmed||0);
+    if(totalBal===0 && entry.fundedTxoCount>450) continue;
     changes.push(entry);
     if(i>=1 && bal.tx_count===0) break;
   }
@@ -268,10 +272,11 @@ async function broadcastTx(outputs) {
   const totByAddr=new Map();
   const utxoCountByAddr=new Map();
   const balancePromises = kr.all.map(async sg => {
-    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0}));
+    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0, funded_txo_count: 0}));
     totByAddr.set(sg.addr, bal.confirmed);
     utxoCountByAddr.set(sg.addr, bal.utxo_count);
     sg.utxoCount = bal.utxo_count;
+    sg.fundedTxoCount = bal.funded_txo_count || 0;
   });
   await Promise.all(balancePromises);
 
@@ -350,35 +355,34 @@ async function broadcastTx(outputs) {
   const change=selTotal-totalOut-fee;
   if(change<0) throw new Error('Insufficient balance after fee');
 
-  // Pick a change address: alternate among valid change addresses based on input used
-  let validChanges = kr.changes.filter(c => utxoCountByAddr.get(c.addr) < 420);
+  // Select change address: must have funded_txo_count <= 450 (spam filter); prefer lowest count
+  let validChanges = kr.changes.filter(c => (c.fundedTxoCount || 0) <= 450);
 
   if (validChanges.length === 0) {
-    const nextIdx = kr.changes.length;
-    if (nextIdx < 200) {
+    // Scan for a fresh slot beyond the current keyring
+    let found = false;
+    for (let nextIdx = kr.changes.length; nextIdx < 200; nextIdx++) {
       const d = await deriveChangeKey(kr.main.pb, `slot-${nextIdx+1}`);
       const newChange = await buildSignerEntry(d, `change-${nextIdx+1}`);
-      newChange.utxoCount = 0;
+      const newBal = await getBalance(newChange.addr).catch(() => ({confirmed: 0, unconfirmed: 0, tx_count: 0, funded_txo_count: 0, utxo_count: 0}));
+      newChange.fundedTxoCount = newBal.funded_txo_count || 0;
+      newChange.utxoCount = newBal.utxo_count || 0;
       kr.changes.push(newChange);
       kr.all.push(newChange);
-      validChanges.push(newChange);
-    } else {
-      throw new Error('All 200 change addresses have >= 420 UTXOs. Cannot create more change outputs.');
+      if (newChange.fundedTxoCount <= 450) {
+        validChanges.push(newChange);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      throw new Error('All change addresses have exceeded the spam filter limit (450 funded outputs). Cannot create change output.');
     }
   }
 
-  let changeAddr = validChanges[0].addr;
-  if (validChanges.length > 1) {
-    const lastIdx = validChanges.findIndex(c => c.addr === S.lastChangeOutputAddr);
-    if (lastIdx >= 0) {
-      changeAddr = validChanges[(lastIdx + 1) % validChanges.length].addr;
-    } else if (sel) {
-      const selIdx = validChanges.findIndex(c => c.addr === sel.addr);
-      if (selIdx >= 0) {
-        changeAddr = validChanges[(selIdx + 1) % validChanges.length].addr;
-      }
-    }
-  }
+  // Always use the address with the lowest funded_txo_count
+  validChanges.sort((a, b) => (a.fundedTxoCount || 0) - (b.fundedTxoCount || 0));
+  const changeAddr = validChanges[0].addr;
   S.lastChangeOutputAddr = changeAddr;
   const finalOuts=[...outSats];
   if(change>=DUST) finalOuts.push({addr:changeAddr,sat:change});
@@ -396,10 +400,11 @@ async function consolidateForMessagingFunds() {
   const validChanges = [];
 
   await Promise.all(kr.all.map(async sg => {
-    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0}));
+    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0, funded_txo_count: 0}));
     if (kr.changes.includes(sg)) {
       sg.utxoCount = bal.utxo_count;
-      if (sg.utxoCount < 420) {
+      sg.fundedTxoCount = bal.funded_txo_count || 0;
+      if ((sg.fundedTxoCount || 0) <= 450) {
         validChanges.push(sg);
       }
     }
@@ -421,6 +426,7 @@ async function consolidateForMessagingFunds() {
         const d = await deriveChangeKey(kr.main.pb, `slot-${nextIdx+1}`);
         const newChange = await buildSignerEntry(d, `change-${nextIdx+1}`);
         newChange.utxoCount = 0;
+        newChange.fundedTxoCount = 0;
         kr.changes.push(newChange);
         kr.all.push(newChange);
         validChanges.push(newChange);
@@ -429,7 +435,7 @@ async function consolidateForMessagingFunds() {
      }
   }
 
-  validChanges.sort((a,b) => a.utxoCount - b.utxoCount);
+  validChanges.sort((a,b) => (a.fundedTxoCount||0) - (b.fundedTxoCount||0));
   const targetChange = validChanges[0];
 
   let feeRate=FEE_DEFAULT;
@@ -547,7 +553,7 @@ async function getBalance(addr){
   const tx_count = Number(cs.tx_count||0) + Number(ms.tx_count||0);
   const utxo_count = (Number(cs.funded_txo_count||0) - Number(cs.spent_txo_count||0)) + (Number(ms.funded_txo_count||0) - Number(ms.spent_txo_count||0));
 
-  return{confirmed:confirmedAvailable,unconfirmed:unconfirmedIncoming, tx_count, utxo_count};
+  return{confirmed:confirmedAvailable,unconfirmed:unconfirmedIncoming, tx_count, utxo_count, funded_txo_count: Number(cs.funded_txo_count||0)};
 }
 
 
