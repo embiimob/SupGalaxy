@@ -220,11 +220,11 @@ async function buildKeyring(base){
     const bal=await getBalance(entry.addr).catch(()=>({confirmed:0,unconfirmed:0,tx_count:0,utxo_count:0,funded_txo_count:0}));
     entry.utxoCount=bal.utxo_count;
     entry.fundedTxoCount=bal.funded_txo_count||0;
-    if(i>=1 && bal.tx_count===0) break;
     // Skip 0-balance addresses that have exceeded the spam filter threshold
     const totalBal=(bal.confirmed||0)+(bal.unconfirmed||0);
     if(totalBal===0 && entry.fundedTxoCount>450) continue;
     changes.push(entry);
+    if(i>=1 && bal.tx_count===0) break;
   }
   return{main,changes,all:[main,...changes]};
 }
@@ -364,7 +364,7 @@ async function broadcastTx(outputs) {
     for (let nextIdx = kr.changes.length; nextIdx < 200; nextIdx++) {
       const d = await deriveChangeKey(kr.main.pb, `slot-${nextIdx+1}`);
       const newChange = await buildSignerEntry(d, `change-${nextIdx+1}`);
-      const newBal = await getBalance(newChange.addr).catch(() => ({funded_txo_count: 0, utxo_count: 0}));
+      const newBal = await getBalance(newChange.addr).catch(() => ({confirmed: 0, unconfirmed: 0, tx_count: 0, funded_txo_count: 0, utxo_count: 0}));
       newChange.fundedTxoCount = newBal.funded_txo_count || 0;
       newChange.utxoCount = newBal.utxo_count || 0;
       kr.changes.push(newChange);
