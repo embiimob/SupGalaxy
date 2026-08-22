@@ -14,8 +14,8 @@ function buildIPFSUrl(hash, filename = null) {
         const localIpfsRoot = getLocalIpfsRoot();
         return `file:///${localIpfsRoot}/${hash}/${filename}`;
     }
-    // Uploaded attachments are stored as IPFS:<cid>/<filename>, so public gateway URLs should include the filename too.
-    return buildIPFSGatewayUrl(hash, filename);
+    // Fetch from public gateway without filename to avoid failures.
+    return buildIPFSGatewayUrl(hash);
 }
 
 // Video Player Logic
