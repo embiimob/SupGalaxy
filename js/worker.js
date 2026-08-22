@@ -8,6 +8,7 @@ const BLOCK_AIR = 0;
 // Defaults to C:/Sup/ipfs on Windows if not overridden
 // Note: Use forward slashes even on Windows for file:// URLs
 var LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
+// Worker code runs inside an isolated Blob context, so it needs its own copy of the gateway helpers from declare.js.
 const IPFS_GATEWAYS = [
     'https://gateway.pinata.cloud/ipfs/',
     'https://4everland.io/ipfs/',
