@@ -16,8 +16,7 @@ function buildIPFSUrl(hash, filename = null) {
         const localIpfsRoot = getLocalIpfsRoot();
         return `file:///${localIpfsRoot}/${hash}/${filename}`;
     }
-    // Fallback to ipfs.io
-    return `https://ipfs.io/ipfs/${hash}`;
+    return buildIPFSGatewayUrl(hash, filename);
 }
 
 // Helper function to detect if an error is caused by autoplay restrictions

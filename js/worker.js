@@ -8,6 +8,25 @@ const BLOCK_AIR = 0;
 // Defaults to C:/Sup/ipfs on Windows if not overridden
 // Note: Use forward slashes even on Windows for file:// URLs
 var LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
+const IPFS_GATEWAYS = [
+    'https://gateway.pinata.cloud/ipfs/',
+    'https://4everland.io/ipfs/',
+    'https://ipfs.filebase.io/ipfs/',
+    'https://hardbin.com/ipfs/'
+];
+
+function encodeIPFSPath(path) {
+    return String(path)
+        .split('/')
+        .filter(Boolean)
+        .map(part => encodeURIComponent(part))
+        .join('/');
+}
+
+function buildIPFSGatewayUrls(hash, filename = null) {
+    const remotePath = filename ? hash + '/' + encodeIPFSPath(filename) : hash;
+    return IPFS_GATEWAYS.map(gateway => gateway + remotePath);
+}
 
 const ARCHETYPES = {
     'Earth': {
@@ -617,13 +636,29 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 }
                 console.log('[Worker IPFS] Local fetch failed with status:', response.status);
             } catch (e) {
-                // Local fetch failed, will fallback to ipfs.io
-                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+                // Local fetch failed, will fallback to public IPFS gateways
+                console.log('[Worker IPFS] Local fetch error:', e.message, '- falling back to public IPFS gateways');
             }
         }
         
-        // Fallback to ipfs.io (doesn't include filename, just hash)
-        return await fetch("https://ipfs.io/ipfs/" + hash);
+        const gatewayUrls = buildIPFSGatewayUrls(hash, filename);
+        let lastResponse = null;
+        let lastError = null;
+        for (const gatewayUrl of gatewayUrls) {
+                try {
+                        const response = await fetch(gatewayUrl);
+                        if (response.ok) {
+                                return response;
+                        }
+                        lastResponse = response;
+                } catch (e) {
+                        lastError = e;
+                }
+        }
+        if (lastResponse) {
+                return lastResponse;
+        }
+        throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
 async function fetchIPFS(hash) {
