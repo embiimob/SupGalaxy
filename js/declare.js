@@ -22,6 +22,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // Default local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
     // Note: Use forward slashes even on Windows for file:// URLs
     DEFAULT_LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
+    IPFS_GATEWAYS = [
+        'https://gateway.pinata.cloud/ipfs/',
+        'https://4everland.io/ipfs/',
+        'https://ipfs.filebase.io/ipfs/',
+        'https://hardbin.com/ipfs/'
+    ],
     API_CALLS_PER_SECOND = 3,
     POLL_RADIUS = 2,
     // Render distance configuration:
@@ -799,6 +805,23 @@ function getLocalIpfsRoot() {
     return effectiveLocalIpfsRoot;
 }
 
+function encodeIPFSPath(path) {
+    return String(path)
+        .split('/')
+        .filter(Boolean)
+        .map(part => encodeURIComponent(part))
+        .join('/');
+}
+
+function buildIPFSGatewayUrls(hash, filename = null) {
+    return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}`);
+}
+
+function buildIPFSGatewayUrl(hash, filename = null, gatewayIndex = 0) {
+    const gatewayUrls = buildIPFSGatewayUrls(hash, filename);
+    return gatewayUrls[gatewayIndex] || gatewayUrls[0];
+}
+
 /**
  * Computes a truncated unix date for IPFS Loading updates.
  * The truncated date is the number of seconds since 2025-09-21 00:00:00 UTC (IPFS_EPOCH_2025_09_21).
@@ -917,4 +940,3 @@ function cleanupMagicianStone(stone, key) {
 
     console.log(`[MagicianStone] Cleaned up resources for key ${key}`);
 }
-

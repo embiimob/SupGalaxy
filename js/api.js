@@ -29,14 +29,30 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             }
             console.log('[IPFS] Local fetch failed with status:', response.status);
         } catch (e) {
-            // Local fetch failed, will fallback to ipfs.io
-            console.log('[IPFS] Local fetch error:', e.message, '- falling back to ipfs.io');
+            // Local fetch failed, will fallback to public IPFS gateways
+            console.log('[IPFS] Local fetch error:', e.message, '- falling back to public IPFS gateways');
         }
     }
     
-    // Fallback to ipfs.io (doesn't include filename, just hash)
     await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-    return await fetch('https://ipfs.io/ipfs/' + hash);
+    const gatewayUrls = buildIPFSGatewayUrls(hash, filename);
+    let lastResponse = null;
+    let lastError = null;
+    for (const gatewayUrl of gatewayUrls) {
+        try {
+            const response = await fetch(gatewayUrl);
+            if (response.ok) {
+                return response;
+            }
+            lastResponse = response;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    if (lastResponse) {
+        return lastResponse;
+    }
+    throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
 async function GetPublicAddressByKeyword(keyword) {

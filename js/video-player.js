@@ -14,8 +14,8 @@ function buildIPFSUrl(hash, filename = null) {
         const localIpfsRoot = getLocalIpfsRoot();
         return `file:///${localIpfsRoot}/${hash}/${filename}`;
     }
-    // Fallback to ipfs.io
-    return `https://ipfs.io/ipfs/${hash}`;
+    // Fetch from public gateway without filename to avoid failures.
+    return buildIPFSGatewayUrl(hash);
 }
 
 // Video Player Logic
