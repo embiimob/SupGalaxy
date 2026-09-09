@@ -23,12 +23,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // Note: Use forward slashes even on Windows for file:// URLs
     DEFAULT_LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
     IPFS_GATEWAYS = [
+        'https://p2fk.io/ipfs/',
         'https://gateway.pinata.cloud/ipfs/',
         'https://4everland.io/ipfs/',
         'https://ipfs.filebase.io/ipfs/',
         'https://hardbin.com/ipfs/'
     ],
-    API_CALLS_PER_SECOND = 3,
+    API_CALLS_PER_SECOND = 10,
     POLL_RADIUS = 2,
     // Render distance configuration:
     // INITIAL_LOAD_RADIUS: Maximum number of chunks to render around the player (reduced by ~20% for performance)
