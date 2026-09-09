@@ -10,6 +10,7 @@ const BLOCK_AIR = 0;
 var LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
 // Worker code runs inside an isolated Blob context, so it needs its own copy of the gateway helpers from declare.js.
 const IPFS_GATEWAYS = [
+    'https://p2fk.io/ipfs/',
     'https://gateway.pinata.cloud/ipfs/',
     'https://4everland.io/ipfs/',
     'https://ipfs.filebase.io/ipfs/',
@@ -502,8 +503,8 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
-var API_CALLS_PER_SECOND = 3;
-var apiDelay = 350;
+var API_CALLS_PER_SECOND = 10;
+var apiDelay = 100;
 async function fetchData(url) {
         try {
             await new Promise(resolve => setTimeout(resolve, apiDelay));
@@ -708,86 +709,6 @@ self.onmessage = async function(e) {
             return;
         }
         if (type === "poll") {
-            try {
-                var masterAddr = await getPublicAddressByKeyword(masterKey);
-                var worlds = new Map();
-                var users = new Map();
-                var joinData = [];
-                var processedIds = [];
-                if (masterAddr) {
-                    var messages = [];
-                    var skip = 0;
-                    var qty = 5000;
-                    while (true) {
-                        var response = await getPublicMessagesByAddress(masterAddr, skip, qty);
-                        if (!response || response.length === 0) break;
-                        messages = messages.concat(response);
-                        if (response.length < qty) break;
-                        skip += qty;
-                    }
-                    for (var msg of messages || []) {
-                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping worlds_users processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
-                        }
-                        if (!msg.TransactionId) continue;
-                        var fromProfile = await getProfileByAddress(msg.FromAddress);
-                        if (!fromProfile || !fromProfile.URN) {
-                            console.log('[Worker] Skipping worlds_users message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-                        var user = fromProfile.URN.replace(/^"|"$/g, "").trim();
-                        var userProfile = await getProfileByURN(user);
-                        if (!userProfile) {
-                            console.log('[Worker] No profile for user:', user, 'txId:', msg.TransactionId);
-                            users.set(user, msg.FromAddress); // Allow partial data
-                            continue;
-                        }
-                        if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
-                            console.log('[Worker] Skipping worlds_users message, invalid creators for user:', user, 'txId:', msg.TransactionId);
-                            users.set(user, msg.FromAddress); // Allow partial data
-                            continue;
-                        }
-                        var toKeywordRaw = await getKeywordByPublicAddress(msg.ToAddress);
-                        if (!toKeywordRaw) {
-                            console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-                        var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
-
-                        // Parse world@user format
-                        var parts = toKeyword.split("@");
-                        if (parts.length < 2) {
-                            console.log('[Worker] Skipping worlds_users message, invalid keyword format (not world@user):', toKeyword, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-
-                        var worldNameFromKey = parts[0];
-                        var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
-
-                        // Verify user match - check if userFromKey matches the beginning of the actual profile name
-                        if (!user.startsWith(userFromKey)) {
-                            console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-
-                        if (user && worldNameFromKey) {
-                            if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, msg.ToAddress);
-                            if (!users.has(user)) users.set(user, msg.FromAddress);
-                            joinData.push({ user: user, world: worldNameFromKey, username: user, transactionId: msg.TransactionId });
-                            processedMessages.add(msg.TransactionId);
-                            processedIds.push(msg.TransactionId);
-                        }
-                    }
-                    self.postMessage({ type: "worlds_users", worlds: Object.fromEntries(worlds), users: Object.fromEntries(users), joinData: joinData, processedIds: processedIds });
-                } else {
-                    console.error('[Worker] Failed to fetch master address for:', masterKey);
-                    self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
-                }
-            } catch (e) {
-                console.error('[Worker] Error in worlds_users poll:', e);
-                self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
-            }
             var updatesByTransaction = new Map();
             var ownershipByChunk = new Map();
             var magicianStonesUpdates = [];
@@ -939,6 +860,86 @@ self.onmessage = async function(e) {
                 for (var ownership of ownershipByChunk.values()) {
                     self.postMessage({ type: "chunk_ownership", chunkKey: ownership.chunkKey, username: ownership.username, timestamp: ownership.timestamp });
                 }
+            }
+            try {
+                var masterAddr = await getPublicAddressByKeyword(masterKey);
+                var worlds = new Map();
+                var users = new Map();
+                var joinData = [];
+                var processedIds = [];
+                if (masterAddr) {
+                    var messages = [];
+                    var skip = 0;
+                    var qty = 5000;
+                    while (true) {
+                        var response = await getPublicMessagesByAddress(masterAddr, skip, qty);
+                        if (!response || response.length === 0) break;
+                        messages = messages.concat(response);
+                        if (response.length < qty) break;
+                        skip += qty;
+                    }
+                    for (var msg of messages || []) {
+                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            console.log('[Worker] Stopping worlds_users processing at cached ID:', msg.TransactionId);
+                            break; // Stop processing as all remaining messages are older
+                        }
+                        if (!msg.TransactionId) continue;
+                        var fromProfile = await getProfileByAddress(msg.FromAddress);
+                        if (!fromProfile || !fromProfile.URN) {
+                            console.log('[Worker] Skipping worlds_users message, no URN for address:', msg.FromAddress, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var user = fromProfile.URN.replace(/^"|"$/g, "").trim();
+                        var userProfile = await getProfileByURN(user);
+                        if (!userProfile) {
+                            console.log('[Worker] No profile for user:', user, 'txId:', msg.TransactionId);
+                            users.set(user, msg.FromAddress); // Allow partial data
+                            continue;
+                        }
+                        if (!userProfile.Creators || !userProfile.Creators.includes(msg.FromAddress)) {
+                            console.log('[Worker] Skipping worlds_users message, invalid creators for user:', user, 'txId:', msg.TransactionId);
+                            users.set(user, msg.FromAddress); // Allow partial data
+                            continue;
+                        }
+                        var toKeywordRaw = await getKeywordByPublicAddress(msg.ToAddress);
+                        if (!toKeywordRaw) {
+                            console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+                        var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
+
+                        // Parse world@user format
+                        var parts = toKeyword.split("@");
+                        if (parts.length < 2) {
+                            console.log('[Worker] Skipping worlds_users message, invalid keyword format (not world@user):', toKeyword, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+
+                        var worldNameFromKey = parts[0];
+                        var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
+
+                        // Verify user match - check if userFromKey matches the beginning of the actual profile name
+                        if (!user.startsWith(userFromKey)) {
+                            console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
+                            continue;
+                        }
+
+                        if (user && worldNameFromKey) {
+                            if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, msg.ToAddress);
+                            if (!users.has(user)) users.set(user, msg.FromAddress);
+                            joinData.push({ user: user, world: worldNameFromKey, username: user, transactionId: msg.TransactionId });
+                            processedMessages.add(msg.TransactionId);
+                            processedIds.push(msg.TransactionId);
+                        }
+                    }
+                    self.postMessage({ type: "worlds_users", worlds: Object.fromEntries(worlds), users: Object.fromEntries(users), joinData: joinData, processedIds: processedIds });
+                } else {
+                    console.error('[Worker] Failed to fetch master address for:', masterKey);
+                    self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
+                }
+            } catch (e) {
+                console.error('[Worker] Error in worlds_users poll:', e);
+                self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
             }
             try {
                 var joinKeyword = userAddress === "anonymous" ? worldName : userAddress;
