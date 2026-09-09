@@ -1629,5 +1629,6 @@ self.onmessage = async function(e) {
 
         function startWorker() {
             console.log('[Worker] Initializing worker with isHost:', isHost, 'userName:', userName, 'worldName:', worldName);
+            triggerPoll(); // Trigger initial poll immediately upon loading
             // The polling is now triggered by player movement and pauses in the gameLoop.
         }

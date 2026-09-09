@@ -4717,7 +4717,7 @@ function gameLoop(e) {
                     t.volume = o < a ? Math.max(0, 1 - o / a) : 0
                 }
             }
-        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e), hasMovedSubstantially && e - lastMoveTime > 1e4 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
+        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e), hasMovedSubstantially && e - lastMoveTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
         for (let o = eruptedBlocks.length - 1; o >= 0; o--) {
             const a = eruptedBlocks[o];
             if (isHost || 0 === peers.size)
