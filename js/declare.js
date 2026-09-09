@@ -22,13 +22,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // Default local IPFS root path for Sup!? local mode - defaults to C:/Sup/ipfs on Windows
     // Note: Use forward slashes even on Windows for file:// URLs
     DEFAULT_LOCAL_IPFS_ROOT = 'C:/Sup/ipfs',
-    IPFS_GATEWAYS = [
-        'https://p2fk.io/ipfs/',
-        'https://gateway.pinata.cloud/ipfs/',
-        'https://4everland.io/ipfs/',
-        'https://ipfs.filebase.io/ipfs/',
-        'https://hardbin.com/ipfs/'
-    ],
+    IPFS_GATEWAYS = ['https://ipfs.filebase.io/ipfs/','https://p2fk.io/ipfs/'],
     API_CALLS_PER_SECOND = 10,
     POLL_RADIUS = 2,
     // Render distance configuration:
