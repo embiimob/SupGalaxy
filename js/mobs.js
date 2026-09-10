@@ -216,7 +216,15 @@ Mob.prototype.update = function (t) {
                         const t = (o - i) / i;
                         this.pos.x += e * t * .2, this.pos.z += s * t * .2
                     }
-                } let e = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + .5;
+                } let e = this.pos.y;
+            if (!checkCollisionWithBlock(this.pos.x, this.pos.y - 16 * t, this.pos.z)) {
+                e = this.pos.y - 16 * t;
+                // Make sure we don't fall below the actual surface if getSurfaceY is higher
+                const surfaceY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + .5;
+                if (e < surfaceY && surfaceY < this.pos.y) e = surfaceY;
+            } else {
+                e = Math.floor(this.pos.y) + .5;
+            }
             for (const t of mobs)
                 if (t.id !== this.id && "crawley" === t.type) {
                     Math.hypot(this.pos.x - t.pos.x, this.pos.z - t.pos.z) < .9 && t.pos.y < this.pos.y && (e = Math.max(e, t.pos.y + .9))
@@ -317,7 +325,7 @@ Mob.prototype.update = function (t) {
                 } if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
-                }, o = e, e < 1.2 && Date.now() - this.attackCooldown > 800)) {
+                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
@@ -543,7 +551,7 @@ Mob.prototype.update = function (t) {
                 } if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
-                }, o = e, e < 1.2 && Date.now() - this.attackCooldown > 800)) {
+                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
@@ -561,13 +569,16 @@ Mob.prototype.update = function (t) {
                 n = s / o * this.speed,
                 r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
                 l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
-            if ("crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
-            }
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
+                if (checkCollisionWithBlock(r, this.pos.y, l)) {
+                    if (!checkCollisionWithBlock(r, this.pos.y + 1, l)) {
+                        this.pos.y += 1;
+                    } else if (!checkCollisionWithBlock(r, this.pos.y + 2, l)) {
+                        this.pos.y += 2;
+                    } else if ("crawley" === this.type && !checkCollisionWithBlock(r, this.pos.y + 3, l)) {
+                        this.pos.y += 3;
+                    }
+                }
             }
             checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
@@ -575,8 +586,15 @@ Mob.prototype.update = function (t) {
                 s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE),
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(s, i);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
+                if (checkCollisionWithBlock(s, this.pos.y, i)) {
+                    if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
+                        this.pos.y += 1;
+                    } else if (!checkCollisionWithBlock(s, this.pos.y + 2, i)) {
+                        this.pos.y += 2;
+                    } else if ("crawley" === this.type && !checkCollisionWithBlock(s, this.pos.y + 3, i)) {
+                        this.pos.y += 3;
+                    }
+                }
             }
             checkCollisionWithBlock(s, this.pos.y, i) || (this.pos.x = s, this.pos.z = i, h = !0)
         }
