@@ -150,6 +150,7 @@ Chunk.prototype.idx = function (e, t, o) {
     var s = new Chunk(a, n);
     return this.chunks.set(s.key, s), pending.add(s.key), s
 }, ChunkManager.prototype.generateChunk = function (e) {
+    window.lastChunkLoadTime = Date.now();
     e.generating || e.generated || (e.generating = !0, worker.postMessage({
         type: "generate_chunk",
         key: e.key
@@ -376,6 +377,7 @@ Chunk.prototype.idx = function (e, t, o) {
         }
     }
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
+    window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
     if (parseChunkKey(o)) {
         var a = this.chunks.get(o);
@@ -384,12 +386,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
                     a.set(n.x, n.y, n.z, r)
-                } updateTorchRegistry(a), a.needsRebuild = !0, this.buildChunkMesh(a)
+                } updateTorchRegistry(a), a.needsRebuild = !0
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
     var t = this.chunks.get(e);
-    t && (t.needsRebuild = !0, this.buildChunkMesh(t))
+    t && (t.needsRebuild = !0)
 }, ChunkManager.prototype.getSurfaceY = function (e, t) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),
@@ -478,7 +480,7 @@ Chunk.prototype.idx = function (e, t, o) {
         u = 0;
     for (const e of r) {
         var p = this.getChunk(e.cx, e.cz);
-        c.add(p.key), p.generating || p.generated || this.generateChunk(p), p.generated && (p.needsRebuild || !p.mesh) && u < 2 && (this.buildChunkMesh(p), u++)
+        c.add(p.key), p.generating || p.generated || this.generateChunk(p), p.generated && (p.needsRebuild || !p.mesh) && u < 1 && (this.buildChunkMesh(p), u++)
     }
     for (var m in userPositions)
         if (m !== userName) {
