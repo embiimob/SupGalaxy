@@ -746,19 +746,30 @@ var volcanoes = [],
 const lightManager = {
     lights: [],
     poolSize: 8,
+    playerLight: null,
     init: function () {
         for (let e = 0; e < this.poolSize; e++) {
             const e = new THREE.PointLight(16755251, 0, 0);
             e.castShadow = !1, this.lights.push(e), scene.add(e)
         }
+        this.playerLight = new THREE.PointLight(16755251, 0, 18);
+        this.playerLight.castShadow = !1;
+        scene.add(this.playerLight);
     },
     update: function (e) {
+        if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120) {
+            this.playerLight.intensity = 1.2;
+            this.playerLight.position.set(e.x, e.y + 2, e.z);
+        } else {
+            this.playerLight.intensity = 0;
+        }
+
         const t = Array.from(torchRegistry.values()).sort(((t, o) => e.distanceTo(new THREE.Vector3(t.x, t.y, t.z)) - e.distanceTo(new THREE.Vector3(o.x, o.y, o.z))));
         for (let e = 0; e < this.poolSize; e++)
             if (e < t.length) {
                 const o = t[e],
                     a = this.lights[e];
-                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = .8, a.distance = 16
+                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 1.2, a.distance = 18
             } else this.lights[e].intensity = 0
     }
 };
