@@ -298,7 +298,7 @@ Mob.prototype.update = function (t) {
             let t = null,
                 e = 1 / 0,
                 s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 2.5 && (e = s, t = {
+            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
                 x: player.x,
                 z: player.z,
                 health: player.health,
@@ -308,7 +308,7 @@ Mob.prototype.update = function (t) {
                 if (userPositions[s]) {
                     const i = userPositions[s],
                         o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
-                    o < e && Math.abs(i.y - this.pos.y) < 2.5 && (e = o, t = {
+                    o < e && Math.abs(i.y - this.pos.y) < 30 && (e = o, t = {
                         x: i.x,
                         z: i.z,
                         health: 20,
@@ -524,7 +524,7 @@ Mob.prototype.update = function (t) {
             let t = null,
                 e = 1 / 0,
                 s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 2.5 && (e = s, t = {
+            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
                 x: player.x,
                 z: player.z,
                 health: player.health,
@@ -534,7 +534,7 @@ Mob.prototype.update = function (t) {
                 if (userPositions[s]) {
                     const i = userPositions[s],
                         o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
-                    o < e && Math.abs(i.y - this.pos.y) < 2.5 && (e = o, t = {
+                    o < e && Math.abs(i.y - this.pos.y) < 30 && (e = o, t = {
                         x: i.x,
                         z: i.z,
                         health: 20,
@@ -563,11 +563,11 @@ Mob.prototype.update = function (t) {
                 l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
             if ("crawley" === this.type) {
                 const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 1 && (this.pos.y = t + .5)
+                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
             }
             if ("grub" === this.type || "crawley" === this.type) {
                 const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 1.2 && (this.pos.y = t + .5)
+                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
             }
             checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
@@ -576,7 +576,7 @@ Mob.prototype.update = function (t) {
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
             if ("grub" === this.type || "crawley" === this.type) {
                 const t = chunkManager.getSurfaceY(s, i);
-                t > this.pos.y && t <= this.pos.y + 1.2 && (this.pos.y = t + .5)
+                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
             }
             checkCollisionWithBlock(s, this.pos.y, i) || (this.pos.x = s, this.pos.z = i, h = !0)
         }
