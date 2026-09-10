@@ -625,7 +625,7 @@ function setupDataChannel(e, t) {
                         }
                     }
                     if (s.bid && BLOCKS[s.bid] && BLOCKS[s.bid].light) {
-                        (a = new THREE.PointLight(16755251, .8, 16)).position.set(s.wx, s.wy + .5, s.wz), scene.add(a), torchLights.set(`${s.wx},${s.wy},${s.wz}`, a);
+                        (a = new THREE.PointLight(16755251, 1.2, 18)).position.set(s.wx, s.wy + .5, s.wz), scene.add(a), torchLights.set(`${s.wx},${s.wy},${s.wz}`, a);
                         r = createFlameParticles(s.wx, s.wy + .5, s.wz);
                         scene.add(r), torchParticles.set(`${s.wx},${s.wy},${s.wz}`, r)
                     }

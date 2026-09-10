@@ -231,6 +231,15 @@ Mob.prototype.update = function (t) {
                 const h = this.pos.distanceTo(t);
                 h < i && h < o && (o = h, e.subVectors(this.pos, t).normalize(), s = !0)
             }
+            if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120 && typeof player !== 'undefined') {
+                const playerPos = new THREE.Vector3(player.x, player.y, player.z);
+                const h = this.pos.distanceTo(playerPos);
+                if (h < i && h < o) {
+                    o = h;
+                    e.subVectors(this.pos, playerPos).normalize();
+                    s = !0;
+                }
+            }
             if (s) {
                 const s = 2.5 * this.speed;
                 return this.pos.x += e.x * s * t * 60, this.pos.z += e.z * s * t * 60, void this.mesh.position.copy(this.pos)
