@@ -112,7 +112,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     }
-    this.mesh.userData.mobId = this.id, this.mesh.position.copy(this.pos), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
+    this.mesh.userData.mobId = this.id, this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
 }
 
 function manageMobs() {
@@ -186,18 +186,18 @@ function handleMobHit(t) {
     safePlayAudio(soundHit), addMessage("Hit mob!", 800)
 }
 Mob.prototype.update = function (t) {
-    if (peers.size > 0 && !isHost && this.mesh.position.copy(this.pos), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isHost && peers.size > 0) {
+    if (peers.size > 0 && !isHost && this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isHost && peers.size > 0) {
         if (this.lastUpdateTime > 0) {
             const t = performance.now(),
                 e = t - this.lastUpdateTime;
             let s = Math.min(1, e / 300);
             s = isNaN(s) ? 1 : s;
-            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.copy(this.pos), this.lastQuaternionUpdate > 0) {
+            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), this.lastQuaternionUpdate > 0) {
                 const e = t - this.lastQuaternionUpdate;
                 let s = Math.min(1, e / 300);
                 s = isNaN(s) ? 1 : s, this.mesh.quaternion.copy(this.prevQuaternion).slerp(this.targetQuaternion, s)
             }
-        } else this.pos.copy(this.targetPos), this.mesh.position.copy(this.pos);
+        } else this.pos.copy(this.targetPos), this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         Date.now() < this.flashEnd ? "grub" === this.type ? this.segments.forEach((t => {
             t.material = this.redMaterials
         })) : this.mesh.material ? this.mesh.material.color.set(16711680) : this.mesh.children[0].material.color.set(16711680) : "grub" === this.type ? this.segments.forEach((t => {
@@ -216,7 +216,15 @@ Mob.prototype.update = function (t) {
                         const t = (o - i) / i;
                         this.pos.x += e * t * .2, this.pos.z += s * t * .2
                     }
-                } let e = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + .5;
+                } let e = this.pos.y;
+            if (!checkCollisionWithBlock(this.pos.x, this.pos.y - 16 * t, this.pos.z)) {
+                e = this.pos.y - 16 * t;
+                // Make sure we don't fall below the actual surface if getSurfaceY is higher
+                const surfaceY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 1;
+                if (e < surfaceY && surfaceY < this.pos.y) e = surfaceY;
+            } else {
+                e = Math.ceil(this.pos.y - 16 * t);
+            }
             for (const t of mobs)
                 if (t.id !== this.id && "crawley" === t.type) {
                     Math.hypot(this.pos.x - t.pos.x, this.pos.z - t.pos.z) < .9 && t.pos.y < this.pos.y && (e = Math.max(e, t.pos.y + .9))
@@ -242,7 +250,7 @@ Mob.prototype.update = function (t) {
             }
             if (s) {
                 const s = 2.5 * this.speed;
-                return this.pos.x += e.x * s * t * 60, this.pos.z += e.z * s * t * 60, void this.mesh.position.copy(this.pos)
+                return this.pos.x += e.x * s * t * 60, this.pos.z += e.z * s * t * 60, void this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z)
             }
         }
         let i = null,
@@ -317,7 +325,7 @@ Mob.prototype.update = function (t) {
                 } if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
-                }, o = e, e < 1.2 && Date.now() - this.attackCooldown > 800)) {
+                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
@@ -543,7 +551,7 @@ Mob.prototype.update = function (t) {
                 } if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
-                }, o = e, e < 1.2 && Date.now() - this.attackCooldown > 800)) {
+                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
@@ -561,13 +569,16 @@ Mob.prototype.update = function (t) {
                 n = s / o * this.speed,
                 r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
                 l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
-            if ("crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
-            }
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(r, l);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
+                if (checkCollisionWithBlock(r, this.pos.y, l)) {
+                    if (!checkCollisionWithBlock(r, this.pos.y + 1, l)) {
+                        this.pos.y += 1;
+                    } else if (!checkCollisionWithBlock(r, this.pos.y + 2, l)) {
+                        this.pos.y += 2;
+                    } else if ("crawley" === this.type && !checkCollisionWithBlock(r, this.pos.y + 3, l)) {
+                        this.pos.y += 3;
+                    }
+                }
             }
             checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
@@ -575,8 +586,15 @@ Mob.prototype.update = function (t) {
                 s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE),
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
             if ("grub" === this.type || "crawley" === this.type) {
-                const t = chunkManager.getSurfaceY(s, i);
-                t > this.pos.y && t <= this.pos.y + 3 && (this.pos.y = t + .5)
+                if (checkCollisionWithBlock(s, this.pos.y, i)) {
+                    if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
+                        this.pos.y += 1;
+                    } else if (!checkCollisionWithBlock(s, this.pos.y + 2, i)) {
+                        this.pos.y += 2;
+                    } else if ("crawley" === this.type && !checkCollisionWithBlock(s, this.pos.y + 3, i)) {
+                        this.pos.y += 3;
+                    }
+                }
             }
             checkCollisionWithBlock(s, this.pos.y, i) || (this.pos.x = s, this.pos.z = i, h = !0)
         }
@@ -585,7 +603,7 @@ Mob.prototype.update = function (t) {
                 e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05)
         }
-        this.mesh.position.copy(this.pos);
+        this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
             n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
         if (a || n) {
