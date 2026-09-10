@@ -25,6 +25,55 @@ function encodeIPFSPath(path) {
         .join('/');
 }
 
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function encB58(b) {
+    let d = [], s = '', i, j, c, n;
+    for(i = 0; i < b.length; i++) {
+        for(j = 0, c = b[i]; j < d.length; j++) {
+            c += d[j] << 8;
+            d[j] = c % 58;
+            c = Math.floor(c / 58);
+        }
+        while(c > 0) {
+            d.push(c % 58);
+            c = Math.floor(c / 58);
+        }
+    }
+    for(c = 0; c < b.length && b[c] === 0; c++) s += '1';
+    for(i = d.length - 1; i >= 0; i--) s += B58[d[i]];
+    return s;
+}
+
+async function sha256(b) {
+    return new Uint8Array(await crypto.subtle.digest('SHA-256', b));
+}
+
+async function encB58C(b) {
+    const p = b instanceof Uint8Array ? b : new Uint8Array(b);
+    const h = await sha256(await sha256(p));
+    const o = new Uint8Array(p.length + 4);
+    o.set(p); o.set(h.slice(0, 4), p.length);
+    return encB58(o);
+}
+
+const P2FK_VER = 0x6f; // 111
+const P2FK_CHUNK = 20;
+const P2FK_PAD = '#';
+
+function norm(s) { return typeof s === 'string' ? s.trim() : ''; }
+
+async function deriveKeywordAddress(keyword) {
+    const tok = norm(keyword).replace(/^#/, '');
+    const b = new TextEncoder().encode(tok);
+    const p = new Uint8Array(21);
+    p[0] = P2FK_VER;
+    p.fill(P2FK_PAD.charCodeAt(0), 1);
+    if(b.length) p.set(b.slice(0, P2FK_CHUNK), 1);
+    return encB58C(p);
+}
+
+
 function buildIPFSGatewayUrls(hash, filename = null) {
     const remotePath = filename ? hash + '/' + encodeIPFSPath(filename) : hash;
     return IPFS_GATEWAYS.map(gateway => gateway + remotePath);
@@ -528,18 +577,11 @@ async function fetchText(url) {
 async function getPublicAddressByKeyword(keyword) {
         try {
             if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetPublicAddressByKeyword/" + keyword + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch address for keyword:', keyword, 'status:', response.status);
-                return null;
-            }
-            var address = await response.text();
-            var cleanAddress = address ? address.replace(/^"|"$/g, "").trim() : null;
+            var cleanAddress = await deriveKeywordAddress(keyword);
             if (cleanAddress) addressByKeywordCache.set(keyword, cleanAddress);
             return cleanAddress;
         } catch (e) {
-            console.error('[Worker] Error fetching address for keyword:', keyword, e);
+            console.error('[Worker] Error deriving address for keyword:', keyword, e);
             return null;
         }
 }

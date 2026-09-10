@@ -58,14 +58,22 @@ async function fetchIPFSWithFallback(hash, filename = null) {
 async function GetPublicAddressByKeyword(keyword) {
     try {
         if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetPublicAddressByKeyword/' + keyword + '?mainnet=false');
-        if (!response.ok) {
-            addMessage('Failed to fetch address for keyword');
-            return null;
+
+        let cleanAddress = null;
+        if (typeof window.deriveKeywordAddress === 'function') {
+            cleanAddress = await window.deriveKeywordAddress(keyword);
+        } else {
+            // Fallback if wallet.js hasn't loaded or isn't available
+            await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+            var response = await fetch('https://p2fk.io/GetPublicAddressByKeyword/' + keyword + '?mainnet=false');
+            if (!response.ok) {
+                addMessage('Failed to fetch address for keyword');
+                return null;
+            }
+            var address = await response.text();
+            cleanAddress = address ? address.trim().replace(/^"|"$/g, '') : null;
         }
-        var address = await response.text();
-        var cleanAddress = address ? address.trim().replace(/^"|"$/g, '') : null;
+
         if (cleanAddress) addressByKeywordCache.set(keyword, cleanAddress);
         return cleanAddress;
     } catch (e) {
