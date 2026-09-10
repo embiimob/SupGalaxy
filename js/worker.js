@@ -11,10 +11,7 @@ var LOCAL_IPFS_ROOT = 'C:/Sup/ipfs';
 // Worker code runs inside an isolated Blob context, so it needs its own copy of the gateway helpers from declare.js.
 const IPFS_GATEWAYS = [
     'https://p2fk.io/ipfs/',
-    'https://gateway.pinata.cloud/ipfs/',
-    'https://4everland.io/ipfs/',
-    'https://ipfs.filebase.io/ipfs/',
-    'https://hardbin.com/ipfs/'
+    'https://ipfs.filebase.io/ipfs/'
 ];
 
 function encodeIPFSPath(path) {
