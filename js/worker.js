@@ -772,8 +772,8 @@ self.onmessage = async function(e) {
                     }
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping chunk processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
+                            console.log('[Worker] Skipping already processed chunk message at cached ID:', msg.TransactionId);
+                            continue; // Allow processing of older messages that may have been missed
                         }
                         if (!msg.TransactionId) continue;
                         var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
@@ -919,8 +919,8 @@ self.onmessage = async function(e) {
                     }
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping worlds_users processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
+                            console.log('[Worker] Skipping already processed worlds_users message at cached ID:', msg.TransactionId);
+                            continue; // Allow processing of older messages that may have been missed
                         }
                         if (!msg.TransactionId) continue;
                         var fromProfile = await getProfileByAddress(msg.FromAddress);
@@ -996,8 +996,8 @@ self.onmessage = async function(e) {
                     }
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping user_update processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
+                            console.log('[Worker] Skipping already processed user_update message at cached ID:', msg.TransactionId);
+                            continue; // Allow processing of older messages that may have been missed
                         }
                         if (msg.FromAddress === userAddress && !processedMessages.has(msg.TransactionId)) {
                             var match = msg.Message.match(/IPFS:([a-zA-Z0-9]+)/);
@@ -1042,8 +1042,8 @@ self.onmessage = async function(e) {
                     var messageMap = new Map();
                     for (var msg of messages || []) {
                         if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Stopping server processing at cached ID:', msg.TransactionId);
-                            break; // Stop processing as all remaining messages are older
+                            console.log('[Worker] Skipping already processed server message at cached ID:', msg.TransactionId);
+                            continue; // Allow processing of older messages that may have been missed
                         }
                         if (!msg.TransactionId) continue;
                         var fromAddress = msg.FromAddress;
@@ -1123,7 +1123,7 @@ self.onmessage = async function(e) {
                         for (var msg of messages || []) {
                             if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
                                 console.log('[Worker] Stopping offer processing at cached ID:', msg.TransactionId);
-                                break; // Stop processing as all remaining messages are older
+                                continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
                             console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
@@ -1252,7 +1252,7 @@ self.onmessage = async function(e) {
                         for (var msg of messages || []) {
                             if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
                                 console.log('[Worker] Stopping answer processing at cached ID:', msg.TransactionId);
-                                break; // Stop processing as all remaining messages are older
+                                continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
                             console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
