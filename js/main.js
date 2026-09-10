@@ -936,19 +936,65 @@ function createInventorySlot(e) {
     })), t
 }
 
+
+function getProjectileLight(colorHex) {
+    for (let i = 0; i < projectileLightPool.length; i++) {
+        if (!projectileLightPool[i].inUse) {
+            projectileLightPool[i].inUse = true;
+            projectileLightPool[i].color.setHex(colorHex);
+            projectileLightPool[i].intensity = 1;
+            return projectileLightPool[i];
+        }
+    }
+    const light = new THREE.PointLight(colorHex, 1, 10);
+    light.inUse = true;
+    scene.add(light);
+    projectileLightPool.push(light);
+    return light;
+}
+
+function releaseProjectileLight(light) {
+    if (light) {
+        light.inUse = false;
+        light.intensity = 0;
+    }
+}
+
+
+function getProjectileMesh(colorHex) {
+    for (let i = 0; i < projectileMeshPool.length; i++) {
+        if (!projectileMeshPool[i].inUse) {
+            projectileMeshPool[i].inUse = true;
+            projectileMeshPool[i].material.color.setHex(colorHex);
+            projectileMeshPool[i].visible = true;
+            return projectileMeshPool[i];
+        }
+    }
+    const l = new THREE.BoxGeometry(.2, .2, .5);
+    const d = new THREE.MeshBasicMaterial({ color: colorHex });
+    const c = new THREE.Mesh(l, d);
+    c.inUse = true;
+    scene.add(c);
+    projectileMeshPool.push(c);
+    return c;
+}
+
+function releaseProjectileMesh(mesh) {
+    if (mesh) {
+        mesh.inUse = false;
+        mesh.visible = false;
+    }
+}
+
 function createProjectile(e, t, o, a, n = "red") {
     const r = "green" === n,
         s = r ? 20 : 10,
         i = r ? 65280 : 16711680,
-        l = new THREE.BoxGeometry(.2, .2, .5),
-        d = new THREE.MeshBasicMaterial({
-            color: i
-        }),
-        c = new THREE.Mesh(l, d),
+        c = getProjectileMesh(i),
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
-    const p = new THREE.PointLight(i, 1, 10);
-    p.position.copy(c.position), c.light = p, scene.add(p), projectiles.push({
+    const p = getProjectileLight(i);
+    p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
         user: t,
         mesh: c,
@@ -956,7 +1002,7 @@ function createProjectile(e, t, o, a, n = "red") {
         createdAt: Date.now(),
         light: p,
         isGreen: r
-    }), scene.add(c)
+    })
 }
 
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
@@ -4487,7 +4533,7 @@ function gameLoop(e) {
                 player.onGround = !0;
             } else if (u > 0) {
                 if (checkBlockCollision(player.x, p, player.z)) {
-                    player.y = Math.floor(p + player.height) - player.height;
+                    player.y = Math.floor(p + player.height) - player.height - 0.001;
                 }
                 player.vy = 0;
             }
@@ -4495,7 +4541,7 @@ function gameLoop(e) {
             player.y = p;
             player.onGround = !1;
         }
-        checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")));
+        checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
                 const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
@@ -4819,8 +4865,8 @@ function gameLoop(e) {
                         }
                     }
                 }
-                scene.remove(o.mesh);
-                scene.remove(o.light);
+                releaseProjectileMesh(o.mesh);
+                releaseProjectileLight(o.light);
                 projectiles.splice(e, 1);
                 continue;
             }
@@ -4836,7 +4882,7 @@ function gameLoop(e) {
                             damage: a,
                             username: o.user
                         }));
-                    scene.remove(o.mesh), scene.remove(o.light), projectiles.splice(e, 1), s = !0;
+                    releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
                     break
                 } if (!s) {
             // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
@@ -4888,8 +4934,8 @@ function gameLoop(e) {
 
                 // If any player was hit, destroy the projectile and move to the next one
                 if (hitPlayer) {
-                    scene.remove(o.mesh);
-                    scene.remove(o.light);
+                    releaseProjectileMesh(o.mesh);
+                    releaseProjectileLight(o.light);
                     projectiles.splice(e, 1);
                     continue;
                 }
@@ -4897,8 +4943,8 @@ function gameLoop(e) {
 
             // Age out projectile if it didn't hit anything
             if (Date.now() - o.createdAt > 5e3) {
-                scene.remove(o.mesh);
-                scene.remove(o.light);
+                releaseProjectileMesh(o.mesh);
+                releaseProjectileLight(o.light);
                 projectiles.splice(e, 1);
             }
         }
