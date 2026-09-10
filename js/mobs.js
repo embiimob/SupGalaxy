@@ -288,8 +288,8 @@ Mob.prototype.update = function (t) {
         } else if (this.isAggressive || !i) {
             let t = null,
                 e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
-            s < e && (e = s, t = {
+                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+            s < e && Math.abs(player.y - this.pos.y) < 2.5 && (e = s, t = {
                 x: player.x,
                 z: player.z,
                 health: player.health,
@@ -298,8 +298,8 @@ Mob.prototype.update = function (t) {
             for (const [s, i] of peers.entries())
                 if (userPositions[s]) {
                     const i = userPositions[s],
-                        o = Math.hypot(i.x - this.pos.x, i.z - this.pos.z);
-                    o < e && (e = o, t = {
+                        o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
+                    o < e && Math.abs(i.y - this.pos.y) < 2.5 && (e = o, t = {
                         x: i.x,
                         z: i.z,
                         health: 20,
@@ -514,8 +514,8 @@ Mob.prototype.update = function (t) {
         if (this.isAggressive || !i) {
             let t = null,
                 e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.z - this.pos.z);
-            s < e && (e = s, t = {
+                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+            s < e && Math.abs(player.y - this.pos.y) < 2.5 && (e = s, t = {
                 x: player.x,
                 z: player.z,
                 health: player.health,
@@ -524,8 +524,8 @@ Mob.prototype.update = function (t) {
             for (const [s, i] of peers.entries())
                 if (userPositions[s]) {
                     const i = userPositions[s],
-                        o = Math.hypot(i.x - this.pos.x, i.z - this.pos.z);
-                    o < e && (e = o, t = {
+                        o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
+                    o < e && Math.abs(i.y - this.pos.y) < 2.5 && (e = o, t = {
                         x: i.x,
                         z: i.z,
                         health: 20,
