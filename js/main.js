@@ -2814,7 +2814,7 @@ function updateMinimap() {
 document.getElementById("trashCancel").addEventListener("click", (function () {
     document.getElementById("trashConfirm").style.display = "none", trashIndex = -1, this.blur()
 })), document.getElementById("trashOk").addEventListener("click", (function () {
-    trashIndex >= 0 && (INVENTORY[trashIndex] = null, updateHotbarUI(), addMessage("Item trashed")), document.getElementById("trashConfirm").style.display = "none", trashIndex = -1, this.blur()
+    trashIndex >= 0 && (INVENTORY[trashIndex] = null, updateHotbarUI(), "block" === document.getElementById("inventoryModal").style.display && updateInventoryUI(), addMessage("Item trashed")), document.getElementById("trashConfirm").style.display = "none", trashIndex = -1, this.blur()
 }));
 var keys = {};
 
