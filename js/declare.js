@@ -37,7 +37,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
     VERSION = "SupGalaxy v1.0.7",
     POLL_INTERVAL = 3e4,
-    MAX_PEERS = 10,
+    MAX_PEERS = 20,
     BLOCKS = {
         1: {
             name: "Bedrock",

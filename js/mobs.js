@@ -607,8 +607,8 @@ Mob.prototype.update = function (t) {
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
             n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
         if (a || n) {
-            const t = {
-                type: "mob_update",
+            if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+            window.mobUpdateQueue.push({
                 id: this.id,
                 x: this.pos.x,
                 y: this.pos.y,
@@ -616,12 +616,10 @@ Mob.prototype.update = function (t) {
                 quaternion: this.mesh.quaternion.toArray(),
                 isMoving: h,
                 aiState: this.aiState,
-                mobType: this.type
-            };
-            for (const [e, s] of peers.entries()) {
-                const i = userPositions[e] ? userPositions[e].world : worldName;
-                e !== userName && s.dc && "open" === s.dc.readyState && i === worldName && s.dc.send(JSON.stringify(t))
-            }
+                type: this.type,
+                hp: this.hp,
+                isAggressive: this.isAggressive
+            });
             this.lastSentPos.copy(this.pos), this.lastSentQuaternion.copy(this.mesh.quaternion)
         }
     }
@@ -661,17 +659,19 @@ Mob.prototype.update = function (t) {
     }
     if (this.hp <= 0) this.die(e);
     else {
-        const t = JSON.stringify({
-            type: "mob_update",
+        if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+        window.mobUpdateQueue.push({
             id: this.id,
             x: this.pos.x,
             y: this.pos.y,
             z: this.pos.z,
             hp: this.hp,
             flash: !0,
-            mobType: this.type
+            type: this.type,
+            isMoving: this.isMoving,
+            aiState: this.aiState,
+            quaternion: this.mesh.quaternion.toArray()
         });
-        for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t)
     }
 }, Mob.prototype.die = function (t) {
     if (!isHost && peers.size > 0) return;

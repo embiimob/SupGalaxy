@@ -4796,6 +4796,20 @@ function gameLoop(e) {
                 };
                 for (const [e, o] of peers.entries()) o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
             }
+            if (window.mobUpdateQueue && window.mobUpdateQueue.length > 0) {
+                const mobBatchMsg = JSON.stringify({
+                    type: "mob_update_batch",
+                    mobs: window.mobUpdateQueue
+                });
+                for (const [peerName, peer] of peers.entries()) {
+                    const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                        peer.dc.send(mobBatchMsg);
+                    }
+                }
+                window.mobUpdateQueue = [];
+            }
+            lastStateUpdateTime = e;
         }
         for (let e = pebbles.length - 1; e >= 0; e--) {
             const o = pebbles[e];
