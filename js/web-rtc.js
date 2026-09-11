@@ -636,9 +636,45 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_spawn":
+                    // Keep a global dictionary of mobs by world to manage them properly if the host switches worlds
+                    if (!window.mobsByWorld) window.mobsByWorld = {};
+                    const mobWorld = s.world || worldName;
+                    if (!window.mobsByWorld[mobWorld]) window.mobsByWorld[mobWorld] = [];
+
+                    if (!window.mobsByWorld[mobWorld].some((e => e.id === s.id))) {
+                        window.mobsByWorld[mobWorld].push(s);
+                    }
+
+                    // Check if this mob belongs to the current world
+                    if (mobWorld !== worldName) {
+                        // The mob spawned in a different world; don't instantiate the 3D model locally.
+                        // However, if we are the host, we should still relay it to other clients in that world.
+                        if (isHost) {
+                            const spawnMsg = JSON.stringify(s);
+                            for (const [peerName, peer] of peers.entries()) {
+                                const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                                if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === mobWorld) {
+                                    peer.dc.send(spawnMsg);
+                                }
+                            }
+                        }
+                        break;
+                    }
+
                     if (!mobs.some((e => e.id === s.id))) {
-                        const e = new Mob(s.x, s.z, s.id, s.mobType);
+                        const e = new Mob(s.x, s.z, s.id, s.mobType || s.type);
                         e.isAggressive = s.isAggressive, mobs.push(e)
+
+                        // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
+                        if (isHost) {
+                            const spawnMsg = JSON.stringify(s);
+                            for (const [peerName, peer] of peers.entries()) {
+                                const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                                if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                                    peer.dc.send(spawnMsg);
+                                }
+                            }
+                        }
                     }
                     break;
                 case "mob_state_batch":
@@ -706,6 +742,9 @@ function setupDataChannel(e, t) {
                             scene.remove(p.mesh), disposeObject(p.mesh)
                         } catch (e) { }
                         mobs = mobs.filter((e => e.id !== p.id))
+                    }
+                    if (isHost && window.mobsByWorld && window.mobsByWorld[s.world || worldName]) {
+                        window.mobsByWorld[s.world || worldName] = window.mobsByWorld[s.world || worldName].filter(m => m.id !== s.id);
                     }
                     break;
                 case "mob_hit":
@@ -1249,6 +1288,42 @@ function setupDataChannel(e, t) {
 
                             const hostChunkKey = makeChunkKey(clientWorld, hostSpawnCx, hostSpawnCz);
                             updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
+                        }
+
+                        // Send the mobs from this world to the client that just joined
+                        const targetWorld = s.world;
+                        if (targetWorld === worldName && mobs.length > 0) {
+                            const mobBatchMsg = JSON.stringify({
+                                type: "mob_update_batch",
+                                mobs: mobs.map(m => ({
+                                    id: m.id,
+                                    x: m.pos.x,
+                                    y: m.pos.y,
+                                    z: m.pos.z,
+                                    quaternion: m.mesh.quaternion.toArray(),
+                                    isMoving: m.isMoving,
+                                    aiState: m.aiState,
+                                    type: m.type,
+                                    hp: m.hp,
+                                    isAggressive: m.isAggressive
+                                }))
+                            });
+                            peer.dc.send(mobBatchMsg);
+                        } else if (window.mobsByWorld && window.mobsByWorld[targetWorld] && window.mobsByWorld[targetWorld].length > 0) {
+                            // If host isn't in that world but has tracked mobs for it
+                            const mobBatchMsg = JSON.stringify({
+                                type: "mob_update_batch",
+                                mobs: window.mobsByWorld[targetWorld].map(m => ({
+                                    id: m.id,
+                                    x: m.x,
+                                    y: m.y,
+                                    z: m.z,
+                                    type: m.mobType || m.type,
+                                    hp: m.hp,
+                                    isAggressive: m.isAggressive
+                                }))
+                            });
+                            peer.dc.send(mobBatchMsg);
                         }
                     }
                     break;

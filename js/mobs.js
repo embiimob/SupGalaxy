@@ -117,7 +117,35 @@ function Mob(t, e, s, i = "crawley") {
 
 function manageMobs() {
     if (!worldArchetype) return;
-    if (!isHost && peers.size > 0) return;
+
+    // Prevent duplicate spawning if there are multiple players in the same world.
+    let isSpawner = true;
+    if (!isHost && peers.size > 0) {
+        // We are a client
+        // Find if someone else in our world should be the spawner (deterministically elect alphabetically lowest name)
+        // Also check if host is in our world; if so, host always overrides and acts as spawner.
+        let hostInOurWorld = false;
+        let isLowestName = true;
+
+        for (const [peerName, pos] of Object.entries(userPositions)) {
+            if (pos.world === worldName) {
+                if (peerName < userName) {
+                    isLowestName = false;
+                }
+                // We know that `peers` map contains the host we are connected to.
+                if (peers.has(peerName)) {
+                    hostInOurWorld = true;
+                }
+            }
+        }
+
+        if (hostInOurWorld || !isLowestName) {
+            isSpawner = false;
+        }
+    }
+
+    if (!isSpawner) return;
+
     if (Date.now() - lastMobManagement < 5e3) return;
     lastMobManagement = Date.now();
     const t = [{
@@ -159,6 +187,22 @@ function manageMobs() {
                 o = 32 + 64 * Math.random() / 2,
                 h = new Mob(modWrap(e.x + Math.cos(i) * o, MAP_SIZE), modWrap(e.z + Math.sin(i) * o, MAP_SIZE), Date.now() + Math.random(), s);
             mobs.push(h);
+
+            // Add newly spawned mob to update queue for state sync
+            if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+            window.mobUpdateQueue.push({
+                id: h.id,
+                x: h.pos.x,
+                y: h.pos.y,
+                z: h.pos.z,
+                quaternion: h.mesh.quaternion.toArray(),
+                isMoving: h.isMoving,
+                aiState: h.aiState,
+                type: h.type,
+                hp: h.hp,
+                isAggressive: h.isAggressive
+            });
+
             const a = JSON.stringify({
                 type: "mob_spawn",
                 id: h.id,
@@ -167,9 +211,27 @@ function manageMobs() {
                 z: h.pos.z,
                 hp: h.hp,
                 mobType: h.type,
-                isAggressive: h.isAggressive
+                isAggressive: h.isAggressive,
+                world: worldName,
+                username: userName
             });
-            for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(a)
+
+            if (isHost || peers.size === 0) {
+                for (const [peerName, peer] of peers.entries()) {
+                    const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                        peer.dc.send(a);
+                    }
+                }
+            } else {
+                // Client sends to host
+                for (const [t, e] of peers.entries()) {
+                    if (e.dc && "open" === e.dc.readyState) {
+                        e.dc.send(a);
+                        break;
+                    }
+                }
+            }
         }
     }
 }
@@ -679,6 +741,9 @@ Mob.prototype.update = function (t) {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
+    if (window.mobsByWorld && window.mobsByWorld[worldName]) {
+        window.mobsByWorld[worldName] = window.mobsByWorld[worldName].filter(m => m.id !== this.id);
+    }
     let e = 10;
     if ("red" === this.eyeColor ? e = 20 : "blue" === this.eyeColor && (e = 30), t === userName) player.score += e, document.getElementById("score").innerText = player.score, addMessage(`+${e} score`), safePlayAudio(soundHit);
     else {

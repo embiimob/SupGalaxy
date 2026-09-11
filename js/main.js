@@ -2193,6 +2193,10 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
         if (!checkChunkOwnership(chunkKey, breaker || userName)) {
             console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
+            if ((breaker || userName) === userName) {
+                const ownerName = getChunkOwnerName(chunkKey, breaker || userName);
+                addMessage(`Cannot edit: Chunk owned by ${ownerName || "another player"}`, 3000);
+            }
             return; // Don't show message here - WebRTC handler will send to client
         }
     }
@@ -2470,6 +2474,9 @@ function placeBlockAt(e, t, o, a) {
                             d = makeChunkKey(worldName, i, l);
                         if (!checkChunkOwnership(d, userName)) {
                             console.log(`[Ownership] Block place denied for host at chunk ${d}`);
+                            // In placeBlockAt, userName is ALWAYS the local player because clients send request_block_place
+                            const ownerName = getChunkOwnerName(d, userName);
+                            addMessage(`Cannot edit: Chunk owned by ${ownerName || "another player"}`, 3000);
                             return; // Don't show message - silently fail for host
                         }
 
@@ -4312,6 +4319,19 @@ function switchWorld(newWorldName, targetSpawn) {
                 world: worldName,
                 username: userName
             }));
+        }
+    }
+
+    if (isHost && window.mobsByWorld && window.mobsByWorld[worldName] && window.mobsByWorld[worldName].length > 0) {
+        // If host switches to a world where they have tracked mobs spawned by clients previously
+        // The host instantiates these tracked mobs locally
+        const trackedMobs = window.mobsByWorld[worldName];
+        for (const tm of trackedMobs) {
+            if (!mobs.some(m => m.id === tm.id)) {
+                const newMob = new Mob(tm.x, tm.z, tm.id, tm.mobType || tm.type);
+                newMob.isAggressive = tm.isAggressive;
+                mobs.push(newMob);
+            }
         }
     }
 
