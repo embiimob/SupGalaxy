@@ -386,15 +386,20 @@ function setupDataChannel(e, t) {
             }
 
             console.log(`[WEBRTC] Host sending initial mob state to ${t}`);
-            for (const t of mobs) e.send(JSON.stringify({
-                type: "mob_update",
+            const mobBatch = mobs.map(t => ({
                 id: t.id,
                 x: t.pos.x,
                 y: t.pos.y,
                 z: t.pos.z,
                 hp: t.hp,
-                mobType: t.type
-            }))
+                type: t.type
+            }));
+            if (mobBatch.length > 0) {
+                e.send(JSON.stringify({
+                    type: "mob_state_batch",
+                    mobs: mobBatch
+                }));
+            }
         }
         const s = setInterval((() => {
             "open" === e.readyState && e.send(JSON.stringify({
@@ -642,14 +647,56 @@ function setupDataChannel(e, t) {
                         for (const t of s.mobs) {
                             e.add(t.id);
                             let o = mobs.find((e => e.id === t.id));
-                            o || (o = new Mob(t.x, t.z, t.id, t.type), mobs.push(o)), o.targetPos.set(t.x, t.y, t.z), o.hp = t.hp, o.isAggressive = t.isAggressive, o.isMoving = t.isMoving, o.aiState = t.aiState, t.quaternion && (o.targetQuaternion.fromArray(t.quaternion), o.lastQuaternionUpdate = performance.now()), o.lastUpdateTime = performance.now()
+                            if (!o) {
+                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType);
+                                mobs.push(o);
+                                o.pos.set(t.x, t.y, t.z);
+                            }
+                            o.prevPos.copy(o.targetPos);
+                            o.targetPos.set(t.x, t.y, t.z);
+                            o.hp = t.hp;
+                            if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.isMoving !== undefined) o.isMoving = t.isMoving;
+                            if (t.aiState) o.aiState = t.aiState;
+                            if (t.flash) o.flashEnd = Date.now() + 200;
+                            if (t.quaternion) {
+                                o.prevQuaternion.copy(o.targetQuaternion);
+                                o.targetQuaternion.fromArray(t.quaternion);
+                                o.lastQuaternionUpdate = performance.now();
+                            }
+                            o.lastUpdateTime = performance.now();
                         }
-                        mobs = mobs.filter((t => !!e.has(t.id) || (scene.remove(t.mesh), disposeObject(t.mesh), !1)))
+                        mobs = mobs.filter((t => !!e.has(t.id) || (scene.remove(t.mesh), disposeObject(t.mesh), !1)));
+                    }
+                    break;
+                case "mob_update_batch":
+                    if (!isHost) {
+                        for (const t of s.mobs) {
+                            let o = mobs.find((e => e.id === t.id));
+                            if (!o) {
+                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType);
+                                mobs.push(o);
+                                o.pos.set(t.x, t.y, t.z);
+                            }
+                            o.prevPos.copy(o.targetPos);
+                            o.targetPos.set(t.x, t.y, t.z);
+                            o.hp = t.hp;
+                            if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.isMoving !== undefined) o.isMoving = t.isMoving;
+                            if (t.aiState) o.aiState = t.aiState;
+                            if (t.flash) o.flashEnd = Date.now() + 200;
+                            if (t.quaternion) {
+                                o.prevQuaternion.copy(o.targetQuaternion);
+                                o.targetQuaternion.fromArray(t.quaternion);
+                                o.lastQuaternionUpdate = performance.now();
+                            }
+                            o.lastUpdateTime = performance.now();
+                        }
                     }
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
-                    d || (d = new Mob(s.x, s.z, s.id, s.mobType), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
+                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
                     break;
                 case "mob_despawn":
                 case "mob_kill":
