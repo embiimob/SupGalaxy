@@ -972,6 +972,22 @@ function checkChunkOwnership(chunkKey, username) {
     return isChunkMutationAllowed(chunkKey, username);
 }
 
+function getChunkOwnerName(chunkKey) {
+    const normalized = chunkKey.replace(/^#/, "");
+    // Check home spawn ownership first
+    if (spawnChunks.size > 0) {
+        for (const [spawnKey, spawnData] of spawnChunks) {
+            const parsed = parseChunkKey(normalized);
+            if (!parsed) continue;
+            if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
+                return spawnData.username;
+            }
+        }
+    }
+    const ownership = OWNED_CHUNKS.get(normalized);
+    return ownership ? ownership.username : null;
+}
+
 var skyProps, avatarGroup;
 
 function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, blockDate) {

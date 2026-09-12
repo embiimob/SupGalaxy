@@ -2192,8 +2192,19 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
         if (!checkChunkOwnership(chunkKey, breaker || userName)) {
-            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
-            return; // Don't show message here - WebRTC handler will send to client
+            const owner = getChunkOwnerName(chunkKey) || 'another user';
+            const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
+            if (breaker && breaker !== userName) {
+                // If the breaker is a peer, send an alert to them
+                const peer = peers.get(breaker);
+                if (peer && peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(JSON.stringify({ type: 'alert', message: alertMsg }));
+                }
+            } else {
+                addMessage(alertMsg, 3000);
+            }
+            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
+            return;
         }
     }
 
@@ -4323,6 +4334,28 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
     initServers();
+
+    // If there are globally tracked mobs for this world, restore them to 3D instances
+    if (window.mobsByWorld && window.mobsByWorld[worldName]) {
+        for (const m of window.mobsByWorld[worldName]) {
+            if (!mobs.find(existing => existing.id === m.id)) {
+                const o = new Mob(m.x, m.z, m.id, m.mobType || m.type);
+                o.pos.set(m.x, m.y, m.z);
+                o.prevPos.copy(o.pos);
+                o.targetPos.copy(o.pos);
+                o.hp = m.hp !== undefined ? m.hp : o.hp;
+                o.isAggressive = m.isAggressive;
+                if (m.aiState) o.aiState = m.aiState;
+                if (m.isMoving !== undefined) o.isMoving = m.isMoving;
+                if (m.quaternion) {
+                    o.prevQuaternion.fromArray(m.quaternion);
+                    o.targetQuaternion.fromArray(m.quaternion);
+                    o.mesh.quaternion.fromArray(m.quaternion);
+                }
+                mobs.push(o);
+            }
+        }
+    }
 }
 
 /**
@@ -4799,6 +4832,7 @@ function gameLoop(e) {
             if (window.mobUpdateQueue && window.mobUpdateQueue.length > 0) {
                 const mobBatchMsg = JSON.stringify({
                     type: "mob_update_batch",
+                    world: worldName,
                     mobs: window.mobUpdateQueue
                 });
                 for (const [peerName, peer] of peers.entries()) {

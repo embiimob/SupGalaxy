@@ -397,6 +397,7 @@ function setupDataChannel(e, t) {
             if (mobBatch.length > 0) {
                 e.send(JSON.stringify({
                     type: "mob_state_batch",
+                    world: worldName,
                     mobs: mobBatch
                 }));
             }
@@ -636,13 +637,49 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_spawn":
+                    // Keep a global dictionary of mobs by world to manage them properly if players switch worlds
+                    if (!window.mobsByWorld) window.mobsByWorld = {};
+                    const mobWorld = s.world || worldName;
+                    if (!window.mobsByWorld[mobWorld]) window.mobsByWorld[mobWorld] = [];
+
+                    if (!window.mobsByWorld[mobWorld].some((e => e.id === s.id))) {
+                        window.mobsByWorld[mobWorld].push(s);
+                    }
+
+                    // Check if this mob belongs to the current world
+                    if (mobWorld !== worldName) {
+                        // The mob spawned in a different world; don't instantiate the 3D model locally.
+                        // However, if we are the host, we should still relay it to other clients in that world.
+                        if (isHost) {
+                            const spawnMsg = JSON.stringify(s);
+                            for (const [peerName, peer] of peers.entries()) {
+                                const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                                if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === mobWorld) {
+                                    peer.dc.send(spawnMsg);
+                                }
+                            }
+                        }
+                        break;
+                    }
+
                     if (!mobs.some((e => e.id === s.id))) {
-                        const e = new Mob(s.x, s.z, s.id, s.mobType);
+                        const e = new Mob(s.x, s.z, s.id, s.mobType || s.type);
                         e.isAggressive = s.isAggressive, mobs.push(e)
+
+                        // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
+                        if (isHost) {
+                            const spawnMsg = JSON.stringify(s);
+                            for (const [peerName, peer] of peers.entries()) {
+                                const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                                if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                                    peer.dc.send(spawnMsg);
+                                }
+                            }
+                        }
                     }
                     break;
                 case "mob_state_batch":
-                    if (!isHost) {
+                    if (!isHost || (isHost && s.world && s.world === worldName)) {
                         const e = new Set;
                         for (const t of s.mobs) {
                             e.add(t.id);
@@ -666,12 +703,28 @@ function setupDataChannel(e, t) {
                             }
                             o.lastUpdateTime = performance.now();
                         }
-                        mobs = mobs.filter((t => !!e.has(t.id) || (scene.remove(t.mesh), disposeObject(t.mesh), !1)));
+                        // Only despawn if we are NOT the host (host manages despawns naturally)
+                        if (!isHost) {
+                            mobs = mobs.filter((t => !!e.has(t.id) || (scene.remove(t.mesh), disposeObject(t.mesh), !1)));
+                        }
                     }
                     break;
                 case "mob_update_batch":
-                    if (!isHost) {
-                        for (const t of s.mobs) {
+                    for (const t of s.mobs) {
+                        // Store updates globally in case we need them when switching worlds
+                        if (!window.mobsByWorld) window.mobsByWorld = {};
+                        const targetWorld = s.world || worldName;
+                        if (!window.mobsByWorld[targetWorld]) window.mobsByWorld[targetWorld] = [];
+
+                        let cachedMob = window.mobsByWorld[targetWorld].find(m => m.id === t.id);
+                        if (cachedMob) {
+                            Object.assign(cachedMob, t);
+                        } else {
+                            window.mobsByWorld[targetWorld].push({...t, world: targetWorld});
+                        }
+
+                        // If the update is for the world we are currently in, update the 3D model
+                        if (targetWorld === worldName) {
                             let o = mobs.find((e => e.id === t.id));
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType);
@@ -693,6 +746,16 @@ function setupDataChannel(e, t) {
                             o.lastUpdateTime = performance.now();
                         }
                     }
+                    // Relay to other clients in the same world if host
+                    if (isHost) {
+                        const batchMsg = JSON.stringify(s);
+                        for (const [peerName, peer] of peers.entries()) {
+                            const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                            if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === (s.world || worldName)) {
+                                peer.dc.send(batchMsg);
+                            }
+                        }
+                    }
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
@@ -706,6 +769,10 @@ function setupDataChannel(e, t) {
                             scene.remove(p.mesh), disposeObject(p.mesh)
                         } catch (e) { }
                         mobs = mobs.filter((e => e.id !== p.id))
+                    }
+
+                    if (window.mobsByWorld && window.mobsByWorld[s.world || worldName]) {
+                        window.mobsByWorld[s.world || worldName] = window.mobsByWorld[s.world || worldName].filter(m => m.id !== s.id);
                     }
                     break;
                 case "mob_hit":
@@ -1249,6 +1316,44 @@ function setupDataChannel(e, t) {
 
                             const hostChunkKey = makeChunkKey(clientWorld, hostSpawnCx, hostSpawnCz);
                             updateChunkOwnership(hostChunkKey, userName, Date.now(), 'home');
+
+                            // Send the mobs from this world to the client that just joined
+                            const targetWorld = s.world;
+                            if (targetWorld === worldName && mobs.length > 0) {
+                                const mobBatchMsg = JSON.stringify({
+                                    type: "mob_update_batch",
+                                    world: worldName,
+                                    mobs: mobs.map(m => ({
+                                        id: m.id,
+                                        x: m.pos.x,
+                                        y: m.pos.y,
+                                        z: m.pos.z,
+                                        quaternion: m.mesh.quaternion.toArray(),
+                                        isMoving: m.isMoving,
+                                        aiState: m.aiState,
+                                        type: m.type,
+                                        hp: m.hp,
+                                        isAggressive: m.isAggressive
+                                    }))
+                                });
+                                peer.dc.send(mobBatchMsg);
+                            } else if (window.mobsByWorld && window.mobsByWorld[targetWorld] && window.mobsByWorld[targetWorld].length > 0) {
+                                // If host isn't in that world but has tracked mobs for it
+                                const mobBatchMsg = JSON.stringify({
+                                    type: "mob_update_batch",
+                                    world: targetWorld,
+                                    mobs: window.mobsByWorld[targetWorld].map(m => ({
+                                        id: m.id,
+                                        x: m.x,
+                                        y: m.y,
+                                        z: m.z,
+                                        type: m.mobType || m.type,
+                                        hp: m.hp,
+                                        isAggressive: m.isAggressive
+                                    }))
+                                });
+                                peer.dc.send(mobBatchMsg);
+                            }
                         }
                     }
                     break;
@@ -1342,30 +1447,8 @@ function setupDataChannel(e, t) {
                             console.log(`[Ownership] Block place allowed for ${s.username} at chunk ${placeChunkKey}`);
                         } else {
                             // Denied: send denial message
-                            let reason = 'Unknown';
-                            const ownership = OWNED_CHUNKS.get(placeChunkKey);
-
-                            // Check if it's a spawn chunk
-                            const parsed = parseChunkKey(placeChunkKey);
-                            if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnKey, spawnData] of spawnChunks) {
-                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            // If not spawn chunk, check OWNED_CHUNKS
-                            if (reason === 'Unknown' && ownership) {
-                                if (ownership.pending) {
-                                    reason = 'Claim immature (<30d)';
-                                } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {
-                                    reason = 'Claim expired (>1y)';
-                                } else {
-                                    reason = `Chunk owned by ${ownership.username}`;
-                                }
-                            }
+                            const ownerName = getChunkOwnerName(placeChunkKey);
+                            const reason = ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
 
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1469,30 +1552,8 @@ function setupDataChannel(e, t) {
                             console.log(`[Ownership] Block break allowed for ${s.username} at chunk ${breakChunkKey}`);
                         } else {
                             // Denied: send denial message
-                            let reason = 'Unknown';
-                            const ownership = OWNED_CHUNKS.get(breakChunkKey);
-
-                            // Check if it's a spawn chunk
-                            const parsed = parseChunkKey(breakChunkKey);
-                            if (parsed && spawnChunks.size > 0) {
-                                for (const [spawnKey, spawnData] of spawnChunks) {
-                                    if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                        reason = `Chunk owned by ${spawnData.username} (home spawn)`;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            // If not spawn chunk, check OWNED_CHUNKS
-                            if (reason === 'Unknown' && ownership) {
-                                if (ownership.pending) {
-                                    reason = 'Claim immature (<30d)';
-                                } else if (ownership.expiryDate && Date.now() > ownership.expiryDate) {
-                                    reason = 'Claim expired (>1y)';
-                                } else {
-                                    reason = `Chunk owned by ${ownership.username}`;
-                                }
-                            }
+                            const ownerName = getChunkOwnerName(breakChunkKey);
+                            const reason = ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
 
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
