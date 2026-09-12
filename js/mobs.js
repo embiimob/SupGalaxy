@@ -152,6 +152,8 @@ function manageMobs() {
 
     // 3. Determine if we are the spawner for any active area
     let mySpawningAreas = [];
+    window.isSpawnerForCurrentWorld = false;
+
     for (const area of activeAreas) {
         let spawner = area.players[0].name;
         // Host overrides lowest alphabetical name if present in the area
@@ -178,6 +180,32 @@ function manageMobs() {
 
         if (spawner === userName) {
             mySpawningAreas.push(area);
+            window.isSpawnerForCurrentWorld = true;
+            // Tag each area with its spawner
+            area.spawner = spawner;
+        } else {
+            // Even if we aren't the spawner, tag it so we know who is
+            area.spawner = spawner;
+        }
+    }
+
+    // Assign mobs to their nearest active area so we can check if we have authority over them
+    for (const mob of mobs) {
+        let nearestArea = null;
+        let minDistance = Infinity;
+        for (const area of activeAreas) {
+            for (const p of area.players) {
+                const d = Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z);
+                if (d < minDistance) {
+                    minDistance = d;
+                    nearestArea = area;
+                }
+            }
+        }
+        if (nearestArea && minDistance < 96) {
+            mob.spawner = nearestArea.spawner;
+        } else {
+            mob.spawner = null;
         }
     }
 
@@ -294,18 +322,30 @@ function manageMobs() {
 }
 
 function handleMobHit(t) {
-    if (isHost || 0 === peers.size) t.hurt(4, userName);
-    else
-        for (const [e, s] of peers.entries()) s.dc && "open" === s.dc.readyState && (console.log(`[WebRTC] Sending mob_hit to host ${e}`), s.dc.send(JSON.stringify({
-            type: "mob_hit",
-            id: t.id,
-            damage: 4,
-            username: userName
-        })));
+    const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    if (isLocalSpawner) {
+        t.hurt(4, userName);
+    } else {
+        // Forward hit to whoever is the host so they can route it or handle it
+        for (const [e, s] of peers.entries()) {
+            if (s.dc && "open" === s.dc.readyState) {
+                console.log(`[WebRTC] Sending mob_hit to host ${e}`);
+                s.dc.send(JSON.stringify({
+                    type: "mob_hit",
+                    id: t.id,
+                    damage: 4,
+                    username: userName
+                }));
+            }
+        }
+    }
     safePlayAudio(soundHit), addMessage("Hit mob!", 800)
 }
 Mob.prototype.update = function (t) {
-    if (peers.size > 0 && !isHost && this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isHost && peers.size > 0) {
+    // Determine if we should run the local simulation logic (spawner) or client interpolation logic
+    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+
+    if (!isLocalSpawner && this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isLocalSpawner) {
         if (this.lastUpdateTime > 0) {
             const t = performance.now(),
                 e = t - this.lastUpdateTime;
@@ -764,7 +804,8 @@ Mob.prototype.update = function (t) {
         t.rotation.x = 0
     })))
 }, Mob.prototype.hurt = function (t, e) {
-    if (!isHost && peers.size > 0) return;
+    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+    if (!isLocalSpawner) return;
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
     const s = e === userName ? player : userPositions[e];
     if (s) {
@@ -793,7 +834,8 @@ Mob.prototype.update = function (t) {
         });
     }
 }, Mob.prototype.die = function (t) {
-    if (!isHost && peers.size > 0) return;
+    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+    if (!isLocalSpawner) return;
     try {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }

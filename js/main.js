@@ -4832,6 +4832,7 @@ function gameLoop(e) {
             if (window.mobUpdateQueue && window.mobUpdateQueue.length > 0) {
                 const mobBatchMsg = JSON.stringify({
                     type: "mob_update_batch",
+                    world: worldName,
                     mobs: window.mobUpdateQueue
                 });
                 for (const [peerName, peer] of peers.entries()) {
