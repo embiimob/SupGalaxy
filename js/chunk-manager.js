@@ -968,39 +968,24 @@ function isChunkMutationAllowed(chunkKey, username) {
     return true;
 }
 
-function getChunkOwnerName(chunkKey, username) {
-    const normalized = chunkKey.replace(/^#/, "");
+function checkChunkOwnership(chunkKey, username) {
+    return isChunkMutationAllowed(chunkKey, username);
+}
 
-    // Check home spawn ownership
+function getChunkOwnerName(chunkKey) {
+    const normalized = chunkKey.replace(/^#/, "");
+    // Check home spawn ownership first
     if (spawnChunks.size > 0) {
         for (const [spawnKey, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
             if (!parsed) continue;
             if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                if (spawnData.username !== username) {
-                    return spawnData.username;
-                }
+                return spawnData.username;
             }
         }
     }
-
-    // Check OWNED_CHUNKS ownership
     const ownership = OWNED_CHUNKS.get(normalized);
-    if (!ownership) return null;
-
-    const now = Date.now();
-    if (ownership.pending) return null;
-    if (ownership.expiryDate && now > ownership.expiryDate) return null;
-
-    if (ownership.username !== username) {
-        return ownership.username;
-    }
-
-    return null;
-}
-
-function checkChunkOwnership(chunkKey, username) {
-    return isChunkMutationAllowed(chunkKey, username);
+    return ownership ? ownership.username : null;
 }
 
 var skyProps, avatarGroup;

@@ -2192,12 +2192,19 @@ function removeBlockAt(e, t, o, breaker) {
         var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
         var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
         if (!checkChunkOwnership(chunkKey, breaker || userName)) {
-            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey}`);
-            if ((breaker || userName) === userName) {
-                const ownerName = getChunkOwnerName(chunkKey, breaker || userName);
-                addMessage(`Cannot edit: Chunk owned by ${ownerName || "another player"}`, 3000);
+            const owner = getChunkOwnerName(chunkKey) || 'another user';
+            const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
+            if (breaker && breaker !== userName) {
+                // If the breaker is a peer, send an alert to them
+                const peer = peers.get(breaker);
+                if (peer && peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(JSON.stringify({ type: 'alert', message: alertMsg }));
+                }
+            } else {
+                addMessage(alertMsg, 3000);
             }
-            return; // Don't show message here - WebRTC handler will send to client
+            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
+            return;
         }
     }
 
@@ -2474,9 +2481,6 @@ function placeBlockAt(e, t, o, a) {
                             d = makeChunkKey(worldName, i, l);
                         if (!checkChunkOwnership(d, userName)) {
                             console.log(`[Ownership] Block place denied for host at chunk ${d}`);
-                            // In placeBlockAt, userName is ALWAYS the local player because clients send request_block_place
-                            const ownerName = getChunkOwnerName(d, userName);
-                            addMessage(`Cannot edit: Chunk owned by ${ownerName || "another player"}`, 3000);
                             return; // Don't show message - silently fail for host
                         }
 
@@ -4322,19 +4326,6 @@ function switchWorld(newWorldName, targetSpawn) {
         }
     }
 
-    if (isHost && window.mobsByWorld && window.mobsByWorld[worldName] && window.mobsByWorld[worldName].length > 0) {
-        // If host switches to a world where they have tracked mobs spawned by clients previously
-        // The host instantiates these tracked mobs locally
-        const trackedMobs = window.mobsByWorld[worldName];
-        for (const tm of trackedMobs) {
-            if (!mobs.some(m => m.id === tm.id)) {
-                const newMob = new Mob(tm.x, tm.z, tm.id, tm.mobType || tm.type);
-                newMob.isAggressive = tm.isAggressive;
-                mobs.push(newMob);
-            }
-        }
-    }
-
     // Refresh ownership for all known users in this world
     populateSpawnChunks();
 
@@ -4343,6 +4334,28 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
     initServers();
+
+    // If there are globally tracked mobs for this world, restore them to 3D instances
+    if (window.mobsByWorld && window.mobsByWorld[worldName]) {
+        for (const m of window.mobsByWorld[worldName]) {
+            if (!mobs.find(existing => existing.id === m.id)) {
+                const o = new Mob(m.x, m.z, m.id, m.mobType || m.type);
+                o.pos.set(m.x, m.y, m.z);
+                o.prevPos.copy(o.pos);
+                o.targetPos.copy(o.pos);
+                o.hp = m.hp !== undefined ? m.hp : o.hp;
+                o.isAggressive = m.isAggressive;
+                if (m.aiState) o.aiState = m.aiState;
+                if (m.isMoving !== undefined) o.isMoving = m.isMoving;
+                if (m.quaternion) {
+                    o.prevQuaternion.fromArray(m.quaternion);
+                    o.targetQuaternion.fromArray(m.quaternion);
+                    o.mesh.quaternion.fromArray(m.quaternion);
+                }
+                mobs.push(o);
+            }
+        }
+    }
 }
 
 /**

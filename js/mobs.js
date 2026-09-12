@@ -118,117 +118,174 @@ function Mob(t, e, s, i = "crawley") {
 function manageMobs() {
     if (!worldArchetype) return;
 
-    // Prevent duplicate spawning if there are multiple players in the same world.
-    let isSpawner = true;
-    if (!isHost && peers.size > 0) {
-        // We are a client
-        // Find if someone else in our world should be the spawner (deterministically elect alphabetically lowest name)
-        // Also check if host is in our world; if so, host always overrides and acts as spawner.
-        let hostInOurWorld = false;
-        let isLowestName = true;
+    if (Date.now() - lastMobManagement < 5e3) return;
+    lastMobManagement = Date.now();
 
-        for (const [peerName, pos] of Object.entries(userPositions)) {
-            if (pos.world === worldName) {
-                if (peerName < userName) {
-                    isLowestName = false;
+    // 1. Find all players in the current world
+    const playersInWorld = [];
+    playersInWorld.push({ name: userName, x: player.x, y: player.y, z: player.z });
+    for (const [peerName, pos] of Object.entries(userPositions)) {
+        if (pos.world === worldName && pos.targetX !== undefined) {
+            playersInWorld.push({ name: peerName, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+        }
+    }
+
+    // 2. Group players into active areas (clusters within 96 blocks)
+    const activeAreas = [];
+    for (const p of playersInWorld) {
+        let foundArea = false;
+        for (const area of activeAreas) {
+            // Check if player is within 96 blocks of any player in the area
+            for (const areaPlayer of area.players) {
+                if (Math.hypot(p.x - areaPlayer.x, p.z - areaPlayer.z) < 96) {
+                    area.players.push(p);
+                    foundArea = true;
+                    break;
                 }
-                // We know that `peers` map contains the host we are connected to.
-                if (peers.has(peerName)) {
-                    hostInOurWorld = true;
+            }
+            if (foundArea) break;
+        }
+        if (!foundArea) {
+            activeAreas.push({ players: [p] });
+        }
+    }
+
+    // 3. Determine if we are the spawner for any active area
+    let mySpawningAreas = [];
+    for (const area of activeAreas) {
+        let spawner = area.players[0].name;
+        // Host overrides lowest alphabetical name if present in the area
+        let hostInArea = false;
+        for (const p of area.players) {
+            if (isHost && p.name === userName) {
+                hostInArea = true;
+                break;
+            }
+            if (!isHost && peers.has(p.name)) {
+                // There is a host in this area
+                hostInArea = true;
+                spawner = p.name;
+                break;
+            }
+        }
+        if (!hostInArea) {
+            for (const p of area.players) {
+                if (p.name < spawner) {
+                    spawner = p.name;
                 }
             }
         }
 
-        if (hostInOurWorld || !isLowestName) {
-            isSpawner = false;
+        if (spawner === userName) {
+            mySpawningAreas.push(area);
         }
     }
 
-    if (!isSpawner) return;
+    // Despawn mobs that are too far from ANY player in their active area
+    const allowedTypes = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+    mobs = mobs.filter((mob) => {
+        const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
+        const isAllowedType = allowedTypes.includes(mob.type);
+        if (!isNearAnyPlayer || !isAllowedType) {
+            // Only the person who "owns" the despawn should send it, but let's have everyone clean up their own locally.
+            // If we are a spawner for the area the mob *was* in, broadcast despawn.
+            // A simpler approach: Anyone can locally despawn if it's too far from everyone.
+            // If they are a spawner, they broadcast it.
+            scene.remove(mob.mesh);
+            disposeObject(mob.mesh);
 
-    if (Date.now() - lastMobManagement < 5e3) return;
-    lastMobManagement = Date.now();
-    const t = [{
-        x: player.x,
-        y: player.y,
-        z: player.z
-    }];
-    for (const e of Object.values(userPositions)) e.targetX && t.push({
-        x: e.targetX,
-        y: e.targetY,
-        z: e.targetZ
-    });
-    const e = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
-    mobs = mobs.filter((s => {
-        const i = t.some((t => Math.hypot(s.pos.x - t.x, s.pos.z - t.z) < 96)),
-            o = e.includes(s.type);
-        if (!i || !o) {
-            scene.remove(s.mesh), disposeObject(s.mesh);
+            // We should only broadcast despawn if we are a spawner for an area near the mob, or if we are host.
+            // Since active areas can shift, it's safest to just let whoever sees it too far broadcast it.
+            // To avoid spam, let's just let the host or the lowest name broadcast despawn, OR just everyone cleans it up locally.
+            // For multiplayer consistency, let's just have everyone send the despawn if they see it. WebRTC dedups it anyway.
             const t = JSON.stringify({
                 type: "mob_despawn",
-                id: s.id
+                id: mob.id,
+                world: worldName
             });
-            for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
-            return !1
+            for (const [peerName, peer] of peers.entries()) {
+                if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
+                    peer.dc.send(t);
+                }
+            }
+            return false;
         }
-        return !0
-    }));
-    for (const s of e) {
-        let e;
-        if ("crawley" === s) e = 10;
-        else if ("bee" === s) e = 8;
-        else {
-            if ("grub" !== s) continue;
-            e = 2
-        }
-        if (mobs.filter((t => t.type === s)).length < e) {
-            const e = t[Math.floor(Math.random() * t.length)],
-                i = Math.random() * Math.PI * 2,
-                o = 32 + 64 * Math.random() / 2,
-                h = new Mob(modWrap(e.x + Math.cos(i) * o, MAP_SIZE), modWrap(e.z + Math.sin(i) * o, MAP_SIZE), Date.now() + Math.random(), s);
-            mobs.push(h);
+        return true;
+    });
 
-            // Add newly spawned mob to update queue for state sync
-            if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
-            window.mobUpdateQueue.push({
-                id: h.id,
-                x: h.pos.x,
-                y: h.pos.y,
-                z: h.pos.z,
-                quaternion: h.mesh.quaternion.toArray(),
-                isMoving: h.isMoving,
-                aiState: h.aiState,
-                type: h.type,
-                hp: h.hp,
-                isAggressive: h.isAggressive
-            });
+    // Spawn new mobs for our active areas
+    for (const area of mySpawningAreas) {
+        for (const type of allowedTypes) {
+            let maxCount;
+            if ("crawley" === type) maxCount = 10;
+            else if ("bee" === type) maxCount = 8;
+            else if ("grub" === type) maxCount = 2;
+            else continue;
 
-            const a = JSON.stringify({
-                type: "mob_spawn",
-                id: h.id,
-                x: h.pos.x,
-                y: h.pos.y,
-                z: h.pos.z,
-                hp: h.hp,
-                mobType: h.type,
-                isAggressive: h.isAggressive,
-                world: worldName,
-                username: userName
-            });
-
-            if (isHost || peers.size === 0) {
-                for (const [peerName, peer] of peers.entries()) {
-                    const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
-                        peer.dc.send(a);
+            // Count mobs of this type in this specific area
+            let countInArea = 0;
+            for (const mob of mobs) {
+                if (mob.type === type) {
+                    // Check if mob is near this area
+                    if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) {
+                        countInArea++;
                     }
                 }
-            } else {
-                // Client sends to host
-                for (const [t, e] of peers.entries()) {
-                    if (e.dc && "open" === e.dc.readyState) {
-                        e.dc.send(a);
-                        break;
+            }
+
+            if (countInArea < maxCount) {
+                const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 32 + 64 * Math.random() / 2;
+                const newMob = new Mob(
+                    modWrap(randomPlayer.x + Math.cos(angle) * distance, MAP_SIZE),
+                    modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE),
+                    Date.now() + Math.random(),
+                    type
+                );
+                mobs.push(newMob);
+
+                if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+                window.mobUpdateQueue.push({
+                    id: newMob.id,
+                    x: newMob.pos.x,
+                    y: newMob.pos.y,
+                    z: newMob.pos.z,
+                    quaternion: newMob.mesh.quaternion.toArray(),
+                    isMoving: newMob.isMoving,
+                    aiState: newMob.aiState,
+                    type: newMob.type,
+                    hp: newMob.hp,
+                    isAggressive: newMob.isAggressive
+                });
+
+                const spawnMsg = JSON.stringify({
+                    type: "mob_spawn",
+                    id: newMob.id,
+                    x: newMob.pos.x,
+                    y: newMob.pos.y,
+                    z: newMob.pos.z,
+                    hp: newMob.hp,
+                    mobType: newMob.type,
+                    isAggressive: newMob.isAggressive,
+                    world: worldName,
+                    username: userName
+                });
+
+                if (isHost || peers.size === 0) {
+                    for (const [peerName, peer] of peers.entries()) {
+                        const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+                        if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                            peer.dc.send(spawnMsg);
+                        }
+                    }
+                } else {
+                    // Client sends to host, host will relay
+                    for (const [peerName, peer] of peers.entries()) {
+                        if (peer.dc && "open" === peer.dc.readyState) {
+                            peer.dc.send(spawnMsg);
+                            break;
+                        }
                     }
                 }
             }
@@ -741,9 +798,6 @@ Mob.prototype.update = function (t) {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
-    if (window.mobsByWorld && window.mobsByWorld[worldName]) {
-        window.mobsByWorld[worldName] = window.mobsByWorld[worldName].filter(m => m.id !== this.id);
-    }
     let e = 10;
     if ("red" === this.eyeColor ? e = 20 : "blue" === this.eyeColor && (e = 30), t === userName) player.score += e, document.getElementById("score").innerText = player.score, addMessage(`+${e} score`), safePlayAudio(soundHit);
     else {
