@@ -2185,27 +2185,24 @@ function removeBlockAt(e, t, o, breaker) {
     const n = BLOCKS[a];
     if (!n || n.strength > 5) return void addMessage("Cannot break that block");
 
-    // Check ownership BEFORE showing any visual feedback (for host/solo only)
-    // Clients will send request and get approved/denied by host
-    if (isHost || peers.size === 0) {
-        var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
-        var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
-        var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-        if (!checkChunkOwnership(chunkKey, breaker || userName)) {
-            const owner = getChunkOwnerName(chunkKey) || 'another user';
-            const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
-            if (breaker && breaker !== userName) {
-                // If the breaker is a peer, send an alert to them
-                const peer = peers.get(breaker);
-                if (peer && peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(JSON.stringify({ type: 'alert', message: alertMsg }));
-                }
-            } else {
-                addMessage(alertMsg, 3000);
+    // Check ownership BEFORE showing any visual feedback
+    var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
+    var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
+    var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+    if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+        const owner = getChunkOwnerName(chunkKey) || 'another user';
+        const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
+        if (isHost && breaker && breaker !== userName) {
+            // If the breaker is a peer and we are host, send an alert to them
+            const peer = peers.get(breaker);
+            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(JSON.stringify({ type: 'alert', message: alertMsg }));
             }
-            console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
-            return;
+        } else if (!breaker || breaker === userName) {
+            addMessage(alertMsg, 3000);
         }
+        console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
+        return;
     }
 
     const r = `${e},${t},${o}`;
@@ -2473,17 +2470,19 @@ function placeBlockAt(e, t, o, a) {
                         chests[key] = chestData;
                     }
 
+                    // Local ownership check for fast-fail and alert
+                    var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
+                        l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
+                        d = makeChunkKey(worldName, i, l);
+                    if (!checkChunkOwnership(d, userName)) {
+                        const owner = getChunkOwnerName(d) || 'another user';
+                        addMessage(`You cannot place here. Chunk is owned by ${owner}.`, 3000);
+                        console.log(`[Ownership] Block place denied at chunk ${d}`);
+                        return;
+                    }
+
                     // Host-authoritative: only host mutates directly, clients send requests
                     if (isHost || peers.size === 0) {
-                        // Host or solo: check ownership and place immediately
-                        var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
-                            l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
-                            d = makeChunkKey(worldName, i, l);
-                        if (!checkChunkOwnership(d, userName)) {
-                            console.log(`[Ownership] Block place denied for host at chunk ${d}`);
-                            return; // Don't show message - silently fail for host
-                        }
-
                         if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
@@ -4288,7 +4287,11 @@ function switchWorld(newWorldName, targetSpawn) {
         x: player.x,
         y: player.y,
         z: player.z
-    }, emberTexture = createEmberTexture(worldSeed), chunkManager = new ChunkManager(worldSeed), initSky();
+    };
+    if (typeof lastSentPosition !== 'undefined') {
+        lastSentPosition.x = Infinity;
+    }
+    emberTexture = createEmberTexture(worldSeed), chunkManager = new ChunkManager(worldSeed), initSky();
     const o = Math.floor(t.x / CHUNK_SIZE),
         a = Math.floor(t.z / CHUNK_SIZE);
 
@@ -4321,7 +4324,10 @@ function switchWorld(newWorldName, targetSpawn) {
             peer.dc.send(JSON.stringify({
                 type: 'world_switch',
                 world: worldName,
-                username: userName
+                username: userName,
+                x: player.x,
+                y: player.y,
+                z: player.z
             }));
         }
     }

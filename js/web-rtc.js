@@ -1256,6 +1256,11 @@ function setupDataChannel(e, t) {
                             }
                             if (userPositions[s.username]) {
                                 userPositions[s.username].world = clientWorld;
+                                if (s.x !== undefined) {
+                                    userPositions[s.username].targetX = s.x;
+                                    userPositions[s.username].targetY = s.y;
+                                    userPositions[s.username].targetZ = s.z;
+                                }
                             }
 
                             // Calculate and store player's spawn point for the new world
