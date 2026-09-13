@@ -599,6 +599,52 @@ async function getPublicMessagesByAddress(address, skip, qty) {
             return [];
         }
 }
+async function getMempoolMessagesByAddress(address) {
+        try {
+            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
+            var url = "https://mempool.space/testnet/api/address/" + cleanAddress + "/txs/mempool";
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var mempoolRes = await fetch(url);
+            if (!mempoolRes.ok) {
+                console.error('[Worker] Failed to fetch mempool txs for address:', cleanAddress, 'status:', mempoolRes.status);
+                return [];
+            }
+            var txs = await mempoolRes.json();
+            if (!txs || txs.length === 0) return [];
+
+            var messages = [];
+            for (var tx of txs) {
+                if (!tx.txid) continue;
+                try {
+                    await new Promise(resolve => setTimeout(resolve, apiDelay));
+                    var rootRes = await fetch("https://p2fk.io/GetRootByTransactionId/" + tx.txid + "?mainnet=false");
+                    if (rootRes.ok) {
+                        var rootData = await rootRes.json();
+                        if (rootData && rootData.Message && rootData.Message.length > 0) {
+                            // rootData.Message is an array of strings in GetRootByTransactionId,
+                            // whereas GetPublicMessagesByAddress returns an array of objects where .Message is a string.
+                            // However, we want to construct message objects similar to getPublicMessagesByAddress.
+                            for (var msgText of rootData.Message) {
+                                messages.push({
+                                    TransactionId: rootData.TransactionId || tx.txid,
+                                    FromAddress: rootData.SignedBy || "",
+                                    ToAddress: address,
+                                    Message: msgText,
+                                    BlockDate: rootData.BlockDate || new Date().toISOString()
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('[Worker] Error fetching root by txid:', tx.txid, e);
+                }
+            }
+            return messages;
+        } catch (e) {
+            console.error('[Worker] Error fetching mempool messages for address:', address, e);
+            return [];
+        }
+}
 async function getProfileByURN(urn) {
         if (!urn || urn.trim() === "") return null;
         try {
@@ -1037,6 +1083,10 @@ self.onmessage = async function(e) {
                         if (response.length < qty) break;
                         skip += qty;
                     }
+                    var mempoolMsgs = await getMempoolMessagesByAddress(serverAddr);
+                    if (mempoolMsgs && mempoolMsgs.length > 0) {
+                        messages = mempoolMsgs.concat(messages);
+                    }
                     var servers = [];
                     var processedIds = [];
                     var messageMap = new Map();
@@ -1116,6 +1166,10 @@ self.onmessage = async function(e) {
                             messages = messages.concat(response);
                             if (response.length < qty) break;
                             skip += qty;
+                        }
+                        var mempoolMsgs = await getMempoolMessagesByAddress(offerAddr);
+                        if (mempoolMsgs && mempoolMsgs.length > 0) {
+                            messages = mempoolMsgs.concat(messages);
                         }
                         var offers = [];
                         var processedIds = [];
@@ -1246,6 +1300,10 @@ self.onmessage = async function(e) {
                             messages = messages.concat(response);
                             if (response.length < qty) break;
                             skip += qty;
+                        }
+                        var mempoolMsgs = await getMempoolMessagesByAddress(answerAddr);
+                        if (mempoolMsgs && mempoolMsgs.length > 0) {
+                            messages = mempoolMsgs.concat(messages);
                         }
                         var answers = [];
                         var processedIds = [];
