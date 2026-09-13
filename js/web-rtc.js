@@ -2137,7 +2137,28 @@ function openUsersModal() {
 
     // Known Worlds Section
     var c = document.createElement("h4");
-    c.innerText = "Known Worlds", c.style.marginTop = "20px", o.appendChild(c);
+    c.innerText = "► Known Worlds";
+    c.style.marginTop = "20px";
+    c.style.cursor = "pointer";
+    c.style.userSelect = "none";
+    o.appendChild(c);
+
+    var worldsContainer = document.createElement("div");
+    worldsContainer.style.display = "none";
+    worldsContainer.style.maxHeight = "300px";
+    worldsContainer.style.overflowY = "auto";
+    worldsContainer.style.marginTop = "10px";
+    o.appendChild(worldsContainer);
+
+    c.onclick = () => {
+        if (worldsContainer.style.display === "none") {
+            worldsContainer.style.display = "block";
+            c.innerText = "▼ Known Worlds";
+        } else {
+            worldsContainer.style.display = "none";
+            c.innerText = "► Known Worlds";
+        }
+    };
 
     // Sort known worlds, putting current world first, then by discovery time or user count
     const sortedWorlds = Array.from(knownWorlds.entries()).sort((a, b) => {
@@ -2158,7 +2179,12 @@ function openUsersModal() {
         header.style.display = "flex";
         header.style.justifyContent = "space-between";
         header.style.alignItems = "center";
-        header.innerHTML = `<strong>${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+        header.style.cursor = "pointer";
+        header.style.userSelect = "none";
+
+        const titleSpan = document.createElement("span");
+        titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+        header.appendChild(titleSpan);
 
         // Switch World Button (if not current)
         if (wName !== worldName) {
@@ -2166,7 +2192,8 @@ function openUsersModal() {
             switchBtn.innerText = "Switch to World";
             switchBtn.style.fontSize = "0.8em";
             switchBtn.style.padding = "4px 8px";
-            switchBtn.onclick = () => {
+            switchBtn.onclick = (e) => {
+                e.stopPropagation(); // prevent collapsing the user list
                 switchWorld(wName);
                 t.remove();
                 isPromptOpen = false;
@@ -2174,6 +2201,19 @@ function openUsersModal() {
             header.appendChild(switchBtn);
         }
         worldItem.appendChild(header);
+
+        const usersContainerWrapper = document.createElement("div");
+        usersContainerWrapper.style.display = "none";
+
+        header.onclick = () => {
+            if (usersContainerWrapper.style.display === "none") {
+                usersContainerWrapper.style.display = "block";
+                titleSpan.innerHTML = `<strong>▼ ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+            } else {
+                usersContainerWrapper.style.display = "none";
+                titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+            }
+        };
 
         // Users List in World
         if (wData.users && wData.users.size > 0) {
@@ -2235,16 +2275,18 @@ function openUsersModal() {
                 userRow.appendChild(teleportBtn);
                 usersContainer.appendChild(userRow);
             });
-            worldItem.appendChild(usersContainer);
+            usersContainerWrapper.appendChild(usersContainer);
         } else {
             const noUsers = document.createElement("div");
             noUsers.innerText = "No known users.";
             noUsers.style.fontSize = "0.8em";
             noUsers.style.opacity = "0.6";
-            worldItem.appendChild(noUsers);
+            noUsers.style.marginTop = "8px";
+            usersContainerWrapper.appendChild(noUsers);
         }
 
-        o.appendChild(worldItem);
+        worldItem.appendChild(usersContainerWrapper);
+        worldsContainer.appendChild(worldItem);
         a = true;
     }
 
