@@ -5201,6 +5201,14 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 }
             });
         }
+        var userInputEl = document.getElementById("userInput");
+        if (userInputEl) {
+            userInputEl.addEventListener("keydown", function(event) {
+                if (event.key === "Enter") {
+                    startGame();
+                }
+            });
+        }
         document.getElementById("homeIcon").addEventListener("click", (function () {
             respawnPlayer(), this.blur()
         })), document.getElementById("camToggle").addEventListener("click", (function () {
