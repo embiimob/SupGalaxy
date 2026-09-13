@@ -5201,6 +5201,16 @@ document.addEventListener("DOMContentLoaded", (async function () {
             });
         }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+
+        var userInputElem = document.getElementById("userInput");
+        if (userInputElem) {
+            userInputElem.addEventListener("keydown", function(event) {
+                if (event.key === "Enter") {
+                    startGame();
+                }
+            });
+        }
+
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
