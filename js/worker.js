@@ -54,6 +54,32 @@ async function encB58C(b) {
     return encB58(o);
 }
 
+function decB58(s) {
+    let d = [];
+    for (let i = 0; i < s.length; i++) {
+        let j = 0, c = B58.indexOf(s[i]);
+        if (c < 0) return null;
+        for (j = 0; j < d.length; j++) {
+            c += d[j] * 58; d[j] = c & 0xff; c >>= 8;
+        }
+        while (c > 0) { d.push(c & 0xff); c >>= 8; }
+    }
+    for (let i = 0; i < s.length && s[i] === '1'; i++) d.push(0);
+    return new Uint8Array(d.reverse());
+}
+
+async function decB58C(s) {
+    const dec = decB58(s);
+    if (!dec) return null;
+    const len = dec.length;
+    if (len < 4) return null;
+    const p = dec.slice(0, len - 4);
+    const checksum = dec.slice(len - 4);
+    const hash = await sha256(await sha256(p));
+    for (let i = 0; i < 4; i++) { if (checksum[i] !== hash[i]) return null; }
+    return p;
+}
+
 const P2FK_VER = 0x6f; // 111
 const P2FK_CHUNK = 20;
 const P2FK_PAD = '#';
@@ -616,27 +642,80 @@ async function getMempoolMessagesByAddress(address) {
             for (var tx of txs) {
                 if (!tx.txid) continue;
                 try {
-                    await new Promise(resolve => setTimeout(resolve, apiDelay));
-                    var rootRes = await fetch("https://p2fk.io/GetRootByTransactionId/" + tx.txid + "?mainnet=false");
-                    if (rootRes.ok) {
-                        var rootData = await rootRes.json();
-                        if (rootData && rootData.Message && rootData.Message.length > 0) {
-                            // rootData.Message is an array of strings in GetRootByTransactionId,
-                            // whereas GetPublicMessagesByAddress returns an array of objects where .Message is a string.
-                            // However, we want to construct message objects similar to getPublicMessagesByAddress.
-                            for (var msgText of rootData.Message) {
-                                messages.push({
-                                    TransactionId: rootData.TransactionId || tx.txid,
-                                    FromAddress: rootData.SignedBy || "",
-                                    ToAddress: address,
-                                    Message: msgText,
-                                    BlockDate: rootData.BlockDate || new Date().toISOString()
-                                });
+                    var rawStr = "";
+                    var fromAddress = "";
+
+                    if (tx.vin && tx.vin.length > 0 && tx.vin[0].prevout) {
+                        fromAddress = tx.vin[0].prevout.scriptpubkey_address || "";
+                    }
+
+                    if (tx.vout && tx.vout.length > 0) {
+                        for (var out of tx.vout) {
+                            if (!out.scriptpubkey_address) continue;
+                            if (out.value === 546 || out.value === 548 || out.value === 5460) {
+                                var dec = await decB58C(out.scriptpubkey_address);
+                                if (dec && dec[0] === 0x6f) {
+                                    var strChunk = new TextDecoder().decode(dec.slice(1));
+                                    strChunk = strChunk.replace(/\0/g, ''); // strip null bytes
+                                    rawStr += strChunk;
+                                }
                             }
                         }
                     }
+
+                    var sigStartIdx = rawStr.indexOf('SIG|');
+                    if (sigStartIdx !== -1) {
+                        var remaining = rawStr.substring(sigStartIdx + 4);
+                        var sigLenEnd = remaining.indexOf('<');
+                        if (sigLenEnd !== -1) {
+                            var sigLenStr = remaining.substring(0, sigLenEnd);
+                            var sigLen = parseInt(sigLenStr, 10);
+                            remaining = remaining.substring(sigLenEnd + 1);
+
+                            if (remaining.length >= sigLen) {
+                                remaining = remaining.substring(sigLen);
+                                if (remaining.startsWith('<')) {
+                                    remaining = remaining.substring(1);
+                                    var headerLenEnd = remaining.indexOf(':');
+                                    if (headerLenEnd !== -1) {
+                                        var headerLenStr = remaining.substring(0, headerLenEnd);
+                                        var headerLen = parseInt(headerLenStr, 10);
+                                        remaining = remaining.substring(headerLenEnd + 1);
+
+                                        if (remaining.length >= headerLen) {
+                                            var messageBody = remaining.substring(0, headerLen);
+                                            messages.push({
+                                                TransactionId: tx.txid,
+                                                FromAddress: fromAddress,
+                                                ToAddress: address,
+                                                Message: messageBody,
+                                                BlockDate: new Date().toISOString()
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (rawStr.indexOf('<<') !== -1 && rawStr.indexOf('>>') !== -1) {
+                        // Fallback for messages without signatures or malformed ones
+                        var startMsg = rawStr.indexOf('<<');
+                        var endMsg = rawStr.indexOf('>>', startMsg) + 2;
+                        // look for another >> if there are inner messages
+                        var nextEnd = rawStr.indexOf('>>', endMsg);
+                        if (nextEnd !== -1 && rawStr.substring(endMsg, nextEnd).indexOf('<<') !== -1) {
+                            endMsg = nextEnd + 2;
+                        }
+                        var messageBody = rawStr.substring(startMsg, endMsg);
+                        messages.push({
+                            TransactionId: tx.txid,
+                            FromAddress: fromAddress,
+                            ToAddress: address,
+                            Message: messageBody,
+                            BlockDate: new Date().toISOString()
+                        });
+                    }
                 } catch (e) {
-                    console.error('[Worker] Error fetching root by txid:', tx.txid, e);
+                    console.error('[Worker] Error decoding mempool txid:', tx.txid, e);
                 }
             }
             return messages;
