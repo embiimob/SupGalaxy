@@ -628,6 +628,7 @@ async function getPublicMessagesByAddress(address, skip, qty) {
 async function getMempoolMessagesByAddress(address) {
         try {
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
+            // Determine if mainnet or testnet based on the existence of a configuration flag, but since we are specifically targeting testnet in SUP space right now, we can check. Wait, the main P2FK endpoints use ?mainnet=false. We'll use testnet for now, but dynamically is better if a flag exists. I'll check if mainnet=true is used anywhere. Actually, all the p2fk.io calls in worker use ?mainnet=false. We will hardcode testnet for now, as that's what the rest of the codebase does.
             var url = "https://mempool.space/testnet/api/address/" + cleanAddress + "/txs/mempool";
             await new Promise(resolve => setTimeout(resolve, apiDelay));
             var mempoolRes = await fetch(url);
@@ -649,6 +650,7 @@ async function getMempoolMessagesByAddress(address) {
                         fromAddress = tx.vin[0].prevout.scriptpubkey_address || "";
                     }
 
+                    var validP2fkAddresses = [];
                     if (tx.vout && tx.vout.length > 0) {
                         for (var out of tx.vout) {
                             if (!out.scriptpubkey_address) continue;
@@ -657,10 +659,27 @@ async function getMempoolMessagesByAddress(address) {
                                 if (dec && dec[0] === 0x6f) {
                                     var strChunk = new TextDecoder().decode(dec.slice(1));
                                     strChunk = strChunk.replace(/\0/g, ''); // strip null bytes
+                                    validP2fkAddresses.push(out.scriptpubkey_address);
                                     rawStr += strChunk;
                                 }
                             }
                         }
+                    }
+
+                    // The standard P2FK format puts the TO address and FROM address at the end.
+                    // The sender's address (FromAddress) should be the last one, or the one that isn't the expected TO address.
+                    if (validP2fkAddresses.length >= 2) {
+                        var lastAddress = validP2fkAddresses[validP2fkAddresses.length - 1];
+                        var secondLastAddress = validP2fkAddresses[validP2fkAddresses.length - 2];
+                        if (secondLastAddress === address) {
+                            fromAddress = lastAddress;
+                        } else if (lastAddress !== address) {
+                            fromAddress = lastAddress;
+                        } else {
+                            fromAddress = validP2fkAddresses.find(a => a !== address) || lastAddress;
+                        }
+                    } else if (validP2fkAddresses.length === 1 && validP2fkAddresses[0] !== address) {
+                        fromAddress = validP2fkAddresses[0];
                     }
 
                     var sigStartIdx = rawStr.indexOf('SIG|');
