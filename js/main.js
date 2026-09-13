@@ -3491,7 +3491,7 @@ function updateSaveChangesButton() {
 }
 
 function updateHudButtons() {
-    updateSaveChangesButton();
+    document.getElementById("joinScriptBtn").style.display = "none", updateSaveChangesButton();
     var e = document.getElementById("usersBtn"),
         t = peers.size > 0 ? peers.size - (peers.has(userName) ? 1 : 0) : 0;
     console.log("[WebRTC] Updating usersBtn: peerCount=", t, "peers=", Array.from(peers.keys())), e.style.display = "inline-block", e.innerText = "🌐 " + t, e.onclick = function () {
@@ -5177,7 +5177,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var a = document.getElementById("acceptAll"),
+        var o = document.getElementById("newUserJoinScriptBtn"),
+            a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
 
@@ -5199,31 +5200,35 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 testnetWifLoginBtn.style.display = "none";
             });
         }
-        if (!(e && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
         a ? a.addEventListener("change", (function (e) {
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame);
-        var worldNameInputEl = document.getElementById("worldNameInput");
-        if (worldNameInputEl) {
-            worldNameInputEl.addEventListener("keydown", function(event) {
-                if (event.key === "Enter") {
-                    startGame();
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
+            this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
+            var e = document.getElementById("worldNameInput").value,
+                t = document.getElementById("userInput").value;
+            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
+            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
+            else if (e && t) {
+                var o = e.slice(0, 8),
+                    a = t.slice(0, 20),
+                    n = o + "@" + a,
+                    r = knownWorlds.get(o);
+                if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
+                else {
+                    var s = await GetPublicAddressByKeyword(n),
+                        i = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
+                        l = [s ? s.trim() : n, i ? i.trim() : MASTER_WORLD_KEY].filter((function (e) {
+                            return e
+                        })).join(",").replace(/["']/g, "");
+                    document.getElementById("joinScriptText").value = l, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.", addMessage("Join script ready to share", 3e3)
                 }
-            });
-        }
-        var userInputEl = document.getElementById("userInput");
-        if (userInputEl) {
-            userInputEl.addEventListener("keydown", function(event) {
-                if (event.key === "Enter") {
-                    startGame();
-                }
-            });
-        }
-        document.getElementById("homeIcon").addEventListener("click", (function () {
+            } else addMessage("Please enter a world and username", 3e3)
+        })), document.getElementById("homeIcon").addEventListener("click", (function () {
             respawnPlayer(), this.blur()
         })), document.getElementById("camToggle").addEventListener("click", (function () {
             toggleCameraMode(), this.blur()
@@ -5245,6 +5250,15 @@ document.addEventListener("DOMContentLoaded", (async function () {
             switchWorld(), this.blur()
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
+        })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
+            this.blur();
+            isPromptOpen = !0;
+            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
+                t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
+                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                    return e
+                })).join(",").replace(/["']/g, "");
+            document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
         })), document.getElementById("usersBtn").addEventListener("click", (function () {
             openUsersModal(), this.blur()
         })), document.getElementById("closeCraft").addEventListener("click", (function () {
@@ -5253,6 +5267,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             closeChest(), this.blur()
         })), document.getElementById("closeInventory").addEventListener("click", (function () {
             toggleInventory(), this.blur()
+        })), document.getElementById("closeJoinScript").addEventListener("click", (function () {
+            isPromptOpen = !1, isConnecting = !1, document.getElementById("joinScriptModal").style.display = "none", this.blur()
         })), document.getElementById("closeDownloadModal").addEventListener("click", (function () {
             isPromptOpen = !1, document.getElementById("downloadModal").style.display = "none", this.blur()
         })), document.getElementById("closeSaveOptionsModal").addEventListener("click", (function () {
