@@ -367,7 +367,7 @@ async function applySaveFile(e, t, o) {
         // For manually uploaded files (local changes not yet published to blockchain),
         // use current time as BlockDate. Published chunks get their BlockDate from
         // GetPublicMessagesByAddress when loaded via keyword search.
-        let blockDate = p; // Default to current time
+        let blockDate = o ? new Date(o).getTime() : p; // Default to current time or provided Date
         const blockAge = p - blockDate;
 
         for (var r of e.deltas) {
