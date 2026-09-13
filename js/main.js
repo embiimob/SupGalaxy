@@ -367,7 +367,7 @@ async function applySaveFile(e, t, o) {
         // For manually uploaded files (local changes not yet published to blockchain),
         // use current time as BlockDate. Published chunks get their BlockDate from
         // GetPublicMessagesByAddress when loaded via keyword search.
-        let blockDate = p; // Default to current time
+        let blockDate = o ? new Date(o).getTime() : p; // Default to current time or provided Date
         const blockAge = p - blockDate;
 
         for (var r of e.deltas) {
@@ -384,7 +384,7 @@ async function applySaveFile(e, t, o) {
                     updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
                     addMessage("Updated chunk " + s, 1e3);
                 } else if (blockAge <= IPFS_MATURITY_PERIOD) {
-                    // Immature claim (<30d): mark pending, apply deltas but no edit rights yet
+                    // Immature claim (<30d): mark pending, lock editing to author
                     chunkManager.applyDeltasToChunk(s, i);
                     updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
                     addMessage("Loaded chunk " + s + " (pending claim maturity)", 1e3);
