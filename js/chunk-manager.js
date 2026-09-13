@@ -951,7 +951,10 @@ function isChunkMutationAllowed(chunkKey, username) {
     
     // Check if ownership is pending (immature IPFS claim < 30 days)
     if (ownership.pending) {
-        return true; // Pending chunks are editable by anyone
+        if (ownership.username === username) {
+            return true; // Author can always edit their pending chunks
+        }
+        return false; // Pending chunks are locked to the author
     }
     
     // Check if ownership has expired (> 1 year)
