@@ -758,7 +758,7 @@ const lightManager = {
     },
     update: function (e) {
         if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120) {
-            this.playerLight.intensity = 1.2;
+            this.playerLight.intensity = 0.9;
             this.playerLight.position.set(e.x, e.y + 2, e.z);
         } else {
             this.playerLight.intensity = 0;
@@ -769,7 +769,7 @@ const lightManager = {
             if (e < t.length) {
                 const o = t[e],
                     a = this.lights[e];
-                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 1.2, a.distance = 18
+                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 0.9, a.distance = 18
             } else this.lights[e].intensity = 0
     }
 };

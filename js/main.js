@@ -565,7 +565,20 @@ function createAndSetupAvatar(e, t, o = 0) {
     A.position.set(0, 0, H);
     const L = new THREE.BoxGeometry(.20769230769230768, .03461538461538462, C),
         O = new THREE.Mesh(L, T);
-    return O.position.set(0, .2 * -m, H), w.add(R, B, A, O), n.add(S, I, k, w, b, x), t ? avatarGroup = n : playerAvatars.set(e, n), scene.add(n), n
+    O.position.set(0, .2 * -m, H);
+    w.add(R, B, A, O);
+    n.add(S, I, k, w, b, x);
+
+    // Add a point light to represent the torch light
+    const torchLight = new THREE.PointLight(0xffddaa, 0, 18);
+    torchLight.position.set(0, 1.5, 0); // Position it relative to the avatar
+    torchLight.decay = 2;
+    n.add(torchLight); // Attach to the avatar group
+
+    // Store reference to the light on the avatar object for easy access
+    n.torchLight = torchLight;
+
+    return t ? avatarGroup = n : playerAvatars.set(e, n), scene.add(n), n
 }
 
 function initHotbar() {
@@ -4735,6 +4748,7 @@ function gameLoop(e) {
                 pitch: player.pitch,
                 isMoving: o,
                 isAttacking: isAttacking,
+                selectedBlockId: selectedBlockId,
                 timestamp: Date.now()
             };
             for (const [e, o] of peers.entries()) e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
