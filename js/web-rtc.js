@@ -544,6 +544,17 @@ function setupDataChannel(e, t) {
                             userPositions[t] || (userPositions[t] = {}, createAndSetupAvatar(t, !1, e.yaw));
                             const o = userPositions[t];
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
+
+                            if (playerAvatars.has(t)) {
+                                const avatar = playerAvatars.get(t);
+                                if (avatar.torchLight) {
+                                    if (e.selectedBlockId === 120) {
+                                        avatar.torchLight.intensity = 0.9;
+                                    } else {
+                                        avatar.torchLight.intensity = 0;
+                                    }
+                                }
+                            }
                         }
                     break;
                 case "player_respawn":
@@ -578,7 +589,22 @@ function setupDataChannel(e, t) {
                         targetPitch: s.pitch
                     });
                     const l = userPositions[n];
+
+                    // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
+                    l.selectedBlockId = s.selectedBlockId;
+
                     s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp);
+
+                    if (playerAvatars.has(n)) {
+                        const avatar = playerAvatars.get(n);
+                        if (avatar.torchLight) {
+                            if (s.selectedBlockId === 120) {
+                                avatar.torchLight.intensity = 0.9;
+                            } else {
+                                avatar.torchLight.intensity = 0;
+                            }
+                        }
+                    }
                     break;
                 case "block_change":
                     if (isHost) {
