@@ -87,21 +87,63 @@ async function connectToServer(e, t, o) {
             user: userName,
             offer: r.localDescription,
             iceCandidates: n
-        },
-            c = new Blob([JSON.stringify(i)], {
-                type: "application/json"
-            }),
-            l = URL.createObjectURL(c),
-            d = document.createElement("a");
-        d.href = l, d.download = `${worldName}_offer_${Date.now()}.json`, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
+        };
+        const jsonStr = JSON.stringify(i);
+        const fileName = `${worldName}_offer_${Date.now()}.json`;
+
         // Use uniform keyword format: world@friendUsername (target's thread)
         var p = worldName + "@" + e,
             m = await GetPublicAddressByKeyword(p);
-        document.getElementById("joinScriptText").value = m ? m.trim().replace(/"|'/g, "") : p, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4), peers.set(e, {
+        var targetAddr = m ? m.trim().replace(/"|'/g, "") : p;
+
+        peers.set(e, {
             pc: r,
             dc: s,
             address: null
         });
+
+        if (window.S && window.S.priv) {
+            addMessage("Uploading offer to IPFS...", 2000);
+            try {
+                const formData = new FormData();
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                formData.append('file', blob, fileName);
+
+                const response = await fetch('https://p2fk.io/ipfs', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("IPFS upload failed");
+                const resData = await response.json();
+                const ipfsHash = resData.cid;
+                console.log("[WebRTC] Uploaded offer to IPFS. CID:", ipfsHash);
+
+                addMessage("Broadcasting offer to Testnet3...", 2000);
+
+                const attachmentStr = `IPFS:${ipfsHash}/${fileName}`;
+                const outputs = await window.buildMsgOutputs({
+                    text: '',
+                    attachments: [attachmentStr],
+                    extras: [targetAddr],
+                    fromAddr: window.S.addr
+                });
+
+                const txid = await window.sendManyWithWallet(outputs);
+                addMessage("Offer broadcasted! TXID: " + txid.slice(0, 8) + "...", 4000);
+            } catch (err) {
+                console.error("[WebRTC] Testnet3 offer broadcast error:", err);
+                addMessage("Failed to broadcast offer: " + err.message, 4000);
+            }
+        } else {
+            var c = new Blob([jsonStr], {
+                    type: "application/json"
+                }),
+                l = URL.createObjectURL(c),
+                d = document.createElement("a");
+            d.href = l, d.download = fileName, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
+            document.getElementById("joinScriptText").value = targetAddr, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4);
+        }
         // Monitor own thread for answers: world@username
         var f = worldName + "@" + userName;
         answerPollingIntervals.set(f, setInterval((function () {
@@ -1913,14 +1955,10 @@ async function acceptPendingOffers() {
             world: worldName,
             user: userName,
             batch: t
-        },
-            a = new Blob([JSON.stringify(e)], {
-                type: "application/json"
-            }),
-            r = URL.createObjectURL(a),
-            s = document.createElement("a");
-        s.href = r, s.download = `${worldName}_batch_${Date.now()}.json`, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
-        const n = document.getElementById("joinScriptModal");
+        };
+        const jsonStr = JSON.stringify(e);
+        const fileName = `${worldName}_batch_${Date.now()}.json`;
+
         // Generate list of addresses for each recipient using uniform keyword format: world@recipientUsername
         // Use Promise.all for concurrent lookups for better performance
         const addressPromises = t.map(async (answer) => {
@@ -1929,8 +1967,54 @@ async function acceptPendingOffers() {
             return recipientAddr?.trim().replace(/"|'/g, "") || recipientKeyword;
         });
         const recipientAddresses = await Promise.all(addressPromises);
-        const c = recipientAddresses.join(",");
-        n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Each recipient will receive on their own thread.", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal()
+
+        if (window.S && window.S.priv) {
+            addMessage("Uploading batch answer to IPFS...", 2000);
+            try {
+                const formData = new FormData();
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                formData.append('file', blob, fileName);
+
+                const response = await fetch('https://p2fk.io/ipfs', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("IPFS upload failed");
+                const resData = await response.json();
+                const ipfsHash = resData.cid;
+                console.log("[WebRTC] Uploaded batch answer to IPFS. CID:", ipfsHash);
+
+                addMessage("Broadcasting batch answer to Testnet3...", 2000);
+
+                const attachmentStr = `IPFS:${ipfsHash}/${fileName}`;
+                const outputs = await window.buildMsgOutputs({
+                    text: '',
+                    attachments: [attachmentStr],
+                    extras: recipientAddresses,
+                    fromAddr: window.S.addr
+                });
+
+                const txid = await window.sendManyWithWallet(outputs);
+                addMessage("Batch broadcasted! TXID: " + txid.slice(0, 8) + "...", 4000);
+
+                pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser)));
+                updatePendingModal();
+            } catch (err) {
+                console.error("[WebRTC] Testnet3 batch answer broadcast error:", err);
+                addMessage("Failed to broadcast batch: " + err.message, 4000);
+            }
+        } else {
+            var a = new Blob([jsonStr], {
+                    type: "application/json"
+                }),
+                r = URL.createObjectURL(a),
+                s = document.createElement("a");
+            s.href = r, s.download = fileName, document.body.appendChild(s), s.click(), s.remove(), URL.revokeObjectURL(r);
+            const n = document.getElementById("joinScriptModal");
+            const c = recipientAddresses.join(",");
+            n.querySelector("h3").innerText = "🚀 BATCH READY - SEND NOW", n.querySelector("p").innerText = "Copy address → Sup!? To: field → Attach JSON → 📢 SEND IMMEDIATELY. Each recipient will receive on their own thread.", n.querySelector("#joinScriptText").value = c, n.style.display = "block", isPromptOpen = !0, addMessage(`✅ Batch ready for ${o.length} players - SEND NOW!`, 1e4), pendingOffers = pendingOffers.filter((e => !o.includes(e.clientUser))), updatePendingModal();
+        }
     }
 }
 
