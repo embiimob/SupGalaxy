@@ -1348,11 +1348,11 @@ self.onmessage = async function(e) {
                                     continue;
                                 }
 
-                                if (data.offer || data.answer) {
+                                if (data.offer) {
                                     if (!offerMap.has(clientUser)) {
                                         offerMap.set(clientUser, {
                                             clientUser: clientUser,
-                                            offer: data.offer || data.answer,
+                                            offer: data.offer,
                                             iceCandidates: data.iceCandidates || [],
                                             transactionId: msg.TransactionId,
                                             timestamp: new Date(msg.BlockDate).getTime(),
@@ -1360,15 +1360,8 @@ self.onmessage = async function(e) {
                                         });
                                     }
                                 } else {
-                                    console.log('[Worker] No offer or answer in IPFS data:', hash, 'txId:', msg.TransactionId);
-                                    offers.push({
-                                        clientUser: clientUser,
-                                        offer: null,
-                                        iceCandidates: [],
-                                        transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime(),
-                                        profile: fromProfile
-                                    });
+                                    console.log('[Worker] No offer in IPFS data (possibly an answer/batch):', hash, 'txId:', msg.TransactionId);
+                                    // Do not push null offers if it's actually an answer file, this prevents false pending connections
                                 }
                             } catch (e) {
                                 console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
