@@ -1,4 +1,4 @@
-        var worker = new Worker(URL.createObjectURL(new Blob([`
+        window.worker = new Worker(URL.createObjectURL(new Blob([`
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
@@ -52,6 +52,32 @@ async function encB58C(b) {
     const o = new Uint8Array(p.length + 4);
     o.set(p); o.set(h.slice(0, 4), p.length);
     return encB58(o);
+}
+
+function decB58(s) {
+    let d = [];
+    for (let i = 0; i < s.length; i++) {
+        let j = 0, c = B58.indexOf(s[i]);
+        if (c < 0) return null;
+        for (j = 0; j < d.length; j++) {
+            c += d[j] * 58; d[j] = c & 0xff; c >>= 8;
+        }
+        while (c > 0) { d.push(c & 0xff); c >>= 8; }
+    }
+    for (let i = 0; i < s.length && s[i] === '1'; i++) d.push(0);
+    return new Uint8Array(d.reverse());
+}
+
+async function decB58C(s) {
+    const dec = decB58(s);
+    if (!dec) return null;
+    const len = dec.length;
+    if (len < 4) return null;
+    const p = dec.slice(0, len - 4);
+    const checksum = dec.slice(len - 4);
+    const hash = await sha256(await sha256(p));
+    for (let i = 0; i < 4; i++) { if (checksum[i] !== hash[i]) return null; }
+    return p;
 }
 
 const P2FK_VER = 0x6f; // 111
@@ -599,6 +625,129 @@ async function getPublicMessagesByAddress(address, skip, qty) {
             return [];
         }
 }
+async function getMempoolMessagesByAddress(address) {
+        try {
+            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
+            // Determine if mainnet or testnet based on the existence of a configuration flag, but since we are specifically targeting testnet in SUP space right now, we can check. Wait, the main P2FK endpoints use ?mainnet=false. We'll use testnet for now, but dynamically is better if a flag exists. I'll check if mainnet=true is used anywhere. Actually, all the p2fk.io calls in worker use ?mainnet=false. We will hardcode testnet for now, as that's what the rest of the codebase does.
+            var url = "https://mempool.space/testnet/api/address/" + cleanAddress + "/txs/mempool";
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var mempoolRes = await fetch(url);
+            if (!mempoolRes.ok) {
+                console.error('[Worker] Failed to fetch mempool txs for address:', cleanAddress, 'status:', mempoolRes.status);
+                return [];
+            }
+            var txs = await mempoolRes.json();
+            if (!txs || txs.length === 0) return [];
+
+            var messages = [];
+            for (var tx of txs) {
+                if (!tx.txid) continue;
+                try {
+                    var rawStr = "";
+                    var fromAddress = "";
+
+                    var validP2fkAddresses = [];
+                    if (tx.vout && tx.vout.length > 0) {
+                        for (var out of tx.vout) {
+                            if (!out.scriptpubkey_address) continue;
+                            if (out.value === 546 || out.value === 548 || out.value === 5460) {
+                                var dec = await decB58C(out.scriptpubkey_address);
+                                if (dec && dec[0] === 0x6f) {
+                                    var strChunk = new TextDecoder().decode(dec.slice(1));
+                                    strChunk = strChunk.replace(/\0/g, ''); // strip null bytes
+                                    validP2fkAddresses.push(out.scriptpubkey_address);
+                                    rawStr += strChunk;
+                                }
+                            }
+                        }
+                    }
+
+                    // The standard P2FK format puts the TO address and FROM address at the end.
+                    // The sender's address (FromAddress) should be the last one, or the one that isn't the expected TO address.
+                    if (validP2fkAddresses.length >= 2) {
+                        var lastAddress = validP2fkAddresses[validP2fkAddresses.length - 1];
+                        var secondLastAddress = validP2fkAddresses[validP2fkAddresses.length - 2];
+                        if (secondLastAddress === address) {
+                            fromAddress = lastAddress;
+                        } else if (lastAddress !== address) {
+                            fromAddress = lastAddress;
+                        } else {
+                            fromAddress = validP2fkAddresses.find(a => a !== address) || lastAddress;
+                        }
+                    } else if (validP2fkAddresses.length === 1 && validP2fkAddresses[0] !== address) {
+                        fromAddress = validP2fkAddresses[0];
+                    }
+
+                    var sigStartIdx = rawStr.indexOf('SIG|');
+                    if (sigStartIdx !== -1) {
+                        var remaining = rawStr.substring(sigStartIdx + 4);
+                        var sigLenEnd = remaining.indexOf('<');
+                        if (sigLenEnd !== -1) {
+                            var sigLenStr = remaining.substring(0, sigLenEnd);
+                            var sigLen = parseInt(sigLenStr, 10);
+                            remaining = remaining.substring(sigLenEnd + 1);
+
+                            if (remaining.length >= sigLen) {
+                                remaining = remaining.substring(sigLen);
+                                if (remaining.startsWith('<')) {
+                                    remaining = remaining.substring(1);
+                                    var headerLenEnd = remaining.indexOf(':');
+                                    if (headerLenEnd !== -1) {
+                                        var headerLenStr = remaining.substring(0, headerLenEnd);
+                                        var headerLen = parseInt(headerLenStr, 10);
+                                        remaining = remaining.substring(headerLenEnd + 1);
+
+                                        if (remaining.length >= headerLen) {
+                                            var messageBody = remaining.substring(0, headerLen);
+                                            messages.push({
+                                                TransactionId: tx.txid,
+                                                FromAddress: fromAddress,
+                                                ToAddress: address,
+                                                Message: messageBody,
+                                                BlockDate: new Date().toISOString()
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (rawStr.indexOf('<<') !== -1 && rawStr.indexOf('>>') !== -1) {
+                        // Fallback for messages without signatures or malformed ones
+                        var startMsg = rawStr.indexOf('<<');
+                        var endMsg = rawStr.indexOf('>>', startMsg) + 2;
+                        // look for another >> if there are inner messages
+                        var nextEnd = rawStr.indexOf('>>', endMsg);
+                        if (nextEnd !== -1 && rawStr.substring(endMsg, nextEnd).indexOf('<<') !== -1) {
+                            endMsg = nextEnd + 2;
+                        }
+                        var messageBody = rawStr.substring(startMsg, endMsg);
+                        messages.push({
+                            TransactionId: tx.txid,
+                            FromAddress: fromAddress,
+                            ToAddress: address,
+                            Message: messageBody,
+                            BlockDate: new Date().toISOString()
+                        });
+                    } else if (rawStr.length > 0) {
+                        // Final fallback for plain string messages (e.g. pure IPFS URNs like 'IPFS:Qm...')
+                        messages.push({
+                            TransactionId: tx.txid,
+                            FromAddress: fromAddress,
+                            ToAddress: address,
+                            Message: rawStr,
+                            BlockDate: new Date().toISOString()
+                        });
+                    }
+                } catch (e) {
+                    console.error('[Worker] Error decoding mempool txid:', tx.txid, e);
+                }
+            }
+            return messages;
+        } catch (e) {
+            console.error('[Worker] Error fetching mempool messages for address:', address, e);
+            return [];
+        }
+}
 async function getProfileByURN(urn) {
         if (!urn || urn.trim() === "") return null;
         try {
@@ -1037,6 +1186,10 @@ self.onmessage = async function(e) {
                         if (response.length < qty) break;
                         skip += qty;
                     }
+                    var mempoolMsgs = await getMempoolMessagesByAddress(serverAddr);
+                    if (mempoolMsgs && mempoolMsgs.length > 0) {
+                        messages = mempoolMsgs.concat(messages);
+                    }
                     var servers = [];
                     var processedIds = [];
                     var messageMap = new Map();
@@ -1117,6 +1270,10 @@ self.onmessage = async function(e) {
                             if (response.length < qty) break;
                             skip += qty;
                         }
+                        var mempoolMsgs = await getMempoolMessagesByAddress(offerAddr);
+                        if (mempoolMsgs && mempoolMsgs.length > 0) {
+                            messages = mempoolMsgs.concat(messages);
+                        }
                         var offers = [];
                         var processedIds = [];
                         var offerMap = new Map();
@@ -1191,11 +1348,11 @@ self.onmessage = async function(e) {
                                     continue;
                                 }
 
-                                if (data.offer || data.answer) {
+                                if (data.offer) {
                                     if (!offerMap.has(clientUser)) {
                                         offerMap.set(clientUser, {
                                             clientUser: clientUser,
-                                            offer: data.offer || data.answer,
+                                            offer: data.offer,
                                             iceCandidates: data.iceCandidates || [],
                                             transactionId: msg.TransactionId,
                                             timestamp: new Date(msg.BlockDate).getTime(),
@@ -1203,21 +1360,17 @@ self.onmessage = async function(e) {
                                         });
                                     }
                                 } else {
-                                    console.log('[Worker] No offer or answer in IPFS data:', hash, 'txId:', msg.TransactionId);
-                                    offers.push({
-                                        clientUser: clientUser,
-                                        offer: null,
-                                        iceCandidates: [],
-                                        transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime(),
-                                        profile: fromProfile
-                                    });
+                                    console.log('[Worker] No offer in IPFS data (possibly an answer/batch):', hash, 'txId:', msg.TransactionId);
+                                    // Do not push null offers if it's actually an answer file, this prevents false pending connections
                                 }
                             } catch (e) {
                                 console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
                             }
                         }
-                        offers = Array.from(offerMap.values());
+                        // Array.from(offerMap.values()) would overwrite items pushed directly to 'offers' array when IPFS data is missing!
+                        var mappedOffers = Array.from(offerMap.values());
+                        offers = offers.concat(mappedOffers);
+
                         if (offers.length > 0) {
                             console.log('[Worker] Sending offer_updates:', offers.map(o => o.clientUser));
                             self.postMessage({ type: "offer_updates", offers: offers, processedIds: processedIds });
@@ -1246,6 +1399,10 @@ self.onmessage = async function(e) {
                             messages = messages.concat(response);
                             if (response.length < qty) break;
                             skip += qty;
+                        }
+                        var mempoolMsgs = await getMempoolMessagesByAddress(answerAddr);
+                        if (mempoolMsgs && mempoolMsgs.length > 0) {
+                            messages = mempoolMsgs.concat(messages);
                         }
                         var answers = [];
                         var processedIds = [];
