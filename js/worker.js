@@ -1,4 +1,4 @@
-        var worker = new Worker(URL.createObjectURL(new Blob([`
+        window.worker = new Worker(URL.createObjectURL(new Blob([`
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
@@ -1365,7 +1365,7 @@ self.onmessage = async function(e) {
                                 console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
                             }
                         }
-                        // Array.from(offerMap.values()) would overwrite items pushed directly to `offers` array when IPFS data is missing!
+                        // Array.from(offerMap.values()) would overwrite items pushed directly to 'offers' array when IPFS data is missing!
                         var mappedOffers = Array.from(offerMap.values());
                         offers = offers.concat(mappedOffers);
 
