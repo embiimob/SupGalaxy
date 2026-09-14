@@ -1,4 +1,4 @@
-# 🌌 SupGalaxy v1.1.0
+# 🌌 SupGalaxy v1.1.1
 **SupGalaxy** is an open-source, serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
 Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **ChatGPT** and **github CoPilot**.
@@ -123,17 +123,37 @@ Spawn, explore, build, fight, survive.
 
 ---
 
-# ⚔️ Multiplayer: Drag-and-Drop WebRTC
+# ⚔️ Multiplayer: WebRTC Signaling
+
+There are two ways to connect with other players via WebRTC: **Automated On-Chain Signaling (Testnet3)** and **Manual Drag-and-Drop**.
+
+## Automated On-Chain Signaling (Recommended)
+When your Testnet3 wallet is unlocked, WebRTC connection files are automatically negotiated over the Bitcoin testnet3 network using IPFS and P2FK.
+
+### Host
+1. Start a world and unlock your Testnet3 wallet.
+2. The game automatically monitors for incoming **offers** on your world's keyword.
+3. When an offer is detected, the game automatically generates an **answer** and broadcasts it back to the client on-chain.
+
+### Client
+1. Unlock your Testnet3 wallet.
+2. Open 🌐 **Online Players** → enter host name → click join.
+3. The game automatically generates an **offer**, uploads it to IPFS, and broadcasts it on-chain to the host.
+4. The game monitors your personal derived keyword (`worldName@userName`) for the host's **answer**.
+5. Once the answer is received, the connection is established!
+
+## Manual Drag-and-Drop
+If you are playing without a wallet, you can manually exchange connection files.
 
 ### Host
 1. Start a world.  
-2. Receive an **offer** file from a client.  
+2. Receive an **offer** file from a client (via chat, email, etc.).
 3. Accept via Pending Connections or drag onto the minimap.  
 4. Game creates an **answer** file.  
 5. Send the answer back to the client.
 
 ### Client
-1. Open 🌐 **Online Players** → enter host name → click join
+1. Open 🌐 **Online Players** → enter host name → click join.
 2. Download **offer** file.  
 3. Send to host.  
 4. Receive **answer**.  
