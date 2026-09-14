@@ -646,10 +646,6 @@ async function getMempoolMessagesByAddress(address) {
                     var rawStr = "";
                     var fromAddress = "";
 
-                    if (tx.vin && tx.vin.length > 0 && tx.vin[0].prevout) {
-                        fromAddress = tx.vin[0].prevout.scriptpubkey_address || "";
-                    }
-
                     var validP2fkAddresses = [];
                     if (tx.vout && tx.vout.length > 0) {
                         for (var out of tx.vout) {
@@ -1369,7 +1365,10 @@ self.onmessage = async function(e) {
                                 console.error('[Worker] Error processing offer message:', msg.TransactionId, e);
                             }
                         }
-                        offers = Array.from(offerMap.values());
+                        // Array.from(offerMap.values()) would overwrite items pushed directly to `offers` array when IPFS data is missing!
+                        var mappedOffers = Array.from(offerMap.values());
+                        offers = offers.concat(mappedOffers);
+
                         if (offers.length > 0) {
                             console.log('[Worker] Sending offer_updates:', offers.map(o => o.clientUser));
                             self.postMessage({ type: "offer_updates", offers: offers, processedIds: processedIds });
