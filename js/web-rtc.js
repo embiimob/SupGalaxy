@@ -2342,12 +2342,10 @@ function openUsersModal() {
 
                         // Ensure we are in the correct world first
                         if (worldName !== targetWorld) {
-                            if(confirm(`Switch to ${targetWorld} to teleport?`)) {
-                                 // Pass spawn directly to switchWorld to avoid double hop
-                                 switchWorld(targetWorld, spawn);
-                                 t.remove();
-                                 isPromptOpen = false;
-                            }
+                             // Pass spawn directly to switchWorld to avoid double hop
+                             switchWorld(targetWorld, spawn);
+                             t.remove();
+                             isPromptOpen = false;
                         } else {
                             respawnPlayer(spawn.x, spawn.y, spawn.z);
                             t.remove();
