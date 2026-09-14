@@ -575,6 +575,8 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
+var processedOfferMessages = new Set();
+var processedAnswerMessages = new Set();
 var API_CALLS_PER_SECOND = 10;
 var apiDelay = 100;
 async function fetchData(url) {
@@ -1278,13 +1280,13 @@ self.onmessage = async function(e) {
                         var processedIds = [];
                         var offerMap = new Map();
                         for (var msg of messages || []) {
-                            if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            if (msg.TransactionId && processedOfferMessages.has(msg.TransactionId)) {
                                 console.log('[Worker] Stopping offer processing at cached ID:', msg.TransactionId);
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
                             console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
-                            processedMessages.add(msg.TransactionId);
+                            processedOfferMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
                             try {
                                 // Efficiently handle IPFS data and user profiles
@@ -1407,13 +1409,13 @@ self.onmessage = async function(e) {
                         var answers = [];
                         var processedIds = [];
                         for (var msg of messages || []) {
-                            if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
+                            if (msg.TransactionId && processedAnswerMessages.has(msg.TransactionId)) {
                                 console.log('[Worker] Stopping answer processing at cached ID:', msg.TransactionId);
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
                             console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
-                            processedMessages.add(msg.TransactionId);
+                            processedAnswerMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
                             try {
                                 var fromProfile = await getProfileByAddress(msg.FromAddress);
