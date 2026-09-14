@@ -728,6 +728,15 @@ async function getMempoolMessagesByAddress(address) {
                             Message: messageBody,
                             BlockDate: new Date().toISOString()
                         });
+                    } else if (rawStr.length > 0) {
+                        // Final fallback for plain string messages (e.g. pure IPFS URNs like 'IPFS:Qm...')
+                        messages.push({
+                            TransactionId: tx.txid,
+                            FromAddress: fromAddress,
+                            ToAddress: address,
+                            Message: rawStr,
+                            BlockDate: new Date().toISOString()
+                        });
                     }
                 } catch (e) {
                     console.error('[Worker] Error decoding mempool txid:', tx.txid, e);
