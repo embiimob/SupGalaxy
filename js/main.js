@@ -3491,7 +3491,12 @@ function updateSaveChangesButton() {
 }
 
 function updateHudButtons() {
-    document.getElementById("joinScriptBtn").style.display = "none", updateSaveChangesButton();
+    if (typeof window.updateClaimSpawnVisibility === 'function') {
+        window.updateClaimSpawnVisibility();
+    } else {
+        document.getElementById("joinScriptBtn").style.display = "none";
+    }
+    updateSaveChangesButton();
     var e = document.getElementById("usersBtn"),
         t = peers.size > 0 ? peers.size - (peers.has(userName) ? 1 : 0) : 0;
     console.log("[WebRTC] Updating usersBtn: peerCount=", t, "peers=", Array.from(peers.keys())), e.style.display = "inline-block", e.innerText = "🌐 " + t, e.onclick = function () {
@@ -3905,6 +3910,8 @@ async function populateSpawnChunks() {
     }
 }
 async function startGame() {
+    if (typeof window.updateClaimSpawnVisibility === 'function') window.updateClaimSpawnVisibility();
+
     // Guard to prevent double game initialization
     if (gameStarted) {
         console.log("[LOGIN] Game already started, skipping duplicate initialization");
@@ -4352,6 +4359,7 @@ function switchWorld(newWorldName, targetSpawn) {
     stopAllPolling();
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
+    if (typeof window.updateClaimSpawnVisibility === 'function') window.updateClaimSpawnVisibility();
     initServers();
 
     // If there are globally tracked mobs for this world, restore them to 3D instances
@@ -5202,8 +5210,111 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }
         if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
 
+
         var userInputElem = document.getElementById("userInput");
+        var worldInputElem = document.getElementById("worldNameInput");
+
+
+window.claimSpawn = async function(targetWorld, targetUser) {
+    if (targetWorld.length > 8) {
+        addMessage("World name too long (max 8 chars)", 3e3);
+        return;
+    }
+    if (targetUser.length > 20) {
+        addMessage("Username too long (max 20 chars)", 3e3);
+        return;
+    }
+    if (!targetWorld || !targetUser) {
+        addMessage("Please enter a world and username", 3e3);
+        return;
+    }
+
+    var wName = targetWorld.slice(0, 8);
+    var uName = targetUser.slice(0, 20);
+    var targetKeyword = uName + "@" + wName; // Use format matching spawnChunks map keys which is userName@worldName
+
+    // We must manually resolve via deriveKeywordAddress directly to avoid API fallback logic issues when P2FK isn't available
+    // or just rely on GetPublicAddressByKeyword assuming it uses deriveKeywordAddress internally.
+    var s = await GetPublicAddressByKeyword(targetKeyword);
+    var i = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+
+    var targetAddr = s ? s.trim() : targetKeyword;
+    var masterAddr = i ? i.trim() : MASTER_WORLD_KEY;
+
+    if (window.S && window.S.priv) {
+        try {
+            addMessage("Broadcasting claim to Testnet3...", 2000);
+            const salt = Math.floor(Math.random() * 1000000000); // Random salt to prevent duplicate rejections
+            const outputs = await window.buildMsgOutputs({
+                text: '<<-' + salt + '>>',
+                extras: [targetAddr, masterAddr],
+                fromAddr: window.S.addr
+            });
+            const txid = await window.sendManyWithWallet(outputs);
+            addMessage("Claim broadcasted! TXID: " + txid.slice(0, 8) + "...", 4000);
+            // Hide the modal if open
+            if (document.getElementById("joinScriptModal")) {
+                document.getElementById("joinScriptModal").style.display = "none";
+                isPromptOpen = false;
+            }
+            window.updateClaimSpawnVisibility();
+        } catch (err) {
+            console.error("[ClaimSpawn] Testnet3 broadcast error:", err);
+            addMessage("Failed to broadcast claim: " + err.message, 4000);
+        }
+    } else {
+        var l = [targetAddr, masterAddr].filter((function (e) {
+            return e
+        })).join(",").replace(/["']/g, "");
+        var joinScriptModal = document.getElementById("joinScriptModal");
+        if (joinScriptModal) {
+            document.getElementById("joinScriptText").value = l;
+            joinScriptModal.style.display = "block";
+            joinScriptModal.querySelector("h3").innerText = "Claim Spawn";
+            joinScriptModal.querySelector("p").innerText = "Copy this keyword string and paste it into a Sup!? message To: field with a random salt in the body (e.g. <<-12345>>) and click 📢 to claim this spawn:";
+            addMessage("Claim script ready to share", 3e3);
+            isPromptOpen = true;
+        }
+    }
+};
+
+window.updateClaimSpawnVisibility = function() {
+            var wName = (gameStarted && worldName) ? worldName : (document.getElementById("worldNameInput") ? document.getElementById("worldNameInput").value : worldName);
+            var uName = (gameStarted && userName) ? userName : (document.getElementById("userInput") ? document.getElementById("userInput").value : userName);
+            var o = document.getElementById("newUserJoinScriptBtn");
+            var inGameBtn = document.getElementById("joinScriptBtn");
+
+            var shouldShow = false;
+
+            if (wName && uName) {
+                wName = wName.slice(0, 8);
+                uName = uName.slice(0, 20);
+                var spawnKey = uName + "@" + wName;
+                if (!spawnChunks.has(spawnKey)) {
+                    shouldShow = true;
+                }
+            }
+
+            if (o) {
+                o.style.display = "none"; // Hide from main top menu per user request
+            }
+            if (inGameBtn) {
+                inGameBtn.innerText = "Join";
+                inGameBtn.style.display = "none"; // Hide from main HUD per user request, only show in known worlds dialogue
+                inGameBtn.onclick = async function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.blur();
+                    isPromptOpen = !0;
+                    await window.claimSpawn(wName, uName);
+                };
+            }
+        };
+
+        if (worldInputElem) worldInputElem.addEventListener("input", window.updateClaimSpawnVisibility);
         if (userInputElem) {
+            userInputElem.addEventListener("input", window.updateClaimSpawnVisibility);
+
             userInputElem.addEventListener("keydown", function(event) {
                 if (event.key === "Enter") {
                     startGame();
@@ -5211,33 +5322,21 @@ document.addEventListener("DOMContentLoaded", (async function () {
             });
         }
 
+
+        window.updateClaimSpawnVisibility();
         a ? a.addEventListener("change", (function (e) {
+
             document.querySelectorAll(".selectOffer").forEach((function (t) {
                 t.checked = e.target.checked
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
         })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = t.slice(0, 20),
-                    n = o + "@" + a,
-                    r = knownWorlds.get(o);
-                if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
-                else {
-                    var s = await GetPublicAddressByKeyword(n),
-                        i = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                        l = [s ? s.trim() : n, i ? i.trim() : MASTER_WORLD_KEY].filter((function (e) {
-                            return e
-                        })).join(",").replace(/["']/g, "");
-                    document.getElementById("joinScriptText").value = l, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.", addMessage("Join script ready to share", 3e3)
-                }
-            } else addMessage("Please enter a world and username", 3e3)
+            this.blur();
+            console.log("[LOGIN] Claim Spawn button clicked");
+            var e = document.getElementById("worldNameInput").value;
+            var t = document.getElementById("userInput").value;
+            await window.claimSpawn(e, t);
         })), document.getElementById("homeIcon").addEventListener("click", (function () {
             respawnPlayer(), this.blur()
         })), document.getElementById("camToggle").addEventListener("click", (function () {
@@ -5260,15 +5359,6 @@ document.addEventListener("DOMContentLoaded", (async function () {
             switchWorld(), this.blur()
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
-        })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
-            this.blur();
-            isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
-                t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
-                    return e
-                })).join(",").replace(/["']/g, "");
-            document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
         })), document.getElementById("usersBtn").addEventListener("click", (function () {
             openUsersModal(), this.blur()
         })), document.getElementById("closeCraft").addEventListener("click", (function () {

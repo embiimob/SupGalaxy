@@ -2269,12 +2269,49 @@ function openUsersModal() {
 
         const titleSpan = document.createElement("span");
         titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
+        titleSpan.style.flexGrow = "1";
         header.appendChild(titleSpan);
+
+        const buttonContainer = document.createElement("div");
+        buttonContainer.style.display = "flex";
+        buttonContainer.style.gap = "8px";
+        header.appendChild(buttonContainer);
+
+        // Check if we need to show Join for ANY world in the list
+        // Note: use knownWorlds to verify blockchain authenticated status if needed, or spawnChunks for local check.
+        // Wait, the user specifically mentioned: "this data is what populates the known worlds spawn point dialogue so the data is already there. be sure your claim spawn function is using the same formatting as what is being looked up to populated the known world spawns.."
+        // Let's use the knownWorlds data instead of spawnChunks, because spawnChunks gets populated instantly on switchWorld.
+
+        var showJoinBtn = true;
+        if (wName === worldName && spawnChunks.has(userName + "@" + wName)) {
+            // Already claimed locally or loaded from save
+            showJoinBtn = false;
+        }
+
+        // Also check knownWorlds to see if they are a registered user of that world
+        var wData = knownWorlds.get(wName);
+        if (wData && wData.users && wData.users.has(userName)) {
+            showJoinBtn = false;
+        }
+
+        if (showJoinBtn) {
+            const claimBtn = document.createElement("button");
+            claimBtn.innerText = "Join";
+            claimBtn.style.fontSize = "0.8em";
+            claimBtn.style.padding = "4px 8px";
+            claimBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (typeof window.claimSpawn === 'function') {
+                    window.claimSpawn(wName, userName);
+                }
+            };
+            buttonContainer.appendChild(claimBtn);
+        }
 
         // Switch World Button (if not current)
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
-            switchBtn.innerText = "Switch to World";
+            switchBtn.innerText = "Switch";
             switchBtn.style.fontSize = "0.8em";
             switchBtn.style.padding = "4px 8px";
             switchBtn.onclick = (e) => {
@@ -2283,7 +2320,7 @@ function openUsersModal() {
                 t.remove();
                 isPromptOpen = false;
             };
-            header.appendChild(switchBtn);
+            buttonContainer.appendChild(switchBtn);
         }
         worldItem.appendChild(header);
 
