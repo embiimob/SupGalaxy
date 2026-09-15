@@ -1352,7 +1352,7 @@ self.onmessage = async function(e) {
                                         offer: null,
                                         iceCandidates: [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        timestamp: msgTime,
                                         profile: fromProfile
                                     });
                                     continue;
@@ -1370,7 +1370,7 @@ self.onmessage = async function(e) {
                                             offer: data.offer,
                                             iceCandidates: data.iceCandidates || [],
                                             transactionId: msg.TransactionId,
-                                            timestamp: new Date(msg.BlockDate).getTime(),
+                                            timestamp: msgTime,
                                             profile: fromProfile
                                         });
                                     }
@@ -1459,7 +1459,7 @@ self.onmessage = async function(e) {
                                         batch: null,
                                         iceCandidates: [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
+                                        timestamp: msgTime
                                     });
                                     continue;
                                 }
@@ -1488,7 +1488,7 @@ self.onmessage = async function(e) {
                                         batch: data.batch,
                                         iceCandidates: data.iceCandidates || [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
+                                        timestamp: msgTime
                                     });
                                 } else {
                                     console.log('[Worker] Invalid IPFS data for answer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
