@@ -2278,7 +2278,8 @@ function openUsersModal() {
         headerActions.style.justifyContent = "flex-end";
         headerActions.style.marginLeft = "auto";
 
-        const hasUserSpawnInWorld = !!(wData.users && wData.users.has(userName));
+        const normalizedUserName = userName.slice(0, 20);
+        const hasUserSpawnInWorld = !!(wData.users && wData.users.has(normalizedUserName));
         if (!hasUserSpawnInWorld) {
             const joinBtn = document.createElement("button");
             joinBtn.innerText = "Join";
@@ -2288,7 +2289,7 @@ function openUsersModal() {
                 e.stopPropagation(); // prevent collapsing the user list
 
                 const worldForJoin = wName.slice(0, 8);
-                const userForJoin = userName.slice(0, 20);
+                const userForJoin = normalizedUserName;
                 const keyword = worldForJoin + "@" + userForJoin;
                 const worldData = knownWorlds.get(wName);
 
