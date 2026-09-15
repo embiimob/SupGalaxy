@@ -3988,7 +3988,8 @@ async function startGame() {
         id: 121,
         count: 1
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
-    var s = calculateSpawnPoint(r);
+    var homeSpawn = calculateSpawnPoint(r),
+        s = homeSpawn;
 
     // Check for initial teleport location to avoid double-hop
     if (initialTeleportLocation) {
@@ -4005,16 +4006,16 @@ async function startGame() {
     }
 
     spawnPoint = {
-        x: player.x,
-        y: player.y,
-        z: player.z
+        x: homeSpawn.x,
+        y: homeSpawn.y,
+        z: homeSpawn.z
     }, player.vy = 0, player.onGround = !0;
 
     initialTeleportLocation = null;
 
     Math.floor(MAP_SIZE / CHUNK_SIZE);
-    var i = Math.floor(s.x / CHUNK_SIZE),
-        l = Math.floor(s.z / CHUNK_SIZE);
+    var i = Math.floor(homeSpawn.x / CHUNK_SIZE),
+        l = Math.floor(homeSpawn.z / CHUNK_SIZE);
 
     // Assign home spawn ownership for the local player
     const homeChunkKey = makeChunkKey(worldName, i, l);
@@ -4028,7 +4029,7 @@ async function startGame() {
         cz: l,
         username: userName,
         world: worldName,
-        spawn: s
+        spawn: homeSpawn
     });
 
     if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) {
@@ -4289,41 +4290,39 @@ function switchWorld(newWorldName, targetSpawn) {
 
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
 
-    let t;
-    if (targetSpawn) {
-        t = targetSpawn;
-    } else {
-        t = calculateSpawnPoint(userName + "@" + worldName);
-    }
+    const homeSpawn = calculateSpawnPoint(userName + "@" + worldName);
+    const t = targetSpawn ? targetSpawn : homeSpawn;
 
     player.x = t.x, player.y = t.y, player.z = t.z, spawnPoint = {
-        x: player.x,
-        y: player.y,
-        z: player.z
+        x: homeSpawn.x,
+        y: homeSpawn.y,
+        z: homeSpawn.z
     };
     if (typeof lastSentPosition !== 'undefined') {
         lastSentPosition.x = Infinity;
     }
     emberTexture = createEmberTexture(worldSeed), chunkManager = new ChunkManager(worldSeed), initSky();
-    const o = Math.floor(t.x / CHUNK_SIZE),
-        a = Math.floor(t.z / CHUNK_SIZE);
+    const playerChunkX = Math.floor(t.x / CHUNK_SIZE),
+        playerChunkZ = Math.floor(t.z / CHUNK_SIZE),
+        homeChunkX = Math.floor(homeSpawn.x / CHUNK_SIZE),
+        homeChunkZ = Math.floor(homeSpawn.z / CHUNK_SIZE);
 
     // Assign home spawn ownership for the new world
-    const homeChunkKey = makeChunkKey(worldName, o, a);
+    const homeChunkKey = makeChunkKey(worldName, homeChunkX, homeChunkZ);
     updateChunkOwnership(homeChunkKey, userName, Date.now(), 'home');
     console.log(`[Ownership] Home spawn chunk ${homeChunkKey} assigned to ${userName} after world switch`);
 
     // Update spawnChunks map with new world data using key format: username@worldname
     const spawnKey = userName + "@" + worldName;
     spawnChunks.set(spawnKey, {
-        cx: o,
-        cz: a,
+        cx: homeChunkX,
+        cz: homeChunkZ,
         username: userName,
         world: worldName,
-        spawn: t
+        spawn: homeSpawn
     });
 
-    chunkManager.preloadChunks(o, a, LOAD_RADIUS);
+    chunkManager.preloadChunks(playerChunkX, playerChunkZ, LOAD_RADIUS);
 
     // --- RESTORE STONE DATA FOR THE NEW WORLD ---
     // This reloads stone media/behaviors when returning to a previously visited world.
