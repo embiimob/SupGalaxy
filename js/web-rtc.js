@@ -2181,10 +2181,13 @@ function openUsersModal() {
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
         t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
-    const styleKnownWorldButton = (button, compact) => {
+    const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
         button.style.padding = compact ? "4px 8px" : "10px";
+        if (compact) {
+            button.style.fontSize = fontSize || "0.8em";
+        }
     };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
@@ -2290,7 +2293,6 @@ function openUsersModal() {
         if (!hasUserSpawnInWorld) {
             const joinBtn = document.createElement("button");
             joinBtn.innerText = "Join";
-            joinBtn.style.fontSize = "0.8em";
             styleKnownWorldButton(joinBtn, true);
             joinBtn.onclick = async (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
@@ -2338,7 +2340,6 @@ function openUsersModal() {
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
             switchBtn.innerText = "Switch";
-            switchBtn.style.fontSize = "0.8em";
             styleKnownWorldButton(switchBtn, true);
             switchBtn.onclick = (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
@@ -2394,9 +2395,8 @@ function openUsersModal() {
                 // Teleport Button
                 const teleportBtn = document.createElement("button");
                 teleportBtn.innerText = "Spawn";
-                teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
-                styleKnownWorldButton(teleportBtn, true);
+                styleKnownWorldButton(teleportBtn, true, "0.7em");
 
                 // Explicitly capture variables to prevent scope issues
                 (function(targetUser, targetWorld) {
