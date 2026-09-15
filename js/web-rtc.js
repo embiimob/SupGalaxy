@@ -2271,6 +2271,46 @@ function openUsersModal() {
         titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
         header.appendChild(titleSpan);
 
+        const headerActions = document.createElement("div");
+        headerActions.style.display = "flex";
+        headerActions.style.gap = "8px";
+        headerActions.style.alignItems = "center";
+        headerActions.style.justifyContent = "flex-end";
+        headerActions.style.marginLeft = "auto";
+
+        const hasUserSpawnInWorld = !!(wData.users && wData.users.has(userName));
+        if (!hasUserSpawnInWorld) {
+            const joinBtn = document.createElement("button");
+            joinBtn.innerText = "Join";
+            joinBtn.style.fontSize = "0.8em";
+            joinBtn.style.padding = "4px 8px";
+            joinBtn.onclick = async (e) => {
+                e.stopPropagation(); // prevent collapsing the user list
+                isPromptOpen = true;
+
+                const worldForJoin = wName.slice(0, 8);
+                const userForJoin = userName.slice(0, 20);
+                const keyword = worldForJoin + "@" + userForJoin;
+                const worldData = knownWorlds.get(worldForJoin);
+
+                if (worldData && worldData.users && worldData.users.has(userForJoin)) {
+                    addMessage("User already in this world. Choose a different username.", 3e3);
+                    return;
+                }
+
+                const worldAddress = await GetPublicAddressByKeyword(keyword);
+                const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
+
+                document.getElementById("joinScriptText").value = joinList;
+                document.getElementById("joinScriptModal").style.display = "block";
+                document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World";
+                document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
+                addMessage("Join script ready to share", 3e3);
+            };
+            headerActions.appendChild(joinBtn);
+        }
+
         // Switch World Button (if not current)
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
@@ -2283,7 +2323,10 @@ function openUsersModal() {
                 t.remove();
                 isPromptOpen = false;
             };
-            header.appendChild(switchBtn);
+            headerActions.appendChild(switchBtn);
+        }
+        if (headerActions.children.length > 0) {
+            header.appendChild(headerActions);
         }
         worldItem.appendChild(header);
 
