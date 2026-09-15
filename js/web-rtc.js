@@ -2297,16 +2297,26 @@ function openUsersModal() {
                     return;
                 }
 
-                isPromptOpen = true;
-                const worldAddress = await GetPublicAddressByKeyword(keyword);
-                const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
-                const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
-
-                document.getElementById("joinScriptText").value = joinList;
-                document.getElementById("joinScriptModal").style.display = "block";
-                document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World";
-                document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
-                addMessage("Join script ready to share", 3e3);
+                try {
+                    const worldAddress = await GetPublicAddressByKeyword(keyword);
+                    const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                    const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
+                    const joinScriptModal = document.getElementById("joinScriptModal");
+                    const joinScriptText = document.getElementById("joinScriptText");
+                    if (!joinScriptModal || !joinScriptText) {
+                        addMessage("Join modal is unavailable", 3e3);
+                        return;
+                    }
+                    joinScriptText.value = joinList;
+                    joinScriptModal.style.display = "block";
+                    joinScriptModal.querySelector("h3").innerText = "Join World";
+                    joinScriptModal.querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
+                    isPromptOpen = true;
+                    addMessage("Join script ready to share", 3e3);
+                } catch (err) {
+                    console.error("[MODAL] Failed to prepare join script:", err);
+                    addMessage("Failed to prepare join script", 3e3);
+                }
             };
             headerActions.appendChild(joinBtn);
         }
