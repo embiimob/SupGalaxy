@@ -2325,7 +2325,7 @@ function openUsersModal() {
                     joinScriptText.value = joinList;
                     joinScriptModal.style.display = "block";
                     joinScriptTitle.innerText = "Join World";
-                    joinScriptDescription.innerText = "Copy this address list and paste it into a Sup!? message To: field and click 📢 to join the world.";
+                    joinScriptDescription.innerText = "Copy this comma-separated address list and paste it into a Sup!? message To: field, then click 📢 to join the world.";
                     isPromptOpen = true;
                     addMessage("Join script ready to share", 3e3);
                 } catch (err) {
