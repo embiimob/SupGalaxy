@@ -5231,7 +5231,7 @@ window.claimSpawn = async function(targetWorld, targetUser) {
 
     var wName = targetWorld.slice(0, 8);
     var uName = targetUser.slice(0, 20);
-    var targetKeyword = wName + "@" + uName; // Prompt says: worldName@userName
+    var targetKeyword = uName + "@" + wName; // Use format matching spawnChunks map keys which is userName@worldName
 
     // We must manually resolve via deriveKeywordAddress directly to avoid API fallback logic issues when P2FK isn't available
     // or just rely on GetPublicAddressByKeyword assuming it uses deriveKeywordAddress internally.
