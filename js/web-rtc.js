@@ -2180,7 +2180,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockhain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact) => {
         if (!button) return;
         button.style.background = "var(--accent)";
@@ -2313,7 +2313,10 @@ function openUsersModal() {
                 try {
                     const worldAddress = await GetPublicAddressByKeyword(keyword);
                     const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
-                    const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
+                    const resolvedWorldAddress = worldAddress ? worldAddress.trim() : keyword;
+                    const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
+                    const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
+                    const joinList = joinEntries.join(",").replace(/["']/g, "");
                     const joinScriptModal = document.getElementById("joinScriptModal");
                     const joinScriptText = document.getElementById("joinScriptText");
                     const joinScriptTitle = joinScriptModal ? joinScriptModal.querySelector("h3") : null;
@@ -2325,7 +2328,7 @@ function openUsersModal() {
                     joinScriptText.value = joinList;
                     joinScriptModal.style.display = "block";
                     joinScriptTitle.innerText = "Join World";
-                    joinScriptDescription.innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
+                    joinScriptDescription.innerText = "Copy this address list and paste it into a Sup!? message To: field and click 📢 to join the world.";
                     isPromptOpen = true;
                     addMessage("Join script ready to share", 3e3);
                 } catch (err) {
