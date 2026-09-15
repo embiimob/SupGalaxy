@@ -149,7 +149,7 @@ async function applySaveFile(e, t, o) {
             for (let [wName, wData] of knownWorlds) {
                 if (wData.users instanceof Set) {
                     const newMap = new Map();
-                    wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+                    wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
                     wData.users = newMap;
                 }
             }
@@ -182,14 +182,19 @@ async function applySaveFile(e, t, o) {
             // Defensive coding: convert deprecated Set to Map if necessary
             if (wData.users instanceof Set) {
                 const newMap = new Map();
-                wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+                wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
                 wData.users = newMap;
             }
-            wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
+            const existingUserData = wData.users.get(userName);
+            wData.users.set(userName, {
+                timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : Date.now(),
+                address: userAddress,
+                claimed: !!(existingUserData && existingUserData.claimed === !0)
+            });
         } else {
             knownWorlds.set(worldName, {
                 discoverer: userName,
-                users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
+                users: new Map([[userName, { timestamp: Date.now(), address: userAddress, claimed: !1 }]]),
                 toAddress: userAddress
             });
         }
@@ -3967,14 +3972,19 @@ async function startGame() {
         // Defensive coding: convert deprecated Set to Map if necessary
         if (wData.users instanceof Set) {
             const newMap = new Map();
-            wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+            wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
             wData.users = newMap;
         }
-        wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
+        const existingUserData = wData.users.get(userName);
+        wData.users.set(userName, {
+            timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : Date.now(),
+            address: userAddress,
+            claimed: !!(existingUserData && existingUserData.claimed === !0)
+        });
     } else {
         knownWorlds.set(worldName, {
             discoverer: userName,
-            users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
+            users: new Map([[userName, { timestamp: Date.now(), address: userAddress, claimed: !1 }]]),
             toAddress: userAddress
         });
     }
@@ -5354,7 +5364,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             // Store user with timestamp
                             worldData.users.set(n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
-                                address: o.FromAddress
+                                address: o.FromAddress,
+                                claimed: !0
                             });
 
                             knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
