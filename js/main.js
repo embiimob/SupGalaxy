@@ -3491,7 +3491,12 @@ function updateSaveChangesButton() {
 }
 
 function updateHudButtons() {
-    document.getElementById("joinScriptBtn").style.display = "none", updateSaveChangesButton();
+    if (typeof window.updateClaimSpawnVisibility === 'function') {
+        window.updateClaimSpawnVisibility();
+    } else {
+        document.getElementById("joinScriptBtn").style.display = "none";
+    }
+    updateSaveChangesButton();
     var e = document.getElementById("usersBtn"),
         t = peers.size > 0 ? peers.size - (peers.has(userName) ? 1 : 0) : 0;
     console.log("[WebRTC] Updating usersBtn: peerCount=", t, "peers=", Array.from(peers.keys())), e.style.display = "inline-block", e.innerText = "🌐 " + t, e.onclick = function () {
@@ -4230,8 +4235,6 @@ function updateProximityVideo() {
 }
 
 function switchWorld(newWorldName, targetSpawn) {
-    if (typeof window.updateClaimSpawnVisibility === 'function') window.updateClaimSpawnVisibility();
-
     worldArchetype = null;
     const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
@@ -4356,6 +4359,7 @@ function switchWorld(newWorldName, targetSpawn) {
     stopAllPolling();
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
+    if (typeof window.updateClaimSpawnVisibility === 'function') window.updateClaimSpawnVisibility();
     initServers();
 
     // If there are globally tracked mobs for this world, restore them to 3D instances
@@ -5229,6 +5233,8 @@ window.claimSpawn = async function(targetWorld, targetUser) {
     var uName = targetUser.slice(0, 20);
     var targetKeyword = wName + "@" + uName; // Prompt says: worldName@userName
 
+    // We must manually resolve via deriveKeywordAddress directly to avoid API fallback logic issues when P2FK isn't available
+    // or just rely on GetPublicAddressByKeyword assuming it uses deriveKeywordAddress internally.
     var s = await GetPublicAddressByKeyword(targetKeyword);
     var i = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
 
@@ -5273,22 +5279,35 @@ window.claimSpawn = async function(targetWorld, targetUser) {
 };
 
 window.updateClaimSpawnVisibility = function() {
-            var wName = document.getElementById("worldNameInput").value;
-            var uName = document.getElementById("userInput").value;
+            var wName = (gameStarted && worldName) ? worldName : (document.getElementById("worldNameInput") ? document.getElementById("worldNameInput").value : worldName);
+            var uName = (gameStarted && userName) ? userName : (document.getElementById("userInput") ? document.getElementById("userInput").value : userName);
             var o = document.getElementById("newUserJoinScriptBtn");
-            if (o) {
-                if (wName && uName) {
-                    wName = wName.slice(0, 8);
-                    uName = uName.slice(0, 20);
-                    var spawnKey = uName + "@" + wName;
-                    if (!spawnChunks.has(spawnKey)) {
-                        o.style.display = "inline-block";
-                    } else {
-                        o.style.display = "none";
-                    }
-                } else {
-                    o.style.display = "none";
+            var inGameBtn = document.getElementById("joinScriptBtn");
+
+            var shouldShow = false;
+
+            if (wName && uName) {
+                wName = wName.slice(0, 8);
+                uName = uName.slice(0, 20);
+                var spawnKey = uName + "@" + wName;
+                if (!spawnChunks.has(spawnKey)) {
+                    shouldShow = true;
                 }
+            }
+
+            if (o) {
+                o.style.display = shouldShow ? "inline-block" : "none";
+            }
+            if (inGameBtn) {
+                inGameBtn.innerText = "Claim Spawn";
+                inGameBtn.style.display = (shouldShow && gameStarted) ? "inline-block" : "none";
+                inGameBtn.onclick = async function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.blur();
+                    isPromptOpen = !0;
+                    await window.claimSpawn(wName, uName);
+                };
             }
         };
 
@@ -5340,15 +5359,6 @@ window.updateClaimSpawnVisibility = function() {
             switchWorld(), this.blur()
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
-        })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
-            this.blur();
-            isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
-                t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
-                    return e
-                })).join(",").replace(/["']/g, "");
-            document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
         })), document.getElementById("usersBtn").addEventListener("click", (function () {
             openUsersModal(), this.blur()
         })), document.getElementById("closeCraft").addEventListener("click", (function () {
