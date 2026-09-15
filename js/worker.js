@@ -1288,7 +1288,11 @@ self.onmessage = async function(e) {
 
                             var dateStr = msg.BlockDate;
                             if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
-                                dateStr += " UTC";
+                                if (dateStr.indexOf("T") !== -1) {
+                                    dateStr += "Z";
+                                } else {
+                                    dateStr += " UTC";
+                                }
                             }
                             var msgTime = new Date(dateStr).getTime();
                             if (Date.now() - msgTime > 30 * 60 * 1000) {
@@ -1430,7 +1434,11 @@ self.onmessage = async function(e) {
 
                             var dateStr = msg.BlockDate;
                             if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
-                                dateStr += " UTC";
+                                if (dateStr.indexOf("T") !== -1) {
+                                    dateStr += "Z";
+                                } else {
+                                    dateStr += " UTC";
+                                }
                             }
                             var msgTime = new Date(dateStr).getTime();
                             if (Date.now() - msgTime > 30 * 60 * 1000) {
