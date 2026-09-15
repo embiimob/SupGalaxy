@@ -2201,7 +2201,8 @@ function openUsersModal() {
             fromAddr: window.S.addr
         });
         const txid = await window.sendManyWithWallet(outputs);
-        addMessage("Join broadcasted! TXID: " + txid.slice(0, 8) + "...", 4000);
+        const txidText = "string" == typeof txid ? txid.trim() : txid && "string" == typeof txid.txid ? txid.txid.trim() : "";
+        addMessage(txidText ? "Join broadcasted! TXID: " + txidText.slice(0, 8) + "..." : "Join broadcasted!", 4000);
         return !0
     };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
@@ -2329,7 +2330,12 @@ function openUsersModal() {
                     const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
                     const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
                     const joinList = joinEntries.join(",").replace(/["']/g, "");
-                    if (await broadcastKnownWorldJoin(joinList)) return;
+                    try {
+                        if (await broadcastKnownWorldJoin(joinList)) return;
+                    } catch (err) {
+                        console.error("[MODAL] Wallet-backed join broadcast failed:", err);
+                        addMessage("Wallet join broadcast failed. Showing manual join flow.", 4e3);
+                    }
                     const joinScriptModal = document.getElementById("joinScriptModal");
                     const joinScriptText = document.getElementById("joinScriptText");
                     const joinScriptTitle = joinScriptModal ? joinScriptModal.querySelector("h3") : null;
