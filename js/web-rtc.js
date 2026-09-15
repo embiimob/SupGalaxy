@@ -2290,7 +2290,7 @@ function openUsersModal() {
                 const worldForJoin = wName.slice(0, 8);
                 const userForJoin = userName.slice(0, 20);
                 const keyword = worldForJoin + "@" + userForJoin;
-                const worldData = knownWorlds.get(worldForJoin);
+                const worldData = knownWorlds.get(wName);
 
                 if (worldData && worldData.users && worldData.users.has(userForJoin)) {
                     addMessage("User already in this world. Choose a different username.", 3e3);
@@ -2303,14 +2303,16 @@ function openUsersModal() {
                     const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
                     const joinScriptModal = document.getElementById("joinScriptModal");
                     const joinScriptText = document.getElementById("joinScriptText");
-                    if (!joinScriptModal || !joinScriptText) {
+                    const joinScriptTitle = joinScriptModal ? joinScriptModal.querySelector("h3") : null;
+                    const joinScriptDescription = joinScriptModal ? joinScriptModal.querySelector("p") : null;
+                    if (!joinScriptModal || !joinScriptText || !joinScriptTitle || !joinScriptDescription) {
                         addMessage("Join modal is unavailable", 3e3);
                         return;
                     }
                     joinScriptText.value = joinList;
                     joinScriptModal.style.display = "block";
-                    joinScriptModal.querySelector("h3").innerText = "Join World";
-                    joinScriptModal.querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
+                    joinScriptTitle.innerText = "Join World";
+                    joinScriptDescription.innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.";
                     isPromptOpen = true;
                     addMessage("Join script ready to share", 3e3);
                 } catch (err) {
