@@ -372,6 +372,12 @@ async function applySaveFile(e, t, o) {
 
         for (var r of e.deltas) {
             s = r.chunk.replace(/^#/, ""), i = r.changes;
+            const homeSpawnOwner = getHomeSpawnOwnerName(s);
+            if (homeSpawnOwner && homeSpawnOwner !== u) {
+                addMessage("Skipped chunk " + s + ": protected home spawn of " + homeSpawnOwner, 3e3);
+                console.log(`[Ownership] Save load skipped for chunk ${s}: home spawn owned by ${homeSpawnOwner}, update author ${u}`);
+                continue;
+            }
 
             const ownership = OWNED_CHUNKS.get(s);
 
@@ -393,11 +399,16 @@ async function applySaveFile(e, t, o) {
                     chunkManager.applyDeltasToChunk(s, i);
                     addMessage("Loaded chunk " + s + " (no ownership, expired)", 1e3);
                 }
-            } else if (ownership.username === u && ownership.type === 'ipfs') {
-                // Same user IPFS ownership: accept deltas, extend expiry
+            } else if (ownership.username === u && (ownership.type === 'ipfs' || ownership.type === 'home')) {
+                // Same user ownership: accept deltas
                 chunkManager.applyDeltasToChunk(s, i);
-                updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
-                addMessage("Updated chunk " + s + " (ownership extended)", 1e3);
+                if (ownership.type === 'ipfs') {
+                    // Extend IPFS ownership only for IPFS-owned chunks
+                    updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
+                    addMessage("Updated chunk " + s + " (ownership extended)", 1e3);
+                } else {
+                    addMessage("Updated chunk " + s + " (home spawn owner)", 1e3);
+                }
             } else {
                 // Different owner or home spawn: reject
                 addMessage("Cannot edit chunk " + s + ": owned by " + ownership.username, 3e3);

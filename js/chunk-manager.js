@@ -712,6 +712,15 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             var n = chunksArray[idx];
             var r = n.chunk,
                 s = n.changes;
+            const normalizedChunkKey = r.replace(/^#/, "");
+            const homeSpawnOwner = getHomeSpawnOwnerName(normalizedChunkKey);
+            const chunkAuthor = ownerUsername || sourceUsername || null;
+
+            if (homeSpawnOwner && chunkAuthor !== homeSpawnOwner) {
+                addMessage(`Skipped chunk ${normalizedChunkKey}: protected home spawn of ${homeSpawnOwner}`, 3000);
+                console.log(`[Ownership] Chunk load skipped for ${normalizedChunkKey}: home spawn owned by ${homeSpawnOwner}, update author ${chunkAuthor || 'unknown'}`);
+                continue;
+            }
             if (chunkManager) {
                 const worldNameFromChunk = parseChunkKey(r)?.world;
                 if (worldNameFromChunk) {
@@ -975,9 +984,8 @@ function checkChunkOwnership(chunkKey, username) {
     return isChunkMutationAllowed(chunkKey, username);
 }
 
-function getChunkOwnerName(chunkKey) {
+function getHomeSpawnOwnerName(chunkKey) {
     const normalized = chunkKey.replace(/^#/, "");
-    // Check home spawn ownership first
     if (spawnChunks.size > 0) {
         for (const [spawnKey, spawnData] of spawnChunks) {
             const parsed = parseChunkKey(normalized);
@@ -986,6 +994,16 @@ function getChunkOwnerName(chunkKey) {
                 return spawnData.username;
             }
         }
+    }
+    return null;
+}
+
+function getChunkOwnerName(chunkKey) {
+    const normalized = chunkKey.replace(/^#/, "");
+    // Check home spawn ownership first
+    const homeOwner = getHomeSpawnOwnerName(normalized);
+    if (homeOwner) {
+        return homeOwner;
     }
     const ownership = OWNED_CHUNKS.get(normalized);
     return ownership ? ownership.username : null;
