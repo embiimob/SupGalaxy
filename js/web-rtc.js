@@ -2189,6 +2189,21 @@ function openUsersModal() {
             button.style.fontSize = fontSize || "0.8em";
         }
     };
+    const broadcastKnownWorldJoin = async (joinList) => {
+        if (!(window.S && window.S.priv && window.S.addr)) return !1;
+        if ("function" != typeof window.buildMsgOutputs || "function" != typeof window.sendManyWithWallet) throw new Error("Wallet broadcast helpers are unavailable");
+        const recipientAddresses = joinList.split(",").map((entry => entry.trim().replace(/["']/g, ""))).filter(Boolean);
+        if (!recipientAddresses.length) throw new Error("No join addresses available");
+        addMessage("Broadcasting join to Testnet3...", 2000);
+        const outputs = await window.buildMsgOutputs({
+            text: "",
+            extras: recipientAddresses,
+            fromAddr: window.S.addr
+        });
+        const txid = await window.sendManyWithWallet(outputs);
+        addMessage("Join broadcasted! TXID: " + txid.slice(0, 8) + "...", 4000);
+        return !0
+    };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
@@ -2314,6 +2329,7 @@ function openUsersModal() {
                     const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
                     const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
                     const joinList = joinEntries.join(",").replace(/["']/g, "");
+                    if (await broadcastKnownWorldJoin(joinList)) return;
                     const joinScriptModal = document.getElementById("joinScriptModal");
                     const joinScriptText = document.getElementById("joinScriptText");
                     const joinScriptTitle = joinScriptModal ? joinScriptModal.querySelector("h3") : null;
