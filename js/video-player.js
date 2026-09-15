@@ -299,6 +299,7 @@ function renderVideoPlaylist() {
         listItem.appendChild(videoName);
 
         const removeButton = document.createElement('button');
+        removeButton.className = 'uniform-action-btn';
         removeButton.innerText = 'Remove';
         removeButton.style.fontSize = '10px';
         removeButton.onclick = () => {
@@ -367,6 +368,7 @@ async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
                 const buttonContainer = document.createElement('div');
 
                 const addButton = document.createElement('button');
+                addButton.className = 'uniform-action-btn';
                 addButton.innerText = 'Add';
                 addButton.style.fontSize = '10px';
                 addButton.style.marginLeft = '5px';

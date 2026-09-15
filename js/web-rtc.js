@@ -2040,11 +2040,11 @@ function setupPendingModal() {
         const s = document.createElement("input");
         s.type = "checkbox", s.className = "selectOffer", s.dataset.user = e.clientUser || "", s.dataset.transactionId = e.transactionId, s.style.margin = "0 8px";
         const n = document.createElement("button");
-        n.innerText = "Accept", n.style.marginRight = "8px", n.onclick = () => {
+        n.className = "uniform-action-btn", n.innerText = "Accept", n.style.marginRight = "8px", n.onclick = () => {
             console.log("[WEBRTC] Accepting offer from:", e.clientUser), s.checked = !0, acceptPendingOffers()
         };
         const i = document.createElement("button");
-        i.innerText = "Reject", i.style.background = "var(--danger)", i.style.color = "#111", i.onclick = () => {
+        i.className = "uniform-action-btn", i.innerText = "Reject", i.onclick = () => {
             console.log("[WEBRTC] Rejecting offer from:", e.clientUser), pendingOffers = pendingOffers.filter((t => t.clientUser !== e.clientUser)), addMessage(`Rejected connection from ${e.clientUser || "Unknown"}`, 3e3), setupPendingModal()
         }, t.appendChild(r), t.appendChild(s), t.appendChild(n), t.appendChild(i), o.appendChild(t), a = !0
     }
@@ -2183,6 +2183,7 @@ function openUsersModal() {
         t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact) => {
         if (!button) return;
+        button.classList.add("uniform-action-btn");
         button.style.background = "var(--accent)";
         button.style.color = "#111";
         button.style.border = "0";

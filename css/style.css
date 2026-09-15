@@ -192,6 +192,15 @@
                 font-weight: 700;
             }
 
+            .uniform-action-btn {
+                background: var(--accent);
+                color: #111;
+                border: 0;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 700;
+            }
+
         #messages {
             position: fixed;
             left: 12px;
@@ -309,11 +318,26 @@
             margin-top: 4px;
             padding: 2px 6px;
             font-size: 10px;
-            background: #0f2a3a;
-            border: 1px solid rgba(255,255,255,0.04);
-            color: #fff;
-            border-radius: 4px;
+            background: var(--accent);
+            border: 0;
+            color: #111;
+            border-radius: 8px;
             cursor: pointer;
+            font-weight: 700;
+        }
+
+        #videoPlayer button,
+        #musicMenuModal button,
+        #videoMenuModal button,
+        #pendingModal button,
+        #joinScriptModal button,
+        #downloadModal button {
+            background: var(--accent) !important;
+            color: #111 !important;
+            border: 0 !important;
+            border-radius: 8px !important;
+            cursor: pointer;
+            font-weight: 700;
         }
 
         #craftModal {
