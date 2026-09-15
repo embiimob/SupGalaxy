@@ -2391,7 +2391,7 @@ function openUsersModal() {
         e.stopPropagation()
     })), t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
-        var e = document.getElementById("friendHandle").value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+        var e = document.getElementById("friendHandle").value.trim().slice(0, 20);
         if (e)
             if (e !== userName) {
                 console.log("[WEBRTC] Attempting to connect to friend:", e);
