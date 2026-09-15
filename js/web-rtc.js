@@ -2189,10 +2189,10 @@ function openUsersModal() {
             button.style.fontSize = fontSize || "0.8em";
         }
     };
-    const broadcastKnownWorldJoin = async (joinList) => {
+    const broadcastKnownWorldJoin = async (joinEntries) => {
         if (!(window.S && window.S.priv && window.S.addr)) return !1;
         if ("function" != typeof window.buildMsgOutputs || "function" != typeof window.sendManyWithWallet) throw new Error("Wallet broadcast helpers are unavailable");
-        const recipientAddresses = joinList.split(",").map((entry => entry.trim().replace(/["']/g, ""))).filter(Boolean);
+        const recipientAddresses = joinEntries.map((entry => String(entry || "").trim().replace(/["']/g, ""))).filter(Boolean);
         if (!recipientAddresses.length) throw new Error("No join addresses available");
         addMessage("Broadcasting join to Testnet3...", 2000);
         const outputs = await window.buildMsgOutputs({
@@ -2331,7 +2331,7 @@ function openUsersModal() {
                     const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
                     const joinList = joinEntries.join(",").replace(/["']/g, "");
                     try {
-                        if (await broadcastKnownWorldJoin(joinList)) return;
+                        if (await broadcastKnownWorldJoin(joinEntries)) return;
                     } catch (err) {
                         console.error("[MODAL] Wallet-backed join broadcast failed:", err);
                         addMessage("Wallet join broadcast failed. Showing manual join flow.", 4e3);
