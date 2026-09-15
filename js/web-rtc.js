@@ -2270,6 +2270,7 @@ function openUsersModal() {
         titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
         header.appendChild(titleSpan);
 
+
         // Switch World Button (if not current)
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
@@ -2283,7 +2284,24 @@ function openUsersModal() {
                 isPromptOpen = false;
             };
             header.appendChild(switchBtn);
+        } else {
+            // It is the current world, check if we need to show Claim Spawn
+            var spawnKey = userName + "@" + wName;
+            if (!spawnChunks.has(spawnKey)) {
+                const claimBtn = document.createElement("button");
+                claimBtn.innerText = "Claim Spawn";
+                claimBtn.style.fontSize = "0.8em";
+                claimBtn.style.padding = "4px 8px";
+                claimBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (typeof window.claimSpawn === 'function') {
+                        window.claimSpawn(wName, userName);
+                    }
+                };
+                header.appendChild(claimBtn);
+            }
         }
+
         worldItem.appendChild(header);
 
         const usersContainerWrapper = document.createElement("div");
