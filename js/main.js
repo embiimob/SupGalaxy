@@ -5296,11 +5296,11 @@ window.updateClaimSpawnVisibility = function() {
             }
 
             if (o) {
-                o.style.display = shouldShow ? "inline-block" : "none";
+                o.style.display = "none"; // Hide from main top menu per user request
             }
             if (inGameBtn) {
-                inGameBtn.innerText = "Claim Spawn";
-                inGameBtn.style.display = (shouldShow && gameStarted) ? "inline-block" : "none";
+                inGameBtn.innerText = "Join";
+                inGameBtn.style.display = "none"; // Hide from main HUD per user request, only show in known worlds dialogue
                 inGameBtn.onclick = async function(e) {
                     e.preventDefault();
                     e.stopPropagation();

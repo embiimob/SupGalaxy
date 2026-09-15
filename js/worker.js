@@ -1285,6 +1285,23 @@ self.onmessage = async function(e) {
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
+
+                            var dateStr = msg.BlockDate;
+                            if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
+                                if (dateStr.indexOf("T") !== -1) {
+                                    dateStr += "Z";
+                                } else {
+                                    dateStr += " UTC";
+                                }
+                            }
+                            var msgTime = new Date(dateStr).getTime();
+                            if (Date.now() - msgTime > 30 * 60 * 1000) {
+                                console.log('[Worker] Skipping offer message older than 30 minutes:', msg.TransactionId);
+                                processedOfferMessages.add(msg.TransactionId);
+                                processedIds.push(msg.TransactionId);
+                                continue;
+                            }
+
                             console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
                             processedOfferMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
@@ -1339,7 +1356,7 @@ self.onmessage = async function(e) {
                                         offer: null,
                                         iceCandidates: [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime(),
+                                        timestamp: msgTime,
                                         profile: fromProfile
                                     });
                                     continue;
@@ -1357,7 +1374,7 @@ self.onmessage = async function(e) {
                                             offer: data.offer,
                                             iceCandidates: data.iceCandidates || [],
                                             transactionId: msg.TransactionId,
-                                            timestamp: new Date(msg.BlockDate).getTime(),
+                                            timestamp: msgTime,
                                             profile: fromProfile
                                         });
                                     }
@@ -1414,6 +1431,23 @@ self.onmessage = async function(e) {
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
+
+                            var dateStr = msg.BlockDate;
+                            if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
+                                if (dateStr.indexOf("T") !== -1) {
+                                    dateStr += "Z";
+                                } else {
+                                    dateStr += " UTC";
+                                }
+                            }
+                            var msgTime = new Date(dateStr).getTime();
+                            if (Date.now() - msgTime > 30 * 60 * 1000) {
+                                console.log('[Worker] Skipping answer message older than 30 minutes:', msg.TransactionId);
+                                processedAnswerMessages.add(msg.TransactionId);
+                                processedIds.push(msg.TransactionId);
+                                continue;
+                            }
+
                             console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
                             processedAnswerMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
@@ -1433,7 +1467,7 @@ self.onmessage = async function(e) {
                                         batch: null,
                                         iceCandidates: [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
+                                        timestamp: msgTime
                                     });
                                     continue;
                                 }
@@ -1462,7 +1496,7 @@ self.onmessage = async function(e) {
                                         batch: data.batch,
                                         iceCandidates: data.iceCandidates || [],
                                         transactionId: msg.TransactionId,
-                                        timestamp: new Date(msg.BlockDate).getTime()
+                                        timestamp: msgTime
                                     });
                                 } else {
                                     console.log('[Worker] Invalid IPFS data for answer message:', hash, 'data:', JSON.stringify(data), 'txId:', msg.TransactionId);
@@ -1653,6 +1687,7 @@ self.onmessage = async function(e) {
                                 // Provide user feedback and update UI (matching handleMinimapFile behavior)
                                 addMessage('Connected to ' + hostUser + ' via IPFS', 5000);
                                 updateHudButtons();
+                                isConnecting = false;
                                 
                                 // Clear the answer polling interval since we got our answer
                                 var userKeyword = worldName + "@" + userName;

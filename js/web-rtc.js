@@ -310,6 +310,7 @@ function setupDataChannel(e, t) {
             stopOfferPolling();
             console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
+        isConnecting = !1;
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
@@ -2270,12 +2271,11 @@ function openUsersModal() {
         titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
         header.appendChild(titleSpan);
 
-
-        // Check if we need to show Claim Spawn for ANY world in the list
+        // Check if we need to show Join for ANY world in the list
         var spawnKey = userName + "@" + wName;
         if (!spawnChunks.has(spawnKey)) {
             const claimBtn = document.createElement("button");
-            claimBtn.innerText = "Claim Spawn";
+            claimBtn.innerText = "Join";
             claimBtn.style.fontSize = "0.8em";
             claimBtn.style.padding = "4px 8px";
             claimBtn.style.marginRight = "8px"; // add margin if switch btn is next to it
@@ -2291,7 +2291,7 @@ function openUsersModal() {
         // Switch World Button (if not current)
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
-            switchBtn.innerText = "Switch to World";
+            switchBtn.innerText = "Switch";
             switchBtn.style.fontSize = "0.8em";
             switchBtn.style.padding = "4px 8px";
             switchBtn.onclick = (e) => {
@@ -2302,7 +2302,6 @@ function openUsersModal() {
             };
             header.appendChild(switchBtn);
         }
-
         worldItem.appendChild(header);
 
         const usersContainerWrapper = document.createElement("div");
@@ -2409,7 +2408,7 @@ function openUsersModal() {
         e.stopPropagation()
     })), t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
-        var e = document.getElementById("friendHandle").value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+        var e = document.getElementById("friendHandle").value.trim().slice(0, 20);
         if (e)
             if (e !== userName) {
                 console.log("[WEBRTC] Attempting to connect to friend:", e);
