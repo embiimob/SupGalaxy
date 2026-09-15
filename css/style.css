@@ -2,6 +2,8 @@
             --panel: rgba(8,12,18,0.8);
             --accent: #ffd166;
             --danger: #ff6b6b;
+            --button-bg: #0f2a3a;
+            --button-text: #ffffff;
         }
 
         html, body {
@@ -57,8 +59,8 @@
             }
 
             #loginCard button {
-                background: var(--accent);
-                color: #111;
+                background: var(--button-bg);
+                color: var(--button-text);
                 border: 0;
                 font-weight: 700;
                 cursor: pointer;
@@ -184,17 +186,17 @@
             #hud button {
                 margin-top: 8px;
                 padding: 6px 8px;
-                background: var(--accent);
+                    background: var(--button-bg);
                 border: 0;
-                color: #111;
+                    color: var(--button-text);
                 border-radius: 8px;
                 cursor: pointer;
                 font-weight: 700;
             }
 
             .uniform-action-btn {
-                background: var(--accent);
-                color: #111;
+                background: var(--button-bg);
+                color: var(--button-text);
                 border: 0;
                 border-radius: 8px;
                 cursor: pointer;
@@ -318,9 +320,9 @@
             margin-top: 4px;
             padding: 2px 6px;
             font-size: 10px;
-            background: var(--accent);
+            background: var(--button-bg);
             border: 0;
-            color: #111;
+            color: var(--button-text);
             border-radius: 8px;
             cursor: pointer;
             font-weight: 700;
@@ -332,8 +334,8 @@
         #pendingModal button,
         #joinScriptModal button,
         #downloadModal button {
-            background: var(--accent) !important;
-            color: #111 !important;
+            background: var(--button-bg) !important;
+            color: var(--button-text) !important;
             border: 0 !important;
             border-radius: 8px !important;
             cursor: pointer;
@@ -426,8 +428,8 @@
         .recipe-status button {
              padding: 6px 10px;
              border-radius: 4px;
-             background: var(--accent);
-             color: #111;
+             background: var(--button-bg);
+             color: var(--button-text);
              border: 0;
              cursor: pointer;
         }
@@ -613,16 +615,16 @@
             #trashConfirm button {
                 padding: 6px 12px;
                 margin: 8px 4px;
-                background: #0f2a3a;
-                border: 1px solid rgba(255,255,255,0.04);
-                color: #fff;
-                border-radius: 6px;
+                background: var(--button-bg);
+                border: 0;
+                color: var(--button-text);
+                border-radius: 8px;
                 cursor: pointer;
             }
 
             #trashConfirm .danger {
-                background: #ff6b6b;
-                color: #111;
+                background: var(--button-bg);
+                color: var(--button-text);
             }
 
         #joinScriptModal {
@@ -762,8 +764,8 @@
             #deathScreen button {
                 margin-top: 20px;
                 padding: 10px 20px;
-                background: var(--accent);
-                color: #111;
+                background: var(--button-bg);
+                color: var(--button-text);
                 border: none;
                 border-radius: 8px;
                 font-weight: 700;
