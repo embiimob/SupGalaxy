@@ -2040,11 +2040,11 @@ function setupPendingModal() {
         const s = document.createElement("input");
         s.type = "checkbox", s.className = "selectOffer", s.dataset.user = e.clientUser || "", s.dataset.transactionId = e.transactionId, s.style.margin = "0 8px";
         const n = document.createElement("button");
-        n.innerText = "Accept", n.style.marginRight = "8px", n.onclick = () => {
+        n.className = "uniform-action-btn", n.innerText = "Accept", n.style.marginRight = "8px", n.onclick = () => {
             console.log("[WEBRTC] Accepting offer from:", e.clientUser), s.checked = !0, acceptPendingOffers()
         };
         const i = document.createElement("button");
-        i.innerText = "Reject", i.style.background = "var(--danger)", i.style.color = "#111", i.onclick = () => {
+        i.className = "uniform-action-btn", i.innerText = "Reject", i.onclick = () => {
             console.log("[WEBRTC] Rejecting offer from:", e.clientUser), pendingOffers = pendingOffers.filter((t => t.clientUser !== e.clientUser)), addMessage(`Rejected connection from ${e.clientUser || "Unknown"}`, 3e3), setupPendingModal()
         }, t.appendChild(r), t.appendChild(s), t.appendChild(n), t.appendChild(i), o.appendChild(t), a = !0
     }
@@ -2180,7 +2180,16 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;background:var(--accent);color:#111;border:0;font-weight:700;cursor:pointer;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockhain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    const styleKnownWorldButton = (button, compact, fontSize) => {
+        if (!button) return;
+        button.classList.add("uniform-action-btn");
+        button.style.padding = compact ? "4px 8px" : "10px";
+        if (compact) {
+            button.style.fontSize = fontSize || "0.8em";
+        }
+    };
+    styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     var a = !1,
@@ -2204,6 +2213,7 @@ function openUsersModal() {
 
             var m = document.createElement("button");
             m.innerText = "Visit Spawn";
+            styleKnownWorldButton(m, true);
 
             (function (e, o) {
                 m.onclick = function () {
@@ -2271,19 +2281,76 @@ function openUsersModal() {
         titleSpan.innerHTML = `<strong>► ${wName}</strong> ${wName === worldName ? '(Current)' : ''}`;
         header.appendChild(titleSpan);
 
+        const headerActions = document.createElement("div");
+        headerActions.style.display = "flex";
+        headerActions.style.gap = "8px";
+        headerActions.style.alignItems = "center";
+        headerActions.style.justifyContent = "flex-end";
+        headerActions.style.marginLeft = "auto";
+
+        const normalizedUserName = userName.slice(0, 20);
+        const hasUserSpawnInWorld = !!(wData.users && wData.users.has(normalizedUserName));
+        if (!hasUserSpawnInWorld) {
+            const joinBtn = document.createElement("button");
+            joinBtn.innerText = "Join";
+            styleKnownWorldButton(joinBtn, true);
+            joinBtn.onclick = async (e) => {
+                e.stopPropagation(); // prevent collapsing the user list
+
+                const worldForJoin = wName.slice(0, 8);
+                const userForJoin = normalizedUserName;
+                const keyword = worldForJoin + "@" + userForJoin;
+                const worldData = knownWorlds.get(wName);
+
+                if (worldData && worldData.users && worldData.users.has(userForJoin)) {
+                    addMessage("User already in this world. Choose a different username.", 3e3);
+                    return;
+                }
+
+                try {
+                    const worldAddress = await GetPublicAddressByKeyword(keyword);
+                    const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
+                    const resolvedWorldAddress = worldAddress ? worldAddress.trim() : keyword;
+                    const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
+                    const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
+                    const joinList = joinEntries.join(",").replace(/["']/g, "");
+                    const joinScriptModal = document.getElementById("joinScriptModal");
+                    const joinScriptText = document.getElementById("joinScriptText");
+                    const joinScriptTitle = joinScriptModal ? joinScriptModal.querySelector("h3") : null;
+                    const joinScriptDescription = joinScriptModal ? joinScriptModal.querySelector("p") : null;
+                    if (!joinScriptModal || !joinScriptText || !joinScriptTitle || !joinScriptDescription) {
+                        addMessage("Join modal is unavailable", 3e3);
+                        return;
+                    }
+                    joinScriptText.value = joinList;
+                    joinScriptModal.style.display = "block";
+                    joinScriptTitle.innerText = "Join World";
+                    joinScriptDescription.innerText = "Copy this comma-separated address list and paste it into a Sup!? message To: field, then click 📢 to join the world.";
+                    isPromptOpen = true;
+                    addMessage("Join script ready to share", 3e3);
+                } catch (err) {
+                    console.error("[MODAL] Failed to prepare join script:", err);
+                    addMessage("Failed to prepare join script", 3e3);
+                }
+            };
+            headerActions.appendChild(joinBtn);
+        }
+
         // Switch World Button (if not current)
         if (wName !== worldName) {
             const switchBtn = document.createElement("button");
-            switchBtn.innerText = "Switch to World";
-            switchBtn.style.fontSize = "0.8em";
-            switchBtn.style.padding = "4px 8px";
+            switchBtn.innerText = "Switch";
+            styleKnownWorldButton(switchBtn, true);
             switchBtn.onclick = (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
                 switchWorld(wName);
                 t.remove();
                 isPromptOpen = false;
             };
-            header.appendChild(switchBtn);
+            headerActions.appendChild(switchBtn);
+        }
+        if (headerActions.children.length > 0) {
+            header.appendChild(headerActions);
         }
         worldItem.appendChild(header);
 
@@ -2328,8 +2395,8 @@ function openUsersModal() {
                 // Teleport Button
                 const teleportBtn = document.createElement("button");
                 teleportBtn.innerText = "Spawn";
-                teleportBtn.style.fontSize = "0.7em";
                 teleportBtn.style.marginLeft = "10px";
+                styleKnownWorldButton(teleportBtn, true, "0.7em");
 
                 // Explicitly capture variables to prevent scope issues
                 (function(targetUser, targetWorld) {

@@ -5177,8 +5177,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
         l && d && startGame();
-        var o = document.getElementById("newUserJoinScriptBtn"),
-            a = document.getElementById("acceptAll"),
+        var a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
 
@@ -5200,7 +5199,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 testnetWifLoginBtn.style.display = "none";
             });
         }
-        if (!(e && o && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
+        if (!(e && r)) return console.error("[SYSTEM] Login buttons or overlay not found in DOM"), void addMessage("UI initialization failed: buttons or overlay missing", 3e3);
 
         var userInputElem = document.getElementById("userInput");
         if (userInputElem) {
@@ -5217,28 +5216,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             })), console.log("[MODAL] Accept All checkbox changed")
         })) : console.warn("[MODAL] acceptAll element not found"), n ? (n.addEventListener("click", (function (e) {
             e.stopPropagation()
-        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), o.addEventListener("click", (async function () {
-            this.blur(), console.log("[LOGIN] Create Join Script button clicked"), isPromptOpen = !0;
-            var e = document.getElementById("worldNameInput").value,
-                t = document.getElementById("userInput").value;
-            if (e.length > 8) addMessage("World name too long (max 8 chars)", 3e3);
-            else if (t.length > 20) addMessage("Username too long (max 20 chars)", 3e3);
-            else if (e && t) {
-                var o = e.slice(0, 8),
-                    a = t.slice(0, 20),
-                    n = o + "@" + a,
-                    r = knownWorlds.get(o);
-                if (r && r.users.has(a)) addMessage("User already in this world. Choose a different username.", 3e3);
-                else {
-                    var s = await GetPublicAddressByKeyword(n),
-                        i = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                        l = [s ? s.trim() : n, i ? i.trim() : MASTER_WORLD_KEY].filter((function (e) {
-                            return e
-                        })).join(",").replace(/["']/g, "");
-                    document.getElementById("joinScriptText").value = l, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Join World", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field and click 📢 to join the world.", addMessage("Join script ready to share", 3e3)
-                }
-            } else addMessage("Please enter a world and username", 3e3)
-        })), document.getElementById("homeIcon").addEventListener("click", (function () {
+        })), console.log("[MODAL] Pending modal click listener added")) : console.warn("[MODAL] pendingModal element not found"), e.addEventListener("click", startGame), document.getElementById("homeIcon").addEventListener("click", (function () {
             respawnPlayer(), this.blur()
         })), document.getElementById("camToggle").addEventListener("click", (function () {
             toggleCameraMode(), this.blur()

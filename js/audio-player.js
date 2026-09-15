@@ -394,13 +394,14 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
 
                 const playButton = document.createElement('button');
                 playButton.innerText = '▶';
-                playButton.className = 'preview-play-btn';
+                playButton.className = 'preview-play-btn uniform-action-btn';
                 playButton.style.fontSize = '10px';
                 const songUrl = buildIPFSUrl(hash, sanitizedFilename);
                 playButton.onclick = () => togglePreview(playButton, songUrl);
                 buttonContainer.appendChild(playButton);
 
                 const addButton = document.createElement('button');
+                addButton.className = 'uniform-action-btn';
                 addButton.innerText = 'Add';
                 addButton.style.fontSize = '10px';
                 addButton.style.marginLeft = '5px';
@@ -450,6 +451,7 @@ function renderPlaylist() {
         listItem.appendChild(songName);
 
         const removeButton = document.createElement('button');
+        removeButton.className = 'uniform-action-btn';
         removeButton.innerText = 'Remove';
         removeButton.style.fontSize = '10px';
         removeButton.onclick = () => {
