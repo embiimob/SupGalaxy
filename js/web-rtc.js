@@ -2286,7 +2286,6 @@ function openUsersModal() {
             joinBtn.style.padding = "4px 8px";
             joinBtn.onclick = async (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
-                isPromptOpen = true;
 
                 const worldForJoin = wName.slice(0, 8);
                 const userForJoin = userName.slice(0, 20);
@@ -2298,6 +2297,7 @@ function openUsersModal() {
                     return;
                 }
 
+                isPromptOpen = true;
                 const worldAddress = await GetPublicAddressByKeyword(keyword);
                 const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
                 const joinList = [worldAddress ? worldAddress.trim() : keyword, masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY].filter((entry) => entry).join(",").replace(/["']/g, "");
