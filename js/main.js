@@ -5251,9 +5251,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
             this.blur();
             isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
+            var e = await GetPublicAddressByKeyword("MCUserJoin@" + worldName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                o = [e || "MCUserJoin@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
             document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"

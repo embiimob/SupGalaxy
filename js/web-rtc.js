@@ -2313,13 +2313,12 @@ function openUsersModal() {
             joinBtn.onclick = async (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
 
-                const worldForJoin = wName.slice(0, 8);
                 const userForJoin = normalizedUserName;
-                const keyword = worldForJoin + "@" + userForJoin;
+                const keyword = "MCUserJoin@" + wName;
                 const worldData = knownWorlds.get(wName);
 
                 if (worldData && worldData.users && worldData.users.has(userForJoin)) {
-                    addMessage("User already in this world. Choose a different username.", 3e3);
+                    addMessage("You already appear in this world.", 3e3);
                     return;
                 }
 
