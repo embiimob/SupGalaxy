@@ -2184,12 +2184,6 @@ function openUsersModal() {
     const styleKnownWorldButton = (button, compact) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
-        button.style.background = "var(--accent)";
-        button.style.color = "#111";
-        button.style.border = "0";
-        button.style.borderRadius = "8px";
-        button.style.cursor = "pointer";
-        button.style.fontWeight = "700";
         button.style.padding = compact ? "4px 8px" : "10px";
     };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
