@@ -1653,6 +1653,7 @@ self.onmessage = async function(e) {
                                 // Provide user feedback and update UI (matching handleMinimapFile behavior)
                                 addMessage('Connected to ' + hostUser + ' via IPFS', 5000);
                                 updateHudButtons();
+                                isConnecting = false;
                                 
                                 // Clear the answer polling interval since we got our answer
                                 var userKeyword = worldName + "@" + userName;

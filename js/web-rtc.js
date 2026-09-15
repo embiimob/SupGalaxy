@@ -310,6 +310,7 @@ function setupDataChannel(e, t) {
             stopOfferPolling();
             console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
+        isConnecting = !1;
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
