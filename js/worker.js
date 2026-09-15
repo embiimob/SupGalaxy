@@ -1286,7 +1286,11 @@ self.onmessage = async function(e) {
                             }
                             if (!msg.TransactionId) continue;
 
-                            var msgTime = new Date(msg.BlockDate).getTime();
+                            var dateStr = msg.BlockDate;
+                            if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
+                                dateStr += " UTC";
+                            }
+                            var msgTime = new Date(dateStr).getTime();
                             if (Date.now() - msgTime > 30 * 60 * 1000) {
                                 console.log('[Worker] Skipping offer message older than 30 minutes:', msg.TransactionId);
                                 processedOfferMessages.add(msg.TransactionId);
@@ -1424,7 +1428,11 @@ self.onmessage = async function(e) {
                             }
                             if (!msg.TransactionId) continue;
 
-                            var msgTime = new Date(msg.BlockDate).getTime();
+                            var dateStr = msg.BlockDate;
+                            if (!dateStr.endsWith("Z") && dateStr.indexOf("UTC") === -1) {
+                                dateStr += " UTC";
+                            }
+                            var msgTime = new Date(dateStr).getTime();
                             if (Date.now() - msgTime > 30 * 60 * 1000) {
                                 console.log('[Worker] Skipping answer message older than 30 minutes:', msg.TransactionId);
                                 processedAnswerMessages.add(msg.TransactionId);
