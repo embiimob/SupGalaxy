@@ -1285,6 +1285,15 @@ self.onmessage = async function(e) {
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
+
+                            var msgTime = new Date(msg.BlockDate).getTime();
+                            if (Date.now() - msgTime > 30 * 60 * 1000) {
+                                console.log('[Worker] Skipping offer message older than 30 minutes:', msg.TransactionId);
+                                processedOfferMessages.add(msg.TransactionId);
+                                processedIds.push(msg.TransactionId);
+                                continue;
+                            }
+
                             console.log('[Worker] Processing offer message:', msg.TransactionId, 'from:', msg.FromAddress);
                             processedOfferMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
@@ -1414,6 +1423,15 @@ self.onmessage = async function(e) {
                                 continue; // Allow processing of older messages that may have been missed
                             }
                             if (!msg.TransactionId) continue;
+
+                            var msgTime = new Date(msg.BlockDate).getTime();
+                            if (Date.now() - msgTime > 30 * 60 * 1000) {
+                                console.log('[Worker] Skipping answer message older than 30 minutes:', msg.TransactionId);
+                                processedAnswerMessages.add(msg.TransactionId);
+                                processedIds.push(msg.TransactionId);
+                                continue;
+                            }
+
                             console.log('[Worker] Processing answer message:', msg.TransactionId, 'from:', msg.FromAddress);
                             processedAnswerMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
