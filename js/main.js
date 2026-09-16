@@ -5317,7 +5317,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: No valid URN for address:", o.FromAddress);
                             continue
                         }
-                        var n = a.URN,
+                        var n = a.URN.replace(/^"|"$/g, "").trim(),
                             r = await GetProfileByURN(n);
                         if (!r || !r.Creators || !r.Creators.includes(o.FromAddress)) {
                             console.log("[USERS] Skipping message: Invalid profile for user:", n);
@@ -5328,9 +5328,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: No keyword for address:", o.ToAddress);
                             continue
                         }
-                        var i = s.replace(/^"|"$/g, "");
+                        var i = s.replace(/^"|"$/g, "").trim();
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
+                        var joinKeywordPrefix = "MCUserJoin@";
 
                         if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
                             var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
@@ -5338,11 +5339,11 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                 if (!outputAddress || outputAddress === o.ToAddress) continue;
                                 var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
                                 if (!outputKeywordRaw) continue;
-                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "");
-                                if (outputKeyword.includes("MCUserJoin@")) {
-                                    var outputJoinParts = outputKeyword.split("@");
-                                    if (outputJoinParts.length >= 2) {
-                                        worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "").trim();
+                                if (outputKeyword.startsWith(joinKeywordPrefix)) {
+                                    var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
+                                    if (outputWorldName) {
+                                        worldNameFromKey = outputWorldName;
                                         worldAddressFromKey = outputAddress;
                                         break
                                     }
@@ -5350,31 +5351,24 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             }
                         }
 
-                        // Logic to handle MCUserJoin format (Discovery)
-                        if (!worldNameFromKey && i.includes("MCUserJoin@")) {
-                            var joinParts = i.split("@");
-                            if (joinParts.length >= 2) {
-                                worldNameFromKey = joinParts.slice(1).join("@");
+                        if (!worldNameFromKey && i.startsWith(joinKeywordPrefix)) {
+                            var directWorldName = i.slice(joinKeywordPrefix.length).trim();
+                            if (directWorldName) {
+                                worldNameFromKey = directWorldName;
                                 worldAddressFromKey = o.ToAddress;
                             }
-                        } else if (!worldNameFromKey) {
-                            // Logic to handle world@user format (Direct/Legacy)
-                            var parts = i.split("@");
-                            if (parts.length >= 2) {
-                                var potentialWorld = parts[0];
-                                var potentialUser = parts.slice(1).join("@");
-                                // Verify user match only if we are parsing user from key
-                                if (n.startsWith(potentialUser)) {
-                                    worldNameFromKey = potentialWorld;
-                                    worldAddressFromKey = o.ToAddress;
-                                }
-                            }
+                        }
+
+                        if (!worldNameFromKey) {
+                            console.log("[USERS] Skipping message: Unsupported join keyword:", i);
+                            continue;
                         }
 
                         if (n && worldNameFromKey) {
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
+                            var joinTimestamp = Date.parse(o.BlockDate) || Date.now();
                             upsertKnownWorldUser(worldNameFromKey, n, {
-                                timestamp: Date.parse(o.BlockDate) || Date.now(),
+                                timestamp: joinTimestamp,
                                 address: o.FromAddress,
                                 worldAddress: worldAddressFromKey,
                                 discoverer: n,
@@ -5400,7 +5394,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
 
                             // Immediately protect home chunk for known users
                             var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
-                            updateChunkOwnership(chunkKey, n, Date.now(), 'home');
+                            updateChunkOwnership(chunkKey, n, joinTimestamp, 'home');
 
                             processedMessages.add(o.TransactionId);
                         }

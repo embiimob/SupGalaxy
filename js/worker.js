@@ -1117,41 +1117,25 @@ self.onmessage = async function(e) {
 
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
+                        var joinKeywordPrefix = "MCUserJoin@";
                         if (toKeyword === MASTER_WORLD_KEY && msg.TransactionId) {
                             var txOutputAddresses = await getTransactionOutputAddresses(msg.TransactionId);
                             for (var outputAddress of txOutputAddresses) {
                                 if (!outputAddress || outputAddress === msg.ToAddress) continue;
-                                var outputKeyword = await getKeywordByPublicAddress(outputAddress);
-                                if (!outputKeyword || !outputKeyword.includes("MCUserJoin@")) continue;
-                                var outputJoinParts = outputKeyword.split("@");
-                                if (outputJoinParts.length >= 2) {
-                                    worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                var outputKeyword = norm(await getKeywordByPublicAddress(outputAddress));
+                                if (!outputKeyword.startsWith(joinKeywordPrefix)) continue;
+                                var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
+                                if (outputWorldName) {
+                                    worldNameFromKey = outputWorldName;
                                     worldAddressFromKey = outputAddress;
                                     break;
                                 }
                             }
-                        } else if (toKeyword.includes("MCUserJoin@")) {
-                            var mcUserJoinParts = toKeyword.split("@");
-                            if (mcUserJoinParts.length >= 2) {
-                                worldNameFromKey = mcUserJoinParts.slice(1).join("@");
+                        } else if (toKeyword.startsWith(joinKeywordPrefix)) {
+                            var directWorldName = toKeyword.slice(joinKeywordPrefix.length).trim();
+                            if (directWorldName) {
+                                worldNameFromKey = directWorldName;
                                 worldAddressFromKey = msg.ToAddress;
-                            }
-                        } else {
-                            // Parse world@user format
-                            var parts = toKeyword.split("@");
-                            if (parts.length < 2) {
-                                console.log('[Worker] Skipping worlds_users message, invalid keyword format:', toKeyword, 'txId:', msg.TransactionId);
-                                continue;
-                            }
-
-                            worldNameFromKey = parts[0];
-                            worldAddressFromKey = msg.ToAddress;
-                            var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
-
-                            // Verify user match - check if userFromKey matches the beginning of the actual profile name
-                            if (!user.startsWith(userFromKey)) {
-                                console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
-                                continue;
                             }
                         }
 
@@ -1163,7 +1147,15 @@ self.onmessage = async function(e) {
                         if (user && worldNameFromKey) {
                             if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, worldAddressFromKey || msg.ToAddress);
                             if (!users.has(user)) users.set(user, msg.FromAddress);
-                            joinData.push({ user: user, world: worldNameFromKey, username: user, transactionId: msg.TransactionId });
+                            joinData.push({
+                                user: user,
+                                world: worldNameFromKey,
+                                username: user,
+                                transactionId: msg.TransactionId,
+                                address: msg.FromAddress,
+                                worldAddress: worldAddressFromKey || msg.ToAddress,
+                                timestamp: new Date(msg.BlockDate).getTime() || Date.now()
+                            });
                             processedMessages.add(msg.TransactionId);
                             processedIds.push(msg.TransactionId);
                         }
@@ -1592,14 +1584,77 @@ self.onmessage = async function(e) {
             if (data.type === "worlds_users") {
                 console.log('[Users] Received worlds_users: worlds=', Object.keys(data.worlds || {}).length, 'users=', Object.keys(data.users || {}).length);
                 if (data.worlds && typeof data.worlds === 'object' && Object.keys(data.worlds).length > 0) {
-                    knownWorlds = new Map(Object.entries(data.worlds));
+                    Object.entries(data.worlds).forEach(function(entry) {
+                        var knownWorldName = entry[0];
+                        var knownWorldAddress = entry[1];
+                        var existingWorldEntry = knownWorlds.get(knownWorldName);
+                        if (!existingWorldEntry || typeof existingWorldEntry !== 'object') {
+                            knownWorlds.set(knownWorldName, {
+                                discoverer: null,
+                                users: new Map(),
+                                toAddress: knownWorldAddress || existingWorldEntry || null
+                            });
+                            return;
+                        }
+                        if (existingWorldEntry.users instanceof Set) {
+                            var migratedUsers = new Map();
+                            existingWorldEntry.users.forEach(function(u) {
+                                migratedUsers.set(u, {
+                                    timestamp: Date.now(),
+                                    address: null,
+                                    claimed: !0
+                                });
+                            });
+                            existingWorldEntry.users = migratedUsers;
+                        } else if (!(existingWorldEntry.users instanceof Map)) {
+                            existingWorldEntry.users = new Map(Object.entries(existingWorldEntry.users || {}));
+                        }
+                        if (!existingWorldEntry.toAddress && knownWorldAddress) {
+                            existingWorldEntry.toAddress = knownWorldAddress;
+                        }
+                        knownWorlds.set(knownWorldName, existingWorldEntry);
+                    });
                 } else {
                     console.log('[Users] Empty worlds_users data received, preserving existing knownWorlds');
                 }
                 if (data.users && typeof data.users === 'object' && Object.keys(data.users).length > 0) {
-                    knownUsers = new Map(Object.entries(data.users));
+                    Object.entries(data.users).forEach(function(entry) {
+                        var knownUserName = entry[0];
+                        var knownUserAddress = entry[1];
+                        if (!knownUsers.has(knownUserName) || !knownUsers.get(knownUserName)) {
+                            knownUsers.set(knownUserName, knownUserAddress);
+                        }
+                    });
                 } else {
                     console.log('[Users] Empty users data received, preserving existing knownUsers');
+                }
+                if (Array.isArray(data.joinData)) {
+                    data.joinData.forEach(function(join) {
+                        if (!join || !join.user || !join.world) return;
+                        var joinTimestamp = typeof join.timestamp === 'number' && !Number.isNaN(join.timestamp) ? join.timestamp : Date.now();
+                        var joinAddress = join.address || data.users && data.users[join.user] || null;
+                        var joinWorldAddress = join.worldAddress || data.worlds && data.worlds[join.world] || null;
+                        upsertKnownWorldUser(join.world, join.user, {
+                            timestamp: joinTimestamp,
+                            address: joinAddress,
+                            worldAddress: joinWorldAddress,
+                            discoverer: join.user,
+                            claimed: !0
+                        });
+                        var spawnKey = join.user + "@" + join.world;
+                        var spawn = calculateSpawnPoint(spawnKey);
+                        var cx = Math.floor(spawn.x / CHUNK_SIZE);
+                        var cz = Math.floor(spawn.z / CHUNK_SIZE);
+                        spawnChunks.set(spawnKey, {
+                            cx: cx,
+                            cz: cz,
+                            username: join.user,
+                            world: join.world,
+                            spawn: spawn
+                        });
+                        var chunkKey = makeChunkKey(join.world, cx, cz);
+                        updateChunkOwnership(chunkKey, join.user, joinTimestamp, 'home');
+                    });
                 }
                 if (data.processedIds) {
                     data.processedIds.forEach(id => processedMessages.add(id));
