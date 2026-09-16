@@ -595,8 +595,6 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
-var txRootByIdCache = new Map();
-var txOutputsByIdCache = new Map();
 var processedMessages = new Set();
 var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
@@ -633,20 +631,31 @@ async function getPublicAddressByKeyword(keyword) {
             return null;
         }
 }
-async function getPublicMessagesByAddress(address, skip, qty) {
+
+function normalizeRootRecord(root, address) {
+        var messageText = Array.isArray(root && root.Message) ? root.Message.join("") : root && root.Message ? String(root.Message) : "";
+        var fromAddress = root && root.SignedBy ? String(root.SignedBy).trim() : root && root.FromAddress ? String(root.FromAddress).trim() : "";
+        return Object.assign({}, root, {
+            Message: messageText,
+            FromAddress: fromAddress,
+            ToAddress: address ? address.trim().replace(/^"|"$/g, "") : ""
+        });
+}
+
+async function getRootsByAddress(address, skip, qty) {
         try {
             // Address should be alphanumeric, but we use strict quote stripping just in case
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
+            var response = await fetch("https://p2fk.io/GetRootsByAddress/" + cleanAddress + "?skip=" + (skip || 0) + "&qty=" + (qty || 5000) + "&mainnet=false");
             if (!response.ok) {
-                console.error('[Worker] Failed to fetch messages for address:', cleanAddress, 'status:', response.status);
+                console.error('[Worker] Failed to fetch roots for address:', cleanAddress, 'status:', response.status);
                 return [];
             }
-            var messages = await response.json();
-            return messages;
+            var roots = await response.json();
+            return Array.isArray(roots) ? roots.map((root => normalizeRootRecord(root, address))) : [];
         } catch (e) {
-            console.error('[Worker] Error fetching messages for address:', address, e);
+            console.error('[Worker] Error fetching roots for address:', address, e);
             return [];
         }
 }
@@ -828,34 +837,6 @@ async function getKeywordByPublicAddress(address) {
             return null;
         }
 }
-async function getTransactionOutputAddresses(txid) {
-        try {
-            if (!txid) return [];
-            if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
-            var root = await getRootByTransactionID(txid);
-            var outputs = root && root.Keyword ? Object.keys(root.Keyword).map((address => address && address.trim ? address.trim() : "")).filter(Boolean) : [];
-            txOutputsByIdCache.set(txid, outputs);
-            return outputs;
-        } catch (e) {
-            console.error('[Worker] Error fetching tx outputs for txid:', txid, e);
-            return [];
-        }
-}
-async function getRootByTransactionID(txid) {
-        try {
-            if (!txid) return null;
-            if (txRootByIdCache.has(txid)) return txRootByIdCache.get(txid);
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetRootByTransactionID/" + encodeURIComponent(txid) + "?mainnet=false");
-            if (!response.ok) return null;
-            var root = await response.json();
-            root && txRootByIdCache.set(txid, root);
-            return root;
-        } catch (e) {
-            console.error('[Worker] Error fetching tx root for txid:', txid, e);
-            return null;
-        }
-}
 // Sup!? local mode detection and IPFS path utilities
 var isSupLocalMode = false; // Will be set by main context
 
@@ -979,7 +960,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(addr, skip, qty);
+                        var response = await getRootsByAddress(addr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1126,7 +1107,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(masterAddr, skip, qty);
+                        var response = await getRootsByAddress(masterAddr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1155,21 +1136,19 @@ self.onmessage = async function(e) {
                             users.set(user, msg.FromAddress); // Allow partial data
                             continue;
                         }
-                        var toKeywordRaw = await getKeywordByPublicAddress(msg.ToAddress);
-                        if (!toKeywordRaw) {
-                            console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-                        var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
-
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
                         var joinKeywordPrefix = "MCUserJoin@";
-                        if (toKeyword === MASTER_WORLD_KEY && msg.TransactionId) {
-                            var txOutputAddresses = await getTransactionOutputAddresses(msg.TransactionId);
-                            for (var outputAddress of txOutputAddresses) {
-                                if (!outputAddress || outputAddress === msg.ToAddress) continue;
-                                var outputKeyword = norm(await getKeywordByPublicAddress(outputAddress));
+                        var keywordEntries = msg.Keyword ? Object.entries(msg.Keyword) : [];
+                        for (var keywordEntry of keywordEntries) {
+                            var outputAddress = keywordEntry[0];
+                            var outputKeywordRaw = keywordEntry[1];
+                            if (!outputAddress || !outputKeywordRaw) continue;
+                            var normalizedKeyword = String(outputKeywordRaw).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
+                            var keywordCandidates = [normalizedKeyword];
+                            normalizedKeyword.startsWith("o") && keywordCandidates.push(normalizedKeyword.slice(1).trim());
+                            for (var outputKeyword of keywordCandidates) {
+                                if (!outputKeyword || outputKeyword === MASTER_WORLD_KEY) continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
                                     var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
                                     if (outputWorldName) {
@@ -1188,24 +1167,11 @@ self.onmessage = async function(e) {
                                     }
                                 }
                             }
-                        } else if (toKeyword.startsWith(joinKeywordPrefix)) {
-                            var directWorldName = toKeyword.slice(joinKeywordPrefix.length).trim();
-                            if (directWorldName) {
-                                worldNameFromKey = directWorldName;
-                                worldAddressFromKey = msg.ToAddress;
-                            }
-                        } else {
-                            var legacyJoinParts = toKeyword.split("@");
-                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
-                            var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
-                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && user === legacyJoinUser) {
-                                worldNameFromKey = legacyWorldName;
-                                worldAddressFromKey = msg.ToAddress;
-                            }
+                            if (worldNameFromKey) break;
                         }
 
                         if (!worldNameFromKey) {
-                            console.log('[Worker] Skipping worlds_users message, no world could be derived from keyword:', toKeyword, 'txId:', msg.TransactionId);
+                            console.log('[Worker] Skipping worlds_users message, no world could be derived from root keywords:', msg.TransactionId);
                             continue;
                         }
 
@@ -1242,7 +1208,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(addressRes, skip, qty);
+                        var response = await getRootsByAddress(addressRes, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1288,7 +1254,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(serverAddr, skip, qty);
+                        var response = await getRootsByAddress(serverAddr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1373,7 +1339,7 @@ self.onmessage = async function(e) {
                         var skip = 0;
                         var qty = 5000;
                         while (true) {
-                            var response = await getPublicMessagesByAddress(offerAddr, skip, qty);
+                            var response = await getRootsByAddress(offerAddr, skip, qty);
                             if (!response || response.length === 0) break;
                             messages = messages.concat(response);
                             if (response.length < qty) break;
@@ -1520,7 +1486,7 @@ self.onmessage = async function(e) {
                         var skip = 0;
                         var qty = 5000;
                         while (true) {
-                            var response = await getPublicMessagesByAddress(answerAddr, skip, qty);
+                            var response = await getRootsByAddress(answerAddr, skip, qty);
                             if (!response || response.length === 0) break;
                             messages = messages.concat(response);
                             if (response.length < qty) break;

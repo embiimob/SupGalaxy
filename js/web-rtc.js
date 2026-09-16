@@ -2137,7 +2137,7 @@ async function initServers() {
         var userThreadAddr = await GetPublicAddressByKeyword(userThreadKeyword);
         if (userThreadAddr) {
             for (a = [], r = 0, s = 5e3; ;) try {
-                if (await new Promise((e => setTimeout(e, n))), !(C = await GetPublicMessagesByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
+                if (await new Promise((e => setTimeout(e, n))), !(C = await GetRootsByAddress(userThreadAddr, r, s)) || 0 === C.length) break;
                 if (a = a.concat(C), C.length < s) break;
                 r += s
             } catch (e) {

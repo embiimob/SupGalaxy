@@ -123,7 +123,7 @@ async function fetchAndPlayVideos(searchTerm = 'game') {
             return;
         }
 
-        const messages = await GetPublicMessagesByAddress(gameAddress, 0, 100);
+        const messages = await GetRootsByAddress(gameAddress, 0, 100);
         if (!messages || messages.length === 0) {
             videoStatus.innerText = 'No videos found';
             return;
@@ -326,7 +326,7 @@ async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
             return;
         }
 
-        const messages = await GetPublicMessagesByAddress(gameAddress, (page - 1) * 50, 50);
+        const messages = await GetRootsByAddress(gameAddress, (page - 1) * 50, 50);
         if (!messages || messages.length === 0) {
             videoList.innerHTML = '<li>No more videos</li>';
             document.getElementById('videoNextBtn').disabled = true;

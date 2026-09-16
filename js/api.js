@@ -2,8 +2,6 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
-var txRootByIdCache = new Map();
-var txOutputsByIdCache = new Map();
 var ipfsFailureCounts = new Map();
 var missingIpfsPaths = new Set();
 
@@ -130,19 +128,30 @@ async function resolveIPFS(url) {
     const blob = await response.blob();
     return URL.createObjectURL(blob);
 }
-async function GetPublicMessagesByAddress(address, skip, qty) {
+
+function normalizeRootRecord(root, address) {
+    var messageText = Array.isArray(root && root.Message) ? root.Message.join("") : root && root.Message ? String(root.Message) : "";
+    var fromAddress = root && root.SignedBy ? String(root.SignedBy).trim() : root && root.FromAddress ? String(root.FromAddress).trim() : "";
+    return Object.assign({}, root, {
+        Message: messageText,
+        FromAddress: fromAddress,
+        ToAddress: address ? address.trim().replace(/^"|"$/g, '') : ""
+    });
+}
+
+async function GetRootsByAddress(address, skip, qty) {
     try {
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetPublicMessagesByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
+        var response = await fetch('https://p2fk.io/GetRootsByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
         if (!response.ok) {
-            addMessage('Failed to fetch messages: Invalid address');
+            addMessage('Failed to fetch roots: Invalid address');
             return [];
         }
-        var messages = await response.json();
-        return messages;
+        var roots = await response.json();
+        return Array.isArray(roots) ? roots.map((root => normalizeRootRecord(root, address))) : [];
     } catch (e) {
-        addMessage('Failed to fetch messages');
+        addMessage('Failed to fetch roots');
         return [];
     }
 }
@@ -189,32 +198,6 @@ async function GetKeywordByPublicAddress(address) {
         return cleanKeyword;
     } catch (e) {
         addMessage('Failed to fetch keyword for address');
-        return null;
-    }
-}
-async function GetTransactionOutputAddresses(txid) {
-    try {
-        if (!txid) return [];
-        if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
-        var root = await GetRootByTransactionID(txid);
-        var outputs = root && root.Keyword ? Object.keys(root.Keyword).map((address => address && address.trim ? address.trim() : "")).filter(Boolean) : [];
-        txOutputsByIdCache.set(txid, outputs);
-        return outputs;
-    } catch (e) {
-        return [];
-    }
-}
-async function GetRootByTransactionID(txid) {
-    try {
-        if (!txid) return null;
-        if (txRootByIdCache.has(txid)) return txRootByIdCache.get(txid);
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetRootByTransactionID/' + encodeURIComponent(txid) + '?mainnet=false');
-        if (!response.ok) return null;
-        var root = await response.json();
-        root && txRootByIdCache.set(txid, root);
-        return root;
-    } catch (e) {
         return null;
     }
 }
