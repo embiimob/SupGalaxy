@@ -1123,18 +1123,34 @@ self.onmessage = async function(e) {
                             for (var outputAddress of txOutputAddresses) {
                                 if (!outputAddress || outputAddress === msg.ToAddress) continue;
                                 var outputKeyword = norm(await getKeywordByPublicAddress(outputAddress));
-                                if (!outputKeyword.startsWith(joinKeywordPrefix)) continue;
-                                var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
-                                if (outputWorldName) {
-                                    worldNameFromKey = outputWorldName;
-                                    worldAddressFromKey = outputAddress;
-                                    break;
+                                if (outputKeyword.startsWith(joinKeywordPrefix)) {
+                                    var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
+                                    if (outputWorldName) {
+                                        worldNameFromKey = outputWorldName;
+                                        worldAddressFromKey = outputAddress;
+                                        break;
+                                    }
+                                } else {
+                                    var legacyOutputParts = outputKeyword.split("@");
+                                    var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
+                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName) {
+                                        worldNameFromKey = legacyOutputWorldName;
+                                        worldAddressFromKey = outputAddress;
+                                        break;
+                                    }
                                 }
                             }
                         } else if (toKeyword.startsWith(joinKeywordPrefix)) {
                             var directWorldName = toKeyword.slice(joinKeywordPrefix.length).trim();
                             if (directWorldName) {
                                 worldNameFromKey = directWorldName;
+                                worldAddressFromKey = msg.ToAddress;
+                            }
+                        } else {
+                            var legacyJoinParts = toKeyword.split("@");
+                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
+                            if (legacyJoinParts.length >= 2 && legacyWorldName) {
+                                worldNameFromKey = legacyWorldName;
                                 worldAddressFromKey = msg.ToAddress;
                             }
                         }
@@ -1621,7 +1637,7 @@ self.onmessage = async function(e) {
                     Object.entries(data.users).forEach(function(entry) {
                         var knownUserName = entry[0];
                         var knownUserAddress = entry[1];
-                        if (!knownUsers.has(knownUserName) || !knownUsers.get(knownUserName)) {
+                        if (knownUserAddress) {
                             knownUsers.set(knownUserName, knownUserAddress);
                         }
                     });

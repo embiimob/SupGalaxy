@@ -171,7 +171,7 @@ function registerKnownWorldJoin(world, user, options = {}) {
         discoverer: void 0 !== options.discoverer ? options.discoverer : user,
         claimed: options.claimed !== !1
     });
-    if (joinAddress && (!knownUsers.has(user) || !knownUsers.get(user))) {
+    if (joinAddress) {
         knownUsers.set(user, joinAddress);
     }
     const spawnKey = user + "@" + world;
@@ -186,7 +186,7 @@ function registerKnownWorldJoin(world, user, options = {}) {
         spawn: spawn
     });
     const chunkKey = makeChunkKey(world, cx, cz);
-    updateChunkOwnership(chunkKey, user, joinTimestamp, 'home');
+    updateChunkOwnership(chunkKey, user, Date.now(), 'home');
 }
 
 async function applySaveFile(e, t, o) {
@@ -5377,6 +5377,14 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                         worldAddressFromKey = outputAddress;
                                         break
                                     }
+                                } else {
+                                    var legacyOutputParts = outputKeyword.split("@");
+                                    var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
+                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName) {
+                                        worldNameFromKey = legacyOutputWorldName;
+                                        worldAddressFromKey = outputAddress;
+                                        break
+                                    }
                                 }
                             }
                         }
@@ -5385,6 +5393,13 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             var directWorldName = i.slice(joinKeywordPrefix.length).trim();
                             if (directWorldName) {
                                 worldNameFromKey = directWorldName;
+                                worldAddressFromKey = o.ToAddress;
+                            }
+                        } else if (!worldNameFromKey) {
+                            var legacyJoinParts = i.split("@");
+                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
+                            if (legacyJoinParts.length >= 2 && legacyWorldName) {
+                                worldNameFromKey = legacyWorldName;
                                 worldAddressFromKey = o.ToAddress;
                             }
                         }
