@@ -1134,7 +1134,7 @@ self.onmessage = async function(e) {
                                     var legacyOutputParts = outputKeyword.split("@");
                                     var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
                                     var legacyOutputUser = legacyOutputParts.slice(1).join("@").trim();
-                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && user.startsWith(legacyOutputUser)) {
+                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && user === legacyOutputUser) {
                                         worldNameFromKey = legacyOutputWorldName;
                                         worldAddressFromKey = outputAddress;
                                         break;
@@ -1151,7 +1151,7 @@ self.onmessage = async function(e) {
                             var legacyJoinParts = toKeyword.split("@");
                             var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
                             var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
-                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && user.startsWith(legacyJoinUser)) {
+                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && user === legacyJoinUser) {
                                 worldNameFromKey = legacyWorldName;
                                 worldAddressFromKey = msg.ToAddress;
                             }
