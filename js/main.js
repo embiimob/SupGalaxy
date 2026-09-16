@@ -4876,26 +4876,27 @@ function gameLoop(e) {
             const a = eruptedBlocks[o];
             if (isHost || 0 === peers.size)
                 if ("boulder" === a.type) {
-                    a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t));
-                    const o = chunkManager.getSurfaceYForBoulders(a.mesh.position.x, a.mesh.position.z) + a.size / 2;
-                    if (a.mesh.position.y <= o && (a.mesh.position.y = o, 2 !== a.mass || a.isRolling ? a.velocity.set(0, 0, 0) : (a.isRolling = !0, a.velocity.y = 0, a.velocity.x *= .8, a.velocity.z *= .8)), a.isRolling && (a.mesh.rotation.x += a.velocity.z * t * 2, a.mesh.rotation.z -= a.velocity.x * t * 2, a.velocity.multiplyScalar(1 - .5 * t), a.velocity.length() < .1 && (a.isRolling = !1)), 4 === a.mass) {
-                        const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
-                            o = (new THREE.Box3).setFromObject(a.mesh);
-                        t.intersectsBox(o) && e - lastDamageTime > 1e3 && (player.health = Math.max(0, player.health - 10), lastDamageTime = e, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a boulder! -10 HP", 2e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
-                    }
+                    updateBoulder(a, t)
                 } else a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t));
-            else if ("boulder" === a.type && a.lastUpdate > 0) {
-                const t = e - a.lastUpdate,
-                    o = Math.min(1, t / 100);
+            else if ("boulder" === a.type && a.lastUpdate > 0 && e - a.lastUpdate < 500) {
+                const o = 1 - Math.exp(-15 * t);
                 a.mesh.position.lerp(a.targetPosition, o), a.mesh.quaternion.slerp(a.targetQuaternion, o)
-            } else "boulder" !== a.type && (a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t)));
-            (a.mesh.position.y < -10 || Date.now() - a.createdAt > 15e3) && (scene.remove(a.mesh), disposeObject(a.mesh), eruptedBlocks.splice(o, 1))
+            } else if ("boulder" === a.type) updateBoulder(a, t);
+            else a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t));
+            if ("boulder" === a.type && 4 === a.mass) {
+                const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
+                    o = (new THREE.Box3).setFromObject(a.mesh);
+                t.intersectsBox(o) && e - lastDamageTime > 1e3 && (player.health = Math.max(0, player.health - 10), lastDamageTime = e, document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a boulder! -10 HP", 2e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
+            }
+            (a.mesh.position.y < -10 || Date.now() - a.createdAt > ("boulder" === a.type ? 45e3 : 15e3)) && (scene.remove(a.mesh), disposeObject(a.mesh), eruptedBlocks.splice(o, 1))
         }
         if ((isHost || 0 === peers.size) && e - (lastStateUpdateTime || 0) > 100) {
             const e = eruptedBlocks.filter((e => "boulder" === e.type)).map((e => ({
                 id: e.id,
                 position: e.mesh.position.toArray(),
-                quaternion: e.mesh.quaternion.toArray()
+                quaternion: e.mesh.quaternion.toArray(),
+                velocity: e.velocity.toArray(),
+                isRolling: e.isRolling
             })));
             if (e.length > 0) {
                 const t = {
