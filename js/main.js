@@ -127,7 +127,8 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
 }
 
 function upsertKnownWorldUser(world, user, options = {}) {
-    const timestamp = void 0 !== options.timestamp ? options.timestamp : Date.now();
+    const hasExplicitTimestamp = void 0 !== options.timestamp && null !== options.timestamp;
+    const timestamp = hasExplicitTimestamp ? options.timestamp : Date.now();
     const address = void 0 !== options.address ? options.address : null;
     const worldAddress = void 0 !== options.worldAddress ? options.worldAddress : address;
     const discoverer = void 0 !== options.discoverer ? options.discoverer : user;
@@ -152,7 +153,7 @@ function upsertKnownWorldUser(world, user, options = {}) {
     const hasNewAddress = void 0 !== options.address && null !== options.address;
     const nextAddress = hasNewAddress ? address : existingUserData && void 0 !== existingUserData.address ? existingUserData.address : null;
     worldData.users.set(user, {
-        timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
+        timestamp: hasExplicitTimestamp ? timestamp : existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
         address: nextAddress,
         claimed: claimed || !!(existingUserData && existingUserData.claimed === !0)
     }), knownWorlds.set(world, worldData)
@@ -5328,6 +5329,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         }
                         var i = s.replace(/^"|"$/g, "");
                         var worldNameFromKey = null;
+                        var worldAddressFromKey = null;
 
                         if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
                             var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
@@ -5340,6 +5342,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                     var outputJoinParts = outputKeyword.split("@");
                                     if (outputJoinParts.length >= 2) {
                                         worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                        worldAddressFromKey = outputAddress;
                                         break
                                     }
                                 }
@@ -5351,6 +5354,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             var joinParts = i.split("@");
                             if (joinParts.length >= 2) {
                                 worldNameFromKey = joinParts.slice(1).join("@");
+                                worldAddressFromKey = o.ToAddress;
                             }
                         } else if (!worldNameFromKey) {
                             // Logic to handle world@user format (Direct/Legacy)
@@ -5361,6 +5365,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                 // Verify user match only if we are parsing user from key
                                 if (n.startsWith(potentialUser)) {
                                     worldNameFromKey = potentialWorld;
+                                    worldAddressFromKey = o.ToAddress;
                                 }
                             }
                         }
@@ -5370,7 +5375,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             upsertKnownWorldUser(worldNameFromKey, n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
                                 address: o.FromAddress,
-                                worldAddress: o.ToAddress,
+                                worldAddress: worldAddressFromKey,
                                 discoverer: n,
                                 claimed: !0
                             });

@@ -1116,6 +1116,7 @@ self.onmessage = async function(e) {
                         var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
 
                         var worldNameFromKey = null;
+                        var worldAddressFromKey = null;
                         if (toKeyword === MASTER_WORLD_KEY && msg.TransactionId) {
                             var txOutputAddresses = await getTransactionOutputAddresses(msg.TransactionId);
                             for (var outputAddress of txOutputAddresses) {
@@ -1125,6 +1126,7 @@ self.onmessage = async function(e) {
                                 var outputJoinParts = outputKeyword.split("@");
                                 if (outputJoinParts.length >= 2) {
                                     worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                    worldAddressFromKey = outputAddress;
                                     break;
                                 }
                             }
@@ -1132,6 +1134,7 @@ self.onmessage = async function(e) {
                             var mcUserJoinParts = toKeyword.split("@");
                             if (mcUserJoinParts.length >= 2) {
                                 worldNameFromKey = mcUserJoinParts.slice(1).join("@");
+                                worldAddressFromKey = msg.ToAddress;
                             }
                         } else {
                             // Parse world@user format
@@ -1142,6 +1145,7 @@ self.onmessage = async function(e) {
                             }
 
                             worldNameFromKey = parts[0];
+                            worldAddressFromKey = msg.ToAddress;
                             var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
 
                             // Verify user match - check if userFromKey matches the beginning of the actual profile name
@@ -1157,7 +1161,7 @@ self.onmessage = async function(e) {
                         }
 
                         if (user && worldNameFromKey) {
-                            if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, msg.ToAddress);
+                            if (!worlds.has(worldNameFromKey)) worlds.set(worldNameFromKey, worldAddressFromKey || msg.ToAddress);
                             if (!users.has(user)) users.set(user, msg.FromAddress);
                             joinData.push({ user: user, world: worldNameFromKey, username: user, transactionId: msg.TransactionId });
                             processedMessages.add(msg.TransactionId);
