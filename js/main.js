@@ -5380,7 +5380,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                 } else {
                                     var legacyOutputParts = outputKeyword.split("@");
                                     var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
-                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName) {
+                                    var legacyOutputUser = legacyOutputParts.slice(1).join("@").trim();
+                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && n.startsWith(legacyOutputUser)) {
                                         worldNameFromKey = legacyOutputWorldName;
                                         worldAddressFromKey = outputAddress;
                                         break
@@ -5398,7 +5399,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         } else if (!worldNameFromKey) {
                             var legacyJoinParts = i.split("@");
                             var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
-                            if (legacyJoinParts.length >= 2 && legacyWorldName) {
+                            var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
+                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && n.startsWith(legacyJoinUser)) {
                                 worldNameFromKey = legacyWorldName;
                                 worldAddressFromKey = o.ToAddress;
                             }
