@@ -513,6 +513,12 @@ async function deriveKeywordAddress(keyword){
   return encB58C(p);
 }
 
+async function deriveKeywordFromAddress(address){
+  const p=await decB58C(norm(address).replace(/^"|"$/g,''));
+  if(!p||p.length<2) return null;
+  return new TextDecoder().decode(p.slice(1)).replace(/#+$/g,'');
+}
+
 async function kwAddr(keyword){
   const tok=norm(keyword).replace(/^#/,'');
   if(!tok) return '';
@@ -880,6 +886,7 @@ window.h2b = h2b;
 window.sha256 = sha256;
 window.priv2addr = priv2addr;
 window.deriveKeywordAddress = deriveKeywordAddress;
+window.deriveKeywordFromAddress = deriveKeywordFromAddress;
 window.kwAddr = kwAddr;
 window.renderWalletUI = renderWalletUI;
 window.generateKey = generateKey;

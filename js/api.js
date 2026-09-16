@@ -148,15 +148,13 @@ async function GetProfileByAddress(address) {
 async function GetKeywordByPublicAddress(address) {
     try {
         if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetKeywordByPublicAddress/' + cleanAddress + '?mainnet=false');
-        if (!response.ok) {
-            addMessage('Failed to fetch keyword for address');
-            return null;
-        }
-        var keyword = await response.text();
-        var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, '') : null;
+        var cleanAddress = address.trim().replace(/^"|"$/g, '');
+        var cleanKeyword = null;
+        if ("function" == typeof window.deriveKeywordFromAddress) cleanKeyword = await window.deriveKeywordFromAddress(cleanAddress);
+        else if ("function" == typeof decB58C) try {
+            var payload = await decB58C(cleanAddress);
+            cleanKeyword = payload && payload.length > 1 ? new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "") : null
+        } catch (e) {}
         if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
         return cleanKeyword;
     } catch (e) {

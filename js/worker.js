@@ -792,19 +792,17 @@ async function getProfileByAddress(address) {
 async function getKeywordByPublicAddress(address) {
         try {
             if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch keyword for address:', cleanAddress, 'status:', response.status);
+            var cleanAddress = address.trim().replace(/^"|"$/g, "");
+            var payload = await decB58C(cleanAddress);
+            if (!payload || payload.length <= 1) {
+                console.error('[Worker] Failed to decode keyword for address:', cleanAddress);
                 return null;
             }
-            var keyword = await response.text();
-            var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, "") : null;
+            var cleanKeyword = new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "");
             if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
             return cleanKeyword;
         } catch (e) {
-            console.error('[Worker] Error fetching keyword for address:', address, e);
+            console.error('[Worker] Error decoding keyword for address:', address, e);
             return null;
         }
 }
