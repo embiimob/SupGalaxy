@@ -1631,29 +1631,13 @@ self.onmessage = async function(e) {
                 if (Array.isArray(data.joinData)) {
                     data.joinData.forEach(function(join) {
                         if (!join || !join.user || !join.world) return;
-                        var joinTimestamp = typeof join.timestamp === 'number' && !Number.isNaN(join.timestamp) ? join.timestamp : Date.now();
-                        var joinAddress = join.address || data.users && data.users[join.user] || null;
-                        var joinWorldAddress = join.worldAddress || data.worlds && data.worlds[join.world] || null;
-                        upsertKnownWorldUser(join.world, join.user, {
-                            timestamp: joinTimestamp,
-                            address: joinAddress,
-                            worldAddress: joinWorldAddress,
+                        registerKnownWorldJoin(join.world, join.user, {
+                            timestamp: typeof join.timestamp === 'number' && !Number.isNaN(join.timestamp) ? join.timestamp : Date.now(),
+                            address: join.address || data.users && data.users[join.user] || null,
+                            worldAddress: join.worldAddress || data.worlds && data.worlds[join.world] || null,
                             discoverer: join.user,
                             claimed: !0
                         });
-                        var spawnKey = join.user + "@" + join.world;
-                        var spawn = calculateSpawnPoint(spawnKey);
-                        var cx = Math.floor(spawn.x / CHUNK_SIZE);
-                        var cz = Math.floor(spawn.z / CHUNK_SIZE);
-                        spawnChunks.set(spawnKey, {
-                            cx: cx,
-                            cz: cz,
-                            username: join.user,
-                            world: join.world,
-                            spawn: spawn
-                        });
-                        var chunkKey = makeChunkKey(join.world, cx, cz);
-                        updateChunkOwnership(chunkKey, join.user, joinTimestamp, 'home');
                     });
                 }
                 if (data.processedIds) {

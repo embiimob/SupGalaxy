@@ -159,6 +159,36 @@ function upsertKnownWorldUser(world, user, options = {}) {
     }), knownWorlds.set(world, worldData)
 }
 
+function registerKnownWorldJoin(world, user, options = {}) {
+    if (!world || !user) return;
+    const joinTimestamp = void 0 !== options.timestamp && null !== options.timestamp ? options.timestamp : Date.now();
+    const joinAddress = void 0 !== options.address ? options.address : null;
+    const joinWorldAddress = void 0 !== options.worldAddress ? options.worldAddress : joinAddress;
+    upsertKnownWorldUser(world, user, {
+        timestamp: joinTimestamp,
+        address: joinAddress,
+        worldAddress: joinWorldAddress,
+        discoverer: void 0 !== options.discoverer ? options.discoverer : user,
+        claimed: options.claimed !== !1
+    });
+    if (joinAddress && (!knownUsers.has(user) || !knownUsers.get(user))) {
+        knownUsers.set(user, joinAddress);
+    }
+    const spawnKey = user + "@" + world;
+    const spawn = calculateSpawnPoint(spawnKey);
+    const cx = Math.floor(spawn.x / CHUNK_SIZE);
+    const cz = Math.floor(spawn.z / CHUNK_SIZE);
+    spawnChunks.set(spawnKey, {
+        cx: cx,
+        cz: cz,
+        username: user,
+        world: world,
+        spawn: spawn
+    });
+    const chunkKey = makeChunkKey(world, cx, cz);
+    updateChunkOwnership(chunkKey, user, joinTimestamp, 'home');
+}
+
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
@@ -5366,36 +5396,13 @@ document.addEventListener("DOMContentLoaded", (async function () {
 
                         if (n && worldNameFromKey) {
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
-                            var joinTimestamp = Date.parse(o.BlockDate) || Date.now();
-                            upsertKnownWorldUser(worldNameFromKey, n, {
-                                timestamp: joinTimestamp,
+                            registerKnownWorldJoin(worldNameFromKey, n, {
+                                timestamp: Date.parse(o.BlockDate) || Date.now(),
                                 address: o.FromAddress,
                                 worldAddress: worldAddressFromKey,
                                 discoverer: n,
                                 claimed: !0
                             });
-
-                            knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
-
-                            // Calculate spawn point for known user to enforce ownership
-                            var spawn = calculateSpawnPoint(n + "@" + worldNameFromKey);
-                            var cx = Math.floor(spawn.x / CHUNK_SIZE);
-                            var cz = Math.floor(spawn.z / CHUNK_SIZE);
-
-                            // Use key format: username@worldname to avoid conflicts
-                            var spawnMapKey = n + "@" + worldNameFromKey;
-                            spawnChunks.set(spawnMapKey, {
-                                cx: cx,
-                                cz: cz,
-                                username: n,
-                                world: worldNameFromKey,
-                                spawn: spawn
-                            });
-
-                            // Immediately protect home chunk for known users
-                            var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
-                            updateChunkOwnership(chunkKey, n, joinTimestamp, 'home');
-
                             processedMessages.add(o.TransactionId);
                         }
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
