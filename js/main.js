@@ -5264,7 +5264,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
             this.blur();
             isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword("MCUserJoin@" + worldName),
+            var e = knownWorlds.has(worldName) && knownWorlds.get(worldName) && "object" == typeof knownWorlds.get(worldName) ? knownWorlds.get(worldName).toAddress : null;
+            e || (e = await GetPublicAddressByKeyword("MCUserJoin@" + worldName));
+            var
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
                 o = [t || MASTER_WORLD_KEY, e || "MCUserJoin@" + worldName].filter((function (e) {
                     return e

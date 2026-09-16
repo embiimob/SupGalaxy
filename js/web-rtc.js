@@ -2332,7 +2332,8 @@ function openUsersModal() {
                 }
 
                 try {
-                    const worldAddress = await GetPublicAddressByKeyword(keyword);
+                    const knownWorldData = knownWorlds.get(wName);
+                    const worldAddress = knownWorldData && "object" == typeof knownWorldData && knownWorldData.toAddress ? knownWorldData.toAddress : await GetPublicAddressByKeyword(keyword);
                     const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
                     const resolvedWorldAddress = worldAddress ? worldAddress.trim() : keyword;
                     const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
