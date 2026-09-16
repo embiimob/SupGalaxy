@@ -83,8 +83,29 @@ async function decB58C(s) {
 const P2FK_VER = 0x6f; // 111
 const P2FK_CHUNK = 20;
 const P2FK_PAD = '#';
+var ipfsFailureCounts = new Map();
+var missingIpfsPaths = new Set();
 
 function norm(s) { return typeof s === 'string' ? s.trim() : ''; }
+
+function getIpfsCacheKey(hash, filename = null) {
+    return filename ? hash + '/' + filename : hash;
+}
+
+function markIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    var attempts = (ipfsFailureCounts.get(cacheKey) || 0) + 1;
+    ipfsFailureCounts.set(cacheKey, attempts);
+    if (attempts >= 3) {
+        missingIpfsPaths.add(cacheKey);
+    }
+}
+
+function clearIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    ipfsFailureCounts.delete(cacheKey);
+    missingIpfsPaths.delete(cacheKey);
+}
 
 async function deriveKeywordAddress(keyword) {
     const tok = norm(keyword).replace(/^#/, '');
@@ -843,6 +864,10 @@ function checkSupLocalMode() {
 }
 
 async function fetchIPFSWithFallback(hash, filename = null) {
+        var cacheKey = getIpfsCacheKey(hash, filename);
+        if (missingIpfsPaths.has(cacheKey)) {
+                throw new Error('IPFS path previously marked missing for this session.');
+        }
         // If running in Sup!? local mode and filename is provided, try local path first
         if (checkSupLocalMode() && filename) {
             try {
@@ -852,6 +877,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 const response = await fetch(localPath);
                 if (response.ok) {
                     console.log('[Worker IPFS] Successfully fetched from local path');
+                    clearIpfsFetchFailure(hash, filename);
                     return response;
                 }
                 console.log('[Worker IPFS] Local fetch failed with status:', response.status);
@@ -868,6 +894,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 try {
                         const response = await fetch(gatewayUrl);
                         if (response.ok) {
+                                clearIpfsFetchFailure(hash, filename);
                                 return response;
                         }
                         lastResponse = response;
@@ -876,23 +903,32 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 }
         }
         if (lastResponse) {
+                markIpfsFetchFailure(hash, filename);
                 return lastResponse;
         }
+        markIpfsFetchFailure(hash, filename);
         throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
 async function fetchIPFS(hash) {
+        if (missingIpfsPaths.has(getIpfsCacheKey(hash))) {
+            return null;
+        }
         let attempts = 0;
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
                 var response = await fetchIPFSWithFallback(hash);
                 if (response.ok) {
+                    clearIpfsFetchFailure(hash);
                     return await response.json();
                 }
                 console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
             } catch (e) {
                 console.error('[Worker] Error fetching IPFS for hash:', hash, e);
+                if (missingIpfsPaths.has(getIpfsCacheKey(hash))) {
+                    break;
+                }
             }
             attempts++;
         }

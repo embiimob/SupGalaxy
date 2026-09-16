@@ -4,6 +4,27 @@ var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var txRootByIdCache = new Map();
 var txOutputsByIdCache = new Map();
+var ipfsFailureCounts = new Map();
+var missingIpfsPaths = new Set();
+
+function getIpfsCacheKey(hash, filename = null) {
+    return filename ? hash + "/" + filename : hash;
+}
+
+function markIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    var attempts = (ipfsFailureCounts.get(cacheKey) || 0) + 1;
+    ipfsFailureCounts.set(cacheKey, attempts);
+    if (attempts >= 3) {
+        missingIpfsPaths.add(cacheKey);
+    }
+}
+
+function clearIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    ipfsFailureCounts.delete(cacheKey);
+    missingIpfsPaths.delete(cacheKey);
+}
 
 // Sup!? local mode detection and IPFS path utilities
 var isSupLocalMode = null;
@@ -17,6 +38,10 @@ function checkSupLocalMode() {
 }
 
 async function fetchIPFSWithFallback(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    if (missingIpfsPaths.has(cacheKey)) {
+        throw new Error('IPFS path previously marked missing for this session.');
+    }
     // If running in Sup!? local mode and filename is provided, try local path first
     if (checkSupLocalMode() && filename) {
         try {
@@ -27,6 +52,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             const response = await fetch(localPath);
             if (response.ok) {
                 console.log('[IPFS] Successfully fetched from local path');
+                clearIpfsFetchFailure(hash, filename);
                 return response;
             }
             console.log('[IPFS] Local fetch failed with status:', response.status);
@@ -44,6 +70,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         try {
             const response = await fetch(gatewayUrl);
             if (response.ok) {
+                clearIpfsFetchFailure(hash, filename);
                 return response;
             }
             lastResponse = response;
@@ -52,8 +79,10 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         }
     }
     if (lastResponse) {
+        markIpfsFetchFailure(hash, filename);
         return lastResponse;
     }
+    markIpfsFetchFailure(hash, filename);
     throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
@@ -197,6 +226,7 @@ async function fetchIPFS(hash) {
             return null;
         }
         var data = await response.json();
+        clearIpfsFetchFailure(hash);
         return data;
     } catch (e) {
         addMessage('Failed to fetch IPFS data');
