@@ -2,6 +2,7 @@ var peers = new Map,
     pendingOffers = [],
     connectionAttempts = new Map;
 window.hasPolledHost = !1;
+var webRtcPollingEnabled = !1;
 // Timeout for IPFS-based signaling (60 minutes in milliseconds)
 const IPFS_SIGNALING_TIMEOUT_MS = 60 * 60 * 1000;
 // Interval for refreshing ICE candidates for pending connections (5 minutes)
@@ -144,25 +145,7 @@ async function connectToServer(e, t, o) {
             d.href = l, d.download = fileName, document.body.appendChild(d), d.click(), d.remove(), URL.revokeObjectURL(l);
             document.getElementById("joinScriptText").value = targetAddr, document.getElementById("joinScriptModal").style.display = "block", document.getElementById("joinScriptModal").querySelector("h3").innerText = "Connect to Server", document.getElementById("joinScriptModal").querySelector("p").innerText = "Copy this address and paste it into a Sup!? message To: field, attach the JSON file, and click 📢 to connect to " + e + ". After sending, wait for host confirmation.", addMessage("Offer created for " + e + ". Send the JSON via Sup!? and wait for host to accept.", 1e4);
         }
-        // Monitor own thread for answers: world@username
-        var f = worldName + "@" + userName;
-        answerPollingIntervals.set(f, setInterval((function () {
-            if (worker.postMessage({
-                type: "poll",
-                chunkKeys: [],
-                masterKey: MASTER_WORLD_KEY,
-                userAddress: userAddress,
-                worldName: worldName,
-                serverKeyword: "MCServerJoin@" + worldName,
-                offerKeyword: null,
-                answerKeywords: [f],
-                userName: userName
-            }), Date.now() - connectionAttempts.get(e) > 36e5) {
-                console.log("[WebRTC] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(f)), answerPollingIntervals.delete(f);
-                var t = peers.get(e);
-                t && t.pc && t.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
-            }
-        }), 3e4))
+        startAnswerPolling(e)
     } catch (t) {
         console.error("[WebRTC] Failed to create offer for:", e, "error:", t), addMessage("Failed to connect to " + e, 3e3), r.close(), peers.delete(e);
         var userKeyword = worldName + "@" + userName;
@@ -2070,6 +2053,7 @@ function setupPendingModal() {
 function startOfferPolling() {
     // All players should poll for offers at their own world@username thread
     // (not just hosts). This enables IPFS-based signaling where anyone can receive offers.
+    if (!webRtcPollingEnabled) return void console.log("[SYSTEM] Skipping offer polling until Online Players is opened");
     console.log("[SYSTEM] Starting offer polling for:", userName);
     // Use uniform keyword format: world@username (monitoring own thread for offers)
     var e = worldName + "@" + userName;
@@ -2115,9 +2099,14 @@ function stopAllPolling() {
     answerPollingIntervals.clear();
 }
 
+function enableWebRtcPolling() {
+    webRtcPollingEnabled || (webRtcPollingEnabled = !0, console.log("[SYSTEM] WebRTC polling enabled by user"), startOfferPolling())
+}
+
 function startAnswerPolling(e) {
     // Use uniform keyword format: world@username (monitoring own thread for answers)
     var t = worldName + "@" + userName;
+    if (!webRtcPollingEnabled) return void console.log("[SYSTEM] Skipping answer polling until Online Players is opened");
     answerPollingIntervals.has(t) || (console.log("[SYSTEM] Starting answer polling for:", e), answerPollingIntervals.set(t, setInterval((function () {
         if (worker.postMessage({
             type: "poll",
@@ -2175,6 +2164,7 @@ async function initServers() {
 }
 
 function openUsersModal() {
+    enableWebRtcPolling();
     console.log("[MODAL] Opening users modal");
     var e = document.getElementById("usersModal");
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
