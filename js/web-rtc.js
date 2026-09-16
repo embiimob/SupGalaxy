@@ -945,7 +945,13 @@ function setupDataChannel(e, t) {
                     if (!isHost)
                         for (const e of s.boulders) {
                             let t = eruptedBlocks.find((t => t.id === e.id));
-                            t && (t.targetPosition = (new THREE.Vector3).fromArray(e.position), t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion), t.lastUpdate = performance.now())
+                            if (t) {
+                                t.targetPosition = (new THREE.Vector3).fromArray(e.position);
+                                t.targetQuaternion = (new THREE.Quaternion).fromArray(e.quaternion);
+                                if (e.velocity) t.velocity.fromArray(e.velocity);
+                                t.isRolling = !!e.isRolling;
+                                t.lastUpdate = performance.now()
+                            }
                         }
                     break;
                 case "ipfs_chunk_update_start":

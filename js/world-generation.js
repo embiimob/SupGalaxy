@@ -550,11 +550,14 @@ function handleBoulderEruption(e) {
             map: createBlockTexture(worldSeed, 4)
         })),
             i = o() * Math.PI * 2,
-            l = 50 + 50 * o(),
-            d = 40 + 20 * o(),
-            c = new THREE.Vector3(Math.cos(i) * l / r, d, Math.sin(i) * l / r);
-        s.position.set(e.volcano.x + 8 * (o() - .5), e.volcano.y - 10 - 5 * o(), e.volcano.z + 8 * (o() - .5));
-        const u = "boulder_" + Date.now() + "_" + t;
+            l = 9 + 5 * o(),
+            d = 22 + 6 * o(),
+            c = new THREE.Vector3(Math.cos(i) * l, d, Math.sin(i) * l),
+            launchRadius = 2 * o(),
+            x = e.volcano.x + Math.cos(i) * launchRadius,
+            z = e.volcano.z + Math.sin(i) * launchRadius;
+        s.position.set(x, Math.max(e.volcano.y, chunkManager.getSurfaceY(x, z)) + n / 2 + .2, z);
+        const u = "boulder_" + JSON.stringify([e.seed, e.volcano.x, e.volcano.z, t]);
         eruptedBlocks.push({
             id: u,
             mesh: s,
@@ -563,11 +566,78 @@ function handleBoulderEruption(e) {
             type: "boulder",
             size: n,
             mass: r,
+            angularVelocity: new THREE.Vector3(Math.sin(i), o() - .5, -Math.cos(i)).multiplyScalar(1 + o()),
             isRolling: !1,
             targetPosition: s.position.clone(),
             targetQuaternion: s.quaternion.clone(),
             lastUpdate: 0
         }), scene.add(s)
+    }
+}
+
+function updateBoulder(boulder, delta) {
+    const elapsed = (boulder.physicsRemainder || 0) + Math.min(delta, .1),
+        steps = Math.floor(elapsed * 120 + 1e-9);
+    boulder.physicsRemainder = Math.max(0, elapsed - steps / 120);
+    if (steps <= 0) return;
+    const dt = 1 / 120,
+        radius = boulder.size / 2,
+        position = boulder.mesh.position,
+        velocity = boulder.velocity,
+        normal = new THREE.Vector3(),
+        previous = new THREE.Vector3();
+    for (let step = 0; step < steps; step++) {
+        previous.copy(position);
+        const ground = chunkManager.getSurfaceYForBoulders(position.x, position.z) + radius;
+        if (boulder.isRolling && position.y <= ground + .6) {
+            // Sample across the boulder's footprint so voxel terraces still have a downhill slope.
+            const span = Math.max(2, boulder.size);
+            normal.set(
+                chunkManager.getSurfaceYForBoulders(position.x - span, position.z) - chunkManager.getSurfaceYForBoulders(position.x + span, position.z),
+                2 * span,
+                chunkManager.getSurfaceYForBoulders(position.x, position.z - span) - chunkManager.getSurfaceYForBoulders(position.x, position.z + span)
+            ).normalize();
+            velocity.y = -(velocity.x * normal.x + velocity.z * normal.z) / normal.y;
+            velocity.y -= gravity * dt;
+            velocity.addScaledVector(normal, gravity * normal.y * dt);
+            velocity.multiplyScalar(Math.exp(-.8 * dt));
+            velocity.clampLength(0, 8);
+        } else {
+            boulder.isRolling = false;
+            velocity.y -= gravity * dt;
+        }
+        position.addScaledVector(velocity, dt);
+        const surface = chunkManager.getSurfaceYForBoulders(position.x, position.z) + radius;
+        if (position.y < surface && surface - ground > .6 && previous.y < surface) {
+            // Hit a cliff face rather than teleporting to the top of its column.
+            position.x = previous.x;
+            position.z = previous.z;
+            velocity.x *= -.25;
+            velocity.z *= -.25;
+        }
+        const contact = chunkManager.getSurfaceYForBoulders(position.x, position.z) + radius;
+        if (position.y <= contact && velocity.y <= 0) {
+            position.y = contact;
+            if (!boulder.isRolling && velocity.y < -6) {
+                velocity.y *= -.25;
+                velocity.x *= .75;
+                velocity.z *= .75;
+            } else {
+                boulder.isRolling = true;
+                velocity.y = 0;
+            }
+        } else if (boulder.isRolling) {
+            if (position.y - contact <= .6) position.y = contact;
+            else boulder.isRolling = false;
+        }
+        if (boulder.isRolling) {
+            normal.set(position.z - previous.z, 0, previous.x - position.x);
+            const distance = normal.length();
+            if (distance > 0) boulder.mesh.rotateOnWorldAxis(normal.divideScalar(distance), distance / radius);
+        } else {
+            const spin = boulder.angularVelocity.length();
+            if (spin > 0) boulder.mesh.rotateOnWorldAxis(normal.copy(boulder.angularVelocity).divideScalar(spin), spin * dt);
+        }
     }
 }
 
