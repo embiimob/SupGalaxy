@@ -5365,30 +5365,35 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         var worldAddressFromKey = null;
                         var joinKeywordPrefix = "MCUserJoin@";
 
-                        if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
-                            var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
-                            for (var outputAddress of txOutputAddresses) {
-                                if (!outputAddress || outputAddress === o.ToAddress) continue;
-                                var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
-                                if (!outputKeywordRaw) continue;
-                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "").trim();
-                                if (outputKeyword.startsWith(joinKeywordPrefix)) {
-                                    var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
-                                    if (outputWorldName) {
-                                        worldNameFromKey = outputWorldName;
-                                        worldAddressFromKey = outputAddress;
-                                        break
-                                    }
-                                } else {
-                                    var legacyOutputParts = outputKeyword.split("@");
-                                    var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
-                                    var legacyOutputUser = legacyOutputParts.slice(1).join("@").trim();
-                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && n === legacyOutputUser) {
-                                        worldNameFromKey = legacyOutputWorldName;
-                                        worldAddressFromKey = outputAddress;
-                                        break
+                        if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetRootByTransactionID) {
+                            var txRoot = await GetRootByTransactionID(o.TransactionId);
+                            var txKeywordEntries = txRoot && txRoot.Keyword ? Object.entries(txRoot.Keyword) : [];
+                            for (var [outputAddress, outputKeywordRaw] of txKeywordEntries) {
+                                if (!outputAddress || outputAddress === o.ToAddress || !outputKeywordRaw) continue;
+                                var normalizedKeyword = String(outputKeywordRaw).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
+                                var keywordCandidates = [normalizedKeyword];
+                                normalizedKeyword.startsWith("o") && keywordCandidates.push(normalizedKeyword.slice(1).trim());
+                                for (var outputKeyword of keywordCandidates) {
+                                    if (!outputKeyword) continue;
+                                    if (outputKeyword.startsWith(joinKeywordPrefix)) {
+                                        var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
+                                        if (outputWorldName) {
+                                            worldNameFromKey = outputWorldName;
+                                            worldAddressFromKey = outputAddress;
+                                            break
+                                        }
+                                    } else {
+                                        var legacyOutputParts = outputKeyword.split("@");
+                                        var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
+                                        var legacyOutputUser = legacyOutputParts.slice(1).join("@").trim();
+                                        if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && n === legacyOutputUser) {
+                                            worldNameFromKey = legacyOutputWorldName;
+                                            worldAddressFromKey = outputAddress;
+                                            break
+                                        }
                                     }
                                 }
+                                if (worldNameFromKey) break
                             }
                         }
 

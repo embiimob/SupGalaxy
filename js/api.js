@@ -2,6 +2,7 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
+var txRootByIdCache = new Map();
 var txOutputsByIdCache = new Map();
 
 // Sup!? local mode detection and IPFS path utilities
@@ -166,15 +167,26 @@ async function GetTransactionOutputAddresses(txid) {
     try {
         if (!txid) return [];
         if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://mempool.space/testnet/api/tx/' + encodeURIComponent(txid));
-        if (!response.ok) return [];
-        var tx = await response.json();
-        var outputs = Array.isArray(tx && tx.vout) ? tx.vout.map((out => out && out.scriptpubkey_address ? out.scriptpubkey_address.trim() : "")).filter(Boolean) : [];
+        var root = await GetRootByTransactionID(txid);
+        var outputs = root && root.Keyword ? Object.keys(root.Keyword).map((address => address && address.trim ? address.trim() : "")).filter(Boolean) : [];
         txOutputsByIdCache.set(txid, outputs);
         return outputs;
     } catch (e) {
         return [];
+    }
+}
+async function GetRootByTransactionID(txid) {
+    try {
+        if (!txid) return null;
+        if (txRootByIdCache.has(txid)) return txRootByIdCache.get(txid);
+        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        var response = await fetch('https://p2fk.io/GetRootByTransactionID/' + encodeURIComponent(txid) + '?mainnet=false');
+        if (!response.ok) return null;
+        var root = await response.json();
+        root && txRootByIdCache.set(txid, root);
+        return root;
+    } catch (e) {
+        return null;
     }
 }
 async function fetchIPFS(hash) {
