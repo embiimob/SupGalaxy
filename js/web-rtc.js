@@ -2189,6 +2189,13 @@ function openUsersModal() {
             button.style.fontSize = fontSize || "0.8em";
         }
     };
+    const getKnownWorldUserEntry = (worldData, targetUser) => {
+        if (!worldData || !worldData.users) return null;
+        if (worldData.users instanceof Map) return worldData.users.get(targetUser) || null;
+        return worldData.users.has && worldData.users.has(targetUser) ? {
+            claimed: !0
+        } : null
+    };
     const broadcastKnownWorldJoin = async (joinEntries) => {
         if (!(window.S && window.S.priv && window.S.addr)) return !1;
         if ("function" != typeof window.buildMsgOutputs || "function" != typeof window.sendManyWithWallet) throw new Error("Wallet broadcast helpers are unavailable");
@@ -2305,21 +2312,22 @@ function openUsersModal() {
         headerActions.style.marginLeft = "auto";
 
         const normalizedUserName = userName.slice(0, 20);
-        const hasUserSpawnInWorld = !!(wData.users && wData.users.has(normalizedUserName));
-        if (!hasUserSpawnInWorld) {
+        const userEntry = getKnownWorldUserEntry(wData, normalizedUserName);
+        const hasClaimedUserSpawnInWorld = !!(userEntry && userEntry.claimed === !0);
+        if (!hasClaimedUserSpawnInWorld) {
             const joinBtn = document.createElement("button");
             joinBtn.innerText = "Join";
             styleKnownWorldButton(joinBtn, true);
             joinBtn.onclick = async (e) => {
                 e.stopPropagation(); // prevent collapsing the user list
 
-                const worldForJoin = wName.slice(0, 8);
                 const userForJoin = normalizedUserName;
-                const keyword = worldForJoin + "@" + userForJoin;
+                const keyword = "MCUserJoin@" + wName;
                 const worldData = knownWorlds.get(wName);
+                const existingUserEntry = getKnownWorldUserEntry(worldData, userForJoin);
 
-                if (worldData && worldData.users && worldData.users.has(userForJoin)) {
-                    addMessage("User already in this world. Choose a different username.", 3e3);
+                if (existingUserEntry && existingUserEntry.claimed === !0) {
+                    addMessage("You already have a claimed home spawn in this world.", 3e3);
                     return;
                 }
 
@@ -2328,7 +2336,7 @@ function openUsersModal() {
                     const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
                     const resolvedWorldAddress = worldAddress ? worldAddress.trim() : keyword;
                     const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
-                    const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
+                    const joinEntries = [resolvedMasterAddress, resolvedWorldAddress].filter((entry) => entry);
                     const joinList = joinEntries.join(",").replace(/["']/g, "");
                     try {
                         if (await broadcastKnownWorldJoin(joinEntries)) return;

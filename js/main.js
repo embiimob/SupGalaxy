@@ -126,6 +126,39 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
     }
 }
 
+function upsertKnownWorldUser(world, user, options = {}) {
+    const hasExplicitTimestamp = void 0 !== options.timestamp && null !== options.timestamp;
+    const timestamp = hasExplicitTimestamp ? options.timestamp : Date.now();
+    const address = void 0 !== options.address ? options.address : null;
+    const worldAddress = void 0 !== options.worldAddress ? options.worldAddress : address;
+    const discoverer = void 0 !== options.discoverer ? options.discoverer : user;
+    const claimed = options.claimed === !0;
+    const existingWorldData = knownWorlds.get(world);
+    let worldData = existingWorldData && "object" == typeof existingWorldData ? existingWorldData : {
+        discoverer: discoverer,
+        users: new Map,
+        toAddress: existingWorldData || worldAddress || null
+    };
+    if (worldData.users instanceof Set) {
+        const usersMap = new Map;
+        worldData.users.forEach((u => usersMap.set(u, {
+            timestamp: Date.now(),
+            address: null,
+            claimed: !0
+        }))), worldData.users = usersMap
+    } else worldData.users instanceof Map || (worldData.users = new Map(Object.entries(worldData.users || {})));
+    worldData.discoverer || (worldData.discoverer = discoverer);
+    worldData.toAddress || !worldAddress || (worldData.toAddress = worldAddress);
+    const existingUserData = worldData.users.get(user);
+    const hasNewAddress = void 0 !== options.address && null !== options.address;
+    const nextAddress = hasNewAddress ? address : existingUserData && void 0 !== existingUserData.address ? existingUserData.address : null;
+    worldData.users.set(user, {
+        timestamp: hasExplicitTimestamp ? timestamp : existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
+        address: nextAddress,
+        claimed: claimed || !!(existingUserData && existingUserData.claimed === !0)
+    }), knownWorlds.set(world, worldData)
+}
+
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
@@ -147,9 +180,9 @@ async function applySaveFile(e, t, o) {
         // Migration: Convert legacy Set users to Map for all known worlds
         if (knownWorlds.size > 0) {
             for (let [wName, wData] of knownWorlds) {
-                if (wData.users instanceof Set) {
+                if (wData && "object" == typeof wData && wData.users instanceof Set) {
                     const newMap = new Map();
-                    wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
+                    wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
                     wData.users = newMap;
                 }
             }
@@ -177,22 +210,10 @@ async function applySaveFile(e, t, o) {
         userAddress = a && a.Creators ? a.Creators[0] : "anonymous";
         if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
 
-        if (knownWorlds.has(worldName)) {
-            let wData = knownWorlds.get(worldName);
-            // Defensive coding: convert deprecated Set to Map if necessary
-            if (wData.users instanceof Set) {
-                const newMap = new Map();
-                wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
-                wData.users = newMap;
-            }
-            wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
-        } else {
-            knownWorlds.set(worldName, {
-                discoverer: userName,
-                users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
-                toAddress: userAddress
-            });
-        }
+        upsertKnownWorldUser(worldName, userName, {
+            address: userAddress,
+            claimed: !1
+        });
 
         keywordCache.set(userAddress, n);
         document.getElementById("loginOverlay").style.display = "none";
@@ -3962,22 +3983,10 @@ async function startGame() {
     userAddress = n && n.Creators ? n.Creators[0] : "anonymous";
     if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
 
-    if (knownWorlds.has(worldName)) {
-        let wData = knownWorlds.get(worldName);
-        // Defensive coding: convert deprecated Set to Map if necessary
-        if (wData.users instanceof Set) {
-            const newMap = new Map();
-            wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null }));
-            wData.users = newMap;
-        }
-        wData.users.set(userName, { timestamp: Date.now(), address: userAddress });
-    } else {
-        knownWorlds.set(worldName, {
-            discoverer: userName,
-            users: new Map([[userName, { timestamp: Date.now(), address: userAddress }]]),
-            toAddress: userAddress
-        });
-    }
+    upsertKnownWorldUser(worldName, userName, {
+        address: userAddress,
+        claimed: !1
+    });
     keywordCache.set(userAddress, r);
     document.getElementById("loginOverlay").style.display = "none";
     document.getElementById("hud").style.display = "block";
@@ -4300,6 +4309,10 @@ function switchWorld(newWorldName, targetSpawn) {
     torchParticles.clear();
 
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    upsertKnownWorldUser(worldName, userName, {
+        address: userAddress,
+        claimed: !1
+    });
 
     const homeSpawn = calculateSpawnPoint(userName + "@" + worldName);
     const t = targetSpawn ? targetSpawn : homeSpawn;
@@ -5251,9 +5264,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
             this.blur();
             isPromptOpen = !0;
-            var e = await GetPublicAddressByKeyword(userName + "@" + worldName),
+            var e = await GetPublicAddressByKeyword("MCUserJoin@" + worldName);
+            var
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || userName + "@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                o = [t || MASTER_WORLD_KEY, e || "MCUserJoin@" + worldName].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
             document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"
@@ -5316,14 +5330,34 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         }
                         var i = s.replace(/^"|"$/g, "");
                         var worldNameFromKey = null;
+                        var worldAddressFromKey = null;
+
+                        if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
+                            var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
+                            for (var outputAddress of txOutputAddresses) {
+                                if (!outputAddress || outputAddress === o.ToAddress) continue;
+                                var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
+                                if (!outputKeywordRaw) continue;
+                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "");
+                                if (outputKeyword.includes("MCUserJoin@")) {
+                                    var outputJoinParts = outputKeyword.split("@");
+                                    if (outputJoinParts.length >= 2) {
+                                        worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                        worldAddressFromKey = outputAddress;
+                                        break
+                                    }
+                                }
+                            }
+                        }
 
                         // Logic to handle MCUserJoin format (Discovery)
-                        if (i.includes("MCUserJoin@")) {
+                        if (!worldNameFromKey && i.includes("MCUserJoin@")) {
                             var joinParts = i.split("@");
                             if (joinParts.length >= 2) {
-                                worldNameFromKey = joinParts[1];
+                                worldNameFromKey = joinParts.slice(1).join("@");
+                                worldAddressFromKey = o.ToAddress;
                             }
-                        } else {
+                        } else if (!worldNameFromKey) {
                             // Logic to handle world@user format (Direct/Legacy)
                             var parts = i.split("@");
                             if (parts.length >= 2) {
@@ -5332,29 +5366,19 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                 // Verify user match only if we are parsing user from key
                                 if (n.startsWith(potentialUser)) {
                                     worldNameFromKey = potentialWorld;
+                                    worldAddressFromKey = o.ToAddress;
                                 }
                             }
                         }
 
                         if (n && worldNameFromKey) {
-                            // Ensure n (profile URN) is used as the username
-                            // Previously n was stripped. Now n comes from a.URN directly (see below change).
-                            // Wait, I need to change where 'n' is defined too.
-
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
-                            if (!knownWorlds.has(worldNameFromKey)) {
-                                knownWorlds.set(worldNameFromKey, {
-                                    discoverer: n,
-                                    users: new Map(), // Store user details (timestamp, etc.)
-                                    toAddress: o.ToAddress
-                                });
-                            }
-
-                            var worldData = knownWorlds.get(worldNameFromKey);
-                            // Store user with timestamp
-                            worldData.users.set(n, {
+                            upsertKnownWorldUser(worldNameFromKey, n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
-                                address: o.FromAddress
+                                address: o.FromAddress,
+                                worldAddress: worldAddressFromKey,
+                                discoverer: n,
+                                claimed: !0
                             });
 
                             knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
