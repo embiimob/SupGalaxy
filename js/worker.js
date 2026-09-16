@@ -1614,19 +1614,44 @@ self.onmessage = async function(e) {
                             });
                             return;
                         }
-                        if (existingWorldEntry.users instanceof Set) {
-                            var migratedUsers = new Map();
-                            existingWorldEntry.users.forEach(function(u) {
-                                migratedUsers.set(u, {
+                        var normalizedUsers = new Map();
+                        var rawUsers = existingWorldEntry.users;
+                        if (rawUsers instanceof Map) {
+                            normalizedUsers = new Map(rawUsers);
+                        } else if (rawUsers instanceof Set) {
+                            rawUsers.forEach(function(u) {
+                                normalizedUsers.set(u, {
                                     timestamp: Date.now(),
                                     address: null,
                                     claimed: !0
                                 });
                             });
-                            existingWorldEntry.users = migratedUsers;
-                        } else if (!(existingWorldEntry.users instanceof Map)) {
-                            existingWorldEntry.users = new Map(Object.entries(existingWorldEntry.users || {}));
+                        } else if (Array.isArray(rawUsers)) {
+                            rawUsers.forEach(function(entry) {
+                                if (Array.isArray(entry) && entry.length >= 1) {
+                                    normalizedUsers.set(entry[0], entry[1] && typeof entry[1] === 'object' ? entry[1] : {
+                                        timestamp: Date.now(),
+                                        address: null,
+                                        claimed: !0
+                                    });
+                                } else if (entry) {
+                                    normalizedUsers.set(entry, {
+                                        timestamp: Date.now(),
+                                        address: null,
+                                        claimed: !0
+                                    });
+                                }
+                            });
+                        } else if (rawUsers && typeof rawUsers === 'object') {
+                            Object.entries(rawUsers).forEach(function(entry) {
+                                normalizedUsers.set(entry[0], entry[1] && typeof entry[1] === 'object' ? entry[1] : {
+                                    timestamp: Date.now(),
+                                    address: null,
+                                    claimed: !0
+                                });
+                            });
                         }
+                        existingWorldEntry.users = normalizedUsers;
                         if (!existingWorldEntry.toAddress && knownWorldAddress) {
                             existingWorldEntry.toAddress = knownWorldAddress;
                         }
