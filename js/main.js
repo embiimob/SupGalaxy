@@ -126,6 +126,36 @@ function reconstructCalligraphyStonesFromDeltas(deltas) {
     }
 }
 
+function upsertKnownWorldUser(world, user, options = {}) {
+    const timestamp = void 0 !== options.timestamp ? options.timestamp : Date.now();
+    const address = void 0 !== options.address ? options.address : null;
+    const worldAddress = void 0 !== options.worldAddress ? options.worldAddress : address;
+    const discoverer = void 0 !== options.discoverer ? options.discoverer : user;
+    const claimed = options.claimed === !0;
+    const existingWorldData = knownWorlds.get(world);
+    let worldData = existingWorldData && "object" == typeof existingWorldData ? existingWorldData : {
+        discoverer: discoverer,
+        users: new Map,
+        toAddress: existingWorldData || worldAddress || null
+    };
+    if (worldData.users instanceof Set) {
+        const usersMap = new Map;
+        worldData.users.forEach((u => usersMap.set(u, {
+            timestamp: Date.now(),
+            address: null,
+            claimed: !0
+        }))), worldData.users = usersMap
+    } else worldData.users instanceof Map || (worldData.users = new Map(Object.entries(worldData.users || {})));
+    worldData.discoverer || (worldData.discoverer = discoverer);
+    worldData.toAddress || !worldAddress || (worldData.toAddress = worldAddress);
+    const existingUserData = worldData.users.get(user);
+    worldData.users.set(user, {
+        timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
+        address: address,
+        claimed: claimed || !!(existingUserData && existingUserData.claimed === !0)
+    }), knownWorlds.set(world, worldData)
+}
+
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
@@ -177,27 +207,11 @@ async function applySaveFile(e, t, o) {
         userAddress = a && a.Creators ? a.Creators[0] : "anonymous";
         if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
 
-        if (knownWorlds.has(worldName)) {
-            let wData = knownWorlds.get(worldName);
-            // Defensive coding: convert deprecated Set to Map if necessary
-            if (wData.users instanceof Set) {
-                const newMap = new Map();
-                wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
-                wData.users = newMap;
-            }
-            const existingUserData = wData.users.get(userName);
-            wData.users.set(userName, {
-                timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : Date.now(),
-                address: userAddress,
-                claimed: !!(existingUserData && existingUserData.claimed === !0)
-            });
-        } else {
-            knownWorlds.set(worldName, {
-                discoverer: userName,
-                users: new Map([[userName, { timestamp: Date.now(), address: userAddress, claimed: !1 }]]),
-                toAddress: userAddress
-            });
-        }
+        upsertKnownWorldUser(worldName, userName, {
+            address: userAddress,
+            worldAddress: userAddress,
+            claimed: !1
+        });
 
         keywordCache.set(userAddress, n);
         document.getElementById("loginOverlay").style.display = "none";
@@ -3967,27 +3981,11 @@ async function startGame() {
     userAddress = n && n.Creators ? n.Creators[0] : "anonymous";
     if (!knownUsers.has(userName)) knownUsers.set(userName, userAddress);
 
-    if (knownWorlds.has(worldName)) {
-        let wData = knownWorlds.get(worldName);
-        // Defensive coding: convert deprecated Set to Map if necessary
-        if (wData.users instanceof Set) {
-            const newMap = new Map();
-            wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
-            wData.users = newMap;
-        }
-        const existingUserData = wData.users.get(userName);
-        wData.users.set(userName, {
-            timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : Date.now(),
-            address: userAddress,
-            claimed: !!(existingUserData && existingUserData.claimed === !0)
-        });
-    } else {
-        knownWorlds.set(worldName, {
-            discoverer: userName,
-            users: new Map([[userName, { timestamp: Date.now(), address: userAddress, claimed: !1 }]]),
-            toAddress: userAddress
-        });
-    }
+    upsertKnownWorldUser(worldName, userName, {
+        address: userAddress,
+        worldAddress: userAddress,
+        claimed: !1
+    });
     keywordCache.set(userAddress, r);
     document.getElementById("loginOverlay").style.display = "none";
     document.getElementById("hud").style.display = "block";
@@ -4310,6 +4308,11 @@ function switchWorld(newWorldName, targetSpawn) {
     torchParticles.clear();
 
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    upsertKnownWorldUser(worldName, userName, {
+        address: userAddress,
+        worldAddress: userAddress,
+        claimed: !1
+    });
 
     const homeSpawn = calculateSpawnPoint(userName + "@" + worldName);
     const t = targetSpawn ? targetSpawn : homeSpawn;
@@ -5352,19 +5355,11 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             // Wait, I need to change where 'n' is defined too.
 
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
-                            if (!knownWorlds.has(worldNameFromKey)) {
-                                knownWorlds.set(worldNameFromKey, {
-                                    discoverer: n,
-                                    users: new Map(), // Store user details (timestamp, etc.)
-                                    toAddress: o.ToAddress
-                                });
-                            }
-
-                            var worldData = knownWorlds.get(worldNameFromKey);
-                            // Store user with timestamp
-                            worldData.users.set(n, {
+                            upsertKnownWorldUser(worldNameFromKey, n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
                                 address: o.FromAddress,
+                                worldAddress: o.ToAddress,
+                                discoverer: n,
                                 claimed: !0
                             });
 
