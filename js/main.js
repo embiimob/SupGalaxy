@@ -149,9 +149,10 @@ function upsertKnownWorldUser(world, user, options = {}) {
     worldData.discoverer || (worldData.discoverer = discoverer);
     worldData.toAddress || !worldAddress || (worldData.toAddress = worldAddress);
     const existingUserData = worldData.users.get(user);
+    const nextAddress = void 0 !== options.address ? address : existingUserData && void 0 !== existingUserData.address ? existingUserData.address : null;
     worldData.users.set(user, {
         timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
-        address: address,
+        address: nextAddress,
         claimed: claimed || !!(existingUserData && existingUserData.claimed === !0)
     }), knownWorlds.set(world, worldData)
 }
@@ -5330,13 +5331,30 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         var i = s.replace(/^"|"$/g, "");
                         var worldNameFromKey = null;
 
+                        if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
+                            var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
+                            for (var outputAddress of txOutputAddresses) {
+                                if (!outputAddress || outputAddress === o.ToAddress) continue;
+                                var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
+                                if (!outputKeywordRaw) continue;
+                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "");
+                                if (outputKeyword.includes("MCUserJoin@")) {
+                                    var outputJoinParts = outputKeyword.split("@");
+                                    if (outputJoinParts.length >= 2) {
+                                        worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
                         // Logic to handle MCUserJoin format (Discovery)
-                        if (i.includes("MCUserJoin@")) {
+                        if (!worldNameFromKey && i.includes("MCUserJoin@")) {
                             var joinParts = i.split("@");
                             if (joinParts.length >= 2) {
-                                worldNameFromKey = joinParts[1];
+                                worldNameFromKey = joinParts.slice(1).join("@");
                             }
-                        } else {
+                        } else if (!worldNameFromKey) {
                             // Logic to handle world@user format (Direct/Legacy)
                             var parts = i.split("@");
                             if (parts.length >= 2) {

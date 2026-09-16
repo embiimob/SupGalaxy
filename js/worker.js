@@ -574,6 +574,7 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
+var txOutputsByIdCache = new Map();
 var processedMessages = new Set();
 var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
@@ -805,6 +806,22 @@ async function getKeywordByPublicAddress(address) {
         } catch (e) {
             console.error('[Worker] Error fetching keyword for address:', address, e);
             return null;
+        }
+}
+async function getTransactionOutputAddresses(txid) {
+        try {
+            if (!txid) return [];
+            if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
+            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            var response = await fetch("https://mempool.space/testnet/api/tx/" + encodeURIComponent(txid));
+            if (!response.ok) return [];
+            var tx = await response.json();
+            var outputs = Array.isArray(tx && tx.vout) ? tx.vout.map((out => out && out.scriptpubkey_address ? out.scriptpubkey_address.trim() : "")).filter(Boolean) : [];
+            txOutputsByIdCache.set(txid, outputs);
+            return outputs;
+        } catch (e) {
+            console.error('[Worker] Error fetching tx outputs for txid:', txid, e);
+            return [];
         }
 }
 // Sup!? local mode detection and IPFS path utilities
@@ -1098,19 +1115,44 @@ self.onmessage = async function(e) {
                         }
                         var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
 
-                        // Parse world@user format
-                        var parts = toKeyword.split("@");
-                        if (parts.length < 2) {
-                            console.log('[Worker] Skipping worlds_users message, invalid keyword format (not world@user):', toKeyword, 'txId:', msg.TransactionId);
-                            continue;
+                        var worldNameFromKey = null;
+                        if (toKeyword === MASTER_WORLD_KEY && msg.TransactionId) {
+                            var txOutputAddresses = await getTransactionOutputAddresses(msg.TransactionId);
+                            for (var outputAddress of txOutputAddresses) {
+                                if (!outputAddress || outputAddress === msg.ToAddress) continue;
+                                var outputKeyword = await getKeywordByPublicAddress(outputAddress);
+                                if (!outputKeyword || !outputKeyword.includes("MCUserJoin@")) continue;
+                                var outputJoinParts = outputKeyword.split("@");
+                                if (outputJoinParts.length >= 2) {
+                                    worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                    break;
+                                }
+                            }
+                        } else if (toKeyword.includes("MCUserJoin@")) {
+                            var mcUserJoinParts = toKeyword.split("@");
+                            if (mcUserJoinParts.length >= 2) {
+                                worldNameFromKey = mcUserJoinParts.slice(1).join("@");
+                            }
+                        } else {
+                            // Parse world@user format
+                            var parts = toKeyword.split("@");
+                            if (parts.length < 2) {
+                                console.log('[Worker] Skipping worlds_users message, invalid keyword format:', toKeyword, 'txId:', msg.TransactionId);
+                                continue;
+                            }
+
+                            worldNameFromKey = parts[0];
+                            var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
+
+                            // Verify user match - check if userFromKey matches the beginning of the actual profile name
+                            if (!user.startsWith(userFromKey)) {
+                                console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
+                                continue;
+                            }
                         }
 
-                        var worldNameFromKey = parts[0];
-                        var userFromKey = parts.slice(1).join("@"); // Join back in case user has @
-
-                        // Verify user match - check if userFromKey matches the beginning of the actual profile name
-                        if (!user.startsWith(userFromKey)) {
-                            console.log('[Worker] Skipping worlds_users message, user mismatch. Key:', userFromKey, 'Profile:', user, 'txId:', msg.TransactionId);
+                        if (!worldNameFromKey) {
+                            console.log('[Worker] Skipping worlds_users message, no world could be derived from keyword:', toKeyword, 'txId:', msg.TransactionId);
                             continue;
                         }
 

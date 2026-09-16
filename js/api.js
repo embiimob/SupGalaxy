@@ -2,6 +2,7 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
+var txOutputsByIdCache = new Map();
 
 // Sup!? local mode detection and IPFS path utilities
 var isSupLocalMode = null;
@@ -161,6 +162,21 @@ async function GetKeywordByPublicAddress(address) {
     } catch (e) {
         addMessage('Failed to fetch keyword for address');
         return null;
+    }
+}
+async function GetTransactionOutputAddresses(txid) {
+    try {
+        if (!txid) return [];
+        if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
+        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        var response = await fetch('https://mempool.space/testnet/api/tx/' + encodeURIComponent(txid));
+        if (!response.ok) return [];
+        var tx = await response.json();
+        var outputs = Array.isArray(tx && tx.vout) ? tx.vout.map((out => out && out.scriptpubkey_address ? out.scriptpubkey_address.trim() : "")).filter(Boolean) : [];
+        txOutputsByIdCache.set(txid, outputs);
+        return outputs;
+    } catch (e) {
+        return [];
     }
 }
 async function fetchIPFS(hash) {
