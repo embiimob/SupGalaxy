@@ -165,7 +165,7 @@ async function fetchAndPlayMusic() {
             return;
         }
 
-        const messages = await GetPublicMessagesByAddress(gameAddress, 0, 100);
+        const messages = await GetRootsByAddress(gameAddress, 0, 100);
         if (!messages || messages.length === 0) {
             musicStatus.innerText = 'No music tracks found';
             return;
@@ -351,7 +351,7 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
             return;
         }
 
-        const messages = await GetPublicMessagesByAddress(gameAddress, (page - 1) * 50, 50);
+        const messages = await GetRootsByAddress(gameAddress, (page - 1) * 50, 50);
         if (!messages || messages.length === 0) {
             musicList.innerHTML = '<li>No more songs</li>';
             document.getElementById('musicNextBtn').disabled = true;

@@ -5340,7 +5340,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             console.log("[USERS] Initializing worlds and users");
             var e = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
             if (e) {
-                var t = await GetPublicMessagesByAddress(e);
+                var t = await GetRootsByAddress(e);
                 for (var o of t || [])
                     if (o.TransactionId && !processedMessages.has(o.TransactionId)) {
                         console.log("[USERS] Processing message:", o.TransactionId);
@@ -5355,23 +5355,17 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: Invalid profile for user:", n);
                             continue
                         }
-                        var s = await GetKeywordByPublicAddress(o.ToAddress);
-                        if (!s) {
-                            console.log("[USERS] Skipping message: No keyword for address:", o.ToAddress);
-                            continue
-                        }
-                        var i = s.replace(/^"|"$/g, "").trim();
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
                         var joinKeywordPrefix = "MCUserJoin@";
-
-                        if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
-                            var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
-                            for (var outputAddress of txOutputAddresses) {
-                                if (!outputAddress || outputAddress === o.ToAddress) continue;
-                                var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
-                                if (!outputKeywordRaw) continue;
-                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "").trim();
+                        var s = o.Keyword ? Object.entries(o.Keyword) : [];
+                        for (var [outputAddress, outputKeywordRaw] of s) {
+                            if (!outputAddress || !outputKeywordRaw) continue;
+                            var normalizedKeyword = String(outputKeywordRaw).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
+                            var keywordCandidates = [normalizedKeyword];
+                            normalizedKeyword.startsWith("o") && keywordCandidates.push(normalizedKeyword.slice(1).trim());
+                            for (var outputKeyword of keywordCandidates) {
+                                if (!outputKeyword || outputKeyword === MASTER_WORLD_KEY) continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
                                     var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
                                     if (outputWorldName) {
@@ -5390,26 +5384,11 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                     }
                                 }
                             }
-                        }
-
-                        if (!worldNameFromKey && i.startsWith(joinKeywordPrefix)) {
-                            var directWorldName = i.slice(joinKeywordPrefix.length).trim();
-                            if (directWorldName) {
-                                worldNameFromKey = directWorldName;
-                                worldAddressFromKey = o.ToAddress;
-                            }
-                        } else if (!worldNameFromKey) {
-                            var legacyJoinParts = i.split("@");
-                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
-                            var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
-                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && n === legacyJoinUser) {
-                                worldNameFromKey = legacyWorldName;
-                                worldAddressFromKey = o.ToAddress;
-                            }
+                            if (worldNameFromKey) break
                         }
 
                         if (!worldNameFromKey) {
-                            console.log("[USERS] Skipping message: Unsupported join keyword:", i);
+                            console.log("[USERS] Skipping message: Unsupported join root keywords:", o.TransactionId);
                             continue;
                         }
 

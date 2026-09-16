@@ -83,8 +83,29 @@ async function decB58C(s) {
 const P2FK_VER = 0x6f; // 111
 const P2FK_CHUNK = 20;
 const P2FK_PAD = '#';
+var ipfsFailureCounts = new Map();
+var missingIpfsPaths = new Set();
 
 function norm(s) { return typeof s === 'string' ? s.trim() : ''; }
+
+function getIpfsCacheKey(hash, filename = null) {
+    return filename ? hash + '/' + filename : hash;
+}
+
+function markIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    var attempts = (ipfsFailureCounts.get(cacheKey) || 0) + 1;
+    ipfsFailureCounts.set(cacheKey, attempts);
+    if (attempts >= 3) {
+        missingIpfsPaths.add(cacheKey);
+    }
+}
+
+function clearIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    ipfsFailureCounts.delete(cacheKey);
+    missingIpfsPaths.delete(cacheKey);
+}
 
 async function deriveKeywordAddress(keyword) {
     const tok = norm(keyword).replace(/^#/, '');
@@ -574,7 +595,6 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
-var txOutputsByIdCache = new Map();
 var processedMessages = new Set();
 var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
@@ -611,20 +631,31 @@ async function getPublicAddressByKeyword(keyword) {
             return null;
         }
 }
-async function getPublicMessagesByAddress(address, skip, qty) {
+
+function normalizeRootRecord(root, address) {
+        var messageText = Array.isArray(root && root.Message) ? root.Message.join("") : root && root.Message ? String(root.Message) : "";
+        var fromAddress = root && root.SignedBy ? String(root.SignedBy).trim() : root && root.FromAddress ? String(root.FromAddress).trim() : "";
+        return Object.assign({}, root, {
+            Message: messageText,
+            FromAddress: fromAddress,
+            ToAddress: address ? address.trim().replace(/^"|"$/g, "") : ""
+        });
+}
+
+async function getRootsByAddress(address, skip, qty) {
         try {
             // Address should be alphanumeric, but we use strict quote stripping just in case
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
             await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetPublicMessagesByAddress/" + cleanAddress + "?skip=" + skip + "&qty=" + qty + "&mainnet=false");
+            var response = await fetch("https://p2fk.io/GetRootsByAddress/" + cleanAddress + "?skip=" + (skip || 0) + "&qty=" + (qty || 5000) + "&mainnet=false");
             if (!response.ok) {
-                console.error('[Worker] Failed to fetch messages for address:', cleanAddress, 'status:', response.status);
+                console.error('[Worker] Failed to fetch roots for address:', cleanAddress, 'status:', response.status);
                 return [];
             }
-            var messages = await response.json();
-            return messages;
+            var roots = await response.json();
+            return Array.isArray(roots) ? roots.map((root => normalizeRootRecord(root, address))) : [];
         } catch (e) {
-            console.error('[Worker] Error fetching messages for address:', address, e);
+            console.error('[Worker] Error fetching roots for address:', address, e);
             return [];
         }
 }
@@ -792,36 +823,18 @@ async function getProfileByAddress(address) {
 async function getKeywordByPublicAddress(address) {
         try {
             if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-            var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://p2fk.io/GetKeywordByPublicAddress/" + cleanAddress + "?mainnet=false");
-            if (!response.ok) {
-                console.error('[Worker] Failed to fetch keyword for address:', cleanAddress, 'status:', response.status);
+            var cleanAddress = address.trim().replace(/^"|"$/g, "");
+            var payload = await decB58C(cleanAddress);
+            if (!payload || payload.length <= 1) {
+                console.error('[Worker] Failed to decode keyword for address:', cleanAddress);
                 return null;
             }
-            var keyword = await response.text();
-            var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, "") : null;
+            var cleanKeyword = new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "");
             if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
             return cleanKeyword;
         } catch (e) {
-            console.error('[Worker] Error fetching keyword for address:', address, e);
+            console.error('[Worker] Error decoding keyword for address:', address, e);
             return null;
-        }
-}
-async function getTransactionOutputAddresses(txid) {
-        try {
-            if (!txid) return [];
-            if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch("https://mempool.space/testnet/api/tx/" + encodeURIComponent(txid));
-            if (!response.ok) return [];
-            var tx = await response.json();
-            var outputs = Array.isArray(tx && tx.vout) ? tx.vout.map((out => out && out.scriptpubkey_address ? out.scriptpubkey_address.trim() : "")).filter(Boolean) : [];
-            txOutputsByIdCache.set(txid, outputs);
-            return outputs;
-        } catch (e) {
-            console.error('[Worker] Error fetching tx outputs for txid:', txid, e);
-            return [];
         }
 }
 // Sup!? local mode detection and IPFS path utilities
@@ -832,6 +845,10 @@ function checkSupLocalMode() {
 }
 
 async function fetchIPFSWithFallback(hash, filename = null) {
+        var cacheKey = getIpfsCacheKey(hash, filename);
+        if (missingIpfsPaths.has(cacheKey)) {
+                throw new Error('IPFS path previously marked missing for this session.');
+        }
         // If running in Sup!? local mode and filename is provided, try local path first
         if (checkSupLocalMode() && filename) {
             try {
@@ -841,6 +858,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 const response = await fetch(localPath);
                 if (response.ok) {
                     console.log('[Worker IPFS] Successfully fetched from local path');
+                    clearIpfsFetchFailure(hash, filename);
                     return response;
                 }
                 console.log('[Worker IPFS] Local fetch failed with status:', response.status);
@@ -857,6 +875,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 try {
                         const response = await fetch(gatewayUrl);
                         if (response.ok) {
+                                clearIpfsFetchFailure(hash, filename);
                                 return response;
                         }
                         lastResponse = response;
@@ -865,23 +884,32 @@ async function fetchIPFSWithFallback(hash, filename = null) {
                 }
         }
         if (lastResponse) {
+                markIpfsFetchFailure(hash, filename);
                 return lastResponse;
         }
+        markIpfsFetchFailure(hash, filename);
         throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
 async function fetchIPFS(hash) {
+        if (missingIpfsPaths.has(getIpfsCacheKey(hash))) {
+            return null;
+        }
         let attempts = 0;
         while (attempts < 3) {
             try {
                 await new Promise(resolve => setTimeout(resolve, apiDelay * (attempts + 1)));
                 var response = await fetchIPFSWithFallback(hash);
                 if (response.ok) {
+                    clearIpfsFetchFailure(hash);
                     return await response.json();
                 }
                 console.error('[Worker] Failed to fetch IPFS for hash:', hash, 'status:', response.status);
             } catch (e) {
                 console.error('[Worker] Error fetching IPFS for hash:', hash, e);
+                if (missingIpfsPaths.has(getIpfsCacheKey(hash))) {
+                    break;
+                }
             }
             attempts++;
         }
@@ -889,7 +917,7 @@ async function fetchIPFS(hash) {
 }
 self.onmessage = async function(e) {
         var data = e.data;
-        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName, runChunkPolling = !1 !== data.runChunkPolling, runWorldsUsersPolling = !1 !== data.runWorldsUsersPolling, runUserUpdatePolling = !1 !== data.runUserUpdatePolling, runServerPolling = !1 !== data.runServerPolling, runOfferPolling = !1 !== data.runOfferPolling, runAnswerPolling = !1 !== data.runAnswerPolling;
 
         if (type === 'configure_sup_local_mode') {
             isSupLocalMode = data.isSupLocalMode || false;
@@ -920,7 +948,7 @@ self.onmessage = async function(e) {
             var ownershipByChunk = new Map();
             var magicianStonesUpdates = [];
             var calligraphyStonesUpdates = [];
-            for (var chunkKey of chunkKeys) {
+            if (runChunkPolling) for (var chunkKey of chunkKeys) {
                 try {
                     var normalizedChunkKey = chunkKey.replace(/^#/, "");
                     var addr = await getPublicAddressByKeyword(normalizedChunkKey);
@@ -932,7 +960,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(addr, skip, qty);
+                        var response = await getRootsByAddress(addr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1068,7 +1096,7 @@ self.onmessage = async function(e) {
                     self.postMessage({ type: "chunk_ownership", chunkKey: ownership.chunkKey, username: ownership.username, timestamp: ownership.timestamp });
                 }
             }
-            try {
+            if (runWorldsUsersPolling) try {
                 var masterAddr = await getPublicAddressByKeyword(masterKey);
                 var worlds = new Map();
                 var users = new Map();
@@ -1079,7 +1107,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(masterAddr, skip, qty);
+                        var response = await getRootsByAddress(masterAddr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1108,21 +1136,19 @@ self.onmessage = async function(e) {
                             users.set(user, msg.FromAddress); // Allow partial data
                             continue;
                         }
-                        var toKeywordRaw = await getKeywordByPublicAddress(msg.ToAddress);
-                        if (!toKeywordRaw) {
-                            console.log('[Worker] Skipping worlds_users message, no keyword for address:', msg.ToAddress, 'txId:', msg.TransactionId);
-                            continue;
-                        }
-                        var toKeyword = toKeywordRaw.replace(/^"|"$/g, "").trim();
-
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
                         var joinKeywordPrefix = "MCUserJoin@";
-                        if (toKeyword === MASTER_WORLD_KEY && msg.TransactionId) {
-                            var txOutputAddresses = await getTransactionOutputAddresses(msg.TransactionId);
-                            for (var outputAddress of txOutputAddresses) {
-                                if (!outputAddress || outputAddress === msg.ToAddress) continue;
-                                var outputKeyword = norm(await getKeywordByPublicAddress(outputAddress));
+                        var keywordEntries = msg.Keyword ? Object.entries(msg.Keyword) : [];
+                        for (var keywordEntry of keywordEntries) {
+                            var outputAddress = keywordEntry[0];
+                            var outputKeywordRaw = keywordEntry[1];
+                            if (!outputAddress || !outputKeywordRaw) continue;
+                            var normalizedKeyword = String(outputKeywordRaw).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
+                            var keywordCandidates = [normalizedKeyword];
+                            normalizedKeyword.startsWith("o") && keywordCandidates.push(normalizedKeyword.slice(1).trim());
+                            for (var outputKeyword of keywordCandidates) {
+                                if (!outputKeyword || outputKeyword === MASTER_WORLD_KEY) continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
                                     var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
                                     if (outputWorldName) {
@@ -1141,24 +1167,11 @@ self.onmessage = async function(e) {
                                     }
                                 }
                             }
-                        } else if (toKeyword.startsWith(joinKeywordPrefix)) {
-                            var directWorldName = toKeyword.slice(joinKeywordPrefix.length).trim();
-                            if (directWorldName) {
-                                worldNameFromKey = directWorldName;
-                                worldAddressFromKey = msg.ToAddress;
-                            }
-                        } else {
-                            var legacyJoinParts = toKeyword.split("@");
-                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
-                            var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
-                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && user === legacyJoinUser) {
-                                worldNameFromKey = legacyWorldName;
-                                worldAddressFromKey = msg.ToAddress;
-                            }
+                            if (worldNameFromKey) break;
                         }
 
                         if (!worldNameFromKey) {
-                            console.log('[Worker] Skipping worlds_users message, no world could be derived from keyword:', toKeyword, 'txId:', msg.TransactionId);
+                            console.log('[Worker] Skipping worlds_users message, no world could be derived from root keywords:', msg.TransactionId);
                             continue;
                         }
 
@@ -1187,7 +1200,7 @@ self.onmessage = async function(e) {
                 console.error('[Worker] Error in worlds_users poll:', e);
                 self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
             }
-            try {
+            if (runUserUpdatePolling) try {
                 var joinKeyword = userAddress === "anonymous" ? worldName : userAddress;
                 var addressRes = await getPublicAddressByKeyword(joinKeyword);
                 if (addressRes) {
@@ -1195,7 +1208,7 @@ self.onmessage = async function(e) {
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(addressRes, skip, qty);
+                        var response = await getRootsByAddress(addressRes, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1231,14 +1244,17 @@ self.onmessage = async function(e) {
             } catch (e) {
                 console.error('[Worker] Error in user_update poll:', e);
             }
-            try {
+            if (runServerPolling) try {
+                if (!serverKeyword) {
+                    console.log('[Worker] Skipping server_updates poll until Online Players is opened');
+                } else {
                 var serverAddr = await getPublicAddressByKeyword(serverKeyword);
                 if (serverAddr) {
                     var messages = [];
                     var skip = 0;
                     var qty = 5000;
                     while (true) {
-                        var response = await getPublicMessagesByAddress(serverAddr, skip, qty);
+                        var response = await getRootsByAddress(serverAddr, skip, qty);
                         if (!response || response.length === 0) break;
                         messages = messages.concat(response);
                         if (response.length < qty) break;
@@ -1311,10 +1327,11 @@ self.onmessage = async function(e) {
                         self.postMessage({ type: "server_updates", servers: servers, processedIds: processedIds });
                     }
                 }
+                }
             } catch (e) {
                 console.error('[Worker] Error in server_updates poll:', e);
             }
-            try {
+            if (runOfferPolling) try {
                 if (offerKeyword) {
                     var offerAddr = await getPublicAddressByKeyword(offerKeyword);
                     if (offerAddr) {
@@ -1322,7 +1339,7 @@ self.onmessage = async function(e) {
                         var skip = 0;
                         var qty = 5000;
                         while (true) {
-                            var response = await getPublicMessagesByAddress(offerAddr, skip, qty);
+                            var response = await getRootsByAddress(offerAddr, skip, qty);
                             if (!response || response.length === 0) break;
                             messages = messages.concat(response);
                             if (response.length < qty) break;
@@ -1461,7 +1478,7 @@ self.onmessage = async function(e) {
             } catch (e) {
                 console.error('[Worker] Error in offer_updates poll:', e);
             }
-            try {
+            if (runAnswerPolling) try {
                 for (var answerKeyword of answerKeywords || []) {
                     var answerAddr = await getPublicAddressByKeyword(answerKeyword);
                     if (answerAddr) {
@@ -1469,7 +1486,7 @@ self.onmessage = async function(e) {
                         var skip = 0;
                         var qty = 5000;
                         while (true) {
-                            var response = await getPublicMessagesByAddress(answerAddr, skip, qty);
+                            var response = await getRootsByAddress(answerAddr, skip, qty);
                             if (!response || response.length === 0) break;
                             messages = messages.concat(response);
                             if (response.length < qty) break;
@@ -1962,7 +1979,7 @@ self.onmessage = async function(e) {
                 var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
-            var serverKeyword = 'MCServerJoin@' + worldName;
+            var serverKeyword = "undefined" != typeof webRtcPollingEnabled && webRtcPollingEnabled ? 'MCServerJoin@' + worldName : null;
             // Use uniform keyword format: world@username for monitoring own thread
             var offerKeyword = isHost ? worldName + '@' + userName : null;
             var answerKeywords = [];
@@ -1973,7 +1990,7 @@ self.onmessage = async function(e) {
                     answerKeywords.push(worldName + '@' + userName);
                 }
             }
-            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            console.log('[Worker] Starting poll with serverKeyword:', serverKeyword, 'offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
             worker.postMessage({
                 type: 'poll',
                 chunkKeys: filteredKeys,
@@ -1983,7 +2000,13 @@ self.onmessage = async function(e) {
                 serverKeyword: serverKeyword,
                 offerKeyword: offerKeyword,
                 answerKeywords: answerKeywords,
-                userName: userName
+                userName: userName,
+                runChunkPolling: !0,
+                runWorldsUsersPolling: !0,
+                runUserUpdatePolling: !0,
+                runServerPolling: !0,
+                runOfferPolling: !0,
+                runAnswerPolling: !0
             });
         }
 

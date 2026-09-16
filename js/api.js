@@ -2,7 +2,27 @@ var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
-var txOutputsByIdCache = new Map();
+var ipfsFailureCounts = new Map();
+var missingIpfsPaths = new Set();
+
+function getIpfsCacheKey(hash, filename = null) {
+    return filename ? hash + "/" + filename : hash;
+}
+
+function markIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    var attempts = (ipfsFailureCounts.get(cacheKey) || 0) + 1;
+    ipfsFailureCounts.set(cacheKey, attempts);
+    if (attempts >= 3) {
+        missingIpfsPaths.add(cacheKey);
+    }
+}
+
+function clearIpfsFetchFailure(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    ipfsFailureCounts.delete(cacheKey);
+    missingIpfsPaths.delete(cacheKey);
+}
 
 // Sup!? local mode detection and IPFS path utilities
 var isSupLocalMode = null;
@@ -16,6 +36,10 @@ function checkSupLocalMode() {
 }
 
 async function fetchIPFSWithFallback(hash, filename = null) {
+    var cacheKey = getIpfsCacheKey(hash, filename);
+    if (missingIpfsPaths.has(cacheKey)) {
+        throw new Error('IPFS path previously marked missing for this session.');
+    }
     // If running in Sup!? local mode and filename is provided, try local path first
     if (checkSupLocalMode() && filename) {
         try {
@@ -26,6 +50,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
             const response = await fetch(localPath);
             if (response.ok) {
                 console.log('[IPFS] Successfully fetched from local path');
+                clearIpfsFetchFailure(hash, filename);
                 return response;
             }
             console.log('[IPFS] Local fetch failed with status:', response.status);
@@ -43,6 +68,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         try {
             const response = await fetch(gatewayUrl);
             if (response.ok) {
+                clearIpfsFetchFailure(hash, filename);
                 return response;
             }
             lastResponse = response;
@@ -51,8 +77,10 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         }
     }
     if (lastResponse) {
+        markIpfsFetchFailure(hash, filename);
         return lastResponse;
     }
+    markIpfsFetchFailure(hash, filename);
     throw lastError || new Error('Failed to fetch from public IPFS gateways.');
 }
 
@@ -100,19 +128,30 @@ async function resolveIPFS(url) {
     const blob = await response.blob();
     return URL.createObjectURL(blob);
 }
-async function GetPublicMessagesByAddress(address, skip, qty) {
+
+function normalizeRootRecord(root, address) {
+    var messageText = Array.isArray(root && root.Message) ? root.Message.join("") : root && root.Message ? String(root.Message) : "";
+    var fromAddress = root && root.SignedBy ? String(root.SignedBy).trim() : root && root.FromAddress ? String(root.FromAddress).trim() : "";
+    return Object.assign({}, root, {
+        Message: messageText,
+        FromAddress: fromAddress,
+        ToAddress: address ? address.trim().replace(/^"|"$/g, '') : ""
+    });
+}
+
+async function GetRootsByAddress(address, skip, qty) {
     try {
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
         await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetPublicMessagesByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
+        var response = await fetch('https://p2fk.io/GetRootsByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
         if (!response.ok) {
-            addMessage('Failed to fetch messages: Invalid address');
+            addMessage('Failed to fetch roots: Invalid address');
             return [];
         }
-        var messages = await response.json();
-        return messages;
+        var roots = await response.json();
+        return Array.isArray(roots) ? roots.map((root => normalizeRootRecord(root, address))) : [];
     } catch (e) {
-        addMessage('Failed to fetch messages');
+        addMessage('Failed to fetch roots');
         return [];
     }
 }
@@ -148,35 +187,18 @@ async function GetProfileByAddress(address) {
 async function GetKeywordByPublicAddress(address) {
     try {
         if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://p2fk.io/GetKeywordByPublicAddress/' + cleanAddress + '?mainnet=false');
-        if (!response.ok) {
-            addMessage('Failed to fetch keyword for address');
-            return null;
-        }
-        var keyword = await response.text();
-        var cleanKeyword = keyword ? keyword.trim().replace(/^"|"$/g, '') : null;
+        var cleanAddress = address.trim().replace(/^"|"$/g, '');
+        var cleanKeyword = null;
+        if ("function" == typeof window.deriveKeywordFromAddress) cleanKeyword = await window.deriveKeywordFromAddress(cleanAddress);
+        else if ("function" == typeof decB58C) try {
+            var payload = await decB58C(cleanAddress);
+            cleanKeyword = payload && payload.length > 1 ? new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "") : null
+        } catch (e) {}
         if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
         return cleanKeyword;
     } catch (e) {
         addMessage('Failed to fetch keyword for address');
         return null;
-    }
-}
-async function GetTransactionOutputAddresses(txid) {
-    try {
-        if (!txid) return [];
-        if (txOutputsByIdCache.has(txid)) return txOutputsByIdCache.get(txid);
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
-        var response = await fetch('https://mempool.space/testnet/api/tx/' + encodeURIComponent(txid));
-        if (!response.ok) return [];
-        var tx = await response.json();
-        var outputs = Array.isArray(tx && tx.vout) ? tx.vout.map((out => out && out.scriptpubkey_address ? out.scriptpubkey_address.trim() : "")).filter(Boolean) : [];
-        txOutputsByIdCache.set(txid, outputs);
-        return outputs;
-    } catch (e) {
-        return [];
     }
 }
 async function fetchIPFS(hash) {
@@ -187,6 +209,7 @@ async function fetchIPFS(hash) {
             return null;
         }
         var data = await response.json();
+        clearIpfsFetchFailure(hash);
         return data;
     } catch (e) {
         addMessage('Failed to fetch IPFS data');
