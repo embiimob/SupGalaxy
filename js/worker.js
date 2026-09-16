@@ -917,7 +917,7 @@ async function fetchIPFS(hash) {
 }
 self.onmessage = async function(e) {
         var data = e.data;
-        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName;
+        var type = data.type, chunkKeys = data.chunkKeys, masterKey = data.masterKey, userAddress = data.userAddress, worldName = data.worldName, serverKeyword = data.serverKeyword, offerKeyword = data.offerKeyword, answerKeywords = data.answerKeywords, userName = data.userName, runChunkPolling = !1 !== data.runChunkPolling, runWorldsUsersPolling = !1 !== data.runWorldsUsersPolling, runUserUpdatePolling = !1 !== data.runUserUpdatePolling, runServerPolling = !1 !== data.runServerPolling, runOfferPolling = !1 !== data.runOfferPolling, runAnswerPolling = !1 !== data.runAnswerPolling;
 
         if (type === 'configure_sup_local_mode') {
             isSupLocalMode = data.isSupLocalMode || false;
@@ -948,7 +948,7 @@ self.onmessage = async function(e) {
             var ownershipByChunk = new Map();
             var magicianStonesUpdates = [];
             var calligraphyStonesUpdates = [];
-            for (var chunkKey of chunkKeys) {
+            if (runChunkPolling) for (var chunkKey of chunkKeys) {
                 try {
                     var normalizedChunkKey = chunkKey.replace(/^#/, "");
                     var addr = await getPublicAddressByKeyword(normalizedChunkKey);
@@ -1096,7 +1096,7 @@ self.onmessage = async function(e) {
                     self.postMessage({ type: "chunk_ownership", chunkKey: ownership.chunkKey, username: ownership.username, timestamp: ownership.timestamp });
                 }
             }
-            try {
+            if (runWorldsUsersPolling) try {
                 var masterAddr = await getPublicAddressByKeyword(masterKey);
                 var worlds = new Map();
                 var users = new Map();
@@ -1200,7 +1200,7 @@ self.onmessage = async function(e) {
                 console.error('[Worker] Error in worlds_users poll:', e);
                 self.postMessage({ type: "worlds_users", worlds: {}, users: {}, joinData: [], processedIds: [] });
             }
-            try {
+            if (runUserUpdatePolling) try {
                 var joinKeyword = userAddress === "anonymous" ? worldName : userAddress;
                 var addressRes = await getPublicAddressByKeyword(joinKeyword);
                 if (addressRes) {
@@ -1244,7 +1244,7 @@ self.onmessage = async function(e) {
             } catch (e) {
                 console.error('[Worker] Error in user_update poll:', e);
             }
-            try {
+            if (runServerPolling) try {
                 if (!serverKeyword) {
                     console.log('[Worker] Skipping server_updates poll until Online Players is opened');
                 } else {
@@ -1331,7 +1331,7 @@ self.onmessage = async function(e) {
             } catch (e) {
                 console.error('[Worker] Error in server_updates poll:', e);
             }
-            try {
+            if (runOfferPolling) try {
                 if (offerKeyword) {
                     var offerAddr = await getPublicAddressByKeyword(offerKeyword);
                     if (offerAddr) {
@@ -1478,7 +1478,7 @@ self.onmessage = async function(e) {
             } catch (e) {
                 console.error('[Worker] Error in offer_updates poll:', e);
             }
-            try {
+            if (runAnswerPolling) try {
                 for (var answerKeyword of answerKeywords || []) {
                     var answerAddr = await getPublicAddressByKeyword(answerKeyword);
                     if (answerAddr) {
@@ -2000,7 +2000,13 @@ self.onmessage = async function(e) {
                 serverKeyword: serverKeyword,
                 offerKeyword: offerKeyword,
                 answerKeywords: answerKeywords,
-                userName: userName
+                userName: userName,
+                runChunkPolling: !0,
+                runWorldsUsersPolling: !0,
+                runUserUpdatePolling: !0,
+                runServerPolling: !0,
+                runOfferPolling: !0,
+                runAnswerPolling: !0
             });
         }
 

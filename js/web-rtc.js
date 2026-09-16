@@ -2072,7 +2072,13 @@ function startOfferPolling() {
                 serverKeyword: "MCServerJoin@" + worldName,
                 offerKeyword: e,
                 answerKeywords: [],
-                userName: userName
+                userName: userName,
+                runChunkPolling: !1,
+                runWorldsUsersPolling: !1,
+                runUserUpdatePolling: !1,
+                runServerPolling: !1,
+                runOfferPolling: !0,
+                runAnswerPolling: !1
             })
         } catch (e) {
             console.error("[SYSTEM] Error in offer polling:", e)
@@ -2117,7 +2123,13 @@ function startAnswerPolling(e) {
             serverKeyword: "MCServerJoin@" + worldName,
             offerKeyword: null,
             answerKeywords: [t],
-            userName: userName
+            userName: userName,
+            runChunkPolling: !1,
+            runWorldsUsersPolling: !1,
+            runUserUpdatePolling: !1,
+            runServerPolling: !1,
+            runOfferPolling: !1,
+            runAnswerPolling: !0
         }), Date.now() - connectionAttempts.get(e) > 36e5) {
             console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
             var o = peers.get(e);
