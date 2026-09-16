@@ -177,7 +177,7 @@ async function applySaveFile(e, t, o) {
         // Migration: Convert legacy Set users to Map for all known worlds
         if (knownWorlds.size > 0) {
             for (let [wName, wData] of knownWorlds) {
-                if (wData.users instanceof Set) {
+                if (wData && "object" == typeof wData && wData.users instanceof Set) {
                     const newMap = new Map();
                     wData.users.forEach(u => newMap.set(u, { timestamp: Date.now(), address: null, claimed: !0 }));
                     wData.users = newMap;
@@ -5350,10 +5350,6 @@ document.addEventListener("DOMContentLoaded", (async function () {
                         }
 
                         if (n && worldNameFromKey) {
-                            // Ensure n (profile URN) is used as the username
-                            // Previously n was stripped. Now n comes from a.URN directly (see below change).
-                            // Wait, I need to change where 'n' is defined too.
-
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
                             upsertKnownWorldUser(worldNameFromKey, n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
