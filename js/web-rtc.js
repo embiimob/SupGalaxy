@@ -2100,7 +2100,7 @@ function stopAllPolling() {
 }
 
 function enableWebRtcPolling() {
-    webRtcPollingEnabled || (webRtcPollingEnabled = !0, console.log("[SYSTEM] WebRTC polling enabled by user"), startOfferPolling())
+    webRtcPollingEnabled || (webRtcPollingEnabled = !0, console.log("[SYSTEM] WebRTC polling enabled by user"), startOfferPolling(), "function" == typeof triggerPoll && triggerPoll())
 }
 
 function startAnswerPolling(e) {

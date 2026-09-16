@@ -1279,6 +1279,9 @@ self.onmessage = async function(e) {
                 console.error('[Worker] Error in user_update poll:', e);
             }
             try {
+                if (!serverKeyword) {
+                    console.log('[Worker] Skipping server_updates poll until Online Players is opened');
+                } else {
                 var serverAddr = await getPublicAddressByKeyword(serverKeyword);
                 if (serverAddr) {
                     var messages = [];
@@ -1357,6 +1360,7 @@ self.onmessage = async function(e) {
                     if (servers.length > 0) {
                         self.postMessage({ type: "server_updates", servers: servers, processedIds: processedIds });
                     }
+                }
                 }
             } catch (e) {
                 console.error('[Worker] Error in server_updates poll:', e);
@@ -2009,7 +2013,7 @@ self.onmessage = async function(e) {
                 var dz = Math.min(Math.abs(parsed.cz - pcz), CHUNKS_PER_SIDE - Math.abs(parsed.cz - pcz));
                 return dx <= POLL_RADIUS && dz <= POLL_RADIUS;
             });
-            var serverKeyword = 'MCServerJoin@' + worldName;
+            var serverKeyword = "undefined" != typeof webRtcPollingEnabled && webRtcPollingEnabled ? 'MCServerJoin@' + worldName : null;
             // Use uniform keyword format: world@username for monitoring own thread
             var offerKeyword = isHost ? worldName + '@' + userName : null;
             var answerKeywords = [];
@@ -2020,7 +2024,7 @@ self.onmessage = async function(e) {
                     answerKeywords.push(worldName + '@' + userName);
                 }
             }
-            console.log('[Worker] Starting poll with offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
+            console.log('[Worker] Starting poll with serverKeyword:', serverKeyword, 'offerKeyword:', offerKeyword, 'isHost:', isHost, 'answerKeywords:', answerKeywords);
             worker.postMessage({
                 type: 'poll',
                 chunkKeys: filteredKeys,
