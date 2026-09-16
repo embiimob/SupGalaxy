@@ -5263,7 +5263,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             isPromptOpen = !0;
             var e = await GetPublicAddressByKeyword("MCUserJoin@" + worldName),
                 t = await GetPublicAddressByKeyword(MASTER_WORLD_KEY),
-                o = [e || "MCUserJoin@" + worldName, t || MASTER_WORLD_KEY].filter((function (e) {
+                o = [t || MASTER_WORLD_KEY, e || "MCUserJoin@" + worldName].filter((function (e) {
                     return e
                 })).join(",").replace(/["']/g, "");
             document.getElementById("joinScriptText").value = o, document.getElementById("joinScriptModal").style.display = "block"

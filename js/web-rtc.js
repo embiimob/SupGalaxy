@@ -2336,7 +2336,7 @@ function openUsersModal() {
                     const masterAddress = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
                     const resolvedWorldAddress = worldAddress ? worldAddress.trim() : keyword;
                     const resolvedMasterAddress = masterAddress ? masterAddress.trim() : MASTER_WORLD_KEY;
-                    const joinEntries = [resolvedWorldAddress, resolvedMasterAddress].filter((entry) => entry);
+                    const joinEntries = [resolvedMasterAddress, resolvedWorldAddress].filter((entry) => entry);
                     const joinList = joinEntries.join(",").replace(/["']/g, "");
                     try {
                         if (await broadcastKnownWorldJoin(joinEntries)) return;
