@@ -1653,7 +1653,6 @@ self.onmessage = async function(e) {
                             timestamp: typeof join.timestamp === 'number' && !Number.isNaN(join.timestamp) ? join.timestamp : Date.now(),
                             address: join.address || data.users && data.users[join.user] || null,
                             worldAddress: join.worldAddress || data.worlds && data.worlds[join.world] || null,
-                            discoverer: join.user,
                             claimed: !0
                         });
                     });

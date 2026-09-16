@@ -164,11 +164,13 @@ function registerKnownWorldJoin(world, user, options = {}) {
     const joinTimestamp = void 0 !== options.timestamp && null !== options.timestamp ? options.timestamp : Date.now();
     const joinAddress = void 0 !== options.address ? options.address : null;
     const joinWorldAddress = void 0 !== options.worldAddress ? options.worldAddress : joinAddress;
+    const existingWorldData = knownWorlds.get(world);
+    const discoverer = void 0 !== options.discoverer ? options.discoverer : existingWorldData && "object" == typeof existingWorldData ? existingWorldData.discoverer : null;
     upsertKnownWorldUser(world, user, {
         timestamp: joinTimestamp,
         address: joinAddress,
         worldAddress: joinWorldAddress,
-        discoverer: void 0 !== options.discoverer ? options.discoverer : user,
+        discoverer: discoverer,
         claimed: options.claimed !== !1
     });
     if (joinAddress) {
