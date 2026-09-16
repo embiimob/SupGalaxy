@@ -149,7 +149,8 @@ function upsertKnownWorldUser(world, user, options = {}) {
     worldData.discoverer || (worldData.discoverer = discoverer);
     worldData.toAddress || !worldAddress || (worldData.toAddress = worldAddress);
     const existingUserData = worldData.users.get(user);
-    const nextAddress = void 0 !== options.address ? address : existingUserData && void 0 !== existingUserData.address ? existingUserData.address : null;
+    const hasNewAddress = void 0 !== options.address && null !== options.address;
+    const nextAddress = hasNewAddress ? address : existingUserData && void 0 !== existingUserData.address ? existingUserData.address : null;
     worldData.users.set(user, {
         timestamp: existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
         address: nextAddress,
@@ -210,7 +211,6 @@ async function applySaveFile(e, t, o) {
 
         upsertKnownWorldUser(worldName, userName, {
             address: userAddress,
-            worldAddress: userAddress,
             claimed: !1
         });
 
@@ -3984,7 +3984,6 @@ async function startGame() {
 
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
-        worldAddress: userAddress,
         claimed: !1
     });
     keywordCache.set(userAddress, r);
@@ -4311,7 +4310,6 @@ function switchWorld(newWorldName, targetSpawn) {
     worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
-        worldAddress: userAddress,
         claimed: !1
     });
 
