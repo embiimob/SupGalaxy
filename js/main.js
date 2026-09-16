@@ -159,6 +159,38 @@ function upsertKnownWorldUser(world, user, options = {}) {
     }), knownWorlds.set(world, worldData)
 }
 
+function registerKnownWorldJoin(world, user, options = {}) {
+    if (!world || !user) return;
+    const joinTimestamp = void 0 !== options.timestamp && null !== options.timestamp ? options.timestamp : Date.now();
+    const joinAddress = void 0 !== options.address ? options.address : null;
+    const joinWorldAddress = void 0 !== options.worldAddress ? options.worldAddress : joinAddress;
+    const existingWorldData = knownWorlds.get(world);
+    const discoverer = void 0 !== options.discoverer ? options.discoverer : existingWorldData && "object" == typeof existingWorldData ? existingWorldData.discoverer : null;
+    upsertKnownWorldUser(world, user, {
+        timestamp: joinTimestamp,
+        address: joinAddress,
+        worldAddress: joinWorldAddress,
+        discoverer: discoverer,
+        claimed: options.claimed !== !1
+    });
+    if (joinAddress) {
+        knownUsers.set(user, joinAddress);
+    }
+    const spawnKey = user + "@" + world;
+    const spawn = calculateSpawnPoint(spawnKey);
+    const cx = Math.floor(spawn.x / CHUNK_SIZE);
+    const cz = Math.floor(spawn.z / CHUNK_SIZE);
+    spawnChunks.set(spawnKey, {
+        cx: cx,
+        cz: cz,
+        username: user,
+        world: world,
+        spawn: spawn
+    });
+    const chunkKey = makeChunkKey(world, cx, cz);
+    updateChunkOwnership(chunkKey, user, Date.now(), 'home');
+}
+
 async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
@@ -5317,7 +5349,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: No valid URN for address:", o.FromAddress);
                             continue
                         }
-                        var n = a.URN,
+                        var n = a.URN.replace(/^"|"$/g, "").trim(),
                             r = await GetProfileByURN(n);
                         if (!r || !r.Creators || !r.Creators.includes(o.FromAddress)) {
                             console.log("[USERS] Skipping message: Invalid profile for user:", n);
@@ -5328,9 +5360,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             console.log("[USERS] Skipping message: No keyword for address:", o.ToAddress);
                             continue
                         }
-                        var i = s.replace(/^"|"$/g, "");
+                        var i = s.replace(/^"|"$/g, "").trim();
                         var worldNameFromKey = null;
                         var worldAddressFromKey = null;
+                        var joinKeywordPrefix = "MCUserJoin@";
 
                         if (i === MASTER_WORLD_KEY && o.TransactionId && "function" == typeof GetTransactionOutputAddresses) {
                             var txOutputAddresses = await GetTransactionOutputAddresses(o.TransactionId);
@@ -5338,11 +5371,20 @@ document.addEventListener("DOMContentLoaded", (async function () {
                                 if (!outputAddress || outputAddress === o.ToAddress) continue;
                                 var outputKeywordRaw = await GetKeywordByPublicAddress(outputAddress);
                                 if (!outputKeywordRaw) continue;
-                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "");
-                                if (outputKeyword.includes("MCUserJoin@")) {
-                                    var outputJoinParts = outputKeyword.split("@");
-                                    if (outputJoinParts.length >= 2) {
-                                        worldNameFromKey = outputJoinParts.slice(1).join("@");
+                                var outputKeyword = outputKeywordRaw.replace(/^"|"$/g, "").trim();
+                                if (outputKeyword.startsWith(joinKeywordPrefix)) {
+                                    var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
+                                    if (outputWorldName) {
+                                        worldNameFromKey = outputWorldName;
+                                        worldAddressFromKey = outputAddress;
+                                        break
+                                    }
+                                } else {
+                                    var legacyOutputParts = outputKeyword.split("@");
+                                    var legacyOutputWorldName = legacyOutputParts[0] ? legacyOutputParts[0].trim() : "";
+                                    var legacyOutputUser = legacyOutputParts.slice(1).join("@").trim();
+                                    if (legacyOutputParts.length >= 2 && legacyOutputWorldName && legacyOutputUser && n === legacyOutputUser) {
+                                        worldNameFromKey = legacyOutputWorldName;
                                         worldAddressFromKey = outputAddress;
                                         break
                                     }
@@ -5350,58 +5392,36 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             }
                         }
 
-                        // Logic to handle MCUserJoin format (Discovery)
-                        if (!worldNameFromKey && i.includes("MCUserJoin@")) {
-                            var joinParts = i.split("@");
-                            if (joinParts.length >= 2) {
-                                worldNameFromKey = joinParts.slice(1).join("@");
+                        if (!worldNameFromKey && i.startsWith(joinKeywordPrefix)) {
+                            var directWorldName = i.slice(joinKeywordPrefix.length).trim();
+                            if (directWorldName) {
+                                worldNameFromKey = directWorldName;
                                 worldAddressFromKey = o.ToAddress;
                             }
                         } else if (!worldNameFromKey) {
-                            // Logic to handle world@user format (Direct/Legacy)
-                            var parts = i.split("@");
-                            if (parts.length >= 2) {
-                                var potentialWorld = parts[0];
-                                var potentialUser = parts.slice(1).join("@");
-                                // Verify user match only if we are parsing user from key
-                                if (n.startsWith(potentialUser)) {
-                                    worldNameFromKey = potentialWorld;
-                                    worldAddressFromKey = o.ToAddress;
-                                }
+                            var legacyJoinParts = i.split("@");
+                            var legacyWorldName = legacyJoinParts[0] ? legacyJoinParts[0].trim() : "";
+                            var legacyJoinUser = legacyJoinParts.slice(1).join("@").trim();
+                            if (legacyJoinParts.length >= 2 && legacyWorldName && legacyJoinUser && n === legacyJoinUser) {
+                                worldNameFromKey = legacyWorldName;
+                                worldAddressFromKey = o.ToAddress;
                             }
+                        }
+
+                        if (!worldNameFromKey) {
+                            console.log("[USERS] Skipping message: Unsupported join keyword:", i);
+                            continue;
                         }
 
                         if (n && worldNameFromKey) {
                             console.log("[USERS] Adding user:", n, "to world:", worldNameFromKey);
-                            upsertKnownWorldUser(worldNameFromKey, n, {
+                            registerKnownWorldJoin(worldNameFromKey, n, {
                                 timestamp: Date.parse(o.BlockDate) || Date.now(),
                                 address: o.FromAddress,
                                 worldAddress: worldAddressFromKey,
                                 discoverer: n,
                                 claimed: !0
                             });
-
-                            knownUsers.has(n) || knownUsers.set(n, o.FromAddress);
-
-                            // Calculate spawn point for known user to enforce ownership
-                            var spawn = calculateSpawnPoint(n + "@" + worldNameFromKey);
-                            var cx = Math.floor(spawn.x / CHUNK_SIZE);
-                            var cz = Math.floor(spawn.z / CHUNK_SIZE);
-
-                            // Use key format: username@worldname to avoid conflicts
-                            var spawnMapKey = n + "@" + worldNameFromKey;
-                            spawnChunks.set(spawnMapKey, {
-                                cx: cx,
-                                cz: cz,
-                                username: n,
-                                world: worldNameFromKey,
-                                spawn: spawn
-                            });
-
-                            // Immediately protect home chunk for known users
-                            var chunkKey = makeChunkKey(worldNameFromKey, cx, cz);
-                            updateChunkOwnership(chunkKey, n, Date.now(), 'home');
-
                             processedMessages.add(o.TransactionId);
                         }
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
