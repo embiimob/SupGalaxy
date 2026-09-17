@@ -313,15 +313,19 @@ async function applySaveFile(e, t, o) {
         Math.floor(MAP_SIZE / CHUNK_SIZE);
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
-        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
-            console.log("[LOGIN] Loading magician stones from session");
-            // Clean up any existing magician stones before loading new ones
+
+        // Clean up any existing magician stones before loading new ones
+        if (typeof magicianStones !== 'undefined') {
             for (const existingKey in magicianStones) {
                 if (magicianStones[existingKey]) {
                     cleanupMagicianStone(magicianStones[existingKey], existingKey);
                 }
             }
             magicianStones = {}; // Clear existing stones
+        }
+
+        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
+            console.log("[LOGIN] Loading magician stones from session");
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = { ...t.magicianStones[key], source: 'local' };
@@ -468,6 +472,19 @@ async function applySaveFile(e, t, o) {
                 console.log(`[Ownership] IPFS load rejected for chunk ${s}: owned by ${ownership.username}`);
             }
         }
+
+        // Clean up any existing magician stones before loading new ones
+        if (e.magicianStones && typeof magicianStones !== 'undefined') {
+            for (const existingKey in magicianStones) {
+                if (magicianStones[existingKey]) {
+                    if (typeof cleanupMagicianStone === 'function') {
+                        cleanupMagicianStone(magicianStones[existingKey], existingKey);
+                    }
+                }
+            }
+            magicianStones = {}; // Clear existing stones
+        }
+
         if (e.magicianStones) {
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {

@@ -1184,6 +1184,18 @@ function setupDataChannel(e, t) {
                     break;
                 case "magician_stones_sync":
                     if (!isHost) {
+                        // Clean up any existing magician stones before loading new ones
+                        if (typeof magicianStones !== 'undefined') {
+                            for (const existingKey in magicianStones) {
+                                if (magicianStones[existingKey]) {
+                                    if (typeof cleanupMagicianStone === 'function') {
+                                        cleanupMagicianStone(magicianStones[existingKey], existingKey);
+                                    }
+                                }
+                            }
+                            magicianStones = {}; // Clear existing stones
+                        }
+
                         for (const key in s.stones) {
                             if (Object.hasOwnProperty.call(s.stones, key)) {
                                 createMagicianStoneScreen({ ...s.stones[key], source: 'network' });
