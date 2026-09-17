@@ -379,12 +379,39 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    if (parseChunkKey(o)) {
+    var chunkParsed = parseChunkKey(o);
+    if (chunkParsed) {
         var a = this.chunks.get(o);
         if (a) {
             for (var n of t)
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
+                    var currentBid = a.get(n.x, n.y, n.z);
+                    if (currentBid === 127 && r !== 127) {
+                        var worldX = modWrap(chunkParsed.cx * CHUNK_SIZE + n.x, MAP_SIZE);
+                        var worldY = n.y;
+                        var worldZ = modWrap(chunkParsed.cz * CHUNK_SIZE + n.z, MAP_SIZE);
+                        var key = `${worldX},${worldY},${worldZ}`;
+                        if (typeof magicianStones !== 'undefined' && magicianStones[key]) {
+                            if (typeof cleanupMagicianStone === 'function') {
+                                cleanupMagicianStone(magicianStones[key], key);
+                            }
+                            delete magicianStones[key];
+                        }
+                    }
+                    if (currentBid === 128 && r !== 128) {
+                        var worldX = modWrap(chunkParsed.cx * CHUNK_SIZE + n.x, MAP_SIZE);
+                        var worldY = n.y;
+                        var worldZ = modWrap(chunkParsed.cz * CHUNK_SIZE + n.z, MAP_SIZE);
+                        var key = `${worldX},${worldY},${worldZ}`;
+                        if (typeof calligraphyStones !== 'undefined' && calligraphyStones[key]) {
+                            if (calligraphyStones[key].mesh && typeof scene !== 'undefined') {
+                                scene.remove(calligraphyStones[key].mesh);
+                                if (typeof disposeObject === 'function') disposeObject(calligraphyStones[key].mesh);
+                            }
+                            delete calligraphyStones[key];
+                        }
+                    }
                     a.set(n.x, n.y, n.z, r)
                 } updateTorchRegistry(a), a.needsRebuild = !0
         }
