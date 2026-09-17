@@ -715,29 +715,26 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 console.log(`[ChunkManager] Loaded ${e.foreignBlockOrigins.length} foreign block origins from IPFS`);
             }
 
-            // Clean up any existing magician stones before loading new ones
-            if (e.magicianStones && typeof magicianStones !== 'undefined') {
-                for (const existingKey in magicianStones) {
-                    if (magicianStones[existingKey]) {
-                        if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(magicianStones[existingKey], existingKey);
-                        }
-                    }
-                }
-                magicianStones = {}; // Clear existing stones
-            }
+            const incomingTruncatedDateForStones = computeIpfsTruncatedDate(blockDate);
+            const worldStateForStones = getCurrentWorldState();
 
             if (e.magicianStones) {
                 for (const key in e.magicianStones) {
                     if (Object.hasOwnProperty.call(e.magicianStones, key)) {
-                        createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
+                        const existingTruncatedDate = worldStateForStones.ipfsTruncatedDates ? (worldStateForStones.ipfsTruncatedDates.get(key) || 0) : 0;
+                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDateForStones)) {
+                            createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
+                        }
                     }
                 }
             }
             if (e.calligraphyStones) {
                 for (const key in e.calligraphyStones) {
                     if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
-                        createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
+                        const existingTruncatedDate = worldStateForStones.ipfsTruncatedDates ? (worldStateForStones.ipfsTruncatedDates.get(key) || 0) : 0;
+                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDateForStones)) {
+                            createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
+                        }
                     }
                 }
             }
