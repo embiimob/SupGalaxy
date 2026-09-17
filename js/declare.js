@@ -292,6 +292,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#8b5a33",
             strength: 2
         },
+        132: {
+            name: "Blue Laser Core",
+            color: "#0000ff",
+            strength: 2
+        },
+        133: {
+            name: "Blue Laser Gun",
+            color: "#0055ff",
+            strength: 2
+        },
         130: {
             name: "Crafting Table",
             color: "#8b5a33",
@@ -340,6 +350,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         heightScale: .5,
         roughness: .2,
         featureDensity: .04
+    }, {
+        id: "blue_laser_gun",
+        out: {
+            id: 133,
+            count: 1
+        },
+        requires: {
+            121: 1,
+            132: 1
+        }
     }],
     RECIPES = [{
         id: "glass",
@@ -615,6 +635,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         requires: {
             129: 8
+        }
+    }, {
+        id: "blue_laser_gun",
+        out: {
+            id: 133,
+            count: 1
+        },
+        requires: {
+            121: 1,
+            132: 1
         }
     }],
     raycaster = new THREE.Raycaster,
