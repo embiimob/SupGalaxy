@@ -119,7 +119,8 @@ async function resolveIPFS(url) {
     const fullMatch = match[0].split('IPFS:')[1];
     const parts = fullMatch.split(/[\\\/]/);
     const hash = parts[0];
-    const filename = parts.length > 1 ? parts.slice(1).join('/') : null;
+    // Ignore filename when fetching from IPFS as gateways only use CID
+    const filename = null;
     
     const response = await fetchIPFSWithFallback(hash, filename);
     if (!response.ok) {
