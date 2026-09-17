@@ -53,7 +53,64 @@ function Mob(t, e, s, i = "crawley") {
             s.position.set(.45 * i, 0, .3 * (Math.floor(e / 2) - 1)), this.mesh.add(s), this.mesh.legs.push(s)
         }
         this.originalColor = new THREE.Color(4868682)
-    } else if ("grub" === this.type) {
+            } else if ("ufo_saucer" === this.type) {
+        this.hp = 200;
+        this.speed = 0.05;
+        this.aiState = "IDLE";
+        this.isAggressive = false;
+
+        this.mesh = new THREE.Group();
+        const mat = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Grey metal
+        const glassMat = new THREE.MeshLambertMaterial({ color: 0x00ffff, transparent: true, opacity: 0.5 }); // Cyan glass
+
+        // Saucer Base
+        const baseGeo = new THREE.SphereGeometry(3, 32, 16);
+        const base = new THREE.Mesh(baseGeo, mat);
+        base.scale.set(1, 0.3, 1);
+        this.mesh.add(base);
+
+        // Glass Dome
+        const domeGeo = new THREE.SphereGeometry(1.5, 32, 16);
+        const dome = new THREE.Mesh(domeGeo, glassMat);
+        dome.position.y = 0.8;
+        dome.scale.set(1, 0.8, 1);
+        this.mesh.add(dome);
+
+        this.originalColor = new THREE.Color(0x888888);
+} else if ("alien" === this.type) {
+        this.hp = 25;
+        this.speed = 0.08;
+        this.aiState = "IDLE";
+        this.isAggressive = true;
+        this.attackCooldown = 0;
+
+        this.mesh = new THREE.Group();
+        const mat = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+
+        // Body
+        const bodyGeo = new THREE.SphereGeometry(0.4, 16, 16);
+        const body = new THREE.Mesh(bodyGeo, mat);
+        body.position.y = 0.4;
+        this.mesh.add(body);
+
+        // Head
+        const headGeo = new THREE.SphereGeometry(0.3, 16, 16);
+        const head = new THREE.Mesh(headGeo, mat);
+        head.position.y = 0.9;
+        this.mesh.add(head);
+
+        // Antenna
+        const antennaGeo = new THREE.BoxGeometry(0.05, 0.4, 0.05);
+        const ant1 = new THREE.Mesh(antennaGeo, mat);
+        ant1.position.set(-0.15, 1.2, 0);
+        this.mesh.add(ant1);
+
+        const ant2 = new THREE.Mesh(antennaGeo, mat);
+        ant2.position.set(0.15, 1.2, 0);
+        this.mesh.add(ant2);
+
+        this.originalColor = new THREE.Color(0x00ff00);
+} else if ("grub" === this.type) {
         this.hp = 40, this.speed = (.01 + .005 * Math.random()) / 2, this.aiState = "IDLE", this.animationTime = Math.random() * Math.PI * 2, this.cactusEaten = 0, this.isAggressive = !1;
         const t = 3,
             e = createMobTexture(worldSeed, "grub_body"),
@@ -210,7 +267,15 @@ function manageMobs() {
     }
 
     // Despawn mobs that are too far from ANY player in their active area
-    const allowedTypes = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+    let allowedTypes = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+    if (worldArchetype.skyType !== 'moon') {
+        if (!allowedTypes.includes('ufo_saucer')) {
+            // Rare chance to allow UFO spawning on other planets
+            if (Math.random() < 0.01) {
+                allowedTypes = [...allowedTypes, 'ufo_saucer'];
+            }
+        }
+    }
     mobs = mobs.filter((mob) => {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
@@ -321,10 +386,10 @@ function manageMobs() {
     }
 }
 
-function handleMobHit(t) {
+function handleMobHit(t, color) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
     if (isLocalSpawner) {
-        t.hurt(4, userName);
+        t.hurt(4, userName, color);
     } else {
         // Forward hit to whoever is the host so they can route it or handle it
         for (const [e, s] of peers.entries()) {
@@ -334,6 +399,7 @@ function handleMobHit(t) {
                     type: "mob_hit",
                     id: t.id,
                     damage: 4,
+                    color: color,
                     username: userName
                 }));
             }
@@ -364,6 +430,107 @@ Mob.prototype.update = function (t) {
             e && (t.material = e)
         })) : this.originalColor && (this.mesh.material ? this.mesh.material.color.copy(this.originalColor) : this.mesh.children[0].material.color.copy(this.originalColor))
     } else {
+
+    if ("ufo_saucer" === this.type && isLocalSpawner) {
+        if (this.hp <= 0) return;
+
+        let targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 15;
+        this.pos.y += (targetY - this.pos.y) * 0.05;
+        this.mesh.position.y = this.pos.y;
+
+        this.mesh.rotation.y += 0.01; // Spin slowly
+
+        // Simple wandering hover
+        if (Math.random() < 0.02) {
+            this.targetPos.x = this.pos.x + (Math.random() - 0.5) * 40;
+            this.targetPos.z = this.pos.z + (Math.random() - 0.5) * 40;
+            this.isMoving = true;
+        }
+
+        if (this.isMoving) {
+            const dx = this.targetPos.x - this.pos.x;
+            const dz = this.targetPos.z - this.pos.z;
+            const dist2D = Math.hypot(dx, dz);
+
+            if (dist2D > 1) {
+                this.vx = (dx / dist2D) * this.speed;
+                this.vz = (dz / dist2D) * this.speed;
+            } else {
+                this.vx = 0;
+                this.vz = 0;
+                this.isMoving = false;
+            }
+
+            this.pos.x += this.vx;
+            this.pos.z += this.vz;
+        }
+    }
+
+    if ("alien" === this.type && isLocalSpawner) {
+        if (this.hp <= 0) return;
+
+        let closestPlayerDist = Infinity;
+        let closestPlayerPos = null;
+
+        const players = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+        for (const [peerName, pos] of Object.entries(userPositions)) {
+            if (pos.world === worldName && pos.targetX !== undefined) {
+                players.push({ name: peerName, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+            }
+        }
+
+        for (const p of players) {
+            const dist = Math.hypot(this.pos.x - p.x, this.pos.y - p.y, this.pos.z - p.z);
+            if (dist < closestPlayerDist) {
+                closestPlayerDist = dist;
+                closestPlayerPos = new THREE.Vector3(p.x, p.y, p.z);
+            }
+        }
+
+        if (closestPlayerPos && closestPlayerDist < 30) {
+            this.targetPos.copy(closestPlayerPos);
+            this.isMoving = true;
+
+            if (closestPlayerDist < 15) {
+                if (Date.now() - this.attackCooldown > 2000) {
+                    this.attackCooldown = Date.now();
+                    if (typeof window.fireAlienLaser === 'function') {
+                        window.fireAlienLaser(this.pos, closestPlayerPos);
+                    }
+                }
+            }
+        } else {
+            this.isMoving = false;
+        }
+
+        if (this.isMoving) {
+            const dx = this.targetPos.x - this.pos.x;
+            const dz = this.targetPos.z - this.pos.z;
+            const dist2D = Math.hypot(dx, dz);
+
+            if (dist2D > 1) {
+                this.vx = (dx / dist2D) * this.speed;
+                this.vz = (dz / dist2D) * this.speed;
+            } else {
+                this.vx = 0;
+                this.vz = 0;
+            }
+
+            this.pos.x += this.vx;
+            this.pos.z += this.vz;
+
+            const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 1;
+            this.pos.y += (targetY - this.pos.y) * 0.1;
+            this.mesh.position.y = this.pos.y;
+
+            if (dx !== 0 || dz !== 0) {
+                const angle = Math.atan2(dx, dz);
+                this.targetQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+                this.mesh.quaternion.slerp(this.targetQuaternion, 0.1);
+            }
+        }
+    }
+
         if (this.pos.x += this.vx * t, this.pos.z += this.vz * t, this.vx *= 1 - 2 * t, this.vz *= 1 - 2 * t, "crawley" === this.type) {
             for (const t of mobs)
                 if (t.id !== this.id && "crawley" === t.type) {
@@ -803,9 +970,15 @@ Mob.prototype.update = function (t) {
     }))) : this.mesh.legs.forEach((t => {
         t.rotation.x = 0
     })))
-}, Mob.prototype.hurt = function (t, e) {
+}, Mob.prototype.hurt = function (t, e, color) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
+    if (this.hp <= 0) return;
+    if (this.type === "ufo_saucer") {
+        if (color !== "green" && color !== "blue") {
+            return; // Only green and blue lasers can hurt UFOs
+        }
+    }
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
     const s = e === userName ? player : userPositions[e];
     if (s) {
@@ -840,6 +1013,14 @@ Mob.prototype.update = function (t) {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
+
+    if (this.type === "ufo_saucer") {
+        if (typeof createDroppedItemOrb === 'function') {
+            createDroppedItemOrb(Date.now(), this.pos, 132, new THREE.Vector3(0, 0.2, 0), "host", 1); // Drop Blue Laser Gun
+            createDroppedItemOrb(Date.now()+1, this.pos.clone().add(new THREE.Vector3(1,0,0)), 131, new THREE.Vector3(0, 0.2, 0), "host", 1); // Drop Blue Laser Core
+        }
+    }
+
     let e = 10;
     if ("red" === this.eyeColor ? e = 20 : "blue" === this.eyeColor && (e = 30), t === userName) player.score += e, document.getElementById("score").innerText = player.score, addMessage(`+${e} score`), safePlayAudio(soundHit);
     else {

@@ -137,7 +137,7 @@ const ARCHETYPES = {
         name: 'Moon',
         gravity: 8.0,
         skyType: 'moon',
-        mobSpawnRules: { day: ['crawley'], night: [] },
+        mobSpawnRules: { day: ['crawley', 'alien', 'ufo_saucer'], night: ['alien', 'ufo_saucer'] },
         terrainGenerator: 'generateMoonTerrain',
         biomeModifications: { noWater: true },
         flora: []
@@ -212,6 +212,8 @@ const BLOCKS = {
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
         127: { name: "Magician's Stone", color: "#8A2BE2" },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
+        132: { name: 'Blue Laser Core', color: '#0000ff' },
+        133: { name: 'Blue Laser Gun', color: '#0055ff', hand_attachable: true },
 };
 
 const BIOMES = [
@@ -418,10 +420,47 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
 
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
 
+
             for (let y = 0; y <= height; y++) {
                 const id = (y === 0) ? 1 : 4; // Bedrock and Stone
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }
+
+            // Generate Moon Bases
+            const moonBaseNoise = makeNoise(worldSeed + '_moonbase');
+            const chunkRnd = makeSeededRandom(worldSeed + '_' + wx + '_' + wz);
+            const baseValue = fbm(moonBaseNoise, nx * 2, nz * 2, 3, 0.5);
+
+            if (baseValue > 0.8) {
+                const baseY = Math.floor(height) + 1;
+
+                // Platform
+                for (let y = baseY; y < baseY + 3; y++) {
+                    chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 107; // Concrete
+                }
+
+                // Add some Blue Laser Core on the platform
+                if (chunkRnd() < 0.05) {
+                    chunkData[(baseY + 3) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 132; // Blue Laser Core
+                }
+
+                // Glass Dome enclosing the platform
+                const domeRadius = 8;
+                // Simple dome approximation per column: if distance to local "center" (derived from fbm gradient) is within radius, cap it with glass
+                // A better approach is simply generating a high glass ceiling
+                const ceilingHeight = baseY + 8;
+                for (let y = baseY + 3; y < ceilingHeight; y++) {
+                    // hollow inside, but walls if edge of baseValue > 0.8? Actually baseValue > 0.8 is a continuous blob.
+                    // We can check if it's the edge of the blob:
+                    const edgeValue = fbm(moonBaseNoise, nx * 2, nz * 2, 3, 0.5);
+                    if (edgeValue > 0.8 && edgeValue < 0.82) {
+                         chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 116; // Dark Glass wall
+                    }
+                }
+                // Glass ceiling
+                chunkData[ceilingHeight * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 116; // Dark Glass ceiling
+            }
+
         }
     }
 }

@@ -1063,10 +1063,18 @@ function releaseProjectileMesh(mesh) {
     }
 }
 
+
+window.fireAlienLaser = function(pos, targetPos) {
+    const id = `alien-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const dir = new THREE.Vector3().subVectors(targetPos, pos).normalize();
+    createProjectile(id, "alien", pos.clone().add(new THREE.Vector3(0, 1, 0)), dir, "red");
+};
+
 function createProjectile(e, t, o, a, n = "red") {
     const r = "green" === n,
-        s = r ? 20 : 10,
-        i = r ? 65280 : 16711680,
+        isBlue = "blue" === n,
+        s = r ? 20 : (isBlue ? 30 : 10),
+        i = r ? 65280 : (isBlue ? 255 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
@@ -1078,7 +1086,9 @@ function createProjectile(e, t, o, a, n = "red") {
         velocity: a.multiplyScalar(s),
         createdAt: Date.now(),
         light: p,
-        isGreen: r
+        isGreen: r,
+        isBlue: isBlue,
+        color: n
     })
 }
 
@@ -1888,6 +1898,44 @@ function onPointerDown(e) {
         });
         return
     }
+    if (t && 133 === t.id) {
+        const e = Date.now();
+        if (e - (player.lastFireTime || 0) < 500) return;
+        let ammoIndex = -1;
+        for (let e = 0; e < INVENTORY.length; e++)
+            if (INVENTORY[e] && 132 === INVENTORY[e].id) {
+                ammoIndex = e;
+                break;
+            }
+        if (-1 === ammoIndex) return void addMessage("No Blue Laser Core to fire!", 1e3);
+        INVENTORY[ammoIndex].count--, INVENTORY[ammoIndex].count <= 0 && (INVENTORY[ammoIndex] = null), updateHotbarUI(), player.lastFireTime = e;
+        const o = new THREE.Vector3;
+        camera.getWorldDirection(o);
+        const a = new THREE.Vector3;
+        let n;
+        a.crossVectors(camera.up, o).normalize(), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (n = new THREE.Vector3, avatarGroup.gun.getWorldPosition(n)) : n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+        const r = `${userName}-${Date.now()}-1`,
+            s = n.clone().add(a.clone().multiplyScalar(.2));
+        createProjectile(r, userName, s, o.clone(), "blue");
+        const i = `${userName}-${Date.now()}-2`,
+            l = n.clone().add(a.clone().multiplyScalar(-.2));
+        createProjectile(i, userName, l, o.clone(), "blue"), laserFireQueue.push({
+            id: r,
+            user: userName,
+            world: worldName,
+            position: { x: s.x, y: s.y, z: s.z },
+            direction: { x: o.x, y: o.y, z: o.z },
+            color: "blue"
+        }), laserFireQueue.push({
+            id: i,
+            user: userName,
+            world: worldName,
+            position: { x: l.x, y: l.y, z: l.z },
+            direction: { x: o.x, y: o.y, z: o.z },
+            color: "blue"
+        });
+        return;
+    }
     if (t && 126 === t.id) {
         const e = Date.now();
         if (e - (player.lastFireTime || 0) < 500) return;
@@ -1955,7 +2003,7 @@ function onPointerDown(e) {
         }
         if (e) {
             const t = mobs.find((t => t.id === e));
-            if (t) return animateAttack(), void handleMobHit(t)
+            if (t) return animateAttack(), void handleMobHit(t, "melee")
         }
     }
     const n = Array.from(playerAvatars.entries()).filter((([e]) => e !== userName)).map((([e, t]) => ({
@@ -2236,7 +2284,7 @@ function handlePlayerHit(e) {
 
 function attackAtPoint(e) {
     for (var t of mobs)
-        if (t.mesh.position.distanceTo(e) < 1.5) return handleMobHit(t), !0;
+        if (t.mesh.position.distanceTo(e) < 1.5) return handleMobHit(t, "melee"), !0;
     return !1
 }
 
@@ -4998,13 +5046,14 @@ function gameLoop(e) {
             for (const t of mobs)
                 if (o.mesh.position.distanceTo(t.pos) < 1) {
                     const a = o.isGreen ? 10 : 5;
-                    if (isHost || 0 === peers.size) t.hurt(a, o.user);
+                    if (isHost || 0 === peers.size) t.hurt(a, o.user, o.color);
                     else
                         for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
                             type: "mob_hit",
                             id: t.id,
                             damage: a,
-                            username: o.user
+                            username: o.user,
+                            color: o.color
                         }));
                     releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
                     break
