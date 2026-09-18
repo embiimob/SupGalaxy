@@ -379,55 +379,45 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    var parsed = parseChunkKey(o);
-    if (parsed) {
+    if (parseChunkKey(o)) {
         var a = this.chunks.get(o);
-        for (var n of t) {
-            if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
-                // Perform global cleanup of old screens when block is updated, even if chunk mesh is unloaded
-                const worldX = parsed.cx * CHUNK_SIZE + n.x;
-                const worldY = n.y;
-                const worldZ = parsed.cz * CHUNK_SIZE + n.z;
-                const key = `${worldX},${worldY},${worldZ}`;
-
-                // If a delta is overwriting this block and it's NOT a magician/calligraphy stone itself
-                // (or if it's replacing it entirely with another block/air), we must destroy the old entity.
-                if (n.b !== 127) {
-                    if (window.magicianStones && window.magicianStones[key]) {
-                        if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(window.magicianStones[key], key);
-                        }
-                        delete window.magicianStones[key];
-                    }
-                    if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
-                        if (!window.cancelledStones) window.cancelledStones = new Set();
-                        window.cancelledStones.add(key);
-                    }
-                }
-
-                if (n.b !== 128) {
-                    if (window.calligraphyStones && window.calligraphyStones[key]) {
-                        if (window.calligraphyStones[key].mesh) {
-                            scene.remove(window.calligraphyStones[key].mesh);
-                            if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
-                        }
-                        delete window.calligraphyStones[key];
-                    }
-                    if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
-                        if (!window.cancelledStones) window.cancelledStones = new Set();
-                        window.cancelledStones.add(key);
-                    }
-                }
-
-                if (a) {
-                    var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
-                    a.set(n.x, n.y, n.z, r);
-                }
-            }
-        }
         if (a) {
-            updateTorchRegistry(a);
-            a.needsRebuild = !0;
+            const parsed = parseChunkKey(o);
+            for (var n of t)
+                if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
+                    var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
+                    a.set(n.x, n.y, n.z, r)
+
+                    if (parsed) {
+                        const worldX = parsed.cx * CHUNK_SIZE + n.x;
+                        const worldY = n.y;
+                        const worldZ = parsed.cz * CHUNK_SIZE + n.z;
+                        const key = `${worldX},${worldY},${worldZ}`;
+
+                        // If a delta is overwriting this block and it's NOT a magician/calligraphy stone itself
+                        // (or if it's replacing it entirely with another block/air), we must destroy the old entity.
+                        if (n.b !== 127) {
+                            if (window.magicianStoneGenerations) window.magicianStoneGenerations[key] = (window.magicianStoneGenerations[key] || 0) + 1;
+                            if (window.magicianStones && window.magicianStones[key]) {
+                                if (typeof cleanupMagicianStone === 'function') {
+                                    cleanupMagicianStone(window.magicianStones[key], key);
+                                }
+                                delete window.magicianStones[key];
+                            }
+                        }
+
+                        if (n.b !== 128) {
+                            if (window.calligraphyStoneGenerations) window.calligraphyStoneGenerations[key] = (window.calligraphyStoneGenerations[key] || 0) + 1;
+                            if (window.calligraphyStones && window.calligraphyStones[key]) {
+                                if (window.calligraphyStones[key].mesh) {
+                                    scene.remove(window.calligraphyStones[key].mesh);
+                                    if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
+                                }
+                                delete window.calligraphyStones[key];
+                            }
+                        }
+                    }
+                } updateTorchRegistry(a), a.needsRebuild = !0
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
@@ -730,17 +720,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             if (e.magicianStones) {
                 for (const key in e.magicianStones) {
                     if (Object.hasOwnProperty.call(e.magicianStones, key)) {
-                        // Cleanup before applying
-                        if (window.magicianStones && window.magicianStones[key]) {
-                            if (typeof cleanupMagicianStone === 'function') {
-                                cleanupMagicianStone(window.magicianStones[key], key);
-                            }
-                            delete window.magicianStones[key];
-                        }
-                        if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
-                            if (!window.cancelledStones) window.cancelledStones = new Set();
-                            window.cancelledStones.add(key);
-                        }
+                        if (window.magicianStoneGenerations) window.magicianStoneGenerations[key] = (window.magicianStoneGenerations[key] || 0) + 1;
                         createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
                     }
                 }
@@ -748,18 +728,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             if (e.calligraphyStones) {
                 for (const key in e.calligraphyStones) {
                     if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
-                        // Cleanup before applying
-                        if (window.calligraphyStones && window.calligraphyStones[key]) {
-                            if (window.calligraphyStones[key].mesh) {
-                                scene.remove(window.calligraphyStones[key].mesh);
-                                if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
-                            }
-                            delete window.calligraphyStones[key];
-                        }
-                        if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
-                            if (!window.cancelledStones) window.cancelledStones = new Set();
-                            window.cancelledStones.add(key);
-                        }
+                        if (window.calligraphyStoneGenerations) window.calligraphyStoneGenerations[key] = (window.calligraphyStoneGenerations[key] || 0) + 1;
                         createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
                     }
                 }

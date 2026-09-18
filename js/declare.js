@@ -737,6 +737,8 @@ var volcanoes = [],
     calligraphyStonePlacement = null,
     calligraphyStones = {},
     calligraphyStonesLoading = new Set(), // Entity-based deduplication: tracks calligraphy stones by position key during loading
+    magicianStoneGenerations = {},
+    calligraphyStoneGenerations = {},
     chests = {},
     currentChestKey = null,
     // Per-world stone data storage: Stores magician and calligraphy stone metadata per world.
