@@ -382,28 +382,19 @@ Chunk.prototype.idx = function (e, t, o) {
     var parsed = parseChunkKey(o);
     if (parsed) {
         var a = this.chunks.get(o);
-        // Even if chunk isn't loaded in memory yet (a is undefined),
-        // we must clean up any existing UI/media entities that are being overwritten
         for (var n of t) {
             if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
-                // Determine absolute world position
+                // Perform global cleanup of old screens when block is updated, even if chunk mesh is unloaded
                 const worldX = parsed.cx * CHUNK_SIZE + n.x;
                 const worldY = n.y;
                 const worldZ = parsed.cz * CHUNK_SIZE + n.z;
                 const key = `${worldX},${worldY},${worldZ}`;
 
-                // If a delta is updating this block, we must destroy the old entity
-                // unconditionally to ensure fresh loading (even if replacing stone with stone).
                 if (window.magicianStones && window.magicianStones[key]) {
                     if (typeof cleanupMagicianStone === 'function') {
                         cleanupMagicianStone(window.magicianStones[key], key);
                     }
                     delete window.magicianStones[key];
-                }
-                if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
-                    // Mark as cancelled so async callbacks don't render it
-                    if (!window.cancelledStones) window.cancelledStones = new Set();
-                    window.cancelledStones.add(key);
                 }
 
                 if (window.calligraphyStones && window.calligraphyStones[key]) {
@@ -412,11 +403,6 @@ Chunk.prototype.idx = function (e, t, o) {
                         if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
                     }
                     delete window.calligraphyStones[key];
-                }
-                if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
-                    // Mark as cancelled so async callbacks don't render it
-                    if (!window.cancelledStones) window.cancelledStones = new Set();
-                    window.cancelledStones.add(key);
                 }
 
                 if (a) {

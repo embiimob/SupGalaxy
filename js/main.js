@@ -1328,14 +1328,6 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
-    // Cancellation check after async resolveIPFS
-    if (window.cancelledStones && window.cancelledStones.has(key)) {
-        console.log(`[MagicianStone] Loading cancelled for key ${key} after resolveIPFS`);
-        magicianStonesLoading.delete(key);
-        window.cancelledStones.delete(key);
-        return;
-    }
-
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     // Handle GLB/GLTF files
@@ -1344,15 +1336,8 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
-                // Post-async-load deduplication and cancellation check
-                if (window.cancelledStones && window.cancelledStones.has(key)) {
-                    console.log(`[MagicianStone] GLB/GLTF load cancelled for key ${key} - discarding and disposing`);
-                    magicianStonesLoading.delete(key);
-                    window.cancelledStones.delete(key);
-                    // Properly dispose the loaded model to prevent memory leaks
-                    disposeObject(gltf.scene);
-                    return;
-                }
+                // Post-async-load deduplication check: another load may have completed while this one was in progress.
+                // This check is entity-based (using position key) and independent of file extension.
                 if (magicianStones[key] && magicianStones[key].mesh) {
                     console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
@@ -1499,18 +1484,8 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
-            // Post-async-load cancellation check
-            if (window.cancelledStones && window.cancelledStones.has(key)) {
-                console.log(`[MagicianStone] GIF load cancelled for key ${key} - discarding and disposing resources`);
-                magicianStonesLoading.delete(key);
-                window.cancelledStones.delete(key);
-                // Clean up the texture that was created before fetch
-                if (texture) {
-                    texture.dispose();
-                }
-                return;
-            }
-            // Post-async-load deduplication check
+            // Post-async-load deduplication check: another load may have completed while this one was in progress.
+            // This check ensures that only one instance is created, regardless of asset format.
             if (magicianStones[key] && magicianStones[key].mesh) {
                 console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
@@ -1573,19 +1548,10 @@ async function createMagicianStoneScreen(stoneData) {
         video.loop = loop;
         video.muted = true; // Muted by default, will be unmuted based on proximity
         video.playsInline = true;
-        video.crossOrigin = 'anonymous'; // Important for WebGL textures loaded from external sources
-
-        // Video must be loaded before it can be played/rendered reliably
-        video.load();
-
         if (autoplay) {
             // Video will be played in the game loop based on distance
         }
         texture = new THREE.VideoTexture(video);
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.format = THREE.RGBAFormat;
-
         stoneData.videoElement = video;
     } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
         const audio = document.createElement('audio');
@@ -1619,27 +1585,8 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    // Final cancellation check for non-GLB files
-    if (window.cancelledStones && window.cancelledStones.has(key)) {
-        console.log(`[MagicianStone] non-GLB load cancelled for key ${key} - discarding and disposing resources`);
-        magicianStonesLoading.delete(key);
-        window.cancelledStones.delete(key);
-        // Clean up any resources that were created
-        if (texture) {
-            texture.dispose();
-        }
-        if (stoneData.videoElement) {
-            stoneData.videoElement.pause();
-            stoneData.videoElement.src = '';
-        }
-        if (stoneData.audioElement) {
-            stoneData.audioElement.pause();
-            stoneData.audioElement.src = '';
-        }
-        return;
-    }
-
-    // Final deduplication check for non-GLB files
+    // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
+    // This check is entity-based (using position key) and independent of file extension.
     if (magicianStones[key] && magicianStones[key].mesh) {
         console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
@@ -1730,14 +1677,6 @@ function createCalligraphyStoneScreen(stoneData) {
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const context = canvas.getContext('2d');
-
-    // Check if cancelled before creating canvas and material
-    if (window.cancelledStones && window.cancelledStones.has(key)) {
-        console.log(`[CalligraphyStone] Creation cancelled for key ${key}`);
-        calligraphyStonesLoading.delete(key);
-        window.cancelledStones.delete(key);
-        return;
-    }
 
     // Draw background (or leave transparent)
     if (!transparent) {
@@ -1837,17 +1776,6 @@ function createCalligraphyStoneScreen(stoneData) {
     // Store link in userData for click handling
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
-
-    // Final cancellation check
-    if (window.cancelledStones && window.cancelledStones.has(key)) {
-        console.log(`[CalligraphyStone] Creation cancelled for key ${key} before adding to scene`);
-        calligraphyStonesLoading.delete(key);
-        window.cancelledStones.delete(key);
-        texture.dispose();
-        material.dispose();
-        planeGeometry.dispose();
-        return;
-    }
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
@@ -5234,42 +5162,36 @@ function gameLoop(e) {
                     }
                 }
 
-                if (mediaElement) {
-                    // Start playback logic regardless of 'autoplay' property if it's a video,
-                    // but respect autoplay if it's strictly an audio element without a visual component.
-                    const shouldPlay = stone.autoplay || stone.videoElement !== undefined;
-
-                    if (shouldPlay) {
-                        // Don't attempt to play if autoplay is paused due to browser restrictions
-                        if (isAutoplayPaused) {
-                            if (!mediaElement.paused) {
-                                mediaElement.pause();
-                            }
-                        } else if (distance <= stone.distance) {
-                            if (mediaElement.paused) {
-                                mediaElement.play().catch(err => {
-                                    // Check if this is an autoplay restriction error
-                                    if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
-                                        isAutoplayPaused = true;
-                                        console.log('[AutoplayPause] Magician stone media blocked by browser, waiting for user interaction');
-                                    } else {
-                                        console.error("Autoplay failed:", err);
-                                    }
-                                });
-                            }
-                            // Proximity-based volume for audio
-                            if (stone.audioElement) {
-                                const volume = Math.max(0, 1 - (distance / stone.distance));
-                                stone.audioElement.volume = stone.isMuted ? 0 : volume;
-                            }
-                            if (stone.videoElement) {
-                                const volume = Math.max(0, 1 - (distance / stone.distance));
-                                stone.videoElement.volume = stone.isMuted ? 0 : volume;
-                            }
-                        } else {
-                            if (!mediaElement.paused) {
-                                mediaElement.pause();
-                            }
+                if (mediaElement && stone.autoplay) {
+                    // Don't attempt to play if autoplay is paused due to browser restrictions
+                    if (isAutoplayPaused) {
+                        if (!mediaElement.paused) {
+                            mediaElement.pause();
+                        }
+                    } else if (distance <= stone.distance) {
+                        if (mediaElement.paused) {
+                            mediaElement.play().catch(err => {
+                                // Check if this is an autoplay restriction error
+                                if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
+                                    isAutoplayPaused = true;
+                                    console.log('[AutoplayPause] Magician stone media blocked by browser, waiting for user interaction');
+                                } else {
+                                    console.error("Autoplay failed:", err);
+                                }
+                            });
+                        }
+                        // Proximity-based volume for audio
+                        if (stone.audioElement) {
+                            const volume = Math.max(0, 1 - (distance / stone.distance));
+                            stone.audioElement.volume = stone.isMuted ? 0 : volume;
+                        }
+                        if (stone.videoElement) {
+                            const volume = Math.max(0, 1 - (distance / stone.distance));
+                            stone.videoElement.volume = stone.isMuted ? 0 : volume;
+                        }
+                    } else {
+                        if (!mediaElement.paused) {
+                            mediaElement.pause();
                         }
                     }
                 }
