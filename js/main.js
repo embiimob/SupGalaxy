@@ -1601,10 +1601,19 @@ async function createMagicianStoneScreen(stoneData) {
         video.loop = loop;
         video.muted = true; // Muted by default, will be unmuted based on proximity
         video.playsInline = true;
+        video.crossOrigin = 'anonymous'; // Important for WebGL textures loaded from external sources
+
+        // Video must be loaded before it can be played/rendered reliably
+        video.load();
+
         if (autoplay) {
             // Video will be played in the game loop based on distance
         }
         texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.format = THREE.RGBAFormat;
+
         stoneData.videoElement = video;
     } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
         const audio = document.createElement('audio');
