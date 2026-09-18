@@ -1318,6 +1318,12 @@ async function createMagicianStoneScreen(stoneData) {
     // This guard applies to ALL asset types, not just .glb files.
     magicianStonesLoading.add(key);
 
+    if (typeof window.magicianStoneGenerations === 'undefined') {
+        window.magicianStoneGenerations = {};
+    }
+    window.magicianStoneGenerations[key] = (window.magicianStoneGenerations[key] || 0) + 1;
+    const generationId = window.magicianStoneGenerations[key];
+
     if (url.startsWith('IPFS:')) {
         try {
             url = await resolveIPFS(url);
@@ -1336,6 +1342,14 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
+                // Check generation ID to prevent race condition when block was removed during async loading
+                if (generationId !== window.magicianStoneGenerations[key]) {
+                    console.log(`[MagicianStone] Async load aborted for key ${key} - block was replaced during load`);
+                    magicianStonesLoading.delete(key);
+                    disposeObject(gltf.scene);
+                    return;
+                }
+
                 // Post-async-load deduplication check: another load may have completed while this one was in progress.
                 // This check is entity-based (using position key) and independent of file extension.
                 if (magicianStones[key] && magicianStones[key].mesh) {
@@ -1667,6 +1681,12 @@ function createCalligraphyStoneScreen(stoneData) {
 
     // Mark as loading to prevent duplicate loads
     calligraphyStonesLoading.add(key);
+
+    if (typeof window.calligraphyStoneGenerations === 'undefined') {
+        window.calligraphyStoneGenerations = {};
+    }
+    window.calligraphyStoneGenerations[key] = (window.calligraphyStoneGenerations[key] || 0) + 1;
+    const generationId = window.calligraphyStoneGenerations[key];
 
     // Create canvas for text rendering
     const pixelsPerBlock = 128; // Resolution per block
