@@ -1345,10 +1345,17 @@ async function createMagicianStoneScreen(stoneData) {
             url,
             function(gltf) {
                 // Post-async-load deduplication and cancellation check
-                if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
-                    console.log(`[MagicianStone] GLB/GLTF load completed for key ${key} but was cancelled or duplicated - discarding and disposing`);
+                if (window.cancelledStones && window.cancelledStones.has(key)) {
+                    console.log(`[MagicianStone] GLB/GLTF load cancelled for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
-                    if (window.cancelledStones) window.cancelledStones.delete(key);
+                    window.cancelledStones.delete(key);
+                    // Properly dispose the loaded model to prevent memory leaks
+                    disposeObject(gltf.scene);
+                    return;
+                }
+                if (magicianStones[key] && magicianStones[key].mesh) {
+                    console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
+                    magicianStonesLoading.delete(key);
                     // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
                     return;
@@ -1492,11 +1499,21 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
-            // Post-async-load deduplication and cancellation check
-            if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
-                console.log(`[MagicianStone] GIF load completed for key ${key} but was cancelled or duplicated - discarding and disposing resources`);
+            // Post-async-load cancellation check
+            if (window.cancelledStones && window.cancelledStones.has(key)) {
+                console.log(`[MagicianStone] GIF load cancelled for key ${key} - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
-                if (window.cancelledStones) window.cancelledStones.delete(key);
+                window.cancelledStones.delete(key);
+                // Clean up the texture that was created before fetch
+                if (texture) {
+                    texture.dispose();
+                }
+                return;
+            }
+            // Post-async-load deduplication check
+            if (magicianStones[key] && magicianStones[key].mesh) {
+                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
+                magicianStonesLoading.delete(key);
                 // Clean up the texture that was created before fetch
                 if (texture) {
                     texture.dispose();
@@ -1602,11 +1619,30 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    // Final deduplication and cancellation check for non-GLB files: ensure no duplicate was created during async operations.
-    if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
-        console.log(`[MagicianStone] non-GLB load completed for key ${key} but was cancelled or duplicated - discarding and disposing resources`);
+    // Final cancellation check for non-GLB files
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[MagicianStone] non-GLB load cancelled for key ${key} - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
-        if (window.cancelledStones) window.cancelledStones.delete(key);
+        window.cancelledStones.delete(key);
+        // Clean up any resources that were created
+        if (texture) {
+            texture.dispose();
+        }
+        if (stoneData.videoElement) {
+            stoneData.videoElement.pause();
+            stoneData.videoElement.src = '';
+        }
+        if (stoneData.audioElement) {
+            stoneData.audioElement.pause();
+            stoneData.audioElement.src = '';
+        }
+        return;
+    }
+
+    // Final deduplication check for non-GLB files
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
+        magicianStonesLoading.delete(key);
         // Clean up any resources that were created
         if (texture) {
             texture.dispose();
@@ -5199,9 +5235,11 @@ function gameLoop(e) {
                 }
 
                 if (mediaElement) {
-                    // If autoplay is false, we should only display the first frame (paused state).
-                    // However, if the user explicitly defined autoplay=true, it will loop/play.
-                    if (stone.autoplay) {
+                    // Start playback logic regardless of 'autoplay' property if it's a video,
+                    // but respect autoplay if it's strictly an audio element without a visual component.
+                    const shouldPlay = stone.autoplay || stone.videoElement !== undefined;
+
+                    if (shouldPlay) {
                         // Don't attempt to play if autoplay is paused due to browser restrictions
                         if (isAutoplayPaused) {
                             if (!mediaElement.paused) {
@@ -5233,13 +5271,6 @@ function gameLoop(e) {
                                 mediaElement.pause();
                             }
                         }
-                    } else if (stone.videoElement) {
-                         // Even if not autoplaying, we might need a very brief play() to extract the first frame for the texture,
-                         // but typically video.load() + THREE.VideoTexture captures the poster/first frame automatically.
-                         // Ensure it stays paused if autoplay is disabled.
-                         if (!mediaElement.paused) {
-                             mediaElement.pause();
-                         }
                     }
                 }
             }

@@ -392,35 +392,31 @@ Chunk.prototype.idx = function (e, t, o) {
                 const worldZ = parsed.cz * CHUNK_SIZE + n.z;
                 const key = `${worldX},${worldY},${worldZ}`;
 
-                // If a delta is overwriting this block and it's NOT a magician/calligraphy stone itself
-                // (or if it's replacing it entirely with another block/air), we must destroy the old entity.
-                if (n.b !== 127) {
-                    if (window.magicianStones && window.magicianStones[key]) {
-                        if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(window.magicianStones[key], key);
-                        }
-                        delete window.magicianStones[key];
+                // If a delta is updating this block, we must destroy the old entity
+                // unconditionally to ensure fresh loading (even if replacing stone with stone).
+                if (window.magicianStones && window.magicianStones[key]) {
+                    if (typeof cleanupMagicianStone === 'function') {
+                        cleanupMagicianStone(window.magicianStones[key], key);
                     }
-                    if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
-                        // Mark as cancelled so async callbacks don't render it
-                        if (!window.cancelledStones) window.cancelledStones = new Set();
-                        window.cancelledStones.add(key);
-                    }
+                    delete window.magicianStones[key];
+                }
+                if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
+                    // Mark as cancelled so async callbacks don't render it
+                    if (!window.cancelledStones) window.cancelledStones = new Set();
+                    window.cancelledStones.add(key);
                 }
 
-                if (n.b !== 128) {
-                    if (window.calligraphyStones && window.calligraphyStones[key]) {
-                        if (window.calligraphyStones[key].mesh) {
-                            scene.remove(window.calligraphyStones[key].mesh);
-                            if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
-                        }
-                        delete window.calligraphyStones[key];
+                if (window.calligraphyStones && window.calligraphyStones[key]) {
+                    if (window.calligraphyStones[key].mesh) {
+                        scene.remove(window.calligraphyStones[key].mesh);
+                        if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
                     }
-                    if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
-                        // Mark as cancelled so async callbacks don't render it
-                        if (!window.cancelledStones) window.cancelledStones = new Set();
-                        window.cancelledStones.add(key);
-                    }
+                    delete window.calligraphyStones[key];
+                }
+                if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
+                    // Mark as cancelled so async callbacks don't render it
+                    if (!window.cancelledStones) window.cancelledStones = new Set();
+                    window.cancelledStones.add(key);
                 }
 
                 if (a) {
