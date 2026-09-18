@@ -390,19 +390,33 @@ Chunk.prototype.idx = function (e, t, o) {
                 const worldZ = parsed.cz * CHUNK_SIZE + n.z;
                 const key = `${worldX},${worldY},${worldZ}`;
 
-                if (window.magicianStones && window.magicianStones[key]) {
-                    if (typeof cleanupMagicianStone === 'function') {
-                        cleanupMagicianStone(window.magicianStones[key], key);
+                // If a delta is overwriting this block and it's NOT a magician/calligraphy stone itself
+                // (or if it's replacing it entirely with another block/air), we must destroy the old entity.
+                if (n.b !== 127) {
+                    if (window.magicianStones && window.magicianStones[key]) {
+                        if (typeof cleanupMagicianStone === 'function') {
+                            cleanupMagicianStone(window.magicianStones[key], key);
+                        }
+                        delete window.magicianStones[key];
                     }
-                    delete window.magicianStones[key];
+                    if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
+                    }
                 }
 
-                if (window.calligraphyStones && window.calligraphyStones[key]) {
-                    if (window.calligraphyStones[key].mesh) {
-                        scene.remove(window.calligraphyStones[key].mesh);
-                        if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
+                if (n.b !== 128) {
+                    if (window.calligraphyStones && window.calligraphyStones[key]) {
+                        if (window.calligraphyStones[key].mesh) {
+                            scene.remove(window.calligraphyStones[key].mesh);
+                            if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
+                        }
+                        delete window.calligraphyStones[key];
                     }
-                    delete window.calligraphyStones[key];
+                    if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
+                    }
                 }
 
                 if (a) {
@@ -716,6 +730,17 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             if (e.magicianStones) {
                 for (const key in e.magicianStones) {
                     if (Object.hasOwnProperty.call(e.magicianStones, key)) {
+                        // Cleanup before applying
+                        if (window.magicianStones && window.magicianStones[key]) {
+                            if (typeof cleanupMagicianStone === 'function') {
+                                cleanupMagicianStone(window.magicianStones[key], key);
+                            }
+                            delete window.magicianStones[key];
+                        }
+                        if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
+                            if (!window.cancelledStones) window.cancelledStones = new Set();
+                            window.cancelledStones.add(key);
+                        }
                         createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
                     }
                 }
@@ -723,6 +748,18 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             if (e.calligraphyStones) {
                 for (const key in e.calligraphyStones) {
                     if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
+                        // Cleanup before applying
+                        if (window.calligraphyStones && window.calligraphyStones[key]) {
+                            if (window.calligraphyStones[key].mesh) {
+                                scene.remove(window.calligraphyStones[key].mesh);
+                                if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
+                            }
+                            delete window.calligraphyStones[key];
+                        }
+                        if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
+                            if (!window.cancelledStones) window.cancelledStones = new Set();
+                            window.cancelledStones.add(key);
+                        }
                         createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
                     }
                 }

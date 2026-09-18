@@ -471,6 +471,17 @@ async function applySaveFile(e, t, o) {
         if (e.magicianStones) {
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {
+                    // Cleanup before applying
+                    if (window.magicianStones && window.magicianStones[key]) {
+                        if (typeof cleanupMagicianStone === 'function') {
+                            cleanupMagicianStone(window.magicianStones[key], key);
+                        }
+                        delete window.magicianStones[key];
+                    }
+                    if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
+                    }
                     createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
                 }
             }
@@ -478,6 +489,18 @@ async function applySaveFile(e, t, o) {
         if (e.calligraphyStones) {
             for (const key in e.calligraphyStones) {
                 if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
+                    // Cleanup before applying
+                    if (window.calligraphyStones && window.calligraphyStones[key]) {
+                        if (window.calligraphyStones[key].mesh) {
+                            scene.remove(window.calligraphyStones[key].mesh);
+                            if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
+                        }
+                        delete window.calligraphyStones[key];
+                    }
+                    if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
+                    }
                     createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
                 }
             }
@@ -1328,6 +1351,14 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
+    // Cancellation check after async resolveIPFS
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[MagicianStone] Loading cancelled for key ${key} after resolveIPFS`);
+        magicianStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        return;
+    }
+
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     // Handle GLB/GLTF files
@@ -1336,6 +1367,16 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
+                // Post-async-load cancellation check
+                if (window.cancelledStones && window.cancelledStones.has(key)) {
+                    console.log(`[MagicianStone] GLB/GLTF load cancelled for key ${key} - discarding and disposing`);
+                    magicianStonesLoading.delete(key);
+                    window.cancelledStones.delete(key);
+                    // Properly dispose the loaded model to prevent memory leaks
+                    disposeObject(gltf.scene);
+                    return;
+                }
+
                 // Post-async-load deduplication check: another load may have completed while this one was in progress.
                 // This check is entity-based (using position key) and independent of file extension.
                 if (magicianStones[key] && magicianStones[key].mesh) {
@@ -1484,6 +1525,18 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
+            // Post-async-load cancellation check
+            if (window.cancelledStones && window.cancelledStones.has(key)) {
+                console.log(`[MagicianStone] GIF load cancelled for key ${key} - discarding and disposing resources`);
+                magicianStonesLoading.delete(key);
+                window.cancelledStones.delete(key);
+                // Clean up the texture that was created before fetch
+                if (texture) {
+                    texture.dispose();
+                }
+                return;
+            }
+
             // Post-async-load deduplication check: another load may have completed while this one was in progress.
             // This check ensures that only one instance is created, regardless of asset format.
             if (magicianStones[key] && magicianStones[key].mesh) {
@@ -1585,6 +1638,26 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
+    // Final cancellation check for non-GLB files
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[MagicianStone] non-GLB load cancelled for key ${key} - discarding and disposing resources`);
+        magicianStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        // Clean up any resources that were created
+        if (texture) {
+            texture.dispose();
+        }
+        if (stoneData.videoElement) {
+            stoneData.videoElement.pause();
+            stoneData.videoElement.src = '';
+        }
+        if (stoneData.audioElement) {
+            stoneData.audioElement.pause();
+            stoneData.audioElement.src = '';
+        }
+        return;
+    }
+
     // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
     // This check is entity-based (using position key) and independent of file extension.
     if (magicianStones[key] && magicianStones[key].mesh) {
@@ -1677,6 +1750,14 @@ function createCalligraphyStoneScreen(stoneData) {
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const context = canvas.getContext('2d');
+
+    // Check if cancelled before creating canvas and material
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key}`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        return;
+    }
 
     // Draw background (or leave transparent)
     if (!transparent) {
@@ -1776,6 +1857,17 @@ function createCalligraphyStoneScreen(stoneData) {
     // Store link in userData for click handling
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
+
+    // Final cancellation check
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key} before adding to scene`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        texture.dispose();
+        material.dispose();
+        planeGeometry.dispose();
+        return;
+    }
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
