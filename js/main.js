@@ -313,19 +313,15 @@ async function applySaveFile(e, t, o) {
         Math.floor(MAP_SIZE / CHUNK_SIZE);
         var l = Math.floor(player.x / CHUNK_SIZE),
             d = Math.floor(player.z / CHUNK_SIZE);
-
-        // Clean up any existing magician stones before loading new ones
-        if (typeof magicianStones !== 'undefined') {
+        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
+            console.log("[LOGIN] Loading magician stones from session");
+            // Clean up any existing magician stones before loading new ones
             for (const existingKey in magicianStones) {
                 if (magicianStones[existingKey]) {
                     cleanupMagicianStone(magicianStones[existingKey], existingKey);
                 }
             }
             magicianStones = {}; // Clear existing stones
-        }
-
-        if (console.log("[LOGIN] Preloading initial chunks from session"), chunkManager.preloadChunks(l, d, INITIAL_LOAD_RADIUS), t.magicianStones) {
-            console.log("[LOGIN] Loading magician stones from session");
             for (const key in t.magicianStones) {
                 if (Object.hasOwnProperty.call(t.magicianStones, key)) {
                     const stoneData = { ...t.magicianStones[key], source: 'local' };
@@ -472,19 +468,6 @@ async function applySaveFile(e, t, o) {
                 console.log(`[Ownership] IPFS load rejected for chunk ${s}: owned by ${ownership.username}`);
             }
         }
-
-        // Clean up any existing magician stones before loading new ones
-        if (e.magicianStones && typeof magicianStones !== 'undefined') {
-            for (const existingKey in magicianStones) {
-                if (magicianStones[existingKey]) {
-                    if (typeof cleanupMagicianStone === 'function') {
-                        cleanupMagicianStone(magicianStones[existingKey], existingKey);
-                    }
-                }
-            }
-            magicianStones = {}; // Clear existing stones
-        }
-
         if (e.magicianStones) {
             for (const key in e.magicianStones) {
                 if (Object.hasOwnProperty.call(e.magicianStones, key)) {
@@ -1345,6 +1328,14 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
+    // Cancellation check after async resolveIPFS
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[MagicianStone] Loading cancelled for key ${key} after resolveIPFS`);
+        magicianStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        return;
+    }
+
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     // Handle GLB/GLTF files
@@ -1353,11 +1344,11 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
-                // Post-async-load deduplication check: another load may have completed while this one was in progress.
-                // This check is entity-based (using position key) and independent of file extension.
-                if (magicianStones[key] && magicianStones[key].mesh) {
-                    console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
+                // Post-async-load deduplication and cancellation check
+                if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
+                    console.log(`[MagicianStone] GLB/GLTF load completed for key ${key} but was cancelled or duplicated - discarding and disposing`);
                     magicianStonesLoading.delete(key);
+                    if (window.cancelledStones) window.cancelledStones.delete(key);
                     // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
                     return;
@@ -1501,11 +1492,11 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
-            // Post-async-load deduplication check: another load may have completed while this one was in progress.
-            // This check ensures that only one instance is created, regardless of asset format.
-            if (magicianStones[key] && magicianStones[key].mesh) {
-                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
+            // Post-async-load deduplication and cancellation check
+            if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
+                console.log(`[MagicianStone] GIF load completed for key ${key} but was cancelled or duplicated - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
+                if (window.cancelledStones) window.cancelledStones.delete(key);
                 // Clean up the texture that was created before fetch
                 if (texture) {
                     texture.dispose();
@@ -1602,11 +1593,11 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
-    // This check is entity-based (using position key) and independent of file extension.
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
+    // Final deduplication and cancellation check for non-GLB files: ensure no duplicate was created during async operations.
+    if ((magicianStones[key] && magicianStones[key].mesh) || (window.cancelledStones && window.cancelledStones.has(key))) {
+        console.log(`[MagicianStone] non-GLB load completed for key ${key} but was cancelled or duplicated - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
+        if (window.cancelledStones) window.cancelledStones.delete(key);
         // Clean up any resources that were created
         if (texture) {
             texture.dispose();
@@ -1694,6 +1685,14 @@ function createCalligraphyStoneScreen(stoneData) {
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const context = canvas.getContext('2d');
+
+    // Check if cancelled before creating canvas and material
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key}`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        return;
+    }
 
     // Draw background (or leave transparent)
     if (!transparent) {
@@ -1793,6 +1792,17 @@ function createCalligraphyStoneScreen(stoneData) {
     // Store link in userData for click handling
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
+
+    // Final cancellation check
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key} before adding to scene`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        texture.dispose();
+        material.dispose();
+        planeGeometry.dispose();
+        return;
+    }
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation

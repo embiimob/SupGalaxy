@@ -379,42 +379,59 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    var chunkParsed = parseChunkKey(o);
-    if (chunkParsed) {
+    var parsed = parseChunkKey(o);
+    if (parsed) {
+        var a = this.chunks.get(o);
+        // Even if chunk isn't loaded in memory yet (a is undefined),
+        // we must clean up any existing UI/media entities that are being overwritten
         for (var n of t) {
             if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
-                var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
-                var worldX = modWrap(chunkParsed.cx * CHUNK_SIZE + n.x, MAP_SIZE);
-                var worldY = n.y;
-                var worldZ = modWrap(chunkParsed.cz * CHUNK_SIZE + n.z, MAP_SIZE);
-                var key = `${worldX},${worldY},${worldZ}`;
+                // Determine absolute world position
+                const worldX = parsed.cx * CHUNK_SIZE + n.x;
+                const worldY = n.y;
+                const worldZ = parsed.cz * CHUNK_SIZE + n.z;
+                const key = `${worldX},${worldY},${worldZ}`;
 
-                if (r !== 127) {
-                    if (typeof magicianStones !== 'undefined' && magicianStones[key]) {
+                // If a delta is overwriting this block and it's NOT a magician/calligraphy stone itself
+                // (or if it's replacing it entirely with another block/air), we must destroy the old entity.
+                if (n.b !== 127) {
+                    if (window.magicianStones && window.magicianStones[key]) {
                         if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(magicianStones[key], key);
+                            cleanupMagicianStone(window.magicianStones[key], key);
                         }
-                        delete magicianStones[key];
+                        delete window.magicianStones[key];
+                    }
+                    if (window.magicianStonesLoading && window.magicianStonesLoading.has(key)) {
+                        // Mark as cancelled so async callbacks don't render it
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
                     }
                 }
-                if (r !== 128) {
-                    if (typeof calligraphyStones !== 'undefined' && calligraphyStones[key]) {
-                        if (calligraphyStones[key].mesh && typeof scene !== 'undefined') {
-                            scene.remove(calligraphyStones[key].mesh);
-                            if (typeof disposeObject === 'function') disposeObject(calligraphyStones[key].mesh);
+
+                if (n.b !== 128) {
+                    if (window.calligraphyStones && window.calligraphyStones[key]) {
+                        if (window.calligraphyStones[key].mesh) {
+                            scene.remove(window.calligraphyStones[key].mesh);
+                            if (typeof disposeObject === 'function') disposeObject(window.calligraphyStones[key].mesh);
                         }
-                        delete calligraphyStones[key];
+                        delete window.calligraphyStones[key];
                     }
+                    if (window.calligraphyStonesLoading && window.calligraphyStonesLoading.has(key)) {
+                        // Mark as cancelled so async callbacks don't render it
+                        if (!window.cancelledStones) window.cancelledStones = new Set();
+                        window.cancelledStones.add(key);
+                    }
+                }
+
+                if (a) {
+                    var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
+                    a.set(n.x, n.y, n.z, r);
                 }
             }
         }
-        var a = this.chunks.get(o);
         if (a) {
-            for (var n of t)
-                if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
-                    var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
-                    a.set(n.x, n.y, n.z, r)
-                } updateTorchRegistry(a), a.needsRebuild = !0
+            updateTorchRegistry(a);
+            a.needsRebuild = !0;
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
@@ -714,27 +731,17 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 }
                 console.log(`[ChunkManager] Loaded ${e.foreignBlockOrigins.length} foreign block origins from IPFS`);
             }
-
-            const incomingTruncatedDateForStones = computeIpfsTruncatedDate(blockDate);
-            const worldStateForStones = getCurrentWorldState();
-
             if (e.magicianStones) {
                 for (const key in e.magicianStones) {
                     if (Object.hasOwnProperty.call(e.magicianStones, key)) {
-                        const existingTruncatedDate = worldStateForStones.ipfsTruncatedDates ? (worldStateForStones.ipfsTruncatedDates.get(key) || 0) : 0;
-                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDateForStones)) {
-                            createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
-                        }
+                        createMagicianStoneScreen({ ...e.magicianStones[key], source: 'ipfs' });
                     }
                 }
             }
             if (e.calligraphyStones) {
                 for (const key in e.calligraphyStones) {
                     if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
-                        const existingTruncatedDate = worldStateForStones.ipfsTruncatedDates ? (worldStateForStones.ipfsTruncatedDates.get(key) || 0) : 0;
-                        if (shouldApplyIpfsUpdate(existingTruncatedDate, incomingTruncatedDateForStones)) {
-                            createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
-                        }
+                        createCalligraphyStoneScreen({ ...e.calligraphyStones[key], source: 'ipfs' });
                     }
                 }
             }

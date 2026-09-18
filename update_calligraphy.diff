@@ -1,0 +1,51 @@
+<<<<<<< SEARCH
+    // Draw background (or leave transparent)
+    if (!transparent) {
+        context.fillStyle = bgColor || '#ffffff';
+        context.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+=======
+    // Check if cancelled before creating canvas and material
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key}`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        return;
+    }
+
+    // Draw background (or leave transparent)
+    if (!transparent) {
+        context.fillStyle = bgColor || '#ffffff';
+        context.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    // Store link in userData for click handling
+    screenMesh.userData.calligraphyLink = link;
+    screenMesh.userData.calligraphyKey = key;
+
+    calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
+    calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
+    scene.add(screenMesh);
+}
+=======
+    // Store link in userData for click handling
+    screenMesh.userData.calligraphyLink = link;
+    screenMesh.userData.calligraphyKey = key;
+
+    // Final cancellation check
+    if (window.cancelledStones && window.cancelledStones.has(key)) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key} before adding to scene`);
+        calligraphyStonesLoading.delete(key);
+        window.cancelledStones.delete(key);
+        texture.dispose();
+        material.dispose();
+        planeGeometry.dispose();
+        return;
+    }
+
+    calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
+    calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
+    scene.add(screenMesh);
+}
+>>>>>>> REPLACE
