@@ -379,52 +379,41 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    var parsed = parseChunkKey(o);
-    if (parsed) {
+    const parsedKey = parseChunkKey(o);
+    if (parsedKey) {
         var a = this.chunks.get(o);
         if (a) {
-            for (var n of t) {
+            for (var n of t)
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
-                    a.set(n.x, n.y, n.z, r);
+                    const oldBlock = a.get(n.x, n.y, n.z);
+                    a.set(n.x, n.y, n.z, r)
 
-                    // Cleanup special blocks if they exist at these coordinates
-                    const globalX = parsed.cx * CHUNK_SIZE + n.x;
+                    const globalX = parsedKey.x * CHUNK_SIZE + n.x;
                     const globalY = n.y;
-                    const globalZ = parsed.cz * CHUNK_SIZE + n.z;
-                    const key = `${globalX},${globalY},${globalZ}`;
+                    const globalZ = parsedKey.z * CHUNK_SIZE + n.z;
+                    const blockKey = `${globalX},${globalY},${globalZ}`;
 
-                    if (typeof magicianStones !== 'undefined' && magicianStones[key]) {
-                        if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(magicianStones[key], key);
+                    if (r !== oldBlock) {
+                        if (oldBlock === 127) {
+                            if (!window.magicianStoneGenerations) window.magicianStoneGenerations = {};
+                            window.magicianStoneGenerations[blockKey] = (window.magicianStoneGenerations[blockKey] || 0) + 1;
+                            if (window.magicianStones && window.magicianStones[blockKey]) {
+                                window.cleanupMagicianStone(window.magicianStones[blockKey], blockKey);
+                            }
+                        } else if (oldBlock === 128) {
+                            if (!window.calligraphyStoneGenerations) window.calligraphyStoneGenerations = {};
+                            window.calligraphyStoneGenerations[blockKey] = (window.calligraphyStoneGenerations[blockKey] || 0) + 1;
+                            if (window.calligraphyStones && window.calligraphyStones[blockKey]) {
+                                window.cleanupCalligraphyStone(window.calligraphyStones[blockKey], blockKey);
+                            }
+                        } else if (oldBlock === 131) {
+                            if (window.chests && window.chests[blockKey]) {
+                                window.cleanupChest(window.chests[blockKey], blockKey);
+                            }
                         }
-                        // Increment generation ID so loading boundaries know to abort
-                        if (typeof window.magicianStoneGenerations !== 'undefined') {
-                            window.magicianStoneGenerations[key] = (window.magicianStoneGenerations[key] || 0) + 1;
-                        }
-                        delete magicianStones[key];
                     }
-                    if (typeof calligraphyStones !== 'undefined' && calligraphyStones[key]) {
-                        if (calligraphyStones[key].mesh) {
-                            scene.remove(calligraphyStones[key].mesh);
-                            disposeObject(calligraphyStones[key].mesh);
-                        }
-                        // Increment generation ID so loading boundaries know to abort
-                        if (typeof window.calligraphyStoneGenerations !== 'undefined') {
-                            window.calligraphyStoneGenerations[key] = (window.calligraphyStoneGenerations[key] || 0) + 1;
-                        }
-                        delete calligraphyStones[key];
-                    }
-                    if (typeof chests !== 'undefined' && chests[key]) {
-                        if (chests[key].mesh) {
-                            scene.remove(chests[key].mesh);
-                            disposeObject(chests[key].mesh);
-                        }
-                        delete chests[key];
-                    }
-                }
-            }
-            updateTorchRegistry(a), a.needsRebuild = !0
+                } updateTorchRegistry(a), a.needsRebuild = !0
         }
     }
 }, ChunkManager.prototype.markDirty = function (e) {
