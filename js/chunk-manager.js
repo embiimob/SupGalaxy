@@ -399,6 +399,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         if (n.b !== 127) {
                             window.magicianStoneGenerations = window.magicianStoneGenerations || {};
                             window.magicianStoneGenerations[key] = (window.magicianStoneGenerations[key] || 0) + 1;
+                            if (window.magicianStonesLoading) window.magicianStonesLoading.delete(key);
                             if (window.magicianStones && window.magicianStones[key]) {
                                 if (typeof cleanupMagicianStone === 'function') {
                                     cleanupMagicianStone(window.magicianStones[key], key);
@@ -410,6 +411,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         if (n.b !== 128) {
                             window.calligraphyStoneGenerations = window.calligraphyStoneGenerations || {};
                             window.calligraphyStoneGenerations[key] = (window.calligraphyStoneGenerations[key] || 0) + 1;
+                            if (window.calligraphyStonesLoading) window.calligraphyStonesLoading.delete(key);
                             if (window.calligraphyStones && window.calligraphyStones[key]) {
                                 if (window.calligraphyStones[key].mesh) {
                                     scene.remove(window.calligraphyStones[key].mesh);
