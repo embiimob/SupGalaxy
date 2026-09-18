@@ -1556,10 +1556,19 @@ async function createMagicianStoneScreen(stoneData) {
         video.loop = loop;
         video.muted = true; // Muted by default, will be unmuted based on proximity
         video.playsInline = true;
+        video.crossOrigin = 'anonymous'; // Important for WebGL textures loaded from external sources
+
+        // Video must be loaded before it can be played/rendered reliably
+        video.load();
+
         if (autoplay) {
             // Video will be played in the game loop based on distance
         }
         texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.format = THREE.RGBAFormat;
+
         stoneData.videoElement = video;
     } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
         const audio = document.createElement('audio');
@@ -5189,37 +5198,48 @@ function gameLoop(e) {
                     }
                 }
 
-                if (mediaElement && stone.autoplay) {
-                    // Don't attempt to play if autoplay is paused due to browser restrictions
-                    if (isAutoplayPaused) {
-                        if (!mediaElement.paused) {
-                            mediaElement.pause();
+                if (mediaElement) {
+                    // If autoplay is false, we should only display the first frame (paused state).
+                    // However, if the user explicitly defined autoplay=true, it will loop/play.
+                    if (stone.autoplay) {
+                        // Don't attempt to play if autoplay is paused due to browser restrictions
+                        if (isAutoplayPaused) {
+                            if (!mediaElement.paused) {
+                                mediaElement.pause();
+                            }
+                        } else if (distance <= stone.distance) {
+                            if (mediaElement.paused) {
+                                mediaElement.play().catch(err => {
+                                    // Check if this is an autoplay restriction error
+                                    if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
+                                        isAutoplayPaused = true;
+                                        console.log('[AutoplayPause] Magician stone media blocked by browser, waiting for user interaction');
+                                    } else {
+                                        console.error("Autoplay failed:", err);
+                                    }
+                                });
+                            }
+                            // Proximity-based volume for audio
+                            if (stone.audioElement) {
+                                const volume = Math.max(0, 1 - (distance / stone.distance));
+                                stone.audioElement.volume = stone.isMuted ? 0 : volume;
+                            }
+                            if (stone.videoElement) {
+                                const volume = Math.max(0, 1 - (distance / stone.distance));
+                                stone.videoElement.volume = stone.isMuted ? 0 : volume;
+                            }
+                        } else {
+                            if (!mediaElement.paused) {
+                                mediaElement.pause();
+                            }
                         }
-                    } else if (distance <= stone.distance) {
-                        if (mediaElement.paused) {
-                            mediaElement.play().catch(err => {
-                                // Check if this is an autoplay restriction error
-                                if (typeof isAutoplayError === 'function' && isAutoplayError(err)) {
-                                    isAutoplayPaused = true;
-                                    console.log('[AutoplayPause] Magician stone media blocked by browser, waiting for user interaction');
-                                } else {
-                                    console.error("Autoplay failed:", err);
-                                }
-                            });
-                        }
-                        // Proximity-based volume for audio
-                        if (stone.audioElement) {
-                            const volume = Math.max(0, 1 - (distance / stone.distance));
-                            stone.audioElement.volume = stone.isMuted ? 0 : volume;
-                        }
-                        if (stone.videoElement) {
-                            const volume = Math.max(0, 1 - (distance / stone.distance));
-                            stone.videoElement.volume = stone.isMuted ? 0 : volume;
-                        }
-                    } else {
-                        if (!mediaElement.paused) {
-                            mediaElement.pause();
-                        }
+                    } else if (stone.videoElement) {
+                         // Even if not autoplaying, we might need a very brief play() to extract the first frame for the texture,
+                         // but typically video.load() + THREE.VideoTexture captures the poster/first frame automatically.
+                         // Ensure it stays paused if autoplay is disabled.
+                         if (!mediaElement.paused) {
+                             mediaElement.pause();
+                         }
                     }
                 }
             }
