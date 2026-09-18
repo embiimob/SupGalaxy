@@ -1306,10 +1306,12 @@ async function createMagicianStoneScreen(stoneData) {
     // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Skip if this stone is already loaded or currently loading
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        return;
-    }
+    // Capture the generation ID at start
+    window.magicianStoneGenerations = window.magicianStoneGenerations || {};
+    const generationId = (window.magicianStoneGenerations[key] || 0) + 1;
+    window.magicianStoneGenerations[key] = generationId;
+
+    // We no longer blindly return if a mesh exists, because if this is a NEW generation, we want to replace it.
     if (magicianStonesLoading.has(key)) {
         return;
     }
@@ -1328,6 +1330,13 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
+    // Cancellation check after async resolveIPFS
+    if (generationId !== window.magicianStoneGenerations[key]) {
+        console.log(`[MagicianStone] Loading cancelled for key ${key} after resolveIPFS (Gen mismatch)`);
+        magicianStonesLoading.delete(key);
+        return;
+    }
+
     const fileExtension = stoneData.url.split('.').pop().toLowerCase();
 
     // Handle GLB/GLTF files
@@ -1336,14 +1345,19 @@ async function createMagicianStoneScreen(stoneData) {
         loader.load(
             url,
             function(gltf) {
-                // Post-async-load deduplication check: another load may have completed while this one was in progress.
-                // This check is entity-based (using position key) and independent of file extension.
-                if (magicianStones[key] && magicianStones[key].mesh) {
-                    console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
+                // Cancellation check after async load
+                if (generationId !== window.magicianStoneGenerations[key]) {
+                    console.log(`[MagicianStone] GLB/GLTF load cancelled for key ${key} (Gen mismatch) - discarding and disposing`);
                     magicianStonesLoading.delete(key);
-                    // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
                     return;
+                }
+
+                // If a previous mesh exists (from an older generation that just got replaced by this one), clean it up.
+                if (magicianStones[key] && magicianStones[key].mesh) {
+                    if (typeof cleanupMagicianStone === 'function') {
+                        cleanupMagicianStone(magicianStones[key], key);
+                    }
                 }
 
                 const model = gltf.scene;
@@ -1484,16 +1498,19 @@ async function createMagicianStoneScreen(stoneData) {
             const u8Buffer = new Uint8Array(buffer);
             const gifReader = new GifReader(u8Buffer);
 
-            // Post-async-load deduplication check: another load may have completed while this one was in progress.
-            // This check ensures that only one instance is created, regardless of asset format.
-            if (magicianStones[key] && magicianStones[key].mesh) {
-                console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
+            // Cancellation check after async fetch
+            if (generationId !== window.magicianStoneGenerations[key]) {
+                console.log(`[MagicianStone] GIF load cancelled for key ${key} (Gen mismatch) - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
-                // Clean up the texture that was created before fetch
-                if (texture) {
-                    texture.dispose();
-                }
+                if (texture) texture.dispose();
                 return;
+            }
+
+            // If a previous mesh exists, clean it up.
+            if (magicianStones[key] && magicianStones[key].mesh) {
+                if (typeof cleanupMagicianStone === 'function') {
+                    cleanupMagicianStone(magicianStones[key], key);
+                }
             }
 
             canvas.width = gifReader.width;
@@ -1585,10 +1602,9 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.CanvasTexture(canvas);
     }
 
-    // Final deduplication check for non-GLB files: ensure no duplicate was created during async operations.
-    // This check is entity-based (using position key) and independent of file extension.
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        console.log(`[MagicianStone] Duplicate non-GLB load completed for key ${key} - discarding and disposing resources`);
+    // Final generation check for non-GLB files
+    if (generationId !== window.magicianStoneGenerations[key]) {
+        console.log(`[MagicianStone] non-GLB load cancelled for key ${key} (Gen mismatch) - discarding and disposing resources`);
         magicianStonesLoading.delete(key);
         // Clean up any resources that were created
         if (texture) {
@@ -1603,6 +1619,13 @@ async function createMagicianStoneScreen(stoneData) {
             stoneData.audioElement.src = '';
         }
         return;
+    }
+
+    // Clean up old mesh if replacing
+    if (magicianStones[key] && magicianStones[key].mesh) {
+        if (typeof cleanupMagicianStone === 'function') {
+            cleanupMagicianStone(magicianStones[key], key);
+        }
     }
 
     let screenMesh;
@@ -1655,11 +1678,11 @@ function createCalligraphyStoneScreen(stoneData) {
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Skip if this stone is already loaded or currently loading
-    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
-        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
-        return;
-    }
+    // Capture the generation ID at start
+    window.calligraphyStoneGenerations = window.calligraphyStoneGenerations || {};
+    const generationId = (window.calligraphyStoneGenerations[key] || 0) + 1;
+    window.calligraphyStoneGenerations[key] = generationId;
+
     if (calligraphyStonesLoading.has(key)) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
@@ -1776,6 +1799,22 @@ function createCalligraphyStoneScreen(stoneData) {
     // Store link in userData for click handling
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
+
+    // Final generation check
+    if (generationId !== window.calligraphyStoneGenerations[key]) {
+        console.log(`[CalligraphyStone] Creation cancelled for key ${key} (Gen mismatch) before adding to scene`);
+        calligraphyStonesLoading.delete(key);
+        texture.dispose();
+        material.dispose();
+        planeGeometry.dispose();
+        return;
+    }
+
+    // Clean up old mesh if replacing
+    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+        scene.remove(calligraphyStones[key].mesh);
+        if (typeof disposeObject === 'function') disposeObject(calligraphyStones[key].mesh);
+    }
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
