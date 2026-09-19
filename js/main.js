@@ -1864,15 +1864,6 @@ function createCalligraphyStoneScreen(stoneData) {
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
 
-    if (!isBlockStillValid(x, y, z, 128)) {
-        console.log(`[CalligraphyStone] Post-load abort for ${key}: block is no longer 128`);
-        disposeObject(screenMesh);
-        texture.dispose();
-        material.dispose();
-        planeGeometry.dispose();
-        calligraphyStonesLoading.delete(key);
-        return;
-    }
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key);
     scene.add(screenMesh);
