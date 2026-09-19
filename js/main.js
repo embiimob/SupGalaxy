@@ -343,6 +343,11 @@ async function applySaveFile(e, t, o) {
         }
         if (t.calligraphyStones) {
             console.log("[LOGIN] Loading calligraphy stones from session");
+            for (const existingKey in calligraphyStones) {
+                if (calligraphyStones[existingKey] && typeof cleanupCalligraphyStone === 'function') {
+                    cleanupCalligraphyStone(calligraphyStones[existingKey], existingKey);
+                }
+            }
             calligraphyStones = {}; // Clear existing stones
             for (const key in t.calligraphyStones) {
                 if (Object.hasOwnProperty.call(t.calligraphyStones, key)) {
@@ -369,12 +374,14 @@ async function applySaveFile(e, t, o) {
 
         if (t.chests) {
             console.log("[LOGIN] Loading chests from session");
+            for (const existingKey in chests) {
+                if (chests[existingKey] && typeof cleanupChest === 'function') {
+                    cleanupChest(chests[existingKey], existingKey);
+                }
+            }
             chests = {};
             for (const key in t.chests) {
                 if (t.chests[key]) {
-                    if (chests[key] && typeof cleanupChest === 'function') {
-                        cleanupChest(chests[key], key);
-                    }
                     const chestData = t.chests[key];
                     const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
                     chests[key] = {

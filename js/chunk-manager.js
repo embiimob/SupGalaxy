@@ -379,37 +379,43 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    if (parseChunkKey(o)) {
+    const parsed = parseChunkKey(o);
+    if (parsed) {
         var a = this.chunks.get(o);
-        const parsed = parseChunkKey(o);
-        if (parsed) {
-            for (var n of t) {
-                if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
-                    const worldX = parsed.cx * CHUNK_SIZE + n.x;
-                    const worldY = n.y;
-                    const worldZ = parsed.cz * CHUNK_SIZE + n.z;
-                    const key = `${worldX},${worldY},${worldZ}`;
 
-                    // Cleanup entities if overwritten regardless of chunk load state.
-                    if (n.b !== 127 && window.magicianStones && window.magicianStones[key]) {
-                        if (typeof cleanupMagicianStone === 'function') {
-                            cleanupMagicianStone(window.magicianStones[key], key);
-                        }
-                        delete window.magicianStones[key];
-                    }
-                    if (n.b !== 128 && window.calligraphyStones && window.calligraphyStones[key]) {
-                        if (typeof cleanupCalligraphyStone === 'function') {
-                            cleanupCalligraphyStone(window.calligraphyStones[key], key);
-                        }
-                        delete window.calligraphyStones[key];
-                    }
-                    if (n.b !== 131 && window.chests && window.chests[key]) {
-                        if (typeof cleanupChest === 'function') {
-                            cleanupChest(window.chests[key], key);
-                        }
-                        delete window.chests[key];
-                    }
+        // Collate deltas to find the final state before performing cleanup
+        const finalBlocks = new Map();
+        for (var n of t) {
+            if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
+                finalBlocks.set(`${n.x},${n.y},${n.z}`, n.b);
+            }
+        }
+
+        for (let [localKey, finalB] of finalBlocks.entries()) {
+            const [lx, ly, lz] = localKey.split(',').map(Number);
+            const worldX = parsed.cx * CHUNK_SIZE + lx;
+            const worldY = ly;
+            const worldZ = parsed.cz * CHUNK_SIZE + lz;
+            const key = `${worldX},${worldY},${worldZ}`;
+
+            // Check against the final block state to prevent sequential history from deleting newly loaded blocks
+            if (finalB !== 127 && window.magicianStones && window.magicianStones[key]) {
+                if (typeof cleanupMagicianStone === 'function') {
+                    cleanupMagicianStone(window.magicianStones[key], key);
                 }
+                delete window.magicianStones[key];
+            }
+            if (finalB !== 128 && window.calligraphyStones && window.calligraphyStones[key]) {
+                if (typeof cleanupCalligraphyStone === 'function') {
+                    cleanupCalligraphyStone(window.calligraphyStones[key], key);
+                }
+                delete window.calligraphyStones[key];
+            }
+            if (finalB !== 131 && window.chests && window.chests[key]) {
+                if (typeof cleanupChest === 'function') {
+                    cleanupChest(window.chests[key], key);
+                }
+                delete window.chests[key];
             }
         }
 
