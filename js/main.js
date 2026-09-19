@@ -467,7 +467,9 @@ async function applySaveFile(e, t, o) {
                 chunkManager.applyDeltasToChunk(s, i);
                 if (ownership.type === 'ipfs') {
                     // Extend IPFS ownership only for IPFS-owned chunks
-                    updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
+                    // Reuse the existing claimDate so that modifying an owned chunk doesn't revert it to pending
+                    const claimDateToUse = (ownership.claimDate) ? ownership.claimDate : blockDate;
+                    updateChunkOwnership(s, u, claimDateToUse, 'ipfs', blockDate);
                     addMessage("Updated chunk " + s + " (ownership extended)", 1e3);
                 } else {
                     addMessage("Updated chunk " + s + " (home spawn owner)", 1e3);

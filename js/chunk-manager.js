@@ -866,7 +866,13 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                         }
 
                         if (shouldUpdate) {
-                            updateChunkOwnership(normalized, ownerUsername, blockDate, 'ipfs', blockDate);
+                            const isSameOwnerRenewing = existing && existing.type === 'ipfs' && existing.username === ownerUsername;
+                            const isExpired = existing && existing.expiryDate && blockDate > existing.expiryDate;
+
+                            // If same owner renewing and not expired, keep original claimDate to avoid re-entering pending state
+                            const claimDateToUse = (isSameOwnerRenewing && !isExpired && existing.claimDate) ? existing.claimDate : blockDate;
+
+                            updateChunkOwnership(normalized, ownerUsername, claimDateToUse, 'ipfs', blockDate);
                         }
                     }
                 }
@@ -1070,13 +1076,14 @@ function updateChunkOwnership(chunkKey, username, claimDate, ownershipType, bloc
             });
         } else if (ownershipType === 'ipfs') {
             // IPFS ownership: check maturity and set expiry
-            const age = now - blockDate;
-            const isPending = age < IPFS_MATURITY_PERIOD;
+            // Determine pending status using claimDate (if provided) or blockDate
+            const effectiveClaimDate = claimDate || blockDate;
+            const isPending = now - effectiveClaimDate <= IPFS_MATURITY_PERIOD;
             const expiryDate = blockDate + IPFS_MAX_OWNERSHIP_PERIOD;
             
             OWNED_CHUNKS.set(normalized, {
                 username: username,
-                claimDate: blockDate,
+                claimDate: effectiveClaimDate,
                 expiryDate: expiryDate,
                 type: 'ipfs',
                 pending: isPending
