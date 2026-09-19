@@ -1297,6 +1297,35 @@ function createChestInventorySlot(index) {
     return slot;
 }
 
+
+function isBlockStillValid(x, y, z, expectedBlockId) {
+    const cx = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+    const cz = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+    const chunkKey = makeChunkKey(worldName, cx, cz);
+    const localX = modWrap(x, CHUNK_SIZE);
+    const localZ = modWrap(z, CHUNK_SIZE);
+
+    if (typeof chunkManager === 'undefined' || !chunkManager) return true;
+
+    const currentChunk = chunkManager.getChunk(cx, cz);
+    if (currentChunk && currentChunk.generated) {
+        const currentBlock = currentChunk.get(localX, y, localZ);
+        if (currentBlock !== expectedBlockId) {
+            return false;
+        }
+    } else {
+        const worldState = getCurrentWorldState();
+        if (worldState && worldState.chunkDeltas.has(chunkKey)) {
+            const deltas = worldState.chunkDeltas.get(chunkKey);
+            const latestDelta = [...deltas].reverse().find(d => d.x === localX && d.y === y && d.z === localZ);
+            if (latestDelta && latestDelta.b !== expectedBlockId) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision = true, damage = 0 } = stoneData;
     
@@ -1358,6 +1387,12 @@ async function createMagicianStoneScreen(stoneData) {
             function(gltf) {
                 // Post-async-load deduplication check: another load may have completed while this one was in progress.
                 // This check is entity-based (using position key) and independent of file extension.
+                if (!isBlockStillValid(x, y, z, 127)) {
+                    console.log(`[MagicianStone] Post-load abort for GLB ${key}: block is no longer 127`);
+                    disposeObject(gltf.scene);
+                    magicianStonesLoading.delete(key);
+                    return;
+                }
                 if (magicianStones[key] && magicianStones[key].mesh) {
                     console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
                     magicianStonesLoading.delete(key);
@@ -1429,8 +1464,14 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
+                if (!isBlockStillValid(x, y, z, 127)) {
+                    console.log(`[MagicianStone] Post-load abort for ${key}: block is no longer 127`);
+                    disposeObject(screenMesh);
+                    magicianStonesLoading.delete(key);
+                    return;
+                }
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false, lastDamageTime: 0 };
-                magicianStonesLoading.delete(key); // Remove from loading set after successful creation
+                magicianStonesLoading.delete(key);
                 scene.add(screenMesh);
             },
             function(progress) {
@@ -1479,8 +1520,14 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
+                if (!isBlockStillValid(x, y, z, 127)) {
+                    console.log(`[MagicianStone] Post-load error fallback abort for ${key}: block is no longer 127`);
+                    disposeObject(screenMesh);
+                    magicianStonesLoading.delete(key);
+                    return;
+                }
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
-                magicianStonesLoading.delete(key); // Remove from loading set after error handling
+                magicianStonesLoading.delete(key);
                 scene.add(screenMesh);
             }
         );
@@ -1506,10 +1553,15 @@ async function createMagicianStoneScreen(stoneData) {
 
             // Post-async-load deduplication check: another load may have completed while this one was in progress.
             // This check ensures that only one instance is created, regardless of asset format.
+            if (!isBlockStillValid(x, y, z, 127)) {
+                console.log(`[MagicianStone] Post-load abort for GIF ${key}: block is no longer 127`);
+                if (texture) texture.dispose();
+                magicianStonesLoading.delete(key);
+                return;
+            }
             if (magicianStones[key] && magicianStones[key].mesh) {
                 console.log(`[MagicianStone] Duplicate GIF load completed for key ${key} - discarding and disposing resources`);
                 magicianStonesLoading.delete(key);
-                // Clean up the texture that was created before fetch
                 if (texture) {
                     texture.dispose();
                 }
@@ -1666,8 +1718,23 @@ async function createMagicianStoneScreen(stoneData) {
     const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
     screenMesh.lookAt(lookAtTarget);
 
+    if (!isBlockStillValid(x, y, z, 127)) {
+        console.log(`[MagicianStone] Post-load abort for non-GLB ${key}: block is no longer 127`);
+        disposeObject(screenMesh);
+        if (texture) texture.dispose();
+        if (stoneData.videoElement) {
+            stoneData.videoElement.pause();
+            stoneData.videoElement.src = '';
+        }
+        if (stoneData.audioElement) {
+            stoneData.audioElement.pause();
+            stoneData.audioElement.src = '';
+        }
+        magicianStonesLoading.delete(key);
+        return;
+    }
     magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
-    magicianStonesLoading.delete(key); // Remove from loading set after successful creation
+    magicianStonesLoading.delete(key);
     scene.add(screenMesh);
 }
 
@@ -1797,8 +1864,17 @@ function createCalligraphyStoneScreen(stoneData) {
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
 
+    if (!isBlockStillValid(x, y, z, 128)) {
+        console.log(`[CalligraphyStone] Post-load abort for ${key}: block is no longer 128`);
+        disposeObject(screenMesh);
+        texture.dispose();
+        material.dispose();
+        planeGeometry.dispose();
+        calligraphyStonesLoading.delete(key);
+        return;
+    }
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
-    calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
+    calligraphyStonesLoading.delete(key);
     scene.add(screenMesh);
 }
 
