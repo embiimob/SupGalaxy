@@ -784,10 +784,10 @@ var effectiveLocalIpfsRoot = null;
  * Gets the effective local IPFS root path for the current session.
  * On first call, reads the 'ipfs-path' query parameter from the URL and caches it.
  * If not present or empty, falls back to DEFAULT_LOCAL_IPFS_ROOT.
- * 
+ *
  * This allows runtime override of the local IPFS path via URL querystring,
  * enabling users to specify custom IPFS directories without code changes.
- * 
+ *
  * @returns {string} The effective local IPFS root path to use
  */
 function getLocalIpfsRoot() {
@@ -795,7 +795,7 @@ function getLocalIpfsRoot() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const ipfsPathParam = urlParams.get('ipfs-path');
-            
+
             // Use the parameter if it's present and non-empty/non-whitespace
             if (ipfsPathParam && ipfsPathParam.trim()) {
                 effectiveLocalIpfsRoot = ipfsPathParam.trim();
@@ -834,7 +834,7 @@ function buildIPFSGatewayUrl(hash, filename = null, gatewayIndex = 0) {
  * Computes a truncated unix date for IPFS Loading updates.
  * The truncated date is the number of seconds since 2025-09-21 00:00:00 UTC (IPFS_EPOCH_2025_09_21).
  * This provides a compact integer for monotonic ordering of block updates.
- * 
+ *
  * @param {number} blockTimestampMs - The BlockDate timestamp in milliseconds (standard JS Date.getTime())
  * @returns {number} Truncated unix date (seconds since 2025-09-21), or 0 if invalid/before epoch
  */
@@ -853,10 +853,10 @@ function computeIpfsTruncatedDate(blockTimestampMs) {
  * Determines whether an IPFS Loading update should be applied to a block.
  * Implements monotonic ordering: updates are only accepted if the incoming
  * truncated unix date is strictly greater than the existing one.
- * 
+ *
  * This ensures that block changes remain in correct chronological order
  * even if IPFS files arrive or are processed out of order.
- * 
+ *
  * @param {number|null|undefined} existingTruncated - The existing truncated date on the block (0, null, or undefined means no previous timestamp)
  * @param {number|null|undefined} incomingTruncated - The incoming truncated date from the IPFS update
  * @returns {boolean} True if the update should be applied, false if it should be skipped
@@ -883,10 +883,10 @@ function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
  * - Stopping and cleaning up audio elements
  * - Disposing GIF animation resources (texture, canvas, reader)
  * - Stopping any animation mixers
- * 
+ *
  * This function is defined in declare.js to be available to all scripts
  * (especially web-rtc.js which needs to handle network stone removal events).
- * 
+ *
  * @param {Object} stone - The magician stone object to clean up
  * @param {string} key - The key of the stone (for logging purposes)
  */

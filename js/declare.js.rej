@@ -1,5 +1,5 @@
---- js/declare.js
-+++ js/declare.js
+--- declare.js
++++ declare.js
 @@ -700,6 +700,7 @@
      activeChunkLoads = 0,
      maxConcurrentChunkLoads = 2,
