@@ -472,7 +472,10 @@ async function applySaveFile(e, t, o) {
                 } else {
                     addMessage("Updated chunk " + s + " (home spawn owner)", 1e3);
                 }
-            } else if (ownership.type === 'ipfs' && (ownership.pending || (ownership.claimDate && blockDate - ownership.claimDate < IPFS_MATURITY_PERIOD) || (ownership.expiryDate && blockDate > ownership.expiryDate))) {
+            } else if (ownership.type === 'ipfs' && (
+                (ownership.claimDate && blockDate > ownership.claimDate && blockDate - ownership.claimDate <= IPFS_MATURITY_PERIOD) ||
+                (ownership.expiryDate && blockDate > ownership.expiryDate)
+            )) {
                 // Different owner, but existing claim was pending or expired when this update was made
                 chunkManager.applyDeltasToChunk(s, i);
                 updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);

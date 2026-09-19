@@ -852,13 +852,16 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                             }
                         } else if (existing.type !== 'home') {
                             // Different owner, but not a home spawn
-                            // Check if existing was pending when this update was made
-                            if (existing.claimDate && blockDate - existing.claimDate < IPFS_MATURITY_PERIOD) {
-                                shouldUpdate = true;
-                            }
-                            // Or check if existing was expired when this update was made
-                            else if (existing.expiryDate && blockDate > existing.expiryDate) {
-                                shouldUpdate = true;
+                            // Only allow updates that are newer than the existing claim
+                            if (existing.claimDate && blockDate > existing.claimDate) {
+                                // Check if existing was pending when this update was made
+                                if (blockDate - existing.claimDate <= IPFS_MATURITY_PERIOD) {
+                                    shouldUpdate = true;
+                                }
+                                // Or check if existing was expired when this update was made
+                                else if (existing.expiryDate && blockDate > existing.expiryDate) {
+                                    shouldUpdate = true;
+                                }
                             }
                         }
 
@@ -1004,7 +1007,7 @@ function isChunkMutationAllowed(chunkKey, username) {
     const now = Date.now();
     
     // Check if ownership is pending (immature IPFS claim < 30 days)
-    if (ownership.pending) {
+    if (ownership.claimDate && (now - ownership.claimDate <= IPFS_MATURITY_PERIOD)) {
         return true; // Any user can edit pending chunks
     }
     
