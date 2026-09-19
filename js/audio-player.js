@@ -174,7 +174,24 @@ async function fetchAndPlayMusic() {
         const audioRegex = /([a-zA-Z0-9\s\-_().]+\.(mp3|wav))/i;
         const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
 
-        for (const msg of messages) {
+        const filteredMessages = messages.filter(msg => {
+            const messageText = msg.Message || '';
+            return audioRegex.test(messageText) && ipfsRegex.test(messageText);
+        });
+
+        filteredMessages.sort((a, b) => {
+            let dateAStr = a.BlockDate;
+            let dateBStr = b.BlockDate;
+            if (dateAStr && !dateAStr.endsWith('Z') && !dateAStr.endsWith('UTC')) {
+                dateAStr += dateAStr.includes('T') ? 'Z' : ' UTC';
+            }
+            if (dateBStr && !dateBStr.endsWith('Z') && !dateBStr.endsWith('UTC')) {
+                dateBStr += dateBStr.includes('T') ? 'Z' : ' UTC';
+            }
+            return new Date(dateBStr) - new Date(dateAStr);
+        });
+
+        for (const msg of filteredMessages) {
             if (musicPlaylist.length >= 10) break;
 
             const messageText = msg.Message || '';
@@ -367,7 +384,17 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
             return audioRegex.test(messageText) && ipfsRegex.test(messageText);
         });
 
-        filteredMessages.sort((a, b) => new Date(b.BlockDate) - new Date(a.BlockDate));
+        filteredMessages.sort((a, b) => {
+            let dateAStr = a.BlockDate;
+            let dateBStr = b.BlockDate;
+            if (dateAStr && !dateAStr.endsWith('Z') && !dateAStr.endsWith('UTC')) {
+                dateAStr += dateAStr.includes('T') ? 'Z' : ' UTC';
+            }
+            if (dateBStr && !dateBStr.endsWith('Z') && !dateBStr.endsWith('UTC')) {
+                dateBStr += dateBStr.includes('T') ? 'Z' : ' UTC';
+            }
+            return new Date(dateBStr) - new Date(dateAStr);
+        });
 
         filteredMessages.forEach(async msg => {
             const messageText = msg.Message || '';
