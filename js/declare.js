@@ -890,6 +890,34 @@ function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
  * @param {Object} stone - The magician stone object to clean up
  * @param {string} key - The key of the stone (for logging purposes)
  */
+function cleanupCalligraphyStone(stone, key) {
+    if (!stone) return;
+
+    if (stone.mesh) {
+        scene.remove(stone.mesh);
+        if (typeof disposeObject === 'function') {
+            disposeObject(stone.mesh);
+        }
+    }
+}
+
+function cleanupChest(chest, key) {
+    if (!chest) return;
+
+    if (chest.mesh) {
+        scene.remove(chest.mesh);
+        if (typeof disposeObject === 'function') {
+            disposeObject(chest.mesh);
+        }
+    }
+    if (chest.lid) {
+        scene.remove(chest.lid);
+        if (typeof disposeObject === 'function') {
+            disposeObject(chest.lid);
+        }
+    }
+}
+
 function cleanupMagicianStone(stone, key) {
     if (!stone) return;
 
