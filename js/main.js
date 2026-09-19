@@ -5455,7 +5455,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                             if (!outputAddress || !outputKeywordRaw) continue;
                             var normalizedKeyword = String(outputKeywordRaw).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
                             var keywordCandidates = [normalizedKeyword];
-                            normalizedKeyword.startsWith("o") && keywordCandidates.push(normalizedKeyword.slice(1).trim());
+                            normalizedKeyword.startsWith("o") && keywordCandidates.unshift(normalizedKeyword.slice(1).trim());
                             for (var outputKeyword of keywordCandidates) {
                                 if (!outputKeyword || outputKeyword === MASTER_WORLD_KEY) continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
