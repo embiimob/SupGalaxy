@@ -379,13 +379,40 @@ Chunk.prototype.idx = function (e, t, o) {
 }, ChunkManager.prototype.applyDeltasToChunk = function (e, t) {
     window.lastChunkLoadTime = Date.now();
     var o = e.replace(/^#/, "");
-    if (parseChunkKey(o)) {
+    const parsedKey = parseChunkKey(o);
+    if (parsedKey) {
         var a = this.chunks.get(o);
         if (a) {
             for (var n of t)
                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
+                    const oldBlock = a.get(n.x, n.y, n.z);
                     a.set(n.x, n.y, n.z, r)
+
+                    const globalX = parsedKey.x * CHUNK_SIZE + n.x;
+                    const globalY = n.y;
+                    const globalZ = parsedKey.z * CHUNK_SIZE + n.z;
+                    const blockKey = `${globalX},${globalY},${globalZ}`;
+
+                    if (r !== oldBlock) {
+                        if (oldBlock === 127) {
+                            if (!window.magicianStoneGenerations) window.magicianStoneGenerations = {};
+                            window.magicianStoneGenerations[blockKey] = (window.magicianStoneGenerations[blockKey] || 0) + 1;
+                            if (window.magicianStones && window.magicianStones[blockKey]) {
+                                window.cleanupMagicianStone(window.magicianStones[blockKey], blockKey);
+                            }
+                        } else if (oldBlock === 128) {
+                            if (!window.calligraphyStoneGenerations) window.calligraphyStoneGenerations = {};
+                            window.calligraphyStoneGenerations[blockKey] = (window.calligraphyStoneGenerations[blockKey] || 0) + 1;
+                            if (window.calligraphyStones && window.calligraphyStones[blockKey]) {
+                                window.cleanupCalligraphyStone(window.calligraphyStones[blockKey], blockKey);
+                            }
+                        } else if (oldBlock === 131) {
+                            if (window.chests && window.chests[blockKey]) {
+                                window.cleanupChest(window.chests[blockKey], blockKey);
+                            }
+                        }
+                    }
                 } updateTorchRegistry(a), a.needsRebuild = !0
         }
     }
