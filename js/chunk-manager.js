@@ -400,19 +400,16 @@ Chunk.prototype.idx = function (e, t, o) {
                             window.magicianStoneGenerations[blockKey] = (window.magicianStoneGenerations[blockKey] || 0) + 1;
                             if (window.magicianStones && window.magicianStones[blockKey]) {
                                 window.cleanupMagicianStone(window.magicianStones[blockKey], blockKey);
-                                delete window.magicianStones[blockKey];
                             }
                         } else if (oldBlock === 128) {
                             if (!window.calligraphyStoneGenerations) window.calligraphyStoneGenerations = {};
                             window.calligraphyStoneGenerations[blockKey] = (window.calligraphyStoneGenerations[blockKey] || 0) + 1;
                             if (window.calligraphyStones && window.calligraphyStones[blockKey]) {
                                 window.cleanupCalligraphyStone(window.calligraphyStones[blockKey], blockKey);
-                                delete window.calligraphyStones[blockKey];
                             }
                         } else if (oldBlock === 131) {
                             if (window.chests && window.chests[blockKey]) {
                                 window.cleanupChest(window.chests[blockKey], blockKey);
-                                delete window.chests[blockKey];
                             }
                         }
                     }

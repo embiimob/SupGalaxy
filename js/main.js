@@ -1308,6 +1308,8 @@ async function createMagicianStoneScreen(stoneData) {
 
     // Read the current generation ID to track if this specific load request is still valid
     const generationId = (window.magicianStoneGenerations && window.magicianStoneGenerations[key]) || 0;
+
+
     if (magicianStonesLoading.has(key)) {
         return;
     }
@@ -1549,16 +1551,7 @@ async function createMagicianStoneScreen(stoneData) {
         }
 
     } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
-        const loader = new THREE.TextureLoader();
-        try {
-            texture = await new Promise((resolve, reject) => {
-                loader.load(url, resolve, undefined, reject);
-            });
-        } catch (err) {
-            console.error('Error loading image texture:', err);
-            magicianStonesLoading.delete(key);
-            return;
-        }
+        texture = new THREE.TextureLoader().load(url);
 
         // Cancellation check after async load
         const currentGenAfterLoad = window.magicianStoneGenerations ? window.magicianStoneGenerations[key] : 0;
@@ -1697,6 +1690,8 @@ function createCalligraphyStoneScreen(stoneData) {
 
     // Capture the generation ID at start
     const generationId = window.calligraphyStoneGenerations ? window.calligraphyStoneGenerations[key] : 0;
+
+
     if (calligraphyStonesLoading.has(key)) {
         console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
@@ -1813,24 +1808,6 @@ function createCalligraphyStoneScreen(stoneData) {
     // Store link in userData for click handling
     screenMesh.userData.calligraphyLink = link;
     screenMesh.userData.calligraphyKey = key;
-
-    // Final generation check
-    const finalGenCheckCalligraphy = window.calligraphyStoneGenerations ? window.calligraphyStoneGenerations[key] : 0;
-    if (generationId !== finalGenCheckCalligraphy) {
-        console.log(`[CalligraphyStone] Creation cancelled for key ${key} (Gen mismatch) before adding to scene`);
-        calligraphyStonesLoading.delete(key);
-        texture.dispose();
-        material.dispose();
-        planeGeometry.dispose();
-        return;
-    }
-
-    // Clean up old mesh if replacing
-    if (calligraphyStones[key] && calligraphyStones[key].mesh) {
-        if (typeof cleanupCalligraphyStone === 'function') {
-            cleanupCalligraphyStone(calligraphyStones[key], key);
-        }
-    }
 
     calligraphyStones[key] = { ...stoneData, mesh: screenMesh };
     calligraphyStonesLoading.delete(key); // Remove from loading set after successful creation
