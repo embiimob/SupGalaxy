@@ -1318,6 +1318,26 @@ async function createMagicianStoneScreen(stoneData) {
     // This guard applies to ALL asset types, not just .glb files.
     magicianStonesLoading.add(key);
 
+    // Pre-flight check: ensure the block at this position is actually meant to be a magician stone.
+    // Check pending/chunk deltas to see if this stone was overwritten before the chunk loaded.
+    const cx = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+    const cz = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+    const chunkKey = makeChunkKey(worldName, cx, cz);
+    const localX = modWrap(x, CHUNK_SIZE);
+    const localZ = modWrap(z, CHUNK_SIZE);
+
+    const worldState = getCurrentWorldState();
+    if (worldState && worldState.chunkDeltas.has(chunkKey)) {
+        const deltas = worldState.chunkDeltas.get(chunkKey);
+        // Find the latest delta for this block
+        const latestDelta = [...deltas].reverse().find(d => d.x === localX && d.y === y && d.z === localZ);
+        if (latestDelta && latestDelta.b !== 127) {
+            console.log(`[MagicianStone] Aborting load for ${key}: overridden by delta block ${latestDelta.b}`);
+            magicianStonesLoading.delete(key);
+            return;
+        }
+    }
+
     if (url.startsWith('IPFS:')) {
         try {
             url = await resolveIPFS(url);
