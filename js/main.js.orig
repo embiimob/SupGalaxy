@@ -402,12 +402,12 @@ async function applySaveFile(e, t, o) {
         }
         player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
         registerKeyEvents();
-        
+
         // Initialize chat system
         if (typeof initChat === 'function') {
             initChat();
         }
-        
+
         return console.log("[LOGIN] Starting game loop from session"), requestAnimationFrame(gameLoop), addMessage("Loaded session for " + userName + " in " + worldName, 3e3), updateHud(), initServers(), worker.postMessage({
             type: "sync_processed",
             ids: Array.from(processedMessages)
@@ -1299,7 +1299,7 @@ function createChestInventorySlot(index) {
 
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision = true, damage = 0 } = stoneData;
-    
+
     // Entity-based deduplication key: uses world position (x,y,z) as the unique identifier.
     // This key is independent of the underlying file extension (.glb, .gltf, .gif, .mp4, etc.)
     // to ensure that the same logical magician stone entity is never instantiated multiple times,
@@ -2651,18 +2651,18 @@ function handlePlayerDeath() {
 function respawnPlayer(e, t, o) {
     // Determine if this is a home teleport (no coords provided, uses spawnPoint)
     var isHomeTeleport = (e === undefined && t === undefined && o === undefined);
-    
+
     var a = modWrap(e || spawnPoint.x, MAP_SIZE),
         n = modWrap(o || spawnPoint.z, MAP_SIZE),
         r = t || chunkManager.getSurfaceY(a, n) + 1;
-    
+
     // Calculate target chunk coordinates to check if it's already loaded
     // Note: a and n are already wrapped, so no need to call modWrap again
     var targetChunkX = Math.floor(a / CHUNK_SIZE),
         targetChunkZ = Math.floor(n / CHUNK_SIZE);
     var targetChunkKey = makeChunkKey(worldName, targetChunkX, targetChunkZ);
     var isTargetChunkLoaded = chunkManager.chunks.has(targetChunkKey);
-    
+
     if (checkCollision(a, r, n)) {
         for (var s = !1, i = 0; i <= 5; i++)
             if (!checkCollision(a, r + i, n)) {
@@ -2671,7 +2671,7 @@ function respawnPlayer(e, t, o) {
             } s || (player.x = a, player.y = chunkManager.getSurfaceY(a, n) + 1, player.z = n, player.vy = 0, player.onGround = !0, player.health = 20, player.yaw = 0, player.pitch = 0)
     } else player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !1, player.health = 20, player.yaw = 0, player.pitch = 0;
     updateHotbarUI(), updateHealthBar(), document.getElementById("health").innerText = player.health;
-    
+
     // Smart teleport behavior:
     // 1. Home teleport: Never unload previous area (let distance-based eviction handle cleanup)
     // 2. Teleport within loaded area: Skip unloading, destination chunk already exists
@@ -2680,11 +2680,11 @@ function respawnPlayer(e, t, o) {
         // Distant teleport: unload chunks from previous location
         chunkManager.unloadDistantChunks(player.x, player.z, currentLoadRadius);
     }
-    
+
     var l = Math.floor(a / CHUNK_SIZE),
         d = Math.floor(n / CHUNK_SIZE);
     currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
-    
+
     // Use circular distance check for chunk iteration
     var radiusSq = currentLoadRadius * currentLoadRadius;
     for (var c = -currentLoadRadius; c <= currentLoadRadius; c++)
@@ -2760,7 +2760,7 @@ function checkMeshCollision(x, y, z) {
 
     for (const stone of stones) {
         if (!stone.mesh) continue;
-        
+
         // Skip collision check if collision is disabled for this stone
         if (stone.collision === false) continue;
 
@@ -2955,20 +2955,20 @@ function isModalInputActive() {
     // Check if the currently focused element is a modal input
     const activeElement = document.activeElement;
     if (!activeElement) return false;
-    
+
     // Check if the active element is within either modal
     const magicianModal = document.getElementById('magicianStoneModal');
     const calligraphyModal = document.getElementById('calligraphyStoneModal');
-    
+
     const isInMagicianModal = magicianModal && magicianModal.contains(activeElement);
     const isInCalligraphyModal = calligraphyModal && calligraphyModal.contains(activeElement);
-    
+
     // Return true if active element is an input/textarea/select within either modal
     if (isInMagicianModal || isInCalligraphyModal) {
         const tagName = activeElement.tagName.toLowerCase();
         return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
     }
-    
+
     return false;
 }
 
@@ -2976,10 +2976,10 @@ function registerKeyEvents() {
     function e(e) {
         // Check if chat input is focused - if so, don't process game controls
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
-        
+
         // Check if any modal input is focused - if so, don't process game controls
         const modalInputActive = isModalInputActive();
-        
+
         // Handle "/" key to open chat (only if no modal is open)
         if (e.key === "/" && !isPromptOpen && !chatInputActive && !modalInputActive) {
             if (typeof handleSlashKeyForChat === 'function') {
@@ -2987,12 +2987,12 @@ function registerKeyEvents() {
             }
             return;
         }
-        
+
         // Don't process game controls if chat or modal input is active
         if (chatInputActive || modalInputActive) {
             return;
         }
-        
+
         const t = e.key.toLowerCase();
         if ("w" === t && !keys[t]) {
             const e = performance.now();
@@ -3106,7 +3106,7 @@ function saveFullSession() {
     // Close the modal
     document.getElementById("saveOptionsModal").style.display = "none";
     isPromptOpen = false;
-    
+
     // Trigger the full session save
     downloadHostSession();
 }
@@ -3115,7 +3115,7 @@ function savePlayerChangesOnly() {
     // Close the modal
     document.getElementById("saveOptionsModal").style.display = "none";
     isPromptOpen = false;
-    
+
     // Trigger the player-specific save
     downloadSinglePlayerSession();
 }
@@ -4092,12 +4092,12 @@ async function startGame() {
     }
     player.yaw = 0, player.pitch = 0, lastFrame = performance.now(), lastRegenTime = lastFrame;
     registerKeyEvents();
-    
+
     // Initialize chat system
     if (typeof initChat === 'function') {
         initChat();
     }
-    
+
     console.log("[LOGIN] Starting game loop"), requestAnimationFrame(gameLoop), addMessage("Welcome — world wraps at edges. Toggle camera with T. Good luck!", 5e3);
     var d = document.getElementById("health");
     d && (d.innerText = player.health);
@@ -4318,7 +4318,10 @@ function switchWorld(newWorldName, targetSpawn) {
     // Clear calligraphy stones and their loading registry
     // Note: Metadata is already saved above; here we only dispose the 3D meshes.
     for (const key in calligraphyStones) {
-        cleanupCalligraphyStone(calligraphyStones[key], key);
+        if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+            scene.remove(calligraphyStones[key].mesh);
+            disposeObject(calligraphyStones[key].mesh);
+        }
     }
     calligraphyStones = {};
     calligraphyStonesLoading.clear();
@@ -4432,7 +4435,7 @@ function switchWorld(newWorldName, targetSpawn) {
  */
 function saveCurrentWorldStoneData(currentWorldName) {
     if (!currentWorldName) return;
-    
+
     // Serialize magician stones (exclude mesh and media elements, keep config data)
     const savedMagicianStones = {};
     for (const key in magicianStones) {
@@ -4648,19 +4651,19 @@ function gameLoop(e) {
             } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isHost || 0 === peers.size) {
                 16 === getBlockAt(player.x, player.y + .5, player.z) && Date.now() - lastDamageTime > 500 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Burning in lava! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             }
-        
+
         // Check for damage from magician stones
         if (isHost || 0 === peers.size) {
             const playerBox = new THREE.Box3().setFromCenterAndSize(
                 new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
                 new THREE.Vector3(player.width, player.height, player.depth)
             );
-            
+
             // Check each magician stone for damage - allow only one damage source per frame
             let damageApplied = false;
             for (const stone of Object.values(magicianStones)) {
                 if (damageApplied) break; // Only process one damage source per frame
-                
+
                 // Only apply damage if stone has damage > 0 and has a mesh
                 if (stone.damage && stone.damage > 0 && stone.mesh) {
                     const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
@@ -4673,7 +4676,7 @@ function gameLoop(e) {
                             updateHealthBar();
                             addMessage("Damaged by magician stone! -" + stone.damage + " HP", 1e3);
                             flashDamageEffect();
-                            
+
                             // Apply knockback similar to getting hit
                             const stonePos = new THREE.Vector3(stone.x, stone.y, stone.z);
                             const playerPos = new THREE.Vector3(player.x, player.y, player.z);
@@ -4681,7 +4684,7 @@ function gameLoop(e) {
                             player.vx += knockbackDir.x * 2;
                             player.vz += knockbackDir.z * 2;
                             player.vy = 0.15;
-                            
+
                             if (player.health <= 0) {
                                 handlePlayerDeath();
                             }
@@ -5082,7 +5085,7 @@ function gameLoop(e) {
                 // Update GIF animation
                 if (stone.gifData && stone.gifData.reader) {
                     const gif = stone.gifData;
-                    
+
                     // Only animate GIF if within the configured distance (similar to video autoplay behavior)
                     // When outside distance, GIF should remain static (show current frame without advancing)
                     if (distance <= stone.distance) {
@@ -5198,7 +5201,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             l = i.get("world-seed"),
             d = i.get("user-name"),
             c = i.get("loc");
-        
+
         // Configure worker for Sup!? local mode and pass effective IPFS root
         if (typeof worker !== 'undefined') {
             worker.postMessage({
@@ -5207,7 +5210,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 localIpfsRoot: getLocalIpfsRoot()
             });
         }
-        
+
         if (l && (document.getElementById("worldNameInput").value = l), d && (document.getElementById("userInput").value = d), c) {
             const e = c.split(",");
             if (3 === e.length) {

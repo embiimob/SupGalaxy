@@ -1,0 +1,40 @@
+--- js/chunk-manager.js
++++ js/chunk-manager.js
+@@ -382,10 +382,34 @@
+     if (parseChunkKey(o)) {
+         var a = this.chunks.get(o);
+         if (a) {
++            const parsed = parseChunkKey(o);
+             for (var n of t)
+                 if (!(n.x < 0 || n.x >= CHUNK_SIZE || n.y < 0 || n.y >= MAX_HEIGHT || n.z < 0 || n.z >= CHUNK_SIZE)) {
+                     var r = n.b === BLOCK_AIR || n.b && BLOCKS[n.b] ? n.b : 4;
+                     a.set(n.x, n.y, n.z, r)
++
++                    if (parsed) {
++                        const worldX = parsed.cx * CHUNK_SIZE + n.x;
++                        const worldY = n.y;
++                        const worldZ = parsed.cz * CHUNK_SIZE + n.z;
++                        const key = \`\${worldX},\${worldY},\${worldZ}\`;
++
++                        if (n.b !== 127 && window.magicianStones && window.magicianStones[key]) {
++                            if (typeof cleanupMagicianStone === 'function') {
++                                cleanupMagicianStone(window.magicianStones[key], key);
++                            }
++                            delete window.magicianStones[key];
++                        }
++                        if (n.b !== 128 && window.calligraphyStones && window.calligraphyStones[key]) {
++                            if (typeof cleanupCalligraphyStone === 'function') {
++                                cleanupCalligraphyStone(window.calligraphyStones[key], key);
++                            }
++                            delete window.calligraphyStones[key];
++                        }
++                        if (n.b !== 131 && window.chests && window.chests[key]) {
++                            if (typeof cleanupChest === 'function') {
++                                cleanupChest(window.chests[key], key);
++                            }
++                            delete window.chests[key];
++                        }
++                    }
+                 } updateTorchRegistry(a), a.needsRebuild = !0
+         }
+     }

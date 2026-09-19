@@ -1,0 +1,14 @@
+--- js/main.js
++++ js/main.js
+@@ -4324,10 +4324,7 @@
+     // Clear calligraphy stones and their loading registry
+     // Note: Metadata is already saved above; here we only dispose the 3D meshes.
+     for (const key in calligraphyStones) {
+-        if (calligraphyStones[key] && calligraphyStones[key].mesh) {
+-            scene.remove(calligraphyStones[key].mesh);
+-            disposeObject(calligraphyStones[key].mesh);
+-        }
++        cleanupCalligraphyStone(calligraphyStones[key], key);
+     }
+     calligraphyStones = {};
+     calligraphyStonesLoading.clear();
