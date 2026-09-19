@@ -372,6 +372,9 @@ async function applySaveFile(e, t, o) {
             chests = {};
             for (const key in t.chests) {
                 if (t.chests[key]) {
+                    if (chests[key] && typeof cleanupChest === 'function') {
+                        cleanupChest(chests[key], key);
+                    }
                     const chestData = t.chests[key];
                     const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
                     chests[key] = {
@@ -1307,22 +1310,23 @@ function isBlockStillValid(x, y, z, expectedBlockId) {
 
     if (typeof chunkManager === 'undefined' || !chunkManager) return true;
 
+    const worldState = typeof getCurrentWorldState === 'function' ? getCurrentWorldState() : null;
+    if (worldState && worldState.chunkDeltas.has(chunkKey)) {
+        const deltas = worldState.chunkDeltas.get(chunkKey);
+        const latestDelta = [...deltas].reverse().find(d => d.x === localX && d.y === y && d.z === localZ);
+        if (latestDelta) {
+            return latestDelta.b === expectedBlockId;
+        }
+    }
+
     const currentChunk = chunkManager.getChunk(cx, cz);
     if (currentChunk && currentChunk.generated) {
         const currentBlock = currentChunk.get(localX, y, localZ);
         if (currentBlock !== expectedBlockId) {
             return false;
         }
-    } else {
-        const worldState = getCurrentWorldState();
-        if (worldState && worldState.chunkDeltas.has(chunkKey)) {
-            const deltas = worldState.chunkDeltas.get(chunkKey);
-            const latestDelta = [...deltas].reverse().find(d => d.x === localX && d.y === y && d.z === localZ);
-            if (latestDelta && latestDelta.b !== expectedBlockId) {
-                return false;
-            }
-        }
     }
+
     return true;
 }
 
@@ -1335,9 +1339,11 @@ async function createMagicianStoneScreen(stoneData) {
     // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Skip if this stone is already loaded or currently loading
+    // Deduplication: Clean up if this stone is already loaded to support replacement
     if (magicianStones[key] && magicianStones[key].mesh) {
-        return;
+        if (typeof cleanupMagicianStone === 'function') {
+            cleanupMagicianStone(magicianStones[key], key);
+        }
     }
     if (magicianStonesLoading.has(key)) {
         return;
@@ -1742,13 +1748,13 @@ function createCalligraphyStoneScreen(stoneData) {
     let { x, y, z, width, height, offsetX, offsetY, offsetZ, bgColor, transparent, fontFamily, fontSize, fontWeight, fontColor, text, link, direction } = stoneData;
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Skip if this stone is already loaded or currently loading
+    // Deduplication: Clean up if this stone is already loaded to support replacement
     if (calligraphyStones[key] && calligraphyStones[key].mesh) {
-        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already exists`);
-        return;
+        if (typeof cleanupCalligraphyStone === 'function') {
+            cleanupCalligraphyStone(calligraphyStones[key], key);
+        }
     }
     if (calligraphyStonesLoading.has(key)) {
-        console.log(`[CalligraphyStone] Skipping duplicate creation for key ${key} - already loading`);
         return;
     }
 

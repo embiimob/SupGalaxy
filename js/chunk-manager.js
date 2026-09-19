@@ -390,7 +390,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     const worldZ = parsed.cz * CHUNK_SIZE + n.z;
                     const key = `${worldX},${worldY},${worldZ}`;
 
-                    // Cleanup entities if overwritten regardless of chunk load state
+                    // Cleanup entities if overwritten regardless of chunk load state.
                     if (n.b !== 127 && window.magicianStones && window.magicianStones[key]) {
                         if (typeof cleanupMagicianStone === 'function') {
                             cleanupMagicianStone(window.magicianStones[key], key);
