@@ -453,7 +453,7 @@ async function applySaveFile(e, t, o) {
                     updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
                     addMessage("Updated chunk " + s, 1e3);
                 } else if (blockAge <= IPFS_MATURITY_PERIOD) {
-                    // Immature claim (<30d): mark pending, lock editing to author
+                    // Immature claim (<30d): mark pending, anyone can edit
                     chunkManager.applyDeltasToChunk(s, i);
                     updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
                     addMessage("Loaded chunk " + s + " (pending claim maturity)", 1e3);
@@ -472,6 +472,11 @@ async function applySaveFile(e, t, o) {
                 } else {
                     addMessage("Updated chunk " + s + " (home spawn owner)", 1e3);
                 }
+            } else if (ownership.type === 'ipfs' && (ownership.pending || (ownership.claimDate && blockDate - ownership.claimDate < IPFS_MATURITY_PERIOD) || (ownership.expiryDate && blockDate > ownership.expiryDate))) {
+                // Different owner, but existing claim was pending or expired when this update was made
+                chunkManager.applyDeltasToChunk(s, i);
+                updateChunkOwnership(s, u, blockDate, 'ipfs', blockDate);
+                addMessage("Updated chunk " + s + " (took over pending/expired claim)", 1e3);
             } else {
                 // Different owner or home spawn: reject
                 addMessage("Cannot edit chunk " + s + ": owned by " + ownership.username, 3e3);
