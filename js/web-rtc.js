@@ -1463,13 +1463,14 @@ function setupDataChannel(e, t) {
                                         console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.username === s.username) {
                                         // Owner is editing - renew for 1 year from now
-                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        const claimDateToUse = ownership.claimDate ? ownership.claimDate : now;
+                                        updateChunkOwnership(normalized, s.username, claimDateToUse, 'ipfs', now);
                                         console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.expiryDate && now > ownership.expiryDate) {
                                         // Previous ownership expired - establish new ownership
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
                                         console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
-                                    } else if (ownership.pending) {
+                                    } else if (ownership.claimDate && now - ownership.claimDate <= IPFS_MATURITY_PERIOD) {
                                         // Pending ownership - anyone can claim by editing
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
                                         console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
@@ -1572,13 +1573,14 @@ function setupDataChannel(e, t) {
                                         console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.username === s.username) {
                                         // Owner is editing - renew for 1 year from now
-                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
+                                        const claimDateToUse = ownership.claimDate ? ownership.claimDate : now;
+                                        updateChunkOwnership(normalized, s.username, claimDateToUse, 'ipfs', now);
                                         console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
                                     } else if (ownership.expiryDate && now > ownership.expiryDate) {
                                         // Previous ownership expired - establish new ownership
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
                                         console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
-                                    } else if (ownership.pending) {
+                                    } else if (ownership.claimDate && now - ownership.claimDate <= IPFS_MATURITY_PERIOD) {
                                         // Pending ownership - anyone can claim by editing
                                         updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
                                         console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
