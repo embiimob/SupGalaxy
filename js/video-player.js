@@ -131,22 +131,29 @@ async function fetchAndPlayVideos(searchTerm = 'game') {
 
         const videoRegex = /([a-zA-Z0-9\s\-_().]+\.(mp4|webm|ogg|mov|avi))/i;
         const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+        const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
 
         for (const msg of messages) {
             if (videoPlaylist.length >= 10) break;
 
             const messageText = msg.Message || '';
-            const videoMatch = messageText.match(videoRegex);
-            const ipfsMatch = messageText.match(ipfsRegex);
 
-            if (videoMatch && ipfsMatch) {
-                const filename = videoMatch[0];
+            for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
+                if (videoPlaylist.length >= 10) break;
+
                 const hash = ipfsMatch[1];
-                if (!videoPlaylist.some(track => track.url.includes(hash))) {
-                    videoPlaylist.push({
-                        name: filename,
-                        url: buildIPFSUrl(hash, filename)
-                    });
+                const path = ipfsMatch[2] || '';
+                const videoMatch = path.match(videoRegex);
+
+                if (videoMatch) {
+                    const filename = videoMatch[0];
+                    const sanitizedFilename = filename.replace(/>|</g, '');
+                    if (!videoPlaylist.some(track => track.url.includes(hash))) {
+                        videoPlaylist.push({
+                            name: sanitizedFilename,
+                            url: buildIPFSUrl(hash, sanitizedFilename)
+                        });
+                    }
                 }
             }
         }
@@ -336,6 +343,7 @@ async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
         videoList.innerHTML = '';
         const videoRegex = /([a-zA-Z0-9\s\-_().]+\.(mp4|webm|ogg|mov|avi))/i;
         const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+        const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
 
         const filteredMessages = messages.filter(msg => {
             const messageText = msg.Message || '';
@@ -346,50 +354,53 @@ async function fetchVideosForMenu(searchTerm = 'game', page = 1) {
 
         filteredMessages.forEach(async msg => {
             const messageText = msg.Message || '';
-            const ipfsMatch = messageText.match(ipfsRegex);
 
-            if (ipfsMatch) {
+            for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
                 const hash = ipfsMatch[1];
-                const videoMatch = messageText.match(videoRegex);
-                const filename = videoMatch ? videoMatch[0] : 'Unnamed Video';
-                const sanitizedFilename = filename.replace(/>|</g, '');
-                const listItem = document.createElement('div');
-                listItem.style.display = 'flex';
-                listItem.style.justifyContent = 'space-between';
-                listItem.style.padding = '5px';
-                listItem.style.borderBottom = '1px solid #333';
+                const path = ipfsMatch[2] || '';
+                const videoMatch = path.match(videoRegex);
 
-                const videoName = document.createElement('span');
-                const profile = await GetProfileByAddress(msg.FromAddress);
-                const creator = profile ? profile.URN : 'anonymous';
-                videoName.innerText = `${sanitizedFilename} by ${creator}`;
-                listItem.appendChild(videoName);
+                if (videoMatch) {
+                    const filename = videoMatch[0];
+                    const sanitizedFilename = filename.replace(/>|</g, '');
+                    const listItem = document.createElement('div');
+                    listItem.style.display = 'flex';
+                    listItem.style.justifyContent = 'space-between';
+                    listItem.style.padding = '5px';
+                    listItem.style.borderBottom = '1px solid #333';
 
-                const buttonContainer = document.createElement('div');
+                    const videoName = document.createElement('span');
+                    const profile = await GetProfileByAddress(msg.FromAddress);
+                    const creator = profile ? profile.URN : 'anonymous';
+                    videoName.innerText = `${sanitizedFilename} by ${creator}`;
+                    listItem.appendChild(videoName);
 
-                const addButton = document.createElement('button');
-                addButton.className = 'uniform-action-btn';
-                addButton.innerText = 'Add';
-                addButton.style.fontSize = '10px';
-                addButton.style.marginLeft = '5px';
-                addButton.onclick = () => {
-                    const track = {
-                        name: sanitizedFilename,
-                        url: buildIPFSUrl(hash, sanitizedFilename)
-                    };
-                    if (!videoPlaylist.some(t => t.url === track.url)) {
-                        if (videoPlaylist.length >= 10) {
-                            videoPlaylist.shift(); // Remove the oldest video
+                    const buttonContainer = document.createElement('div');
+
+                    const addButton = document.createElement('button');
+                    addButton.className = 'uniform-action-btn';
+                    addButton.innerText = 'Add';
+                    addButton.style.fontSize = '10px';
+                    addButton.style.marginLeft = '5px';
+                    addButton.onclick = () => {
+                        const track = {
+                            name: sanitizedFilename,
+                            url: buildIPFSUrl(hash, sanitizedFilename)
+                        };
+                        if (!videoPlaylist.some(t => t.url === track.url)) {
+                            if (videoPlaylist.length >= 10) {
+                                videoPlaylist.shift(); // Remove the oldest video
+                            }
+                            videoPlaylist.push(track);
+                            addMessage(`${sanitizedFilename} added to playlist`);
+                        } else {
+                            addMessage(`${sanitizedFilename} is already in the playlist`);
                         }
-                        videoPlaylist.push(track);
-                        addMessage(`${sanitizedFilename} added to playlist`);
-                    } else {
-                        addMessage(`${sanitizedFilename} is already in the playlist`);
-                    }
-                };
-                buttonContainer.appendChild(addButton);
-                listItem.appendChild(buttonContainer);
-                videoList.appendChild(listItem);
+                    };
+                    buttonContainer.appendChild(addButton);
+                    listItem.appendChild(buttonContainer);
+                    videoList.appendChild(listItem);
+                }
             }
         });
         document.getElementById('videoNextBtn').disabled = messages.length < 50;

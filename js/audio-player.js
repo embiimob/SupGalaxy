@@ -173,6 +173,7 @@ async function fetchAndPlayMusic() {
 
         const audioRegex = /([a-zA-Z0-9\s\-_().]+\.(mp3|wav))/i;
         const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+        const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
 
         const filteredMessages = messages.filter(msg => {
             const messageText = msg.Message || '';
@@ -195,18 +196,23 @@ async function fetchAndPlayMusic() {
             if (musicPlaylist.length >= 10) break;
 
             const messageText = msg.Message || '';
-            const audioMatch = messageText.match(audioRegex);
-            const ipfsMatch = messageText.match(ipfsRegex);
 
-            if (audioMatch && ipfsMatch) {
-                const filename = audioMatch[0];
-                const sanitizedFilename = filename.replace(/>|</g, '');
+            for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
+                if (musicPlaylist.length >= 10) break;
+
                 const hash = ipfsMatch[1];
-                if (!musicPlaylist.some(track => track.url.includes(hash))) {
-                    musicPlaylist.push({
-                        name: sanitizedFilename,
-                        url: buildIPFSUrl(hash, sanitizedFilename)
-                    });
+                const path = ipfsMatch[2] || '';
+                const audioMatch = path.match(audioRegex);
+
+                if (audioMatch) {
+                    const filename = audioMatch[0];
+                    const sanitizedFilename = filename.replace(/>|</g, '');
+                    if (!musicPlaylist.some(track => track.url.includes(hash))) {
+                        musicPlaylist.push({
+                            name: sanitizedFilename,
+                            url: buildIPFSUrl(hash, sanitizedFilename)
+                        });
+                    }
                 }
             }
         }
@@ -378,6 +384,7 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
         musicList.innerHTML = '';
         const audioRegex = /([a-zA-Z0-9\s\-_().]+\.(mp3|wav))/i;
         const ipfsRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})/;
+        const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
 
         const filteredMessages = messages.filter(msg => {
             const messageText = msg.Message || '';
@@ -398,58 +405,61 @@ async function fetchSongsForMenu(searchTerm = 'game', page = 1) {
 
         filteredMessages.forEach(async msg => {
             const messageText = msg.Message || '';
-            const ipfsMatch = messageText.match(ipfsRegex);
 
-            if (ipfsMatch) {
+            for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
                 const hash = ipfsMatch[1];
-                const audioMatch = messageText.match(audioRegex);
-                const filename = audioMatch ? audioMatch[0] : 'Unnamed Track';
-                const sanitizedFilename = filename.replace(/>|</g, '');
-                const listItem = document.createElement('div');
-                listItem.style.display = 'flex';
-                listItem.style.justifyContent = 'space-between';
-                listItem.style.padding = '5px';
-                listItem.style.borderBottom = '1px solid #333';
+                const path = ipfsMatch[2] || '';
+                const audioMatch = path.match(audioRegex);
 
-                const songName = document.createElement('span');
-                const profile = await GetProfileByAddress(msg.FromAddress);
-                const creator = profile ? profile.URN : 'anonymous';
-                songName.innerText = `${sanitizedFilename} by ${creator}`;
-                listItem.appendChild(songName);
+                if (audioMatch) {
+                    const filename = audioMatch[0];
+                    const sanitizedFilename = filename.replace(/>|</g, '');
+                    const listItem = document.createElement('div');
+                    listItem.style.display = 'flex';
+                    listItem.style.justifyContent = 'space-between';
+                    listItem.style.padding = '5px';
+                    listItem.style.borderBottom = '1px solid #333';
 
-                const buttonContainer = document.createElement('div');
+                    const songName = document.createElement('span');
+                    const profile = await GetProfileByAddress(msg.FromAddress);
+                    const creator = profile ? profile.URN : 'anonymous';
+                    songName.innerText = `${sanitizedFilename} by ${creator}`;
+                    listItem.appendChild(songName);
 
-                const playButton = document.createElement('button');
-                playButton.innerText = '▶';
-                playButton.className = 'preview-play-btn uniform-action-btn';
-                playButton.style.fontSize = '10px';
-                const songUrl = buildIPFSUrl(hash, sanitizedFilename);
-                playButton.onclick = () => togglePreview(playButton, songUrl);
-                buttonContainer.appendChild(playButton);
+                    const buttonContainer = document.createElement('div');
 
-                const addButton = document.createElement('button');
-                addButton.className = 'uniform-action-btn';
-                addButton.innerText = 'Add';
-                addButton.style.fontSize = '10px';
-                addButton.style.marginLeft = '5px';
-                addButton.onclick = () => {
-                    const track = {
-                        name: sanitizedFilename,
-                        url: buildIPFSUrl(hash, sanitizedFilename)
-                    };
-                    if (!musicPlaylist.some(t => t.url === track.url)) {
-                        if (musicPlaylist.length >= 10) {
-                            musicPlaylist.shift(); // Remove the oldest song
+                    const playButton = document.createElement('button');
+                    playButton.innerText = '▶';
+                    playButton.className = 'preview-play-btn uniform-action-btn';
+                    playButton.style.fontSize = '10px';
+                    const songUrl = buildIPFSUrl(hash, sanitizedFilename);
+                    playButton.onclick = () => togglePreview(playButton, songUrl);
+                    buttonContainer.appendChild(playButton);
+
+                    const addButton = document.createElement('button');
+                    addButton.className = 'uniform-action-btn';
+                    addButton.innerText = 'Add';
+                    addButton.style.fontSize = '10px';
+                    addButton.style.marginLeft = '5px';
+                    addButton.onclick = () => {
+                        const track = {
+                            name: sanitizedFilename,
+                            url: buildIPFSUrl(hash, sanitizedFilename)
+                        };
+                        if (!musicPlaylist.some(t => t.url === track.url)) {
+                            if (musicPlaylist.length >= 10) {
+                                musicPlaylist.shift(); // Remove the oldest song
+                            }
+                            musicPlaylist.push(track);
+                            addMessage(`${sanitizedFilename} added to playlist`);
+                        } else {
+                            addMessage(`${sanitizedFilename} is already in the playlist`);
                         }
-                        musicPlaylist.push(track);
-                        addMessage(`${sanitizedFilename} added to playlist`);
-                    } else {
-                        addMessage(`${sanitizedFilename} is already in the playlist`);
-                    }
-                };
-                buttonContainer.appendChild(addButton);
-                listItem.appendChild(buttonContainer);
-                musicList.appendChild(listItem);
+                    };
+                    buttonContainer.appendChild(addButton);
+                    listItem.appendChild(buttonContainer);
+                    musicList.appendChild(listItem);
+                }
             }
         });
         document.getElementById('musicNextBtn').disabled = messages.length < 50;
