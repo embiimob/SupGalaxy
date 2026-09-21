@@ -5762,8 +5762,6 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
     , source: 'local'
     };
 
-    createMagicianStoneScreen(stoneData);
-
     const n = INVENTORY[selectedHotIndex];
     if (magicianStonePlacement && n && n.id === 127) {
         chunkManager.setBlockGlobal(magicianStonePlacement.x, magicianStonePlacement.y, magicianStonePlacement.z, 127, true, n.originSeed);
@@ -5774,6 +5772,8 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
         }
         updateHotbarUI();
         safePlayAudio(soundPlace);
+
+        createMagicianStoneScreen(stoneData);
 
         // Send magician stone data to other peers
         const message = JSON.stringify({
@@ -5828,8 +5828,6 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
     , source: 'local'
     };
 
-    createCalligraphyStoneScreen(stoneData);
-
     const n = INVENTORY[selectedHotIndex];
     if (calligraphyStonePlacement && n && n.id === 128) {
         chunkManager.setBlockGlobal(calligraphyStonePlacement.x, calligraphyStonePlacement.y, calligraphyStonePlacement.z, 128, true, n.originSeed);
@@ -5840,6 +5838,8 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
         }
         updateHotbarUI();
         safePlayAudio(soundPlace);
+
+        createCalligraphyStoneScreen(stoneData);
 
         // Send calligraphy stone data to other peers
         const message = JSON.stringify({
