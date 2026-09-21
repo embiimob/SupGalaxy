@@ -655,6 +655,55 @@ ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) 
             }
         }
         
+        // Clean up special stones in this chunk
+        if (typeof magicianStones !== 'undefined') {
+            for (const key in magicianStones) {
+                if (Object.hasOwnProperty.call(magicianStones, key)) {
+                    const stone = magicianStones[key];
+                    const cx = Math.floor(modWrap(stone.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(stone.z, MAP_SIZE) / CHUNK_SIZE);
+                    if (chunk.cx === cx && chunk.cz === cz) {
+                        if (typeof cleanupMagicianStone === 'function') {
+                            cleanupMagicianStone(stone, key);
+                        }
+                        delete magicianStones[key];
+                    }
+                }
+            }
+        }
+
+        if (typeof calligraphyStones !== 'undefined') {
+            for (const key in calligraphyStones) {
+                if (Object.hasOwnProperty.call(calligraphyStones, key)) {
+                    const stone = calligraphyStones[key];
+                    const cx = Math.floor(modWrap(stone.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(stone.z, MAP_SIZE) / CHUNK_SIZE);
+                    if (chunk.cx === cx && chunk.cz === cz) {
+                        if (typeof cleanupCalligraphyStone === 'function') {
+                            cleanupCalligraphyStone(stone, key);
+                        }
+                        delete calligraphyStones[key];
+                    }
+                }
+            }
+        }
+
+        if (typeof chests !== 'undefined') {
+            for (const key in chests) {
+                if (Object.hasOwnProperty.call(chests, key)) {
+                    const chest = chests[key];
+                    const cx = Math.floor(modWrap(chest.x, MAP_SIZE) / CHUNK_SIZE);
+                    const cz = Math.floor(modWrap(chest.z, MAP_SIZE) / CHUNK_SIZE);
+                    if (chunk.cx === cx && chunk.cz === cz) {
+                        if (typeof cleanupChest === 'function') {
+                            cleanupChest(chest, key);
+                        }
+                        delete chests[key];
+                    }
+                }
+            }
+        }
+
         // Remove the chunk from the manager
         this.chunks.delete(chunk.key);
     }
