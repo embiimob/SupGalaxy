@@ -1361,6 +1361,7 @@ async function createMagicianStoneScreen(stoneData) {
         if (typeof cleanupMagicianStone === 'function') {
             cleanupMagicianStone(magicianStones[key], key);
         }
+        delete magicianStones[key];
     }
     if (magicianStonesLoading.has(key)) {
         return;
@@ -1770,6 +1771,7 @@ function createCalligraphyStoneScreen(stoneData) {
         if (typeof cleanupCalligraphyStone === 'function') {
             cleanupCalligraphyStone(calligraphyStones[key], key);
         }
+        delete calligraphyStones[key];
     }
     if (calligraphyStonesLoading.has(key)) {
         return;
