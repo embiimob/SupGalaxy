@@ -1,4 +1,5 @@
-        window.worker = new Worker(URL.createObjectURL(new Blob([`
+if (typeof window === 'undefined') {
+
 const CHUNK_SIZE = 16;
 const MAX_HEIGHT = 256;
 const SEA_LEVEL = 16;
@@ -1613,7 +1614,10 @@ self.onmessage = async function(e) {
             self.postMessage({ type: "cleanup_pending", keysToDelete: keysToDelete });
         }
 };
-        `], { type: 'application/javascript' })));
+} else {
+    if (typeof window.worker === "undefined") {
+        window.worker = new Worker("js/worker.js");
+    }
         worker.onmessage = function (e) {
             var data = e.data;
             if (data.type === "worlds_users") {
@@ -1924,7 +1928,7 @@ self.onmessage = async function(e) {
                 }
             }
         };
-        function triggerPoll() {
+        window.triggerPoll = function() {
             if (isPromptOpen) {
                 console.log('[Worker] Skipping poll, prompt open');
                 return;
@@ -2010,8 +2014,9 @@ self.onmessage = async function(e) {
             });
         }
 
-        function startWorker() {
+        window.startWorker = function() {
             console.log('[Worker] Initializing worker with isHost:', isHost, 'userName:', userName, 'worldName:', worldName);
-            triggerPoll(); // Trigger initial poll immediately upon loading
+            window.triggerPoll(); // Trigger initial poll immediately upon loading
             // The polling is now triggered by player movement and pauses in the gameLoop.
         }
+}
