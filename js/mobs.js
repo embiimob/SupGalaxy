@@ -513,11 +513,11 @@ Mob.prototype.update = function (t) {
                         const pPos = this.pos.clone().add(offsets[i]);
                         createProjectile(pid, this.id, pPos, dir, "blue");
 
-                        if (typeof laserFireQueue !== "undefined") {
-                            laserFireQueue.push({
+                        if (typeof window.laserFireQueue !== "undefined") {
+                            window.laserFireQueue.push({
                                 id: pid,
                                 user: this.id,
-                                world: typeof worldName !== "undefined" ? worldName : "",
+                                world: typeof window.worldName !== "undefined" ? window.worldName : "",
                                 position: { x: pPos.x, y: pPos.y, z: pPos.z },
                                 direction: { x: dir.x, y: dir.y, z: dir.z },
                                 color: "blue"

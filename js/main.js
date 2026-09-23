@@ -1101,6 +1101,7 @@ function releaseProjectileMesh(mesh) {
     if (mesh) {
         mesh.inUse = false;
         mesh.visible = false;
+        mesh.scale.set(1, 1, 1);
     }
 }
 
@@ -1112,7 +1113,7 @@ function createProjectile(e, t, o, a, n = "red") {
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
-    if (b) { c.scale.set(1, 1, 3); }
+    if (b) { c.scale.set(3, 3, 6); } else { c.scale.set(1, 1, 1); }
     const p = getProjectileLight(i);
     p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
