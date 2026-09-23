@@ -864,6 +864,43 @@ function setupDataChannel(e, t) {
                     break;
                 case "add_score":
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
+                    // Broadcast new score to host so it updates all clients
+                    if (!isHost) {
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: "peer_score_update",
+                                    username: userName,
+                                    score: player.score
+                                }));
+                                break;
+                            }
+                        }
+                    } else {
+                        // Host updates its own score and broadcasts to clients
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(JSON.stringify({
+                                    type: "peer_score_update",
+                                    username: userName,
+                                    score: player.score
+                                }));
+                            }
+                        }
+                    }
+                    break;
+                case "peer_score_update":
+                    if (userPositions[s.username]) {
+                        userPositions[s.username].score = s.score;
+                    }
+                    if (isHost) {
+                        // Relay to other clients
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(e.data);
+                            }
+                        }
+                    }
                     break;
                 case "player_attack":
                     if (isHost) {

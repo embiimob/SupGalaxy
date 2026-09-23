@@ -1105,12 +1105,14 @@ function releaseProjectileMesh(mesh) {
 }
 
 function createProjectile(e, t, o, a, n = "red") {
-    const r = "green" === n,
-        s = r ? 20 : 10,
-        i = r ? 65280 : 16711680,
+    const b = "blue" === n,
+        r = "green" === n,
+        s = r || b ? 20 : 10,
+        i = b ? 0x0000FF : (r ? 65280 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
+    if (b) { c.scale.set(1, 1, 3); }
     const p = getProjectileLight(i);
     p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
@@ -1119,7 +1121,8 @@ function createProjectile(e, t, o, a, n = "red") {
         velocity: a.multiplyScalar(s),
         createdAt: Date.now(),
         light: p,
-        isGreen: r
+        isGreen: r,
+        isBlue: b
     })
 }
 
@@ -5159,22 +5162,32 @@ function gameLoop(e) {
                 r = Math.floor(o.mesh.position.z);
             if (isSolid(getBlockAt(a, n, r))) {
                 if (isHost || peers.size === 0) {
-                    removeBlockAt(a, n, r, o.user);
+                    if (o.isBlue) {
+                        removeBlockAt(a, n, r, o.user);
+                        removeBlockAt(a, n - 1, r, o.user);
+                        removeBlockAt(a, n - 2, r, o.user);
+                    } else {
+                        removeBlockAt(a, n, r, o.user);
+                    }
                 } else {
-                    const blockId = getBlockAt(a, n, r);
-                    if (blockId > 0) {
-                        const blockHitMsg = JSON.stringify({
-                            type: 'block_hit',
-                            x: a,
-                            y: n,
-                            z: r,
-                            username: o.user,
-                            world: worldName,
-                            blockId: blockId
-                        });
-                        for (const [, peer] of peers.entries()) {
-                            if (peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(blockHitMsg);
+                    const depths = o.isBlue ? [0, 1, 2] : [0];
+                    for (const d of depths) {
+                        const currentY = n - d;
+                        const blockId = getBlockAt(a, currentY, r);
+                        if (blockId > 0) {
+                            const blockHitMsg = JSON.stringify({
+                                type: 'block_hit',
+                                x: a,
+                                y: currentY,
+                                z: r,
+                                username: o.user,
+                                world: worldName,
+                                blockId: blockId
+                            });
+                            for (const [, peer] of peers.entries()) {
+                                if (peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(blockHitMsg);
+                                }
                             }
                         }
                     }
@@ -5187,7 +5200,7 @@ function gameLoop(e) {
             let s = !1;
             for (const t of mobs)
                 if (o.mesh.position.distanceTo(t.pos) < 1) {
-                    const a = o.isGreen ? 10 : 5;
+                    const a = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                     if (isHost || 0 === peers.size) t.hurt(a, o.user);
                     else
                         for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
@@ -5207,7 +5220,7 @@ function gameLoop(e) {
                 if (o.user !== userName) { // Can't be hit by your own projectile
                     const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
                     if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
-                        const damage = o.isGreen ? 10 : 5;
+                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                         player.health -= damage;
                         document.getElementById("health").innerText = player.health;
                         updateHealthBar();
@@ -5231,7 +5244,7 @@ function gameLoop(e) {
                         remotePlayerPos.y += player.height / 2; // Adjust to player center
 
                         if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
-                            const damage = o.isGreen ? 10 : 5;
+                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                             const peer = peers.get(username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
                                 peer.dc.send(JSON.stringify({

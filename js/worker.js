@@ -137,7 +137,7 @@ const ARCHETYPES = {
         name: 'Moon',
         gravity: 8.0,
         skyType: 'moon',
-        mobSpawnRules: { day: ['crawley'], night: [] },
+        mobSpawnRules: { day: ['crawley', 'ufo_saucer'], night: ['ufo_saucer'] },
         terrainGenerator: 'generateMoonTerrain',
         biomeModifications: { noWater: true },
         flora: []
@@ -146,7 +146,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
+        mobSpawnRules: { day: ['crawley', 'ufo_saucer'], night: ['crawley', 'ufo_saucer'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
