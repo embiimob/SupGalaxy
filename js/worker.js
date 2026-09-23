@@ -1595,6 +1595,9 @@ self.onmessage = async function(e) {
             data.transactionIds.forEach(function(id) { processedMessages.add(id); });
         } else if (type === "retry_chunk") {
             self.postMessage({ type: "poll", chunkKeys: [data.chunkKey], masterKey: masterKey, userAddress: userAddress, worldName: worldName });
+        } else if (type === "force_poll") {
+            pending.clear();
+            triggerPoll();
         } else if (type === "cleanup_pending") {
             var pcx = data.pcx, pcz = data.pcz, pendingKeys = data.pendingKeys, chunksPerSide = data.chunksPerSide, pollRadius = data.pollRadius;
             var keysToDelete = [];

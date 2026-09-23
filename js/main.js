@@ -2839,6 +2839,12 @@ function respawnPlayer(e, t, o) {
         }
     } else camera.position.set(player.x, player.y + 5, player.z + 10), controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2), controls.update();
     document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
+
+    // Tell worker to stop looking at old chunks and poll new location immediately
+    lastPollPosition.copy(player);
+    hasMovedSubstantially = false;
+    worker.postMessage({ type: 'force_poll' });
+
     const h = JSON.stringify({
         type: "player_respawn",
         username: userName,
@@ -4532,6 +4538,11 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Re-initialize signaling for the new world - cache messages and start polling for offers/answers
     initServers();
+
+    // Tell worker to stop looking at old chunks and poll new location immediately
+    lastPollPosition.copy(player);
+    hasMovedSubstantially = false;
+    worker.postMessage({ type: 'force_poll' });
 
     // If there are globally tracked mobs for this world, restore them to 3D instances
     if (window.mobsByWorld && window.mobsByWorld[worldName]) {
