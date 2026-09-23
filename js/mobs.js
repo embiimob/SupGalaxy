@@ -117,18 +117,29 @@ function Mob(t, e, s, i = "crawley") {
     } else if ("ufo_saucer" === this.type) {
         this.hp = 200;
         this.mesh = new THREE.Group();
-        const bodyGeo = new THREE.ConeGeometry(25, 75, 15);
+        // A flat wedge shape
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 40); // nose
+        shape.lineTo(25, -40); // back right
+        shape.lineTo(-25, -40); // back left
+        shape.lineTo(0, 40); // back to nose
+
+        const extrudeSettings = { depth: 10, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 1, bevelThickness: 1 };
+        const bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+        // Center the geometry so it pivots correctly
+        bodyGeo.computeBoundingBox();
+        const centerOffset = new THREE.Vector3();
+        bodyGeo.boundingBox.getCenter(centerOffset);
+        bodyGeo.translate(-centerOffset.x, -centerOffset.y, -centerOffset.z);
+
+        // Rotate so it lays flat (X/Z plane) and points forward (+Z or -Z depending on orientation, we want nose forward)
         bodyGeo.rotateX(Math.PI / 2);
-        bodyGeo.rotateZ(Math.PI);
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+        bodyGeo.rotateY(Math.PI); // Point nose in the correct direction
+
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
         this.mesh.add(bodyMesh);
-
-        const cabinGeo = new THREE.BoxGeometry(10, 15, 20);
-        const cabinMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-        const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
-        cabinMesh.position.set(0, 10, 5);
-        this.mesh.add(cabinMesh);
 
         const engineLight1 = new THREE.PointLight(0x00ffff, 5, 50);
         engineLight1.position.set(-8, 5, -35);
@@ -466,30 +477,55 @@ Mob.prototype.update = function (t) {
             const dist = Math.hypot(dx, dz);
 
             if (dist > 40) {
-                this.pos.x += (dx / dist) * 15 * t;
-                this.pos.z += (dz / dist) * 15 * t;
+                this.pos.x += (dx / dist) * 5 * t;
+                this.pos.z += (dz / dist) * 5 * t;
             }
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
             const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 60;
             if (this.pos.y > targetY) {
-                this.pos.y -= 10 * t;
+                this.pos.y -= 5 * t;
             } else if (this.pos.y < targetY) {
-                this.pos.y += 10 * t;
+                this.pos.y += 5 * t;
             }
 
-            this.mesh.rotation.y = Math.atan2(dx, dz);
+            // Smoothly rotate towards the target
+            const targetRotation = Math.atan2(dx, dz);
+            // Angle difference clamping to make the massive ship turn slowly
+            let angleDiff = targetRotation - this.mesh.rotation.y;
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+            this.mesh.rotation.y += angleDiff * 0.5 * t;
 
             this.attackCooldown -= t;
             if (this.attackCooldown <= 0 && dist < 120) {
                 const dir = new THREE.Vector3().subVectors(targetPos, this.pos).normalize();
                 if (typeof createProjectile === "function") {
-                    createProjectile(this.id + '-' + Date.now() + '-1', this.id, this.pos.clone().add(new THREE.Vector3(-8, 0, 0)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-2', this.id, this.pos.clone().add(new THREE.Vector3(8, 0, 0)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-3', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, -8)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-4', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, 8)), dir, "blue");
+                    const offsets = [
+                        new THREE.Vector3(-8, 0, 0),
+                        new THREE.Vector3(8, 0, 0),
+                        new THREE.Vector3(0, 0, -8),
+                        new THREE.Vector3(0, 0, 8)
+                    ];
+
+                    for (let i = 0; i < offsets.length; i++) {
+                        const pid = this.id + '-' + Date.now() + '-' + i;
+                        const pPos = this.pos.clone().add(offsets[i]);
+                        createProjectile(pid, this.id, pPos, dir, "blue");
+
+                        if (typeof laserFireQueue !== "undefined") {
+                            laserFireQueue.push({
+                                id: pid,
+                                user: this.id,
+                                world: typeof worldName !== "undefined" ? worldName : "",
+                                position: { x: pPos.x, y: pPos.y, z: pPos.z },
+                                direction: { x: dir.x, y: dir.y, z: dir.z },
+                                color: "blue"
+                            });
+                        }
+                    }
                 }
-                this.attackCooldown = 0.5;
+                this.attackCooldown = 1.0;
             }
         }
         this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
