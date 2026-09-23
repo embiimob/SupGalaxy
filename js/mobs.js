@@ -511,7 +511,7 @@ Mob.prototype.update = function (t) {
                     for (let i = 0; i < offsets.length; i++) {
                         const pid = this.id + '-' + Date.now() + '-' + i;
                         const pPos = this.pos.clone().add(offsets[i]);
-                        createProjectile(pid, this.id, pPos, dir, "blue");
+                        createProjectile(pid, this.id, pPos, dir.clone(), "blue");
 
                         if (typeof window.laserFireQueue !== "undefined") {
                             window.laserFireQueue.push({
