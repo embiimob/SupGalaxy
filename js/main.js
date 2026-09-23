@@ -540,9 +540,30 @@ function initThree() {
     var e = new THREE.DirectionalLight(16777215, 1);
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized"), renderer.domElement.addEventListener("pointerdown", (function (e) {
-        onPointerDown(e)
-    })), renderer.domElement.addEventListener("wheel", (function (e) {
+    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
+
+    let pointerHoldTimeout = null;
+    let pointerHoldInterval = null;
+    const clearPointerHold = () => {
+        clearTimeout(pointerHoldTimeout);
+        clearInterval(pointerHoldInterval);
+    };
+
+    renderer.domElement.addEventListener("pointerdown", (function (e) {
+        onPointerDown(e);
+        if (e.button === 0) {
+            clearPointerHold();
+            pointerHoldTimeout = setTimeout(() => {
+                pointerHoldInterval = setInterval(() => {
+                    onPointerDown(e);
+                }, 200);
+            }, 500);
+        }
+    }));
+    renderer.domElement.addEventListener("pointerup", clearPointerHold);
+    renderer.domElement.addEventListener("pointerleave", clearPointerHold);
+
+    renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
             var t = e.deltaY > 0 ? 1 : -1;
             selectedHotIndex = (selectedHotIndex + t + 9) % 9, updateHotbarUI()
