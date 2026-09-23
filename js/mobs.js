@@ -117,20 +117,30 @@ function Mob(t, e, s, i = "crawley") {
     } else if ("ufo_saucer" === this.type) {
         this.hp = 200;
         this.mesh = new THREE.Group();
-        const bodyGeo = new THREE.ConeGeometry(5, 15, 3);
+        const bodyGeo = new THREE.ConeGeometry(25, 75, 15);
         bodyGeo.rotateX(Math.PI / 2);
         bodyGeo.rotateZ(Math.PI);
         const bodyMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
         this.mesh.add(bodyMesh);
 
-        const engineLight1 = new THREE.PointLight(0x0000ff, 2, 20);
-        engineLight1.position.set(-2, 0, -7.5);
+        const cabinGeo = new THREE.BoxGeometry(10, 15, 20);
+        const cabinMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
+        cabinMesh.position.set(0, 10, 5);
+        this.mesh.add(cabinMesh);
+
+        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight1.position.set(-8, 5, -35);
         this.mesh.add(engineLight1);
 
-        const engineLight2 = new THREE.PointLight(0x0000ff, 2, 20);
-        engineLight2.position.set(2, 0, -7.5);
+        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight2.position.set(8, 5, -35);
         this.mesh.add(engineLight2);
+
+        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight3.position.set(0, 8, -35);
+        this.mesh.add(engineLight3);
 
         this.originalColor = null;
     }
@@ -272,7 +282,11 @@ function manageMobs() {
             else if ("grub" === type) maxCount = 2;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
-                if (player.score < 100) continue;
+                let highestScore = player.score;
+                for (const p of Object.values(userPositions)) {
+                    if (p.score > highestScore) highestScore = p.score;
+                }
+                if (highestScore < 100) continue;
                 if (Math.random() > 0.02) continue;
             } else continue;
 
@@ -394,12 +408,23 @@ Mob.prototype.update = function (t) {
 
         const lights = this.mesh.children.filter(c => c.isPointLight);
         if (lights.length > 0) {
-            const intensity = 2 + Math.sin(Date.now() * 0.01) * 2;
+            const intensity = 5 + Math.sin(Date.now() * 0.01) * 5;
             lights.forEach(l => l.intensity = intensity);
         }
 
         if (!this.lastRumbleTime || Date.now() - this.lastRumbleTime > 2000) {
-            safePlayAudio(document.getElementById(`rumble${Math.floor(Math.random() * 6)}`));
+            const a = document.getElementById(`rumble${Math.floor(Math.random() * 6)}`);
+            if (a) {
+                const distToPlayer = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+                const maxAudioDistance = 192;
+                let volume = 0;
+                if (distToPlayer < maxAudioDistance) {
+                    volume = Math.max(0, 1 - distToPlayer / maxAudioDistance);
+                }
+                a.volume = volume;
+                a.currentTime = 0;
+                a.play().catch(e => {});
+            }
             this.lastRumbleTime = Date.now();
         }
 
@@ -409,8 +434,21 @@ Mob.prototype.update = function (t) {
 
         if (this.aiState === "LEAVING") {
             this.pos.y += 20 * t;
-            if (this.pos.y > 500) {
-                this.hp = 0;
+            this.pos.x += Math.cos(this.mesh.rotation.y) * 20 * t;
+            this.pos.z -= Math.sin(this.mesh.rotation.y) * 20 * t;
+            if (this.pos.y > 800) {
+                try {
+                    scene.remove(this.mesh);
+                    disposeObject(this.mesh);
+                } catch (e) {}
+                mobs = mobs.filter((t => t.id !== this.id));
+                const s = JSON.stringify({ type: "mob_despawn", id: this.id, world: worldName });
+                for (const [peerName, peer] of peers.entries()) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(s);
+                    }
+                }
+                return;
             }
         } else {
             let targetPos = new THREE.Vector3(player.x, player.y, player.z);
@@ -427,23 +465,31 @@ Mob.prototype.update = function (t) {
             const dz = targetPos.z - this.pos.z;
             const dist = Math.hypot(dx, dz);
 
-            if (dist > 20) {
-                this.pos.x += (dx / dist) * 10 * t;
-                this.pos.z += (dz / dist) * 10 * t;
+            if (dist > 40) {
+                this.pos.x += (dx / dist) * 15 * t;
+                this.pos.z += (dz / dist) * 15 * t;
             }
-            this.pos.y = 220;
+
+            // Hover closer to the ground than 220, e.g. targetPos.y + 60
+            const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 60;
+            if (this.pos.y > targetY) {
+                this.pos.y -= 10 * t;
+            } else if (this.pos.y < targetY) {
+                this.pos.y += 10 * t;
+            }
+
             this.mesh.rotation.y = Math.atan2(dx, dz);
 
             this.attackCooldown -= t;
-            if (this.attackCooldown <= 0 && dist < 100) {
+            if (this.attackCooldown <= 0 && dist < 120) {
                 const dir = new THREE.Vector3().subVectors(targetPos, this.pos).normalize();
                 if (typeof createProjectile === "function") {
-                    createProjectile(this.id + '-' + Date.now() + '-1', this.id, this.pos.clone().add(new THREE.Vector3(-2, 0, 0)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-2', this.id, this.pos.clone().add(new THREE.Vector3(2, 0, 0)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-3', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, -2)), dir, "blue");
-                    createProjectile(this.id + '-' + Date.now() + '-4', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, 2)), dir, "blue");
+                    createProjectile(this.id + '-' + Date.now() + '-1', this.id, this.pos.clone().add(new THREE.Vector3(-8, 0, 0)), dir, "blue");
+                    createProjectile(this.id + '-' + Date.now() + '-2', this.id, this.pos.clone().add(new THREE.Vector3(8, 0, 0)), dir, "blue");
+                    createProjectile(this.id + '-' + Date.now() + '-3', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, -8)), dir, "blue");
+                    createProjectile(this.id + '-' + Date.now() + '-4', this.id, this.pos.clone().add(new THREE.Vector3(0, 0, 8)), dir, "blue");
                 }
-                this.attackCooldown = 3;
+                this.attackCooldown = 0.5;
             }
         }
         this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);

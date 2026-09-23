@@ -4484,13 +4484,25 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Clear mobs and their meshes
     mobs.forEach(mob => {
-        if (mob.mesh) scene.remove(mob.mesh);
+        if (mob.mesh) {
+            scene.remove(mob.mesh);
+            disposeObject(mob.mesh);
+        }
         if (mob.particles) scene.remove(mob.particles);
     });
     mobs = [];
+    window.mobsByWorld = {}; // Clear cached mobs so they don't respawn from previous worlds
 
     // Clear volcanoes and related particles
     volcanoes = [];
+    activeEruptions.forEach(eruption => {
+        const audioEl = document.getElementById(eruption.soundId);
+        if (audioEl) {
+            audioEl.pause();
+            audioEl.currentTime = 0;
+            audioEl.onended = null;
+        }
+    });
     activeEruptions = [];
     eruptedBlocks.forEach(block => scene.remove(block.mesh));
     eruptedBlocks = [];
@@ -4526,7 +4538,7 @@ function switchWorld(newWorldName, targetSpawn) {
     torchParticles.forEach(p => scene.remove(p));
     torchParticles.clear();
 
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
         claimed: !1
