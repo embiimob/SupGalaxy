@@ -140,6 +140,21 @@ function normalizeRootRecord(root, address) {
     });
 }
 
+async function GetPublicMessagesByAddress(address) {
+    try {
+        var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
+        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        var response = await fetch('https://p2fk.io/GetPublicMessagesByAddress/' + cleanAddress + '?mainnet=false');
+        if (!response.ok) {
+            return [];
+        }
+        var messages = await response.json();
+        return Array.isArray(messages) ? messages : [];
+    } catch (e) {
+        return [];
+    }
+}
+
 async function GetRootsByAddress(address, skip, qty) {
     try {
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));

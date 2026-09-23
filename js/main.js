@@ -4155,6 +4155,57 @@ async function startGame() {
         claimed: !1
     });
     keywordCache.set(userAddress, r);
+
+    // Process user session restoring
+    if (userAddress !== "anonymous") {
+        try {
+            const messages = await GetPublicMessagesByAddress(userAddress);
+            if (messages && messages.length > 0) {
+                const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
+                const filteredMessages = messages.filter(msg => {
+                    const messageText = msg.Message || '';
+                    return /_session_/i.test(messageText) && /\.json/i.test(messageText) && /IPFS:/i.test(messageText);
+                });
+
+                filteredMessages.sort((a, b) => {
+                    let dateAStr = a.BlockDate;
+                    let dateBStr = b.BlockDate;
+                    if (dateAStr && !dateAStr.endsWith('Z') && !dateAStr.endsWith('UTC')) {
+                        dateAStr += dateAStr.includes('T') ? 'Z' : ' UTC';
+                    }
+                    if (dateBStr && !dateBStr.endsWith('Z') && !dateBStr.endsWith('UTC')) {
+                        dateBStr += dateBStr.includes('T') ? 'Z' : ' UTC';
+                    }
+                    const dateA = new Date(dateAStr).getTime();
+                    const dateB = new Date(dateBStr).getTime();
+                    return dateB - dateA;
+                });
+
+                if (filteredMessages.length > 0) {
+                    const latestMsg = filteredMessages[0];
+                    const messageText = latestMsg.Message || '';
+                    const matches = [...messageText.matchAll(ipfsExtractRegex)];
+                    if (matches.length > 0) {
+                        const hash = matches[0][1];
+                        const response = await window.fetchIPFSWithFallback(hash, null);
+                        if (response.ok) {
+                            const jsonData = await response.json();
+                            let bDateStr = latestMsg.BlockDate;
+                            if (bDateStr && !bDateStr.endsWith('Z') && !bDateStr.endsWith('UTC')) {
+                                bDateStr += bDateStr.includes('T') ? 'Z' : ' UTC';
+                            }
+                            addMessage("Restoring you to the last known save point...", 5e3);
+                            await applySaveFile(jsonData, userAddress, new Date(bDateStr).toISOString());
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Failed to restore session", e);
+        }
+    }
+
     document.getElementById("loginOverlay").style.display = "none";
     document.getElementById("hud").style.display = "block";
     document.getElementById("hotbar").style.display = "flex";
