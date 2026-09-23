@@ -2839,6 +2839,14 @@ function respawnPlayer(e, t, o) {
         }
     } else camera.position.set(player.x, player.y + 5, player.z + 10), controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2), controls.update();
     document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
+
+    // Force immediate chunk scanning upon teleport/spawn to avoid 1-minute delay
+    if (typeof triggerPoll === 'function') {
+        triggerPoll();
+    }
+    lastPollPosition.copy(player);
+    hasMovedSubstantially = !1;
+
     const h = JSON.stringify({
         type: "player_respawn",
         username: userName,
@@ -4510,6 +4518,13 @@ function switchWorld(newWorldName, targetSpawn) {
     restoreWorldStoneData(worldName);
 
     addMessage(`Switched to world: ${worldName}`, 4e3);
+
+    // Force immediate chunk scanning upon teleport/spawn to avoid 1-minute delay
+    if (typeof triggerPoll === 'function') {
+        triggerPoll();
+    }
+    lastPollPosition.copy(player);
+    hasMovedSubstantially = !1;
 
     for (const [peerUsername, peer] of peers.entries()) {
         if (peer.dc && peer.dc.readyState === 'open') {
