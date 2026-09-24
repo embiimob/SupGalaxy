@@ -5173,6 +5173,86 @@ function gameLoop(e) {
             const a = Math.floor(o.mesh.position.x),
                 n = Math.floor(o.mesh.position.y),
                 r = Math.floor(o.mesh.position.z);
+
+            let s = !1;
+
+            // MOB COLLISION LOGIC
+            for (const t of mobs)
+                if (o.mesh.position.distanceTo(t.pos) < 1) {
+                    const a = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                    if (isHost || 0 === peers.size) t.hurt(a, o.user);
+                    else
+                        for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
+                            type: "mob_hit",
+                            id: t.id,
+                            damage: a,
+                            username: o.user
+                        }));
+                    releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
+                    break
+                }
+
+            if (!s) {
+                // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
+                if (isHost) {
+                    let hitPlayer = false;
+
+                    // First, check for collision with the host player itself
+                    if (o.user !== userName) { // Can't be hit by your own projectile
+                        const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
+                        if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
+                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                            player.health -= damage;
+                            document.getElementById("health").innerText = player.health;
+                            updateHealthBar();
+                            addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+                            player.health <= 0 && handlePlayerDeath();
+
+                            hitPlayer = true;
+                        }
+                    }
+
+                    // If no hit on host, check remote players
+                    if (!hitPlayer) {
+                        for (const [username, avatar] of playerAvatars.entries()) {
+                            // This check is redundant if projectile owner is not in playerAvatars, but good for safety
+                            if (o.user === username) continue;
+
+                            const remotePlayerPos = new THREE.Vector3();
+                            avatar.getWorldPosition(remotePlayerPos);
+                            remotePlayerPos.y += player.height / 2; // Adjust to player center
+
+                            if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
+                                const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                                const peer = peers.get(username);
+                                if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(JSON.stringify({
+                                        type: 'player_damage',
+                                        damage: damage,
+                                        attacker: o.user
+                                    }));
+                                }
+                                hitPlayer = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If any player was hit, destroy the projectile and move to the next one
+                    if (hitPlayer) {
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                    }
+                }
+            }
+
+            if (s) continue;
+
+            // BLOCK COLLISION LOGIC
             if (isSolid(getBlockAt(a, n, r))) {
                 if (isHost || peers.size === 0) {
                     if (o.isBlue) {
@@ -5209,76 +5289,6 @@ function gameLoop(e) {
                 releaseProjectileLight(o.light);
                 projectiles.splice(e, 1);
                 continue;
-            }
-            let s = !1;
-            for (const t of mobs)
-                if (o.mesh.position.distanceTo(t.pos) < 1) {
-                    const a = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
-                    if (isHost || 0 === peers.size) t.hurt(a, o.user);
-                    else
-                        for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
-                            type: "mob_hit",
-                            id: t.id,
-                            damage: a,
-                            username: o.user
-                        }));
-                    releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
-                    break
-                } if (!s) {
-            // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
-            if (isHost) {
-                let hitPlayer = false;
-
-                // First, check for collision with the host player itself
-                if (o.user !== userName) { // Can't be hit by your own projectile
-                    const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
-                    if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
-                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
-                        player.health -= damage;
-                        document.getElementById("health").innerText = player.health;
-                        updateHealthBar();
-                        addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
-                        flashDamageEffect();
-                        safePlayAudio(soundHit);
-                        player.health <= 0 && handlePlayerDeath();
-
-                        hitPlayer = true;
-                    }
-                }
-
-                // If no hit on host, check remote players
-                if (!hitPlayer) {
-                    for (const [username, avatar] of playerAvatars.entries()) {
-                        // This check is redundant if projectile owner is not in playerAvatars, but good for safety
-                        if (o.user === username) continue;
-
-                        const remotePlayerPos = new THREE.Vector3();
-                        avatar.getWorldPosition(remotePlayerPos);
-                        remotePlayerPos.y += player.height / 2; // Adjust to player center
-
-                        if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
-                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
-                            const peer = peers.get(username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({
-                                    type: 'player_damage',
-                                    damage: damage,
-                                    attacker: o.user
-                                }));
-                            }
-                            hitPlayer = true;
-                            break;
-                        }
-                    }
-                }
-
-                // If any player was hit, destroy the projectile and move to the next one
-                if (hitPlayer) {
-                    releaseProjectileMesh(o.mesh);
-                    releaseProjectileLight(o.light);
-                    projectiles.splice(e, 1);
-                    continue;
-                }
             }
 
             // Age out projectile if it didn't hit anything
