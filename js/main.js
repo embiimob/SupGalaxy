@@ -4471,7 +4471,7 @@ function updateProximityVideo() {
 }
 
 function switchWorld(newWorldName, targetSpawn) {
-    worldArchetype = null;
+    window.worldArchetype = null;
     const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
@@ -5289,7 +5289,11 @@ function gameLoop(e) {
                             if (o.user === username) continue;
 
                             const remotePlayerPos = new THREE.Vector3();
-                            avatar.group.getWorldPosition(remotePlayerPos);
+                            if (avatar.group) {
+                                avatar.group.getWorldPosition(remotePlayerPos);
+                            } else {
+                                avatar.getWorldPosition(remotePlayerPos);
+                            }
                             remotePlayerPos.y += player.height / 2; // Adjust to player center
 
                             const hitThreshold = o.isBlue ? 2.5 : 1.5;

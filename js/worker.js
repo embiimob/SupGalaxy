@@ -1731,9 +1731,9 @@ self.onmessage = async function(e) {
                 flowerLocations.push(data.location);
             } else if (data.type === 'world_archetype') {
                 if (data.seed === worldSeed) {
-                    worldArchetype = data.archetype;
+                    window.worldArchetype = data.archetype;
                     gravity = data.archetype.gravity;
-                    document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
+                    document.getElementById('worldLabel').textContent = `${worldName} (${data.archetype.name})`;
                 }
             } else if (data.type === "server_updates") {
                 console.log('[WebRTC] Received server_updates:', data.servers);
