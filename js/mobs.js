@@ -62,10 +62,10 @@ function Mob(t, e, s, i = "crawley") {
             e = createMobTexture(worldSeed, "grub_body"),
             s = createMobTexture(worldSeed, "grub_body", !0),
             i = createMobTexture(worldSeed, "grub_mouth"),
-            o = new THREE.MeshStandardMaterial({
+            o = new THREE.MeshLambertMaterial({
                 map: e
             }),
-            h = new THREE.MeshStandardMaterial({
+            h = new THREE.MeshLambertMaterial({
                 map: s
             }),
             a = [h, h, h, h, h, h];
@@ -97,7 +97,7 @@ function Mob(t, e, s, i = "crawley") {
         const d = new THREE.Mesh(p, l);
         d.position.set(.6 * t, .2 * t, 0), r.add(d);
         const m = new THREE.BoxGeometry(.4 * t, .1 * t, .1 * t),
-            y = new THREE.MeshStandardMaterial({
+            y = new THREE.MeshLambertMaterial({
                 map: i
             }),
             g = new THREE.Mesh(m, y);
@@ -110,7 +110,7 @@ function Mob(t, e, s, i = "crawley") {
         const M = makeSeededRandom(worldSeed + "_grub_glow_" + this.id),
             w = (new THREE.Color).setHSL(M(), .7 + .3 * M(), .5 + .2 * M());
         this.glowLight = new THREE.PointLight(w, 0, 10 * t), this.mesh.add(this.glowLight);
-        const T = new THREE.MeshStandardMaterial({
+        const T = new THREE.MeshLambertMaterial({
             color: 16711680
         });
         this.redMaterials = Array(a.length).fill(T)
@@ -166,32 +166,11 @@ function Mob(t, e, s, i = "crawley") {
             }
         }
 
-        // Generate Bridge Structure (rear)
-        const bridgeStartZ = length * 0.7;
-        const bridgeWidth = width * 0.3;
-        const bridgeLength = length * 0.15;
-        const bridgeHeight = height * 1.5;
-
-        for (let z = bridgeStartZ; z < bridgeStartZ + bridgeLength; z += voxelSize) {
-            for (let x = -bridgeWidth / 2; x <= bridgeWidth / 2; x += voxelSize) {
-                for (let y = height; y < height + bridgeHeight; y += voxelSize) {
-                    voxelPositions.push(new THREE.Vector3(x, y, z - length/2));
-                    voxelColors.push(bridgeColor);
-                }
-            }
-        }
-
-        // Bridge Sensor Domes
-        const domeY = height + bridgeHeight;
-        const domeZ = bridgeStartZ + bridgeLength * 0.5 - length/2;
-        voxelPositions.push(new THREE.Vector3(-bridgeWidth * 0.4, domeY, domeZ));
-        voxelColors.push(new THREE.Color(0x333333));
-        voxelPositions.push(new THREE.Vector3(bridgeWidth * 0.4, domeY, domeZ));
-        voxelColors.push(new THREE.Color(0x333333));
+        // Remove the bridge completely
 
         // Use InstancedMesh for performance
         const geo = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
-        const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.2 });
         const instancedMesh = new THREE.InstancedMesh(geo, mat, voxelPositions.length);
 
         const dummy = new THREE.Object3D();
@@ -230,7 +209,7 @@ function Mob(t, e, s, i = "crawley") {
 
         this.originalColor = null;
     }
-    this.mesh.userData.mobId = this.id, this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
+    if (this.mesh) { this.mesh.userData.mobId = this.id; this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z); scene.add(this.mesh); this.lastSentPos = new THREE.Vector3().copy(this.pos); this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion); }
 }
 
 function manageMobs() {
