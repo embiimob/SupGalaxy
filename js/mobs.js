@@ -306,8 +306,38 @@ function manageMobs() {
         }
     }
 
+    // Check if any player in the world is idle
+    let hasIdlePlayer = false;
+    const now = performance.now();
+    for (const p of playersInWorld) {
+        if (p.name === userName) {
+            // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
+                if (now - window.lastMoveTime > 3600000) {
+                    hasIdlePlayer = true;
+                    break;
+                }
+            } else if (typeof lastMoveTime !== 'undefined') {
+                if (now - lastMoveTime > 3600000) {
+                    hasIdlePlayer = true;
+                    break;
+                }
+            }
+        } else if (userPositions[p.name]) {
+            const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
+            if (now - peerMoveTime > 3600000) {
+                hasIdlePlayer = true;
+                break;
+            }
+        }
+    }
+
     // Despawn mobs that are too far from ANY player in their active area
-    const allowedTypes = isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day;
+    const allowedTypes = (isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day).slice();
+    if (hasIdlePlayer) {
+        allowedTypes.push("ufo_saucer");
+    }
+
     mobs = mobs.filter((mob) => {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
@@ -349,11 +379,6 @@ function manageMobs() {
             else if ("grub" === type) maxCount = 2;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
-                let highestScore = player.score;
-                for (const p of Object.values(userPositions)) {
-                    if (p.score > highestScore) highestScore = p.score;
-                }
-                if (highestScore < 100) continue;
                 if (Math.random() > 0.02) continue;
             } else continue;
 
