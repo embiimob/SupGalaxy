@@ -5199,8 +5199,10 @@ function gameLoop(e) {
 
                     // First, check for collision with the host player itself
                     if (o.user !== userName) { // Can't be hit by your own projectile
+                        // Adjust distance to be more forgiving for the host player depending on the projectile
                         const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
-                        if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
+                        const hitThreshold = o.isBlue ? 3.0 : 1.5;
+                        if (o.mesh.position.distanceTo(hostPlayerPos) < hitThreshold) {
                             const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                             player.health -= damage;
                             document.getElementById("health").innerText = player.health;
@@ -5224,7 +5226,8 @@ function gameLoop(e) {
                             avatar.getWorldPosition(remotePlayerPos);
                             remotePlayerPos.y += player.height / 2; // Adjust to player center
 
-                            if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
+                            const hitThreshold = o.isBlue ? 3.0 : 1.5;
+                            if (o.mesh.position.distanceTo(remotePlayerPos) < hitThreshold) {
                                 const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                                 const peer = peers.get(username);
                                 if (peer && peer.dc && peer.dc.readyState === 'open') {
