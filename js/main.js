@@ -5169,40 +5169,107 @@ function gameLoop(e) {
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
-            o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light.position.copy(o.mesh.position);
-            const a = Math.floor(o.mesh.position.x),
-                n = Math.floor(o.mesh.position.y),
-                r = Math.floor(o.mesh.position.z);
+            const prevPos = o.mesh.position.clone();
+
+            o.mesh.position.x += o.velocity.x * t;
+            o.mesh.position.y += o.velocity.y * t;
+            o.mesh.position.z += o.velocity.z * t;
+            o.light.position.copy(o.mesh.position);
+
+            const currentPos = o.mesh.position.clone();
+            const rayLength = prevPos.distanceTo(currentPos);
+            // Check every 0.5 units along the velocity path to prevent tunneling
+            const steps = Math.max(1, Math.ceil(rayLength / 0.5));
 
             let s = !1;
 
-            // MOB COLLISION LOGIC
-            for (const t of mobs)
-                if (o.mesh.position.distanceTo(t.pos) < 1) {
-                    const a = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
-                    if (isHost || 0 === peers.size) t.hurt(a, o.user);
-                    else
-                        for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
-                            type: "mob_hit",
-                            id: t.id,
-                            damage: a,
-                            username: o.user
-                        }));
-                    releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
-                    break
+            for (let step = 1; step <= steps; step++) {
+                if (s) break;
+
+                const stepPos = new THREE.Vector3().lerpVectors(prevPos, currentPos, step / steps);
+
+                const a = Math.floor(stepPos.x);
+                const n = Math.floor(stepPos.y);
+                const r = Math.floor(stepPos.z);
+
+                // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
+                if (isSolid(getBlockAt(a, n, r))) {
+                    if (isHost || peers.size === 0) {
+                        if (o.isBlue) {
+                            removeBlockAt(a, n, r, o.user);
+                            removeBlockAt(a, n - 1, r, o.user);
+                            removeBlockAt(a, n - 2, r, o.user);
+                        } else {
+                            removeBlockAt(a, n, r, o.user);
+                        }
+                    } else {
+                        const depths = o.isBlue ? [0, 1, 2] : [0];
+                        for (const d of depths) {
+                            const currentY = n - d;
+                            const blockId = getBlockAt(a, currentY, r);
+                            if (blockId > 0) {
+                                const blockHitMsg = JSON.stringify({
+                                    type: 'block_hit',
+                                    x: a,
+                                    y: currentY,
+                                    z: r,
+                                    username: o.user,
+                                    world: worldName,
+                                    blockId: blockId
+                                });
+                                for (const [, peer] of peers.entries()) {
+                                    if (peer.dc && peer.dc.readyState === 'open') {
+                                        peer.dc.send(blockHitMsg);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    createBlockParticles(a, n, r, getBlockAt(a, n, r));
+                    releaseProjectileMesh(o.mesh);
+                    releaseProjectileLight(o.light);
+                    projectiles.splice(e, 1);
+                    s = !0;
+                    break; // break steps loop
                 }
 
-            if (!s) {
-                // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
-                if (isHost) {
+                // 2. MOB COLLISION LOGIC
+                for (const mob of mobs) {
+                    if (stepPos.distanceTo(mob.pos) < 1.5) { // Mob hit threshold
+                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                        if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
+                        else {
+                            for (const [peerId, peer] of peers.entries()) {
+                                if (peer.dc && "open" === peer.dc.readyState) {
+                                    peer.dc.send(JSON.stringify({
+                                        type: "mob_hit",
+                                        id: mob.id,
+                                        damage: damage,
+                                        username: o.user
+                                    }));
+                                }
+                            }
+                        }
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                        break;
+                    }
+                }
+
+                if (s) break; // break steps loop
+
+                // 3. PLAYER COLLISION LOGIC
+                if (isHost || peers.size === 0) {
                     let hitPlayer = false;
 
                     // First, check for collision with the host player itself
                     if (o.user !== userName) { // Can't be hit by your own projectile
-                        // Adjust distance to be more forgiving for the host player depending on the projectile
                         const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
-                        const hitThreshold = o.isBlue ? 3.0 : 1.5;
-                        if (o.mesh.position.distanceTo(hostPlayerPos) < hitThreshold) {
+                        // Make blue laser slightly more forgiving
+                        const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                        if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
                             const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                             player.health -= damage;
                             document.getElementById("health").innerText = player.health;
@@ -5219,15 +5286,14 @@ function gameLoop(e) {
                     // If no hit on host, check remote players
                     if (!hitPlayer) {
                         for (const [username, avatar] of playerAvatars.entries()) {
-                            // This check is redundant if projectile owner is not in playerAvatars, but good for safety
                             if (o.user === username) continue;
 
                             const remotePlayerPos = new THREE.Vector3();
-                            avatar.getWorldPosition(remotePlayerPos);
+                            avatar.group.getWorldPosition(remotePlayerPos);
                             remotePlayerPos.y += player.height / 2; // Adjust to player center
 
-                            const hitThreshold = o.isBlue ? 3.0 : 1.5;
-                            if (o.mesh.position.distanceTo(remotePlayerPos) < hitThreshold) {
+                            const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                            if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
                                 const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                                 const peer = peers.get(username);
                                 if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -5238,61 +5304,23 @@ function gameLoop(e) {
                                     }));
                                 }
                                 hitPlayer = true;
-                                break;
+                                break; // break player loop
                             }
                         }
                     }
 
-                    // If any player was hit, destroy the projectile and move to the next one
+                    // If any player was hit, destroy the projectile
                     if (hitPlayer) {
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);
                         s = !0;
+                        break; // break steps loop
                     }
                 }
             }
 
-            if (s) continue;
-
-            // BLOCK COLLISION LOGIC
-            if (isSolid(getBlockAt(a, n, r))) {
-                if (isHost || peers.size === 0) {
-                    if (o.isBlue) {
-                        removeBlockAt(a, n, r, o.user);
-                        removeBlockAt(a, n - 1, r, o.user);
-                        removeBlockAt(a, n - 2, r, o.user);
-                    } else {
-                        removeBlockAt(a, n, r, o.user);
-                    }
-                } else {
-                    const depths = o.isBlue ? [0, 1, 2] : [0];
-                    for (const d of depths) {
-                        const currentY = n - d;
-                        const blockId = getBlockAt(a, currentY, r);
-                        if (blockId > 0) {
-                            const blockHitMsg = JSON.stringify({
-                                type: 'block_hit',
-                                x: a,
-                                y: currentY,
-                                z: r,
-                                username: o.user,
-                                world: worldName,
-                                blockId: blockId
-                            });
-                            for (const [, peer] of peers.entries()) {
-                                if (peer.dc && peer.dc.readyState === 'open') {
-                                    peer.dc.send(blockHitMsg);
-                                }
-                            }
-                        }
-                    }
-                }
-                releaseProjectileMesh(o.mesh);
-                releaseProjectileLight(o.light);
-                projectiles.splice(e, 1);
-                continue;
-            }
+            if (s) continue; // continue main projectiles loop
 
             // Age out projectile if it didn't hit anything
             if (Date.now() - o.createdAt > 5e3) {
