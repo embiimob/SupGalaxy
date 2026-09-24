@@ -117,40 +117,115 @@ function Mob(t, e, s, i = "crawley") {
     } else if ("ufo_saucer" === this.type) {
         this.hp = 200;
         this.mesh = new THREE.Group();
-        // A flat wedge shape
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 40); // nose
-        shape.lineTo(25, -40); // back right
-        shape.lineTo(-25, -40); // back left
-        shape.lineTo(0, 40); // back to nose
 
-        const extrudeSettings = { depth: 10, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 1, bevelThickness: 1 };
-        const bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        // Build Star Destroyer voxel construct
+        const voxelSize = 2;
+        const width = 60; // Max width at the back
+        const length = 100; // Total length
+        const height = 15; // Max height of main body
 
-        // Center the geometry so it pivots correctly
-        bodyGeo.computeBoundingBox();
-        const centerOffset = new THREE.Vector3();
-        bodyGeo.boundingBox.getCenter(centerOffset);
-        bodyGeo.translate(-centerOffset.x, -centerOffset.y, -centerOffset.z);
+        const voxelPositions = [];
+        const voxelColors = [];
+
+        // Colors for voxels
+        const hullColor = new THREE.Color(0x888888);
+        const darkHullColor = new THREE.Color(0x666666);
+        const engineColor = new THREE.Color(0x00ffff);
+        const bridgeColor = new THREE.Color(0x777777);
+
+        // Generate main triangular wedge
+        for (let z = 0; z < length; z += voxelSize) {
+            const currentWidth = width * (z / length); // Tapers to 0 at z=0 (nose)
+            const currentHeight = height * (z / length);
+
+            for (let x = -currentWidth / 2; x <= currentWidth / 2; x += voxelSize) {
+                // Outer edges are thinner, center is thicker
+                const distanceToEdge = (currentWidth / 2) - Math.abs(x);
+                const localMaxHeight = Math.max(1, currentHeight * (distanceToEdge / (currentWidth / 2)));
+
+                for (let y = -voxelSize; y < localMaxHeight; y += voxelSize) {
+                    // Introduce greebling by occasionally omitting surface voxels or raising them
+                    const isSurface = (y + voxelSize >= localMaxHeight) || (y === -voxelSize);
+                    let yOffset = 0;
+                    let color = hullColor;
+
+                    if (isSurface) {
+                        const r = Math.random();
+                        if (r < 0.05) continue; // Small holes/greebling
+                        if (r > 0.85) {
+                            yOffset += voxelSize; // Raised greebling
+                            color = darkHullColor;
+                        } else if (r > 0.7) {
+                            color = darkHullColor;
+                        }
+                    }
+
+                    voxelPositions.push(new THREE.Vector3(x, y + yOffset, z - length/2));
+                    voxelColors.push(color);
+                }
+            }
+        }
+
+        // Generate Bridge Structure (rear)
+        const bridgeStartZ = length * 0.7;
+        const bridgeWidth = width * 0.3;
+        const bridgeLength = length * 0.15;
+        const bridgeHeight = height * 1.5;
+
+        for (let z = bridgeStartZ; z < bridgeStartZ + bridgeLength; z += voxelSize) {
+            for (let x = -bridgeWidth / 2; x <= bridgeWidth / 2; x += voxelSize) {
+                for (let y = height; y < height + bridgeHeight; y += voxelSize) {
+                    voxelPositions.push(new THREE.Vector3(x, y, z - length/2));
+                    voxelColors.push(bridgeColor);
+                }
+            }
+        }
+
+        // Bridge Sensor Domes
+        const domeY = height + bridgeHeight;
+        const domeZ = bridgeStartZ + bridgeLength * 0.5 - length/2;
+        voxelPositions.push(new THREE.Vector3(-bridgeWidth * 0.4, domeY, domeZ));
+        voxelColors.push(new THREE.Color(0x333333));
+        voxelPositions.push(new THREE.Vector3(bridgeWidth * 0.4, domeY, domeZ));
+        voxelColors.push(new THREE.Color(0x333333));
+
+        // Use InstancedMesh for performance
+        const geo = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+        const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const instancedMesh = new THREE.InstancedMesh(geo, mat, voxelPositions.length);
+
+        const dummy = new THREE.Object3D();
+        const tempColor = new THREE.Color();
+
+        for (let i = 0; i < voxelPositions.length; i++) {
+            dummy.position.copy(voxelPositions[i]);
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+            tempColor.copy(voxelColors[i]);
+            instancedMesh.setColorAt(i, tempColor);
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        instancedMesh.instanceColor.needsUpdate = true;
 
         // Rotate so it lays flat (X/Z plane) and points forward (+Z or -Z depending on orientation, we want nose forward)
-        bodyGeo.rotateX(Math.PI / 2);
-        bodyGeo.rotateY(Math.PI); // Point nose in the correct direction
+        // Nose is currently at z = -length/2 because of `z - length/2`. We want nose forward, which is +Z in three.js typically?
+        // Let's match original rotation logic where nose points in target direction
+        instancedMesh.rotation.y = Math.PI; // Point nose in the correct direction
 
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.add(bodyMesh);
+        this.mesh.add(instancedMesh);
 
-        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight1.position.set(-8, 5, -35);
+        // Engines at the rear (z = length/2 rotated by PI, so effectively -length/2 in mesh space)
+        const rearZ = length/2 - voxelSize;
+        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight1.position.set(-width*0.2, 0, rearZ);
         this.mesh.add(engineLight1);
 
-        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight2.position.set(8, 5, -35);
+        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight2.position.set(width*0.2, 0, rearZ);
         this.mesh.add(engineLight2);
 
-        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight3.position.set(0, 8, -35);
+        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight3.position.set(0, height*0.3, rearZ);
         this.mesh.add(engineLight3);
 
         this.originalColor = null;
@@ -262,6 +337,8 @@ function manageMobs() {
             // If we are a spawner for the area the mob *was* in, broadcast despawn.
             // A simpler approach: Anyone can locally despawn if it's too far from everyone.
             // If they are a spawner, they broadcast it.
+            if (mob.engineAudio) mob.engineAudio.pause();
+            if (mob.engineAudio2) mob.engineAudio2.pause();
             scene.remove(mob.mesh);
             disposeObject(mob.mesh);
 

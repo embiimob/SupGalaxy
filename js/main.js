@@ -4485,6 +4485,8 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Clear mobs and their meshes
     mobs.forEach(mob => {
+        if (mob.engineAudio) mob.engineAudio.pause();
+        if (mob.engineAudio2) mob.engineAudio2.pause();
         if (mob.mesh) {
             scene.remove(mob.mesh);
             disposeObject(mob.mesh);
