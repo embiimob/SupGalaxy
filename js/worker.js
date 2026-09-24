@@ -943,6 +943,11 @@ self.onmessage = async function(e) {
             console.log('[Worker] Synced processedMessages, size:', processedMessages.size);
             return;
         }
+        if (type === "clear_processed") {
+            processedMessages.clear();
+            console.log('[Worker] Cleared processedMessages, size:', processedMessages.size);
+            return;
+        }
         if (type === "poll") {
             var updatesByTransaction = new Map();
             var ownershipByChunk = new Map();
