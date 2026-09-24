@@ -1148,7 +1148,7 @@ self.onmessage = async function(e) {
                             var keywordCandidates = [normalizedKeyword];
                             normalizedKeyword.startsWith("o") && keywordCandidates.unshift(normalizedKeyword.slice(1).trim());
                             for (var outputKeyword of keywordCandidates) {
-                                if (!outputKeyword || outputKeyword === MASTER_WORLD_KEY) continue;
+                                if (!outputKeyword || outputKeyword === "MCWorlds") continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
                                     var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
                                     if (outputWorldName) {
@@ -1731,9 +1731,9 @@ self.onmessage = async function(e) {
                 flowerLocations.push(data.location);
             } else if (data.type === 'world_archetype') {
                 if (data.seed === worldSeed) {
-                    window.worldArchetype = data.archetype;
+                    worldArchetype = data.archetype;
                     gravity = data.archetype.gravity;
-                    document.getElementById('worldLabel').textContent = `${worldName} (${data.archetype.name})`;
+                    document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
                 }
             } else if (data.type === "server_updates") {
                 console.log('[WebRTC] Received server_updates:', data.servers);
@@ -1994,7 +1994,7 @@ self.onmessage = async function(e) {
             worker.postMessage({
                 type: 'poll',
                 chunkKeys: filteredKeys,
-                masterKey: MASTER_WORLD_KEY,
+                masterKey: "MCWorlds",
                 userAddress: userAddress,
                 worldName: worldName,
                 serverKeyword: serverKeyword,

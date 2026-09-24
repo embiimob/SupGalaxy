@@ -4471,7 +4471,7 @@ function updateProximityVideo() {
 }
 
 function switchWorld(newWorldName, targetSpawn) {
-    window.worldArchetype = null;
+    worldArchetype = null;
     const e = newWorldName || prompt("Enter the name of the world to switch to:");
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
@@ -5169,24 +5169,18 @@ function gameLoop(e) {
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
-            const prevPos = o.mesh.position.clone();
+            o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light.position.copy(o.mesh.position);
+            const newPos = o.mesh.position.clone();
+            const oldPos = newPos.clone().sub(o.velocity.clone().multiplyScalar(t));
 
-            o.mesh.position.x += o.velocity.x * t;
-            o.mesh.position.y += o.velocity.y * t;
-            o.mesh.position.z += o.velocity.z * t;
-            o.light.position.copy(o.mesh.position);
+            // Continuous Collision Detection (CCD) by stepping along the trajectory
+            const distance = oldPos.distanceTo(newPos);
+            const steps = Math.ceil(distance / 0.5); // Check every 0.5 blocks
+            let s = !1; // collided flag
 
-            const currentPos = o.mesh.position.clone();
-            const rayLength = prevPos.distanceTo(currentPos);
-            // Check every 0.5 units along the velocity path to prevent tunneling
-            const steps = Math.max(1, Math.ceil(rayLength / 0.5));
-
-            let s = !1;
-
-            for (let step = 1; step <= steps; step++) {
-                if (s) break;
-
-                const stepPos = new THREE.Vector3().lerpVectors(prevPos, currentPos, step / steps);
+            for (let i = 1; i <= steps; i++) {
+                const stepPos = oldPos.clone().lerp(newPos, i / steps);
+                o.mesh.position.copy(stepPos); // Move mesh to step position for accurate distance checks
 
                 const a = Math.floor(stepPos.x);
                 const n = Math.floor(stepPos.y);
