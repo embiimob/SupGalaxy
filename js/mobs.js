@@ -510,7 +510,7 @@ Mob.prototype.update = function (t) {
                     for (let i = 0; i < offsets.length; i++) {
                         const pid = this.id + '-' + Date.now() + '-' + i;
                         const pPos = this.pos.clone().add(offsets[i]);
-                        const laserDir = new THREE.Vector3().subVectors(targetPos, this.pos).normalize();
+                        const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
 
                         createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
 
