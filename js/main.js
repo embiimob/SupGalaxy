@@ -1101,16 +1101,19 @@ function releaseProjectileMesh(mesh) {
     if (mesh) {
         mesh.inUse = false;
         mesh.visible = false;
+        mesh.scale.set(1, 1, 1);
     }
 }
 
 function createProjectile(e, t, o, a, n = "red") {
-    const r = "green" === n,
-        s = r ? 20 : 10,
-        i = r ? 65280 : 16711680,
+    const b = "blue" === n,
+        r = "green" === n,
+        s = r || b ? 20 : 10,
+        i = b ? 0x0000FF : (r ? 65280 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
+    if (b) { c.scale.set(3, 3, 6); } else { c.scale.set(1, 1, 1); }
     const p = getProjectileLight(i);
     p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
@@ -1119,7 +1122,8 @@ function createProjectile(e, t, o, a, n = "red") {
         velocity: a.multiplyScalar(s),
         createdAt: Date.now(),
         light: p,
-        isGreen: r
+        isGreen: r,
+        isBlue: b
     })
 }
 
@@ -4481,13 +4485,25 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Clear mobs and their meshes
     mobs.forEach(mob => {
-        if (mob.mesh) scene.remove(mob.mesh);
+        if (mob.mesh) {
+            scene.remove(mob.mesh);
+            disposeObject(mob.mesh);
+        }
         if (mob.particles) scene.remove(mob.particles);
     });
     mobs = [];
+    window.mobsByWorld = {}; // Clear cached mobs so they don't respawn from previous worlds
 
     // Clear volcanoes and related particles
     volcanoes = [];
+    activeEruptions.forEach(eruption => {
+        const audioEl = document.getElementById(eruption.soundId);
+        if (audioEl) {
+            audioEl.pause();
+            audioEl.currentTime = 0;
+            audioEl.onended = null;
+        }
+    });
     activeEruptions = [];
     eruptedBlocks.forEach(block => scene.remove(block.mesh));
     eruptedBlocks = [];
@@ -4523,7 +4539,7 @@ function switchWorld(newWorldName, targetSpawn) {
     torchParticles.forEach(p => scene.remove(p));
     torchParticles.clear();
 
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], mobs.forEach((e => scene.remove(e.mesh))), mobs = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
         claimed: !1
@@ -5154,106 +5170,155 @@ function gameLoop(e) {
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
             o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light.position.copy(o.mesh.position);
-            const a = Math.floor(o.mesh.position.x),
-                n = Math.floor(o.mesh.position.y),
-                r = Math.floor(o.mesh.position.z);
-            if (isSolid(getBlockAt(a, n, r))) {
-                if (isHost || peers.size === 0) {
-                    removeBlockAt(a, n, r, o.user);
-                } else {
-                    const blockId = getBlockAt(a, n, r);
-                    if (blockId > 0) {
-                        const blockHitMsg = JSON.stringify({
-                            type: 'block_hit',
-                            x: a,
-                            y: n,
-                            z: r,
-                            username: o.user,
-                            world: worldName,
-                            blockId: blockId
-                        });
-                        for (const [, peer] of peers.entries()) {
-                            if (peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(blockHitMsg);
+            const newPos = o.mesh.position.clone();
+            const oldPos = newPos.clone().sub(o.velocity.clone().multiplyScalar(t));
+
+            // Continuous Collision Detection (CCD) by stepping along the trajectory
+            const distance = oldPos.distanceTo(newPos);
+            const steps = Math.ceil(distance / 0.5); // Check every 0.5 blocks
+            let s = !1; // collided flag
+
+            for (let i = 1; i <= steps; i++) {
+                const stepPos = oldPos.clone().lerp(newPos, i / steps);
+                o.mesh.position.copy(stepPos); // Move mesh to step position for accurate distance checks
+
+                const a = Math.floor(stepPos.x);
+                const n = Math.floor(stepPos.y);
+                const r = Math.floor(stepPos.z);
+
+                // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
+                if (isSolid(getBlockAt(a, n, r))) {
+                    if (isHost || peers.size === 0) {
+                        if (o.isBlue) {
+                            removeBlockAt(a, n, r, o.user);
+                            removeBlockAt(a, n - 1, r, o.user);
+                            removeBlockAt(a, n - 2, r, o.user);
+                        } else {
+                            removeBlockAt(a, n, r, o.user);
+                        }
+                    } else {
+                        const depths = o.isBlue ? [0, 1, 2] : [0];
+                        for (const d of depths) {
+                            const currentY = n - d;
+                            const blockId = getBlockAt(a, currentY, r);
+                            if (blockId > 0) {
+                                const blockHitMsg = JSON.stringify({
+                                    type: 'block_hit',
+                                    x: a,
+                                    y: currentY,
+                                    z: r,
+                                    username: o.user,
+                                    world: worldName,
+                                    blockId: blockId
+                                });
+                                for (const [, peer] of peers.entries()) {
+                                    if (peer.dc && peer.dc.readyState === 'open') {
+                                        peer.dc.send(blockHitMsg);
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                releaseProjectileMesh(o.mesh);
-                releaseProjectileLight(o.light);
-                projectiles.splice(e, 1);
-                continue;
-            }
-            let s = !1;
-            for (const t of mobs)
-                if (o.mesh.position.distanceTo(t.pos) < 1) {
-                    const a = o.isGreen ? 10 : 5;
-                    if (isHost || 0 === peers.size) t.hurt(a, o.user);
-                    else
-                        for (const [e, n] of peers.entries()) n.dc && "open" === n.dc.readyState && n.dc.send(JSON.stringify({
-                            type: "mob_hit",
-                            id: t.id,
-                            damage: a,
-                            username: o.user
-                        }));
-                    releaseProjectileMesh(o.mesh), releaseProjectileLight(o.light), projectiles.splice(e, 1), s = !0;
-                    break
-                } if (!s) {
-            // HOST-AUTHORITATIVE PVP DAMAGE LOGIC
-            if (isHost) {
-                let hitPlayer = false;
-
-                // First, check for collision with the host player itself
-                if (o.user !== userName) { // Can't be hit by your own projectile
-                    const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
-                    if (o.mesh.position.distanceTo(hostPlayerPos) < 1.5) {
-                        const damage = o.isGreen ? 10 : 5;
-                        player.health -= damage;
-                        document.getElementById("health").innerText = player.health;
-                        updateHealthBar();
-                        addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
-                        flashDamageEffect();
-                        safePlayAudio(soundHit);
-                        player.health <= 0 && handlePlayerDeath();
-
-                        hitPlayer = true;
-                    }
-                }
-
-                // If no hit on host, check remote players
-                if (!hitPlayer) {
-                    for (const [username, avatar] of playerAvatars.entries()) {
-                        // This check is redundant if projectile owner is not in playerAvatars, but good for safety
-                        if (o.user === username) continue;
-
-                        const remotePlayerPos = new THREE.Vector3();
-                        avatar.getWorldPosition(remotePlayerPos);
-                        remotePlayerPos.y += player.height / 2; // Adjust to player center
-
-                        if (o.mesh.position.distanceTo(remotePlayerPos) < 1.5) {
-                            const damage = o.isGreen ? 10 : 5;
-                            const peer = peers.get(username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({
-                                    type: 'player_damage',
-                                    damage: damage,
-                                    attacker: o.user
-                                }));
-                            }
-                            hitPlayer = true;
-                            break;
-                        }
-                    }
-                }
-
-                // If any player was hit, destroy the projectile and move to the next one
-                if (hitPlayer) {
+                    createBlockParticles(a, n, r, getBlockAt(a, n, r));
                     releaseProjectileMesh(o.mesh);
                     releaseProjectileLight(o.light);
                     projectiles.splice(e, 1);
-                    continue;
+                    s = !0;
+                    break; // break steps loop
+                }
+
+                // 2. MOB COLLISION LOGIC
+                for (const mob of mobs) {
+                    if (stepPos.distanceTo(mob.pos) < 1.5) { // Mob hit threshold
+                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                        if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
+                        else {
+                            for (const [peerId, peer] of peers.entries()) {
+                                if (peer.dc && "open" === peer.dc.readyState) {
+                                    peer.dc.send(JSON.stringify({
+                                        type: "mob_hit",
+                                        id: mob.id,
+                                        damage: damage,
+                                        username: o.user
+                                    }));
+                                }
+                            }
+                        }
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                        break;
+                    }
+                }
+
+                if (s) break; // break steps loop
+
+                // 3. PLAYER COLLISION LOGIC
+                if (isHost || peers.size === 0) {
+                    let hitPlayer = false;
+
+                    // First, check for collision with the host player itself
+                    if (o.user !== userName) { // Can't be hit by your own projectile
+                        const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
+                        // Make blue laser slightly more forgiving
+                        const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                        if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
+                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                            player.health -= damage;
+                            document.getElementById("health").innerText = player.health;
+                            updateHealthBar();
+                            addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
+                            flashDamageEffect();
+                            safePlayAudio(soundHit);
+                            player.health <= 0 && handlePlayerDeath();
+
+                            hitPlayer = true;
+                        }
+                    }
+
+                    // If no hit on host, check remote players
+                    if (!hitPlayer) {
+                        for (const [username, avatar] of playerAvatars.entries()) {
+                            if (o.user === username) continue;
+
+                            const remotePlayerPos = new THREE.Vector3();
+                            if (avatar.group) {
+                                avatar.group.getWorldPosition(remotePlayerPos);
+                            } else {
+                                avatar.getWorldPosition(remotePlayerPos);
+                            }
+                            remotePlayerPos.y += player.height / 2; // Adjust to player center
+
+                            const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                            if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
+                                const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                                const peer = peers.get(username);
+                                if (peer && peer.dc && peer.dc.readyState === 'open') {
+                                    peer.dc.send(JSON.stringify({
+                                        type: 'player_damage',
+                                        damage: damage,
+                                        attacker: o.user
+                                    }));
+                                }
+                                hitPlayer = true;
+                                break; // break player loop
+                            }
+                        }
+                    }
+
+                    // If any player was hit, destroy the projectile
+                    if (hitPlayer) {
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                        break; // break steps loop
+                    }
                 }
             }
+
+            if (s) continue; // continue main projectiles loop
 
             // Age out projectile if it didn't hit anything
             if (Date.now() - o.createdAt > 5e3) {
@@ -5261,7 +5326,6 @@ function gameLoop(e) {
                 releaseProjectileLight(o.light);
                 projectiles.splice(e, 1);
             }
-        }
         }
 
         // Magician stone media playback and animation logic

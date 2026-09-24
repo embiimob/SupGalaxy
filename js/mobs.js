@@ -1,8 +1,11 @@
 function Mob(t, e, s, i = "crawley") {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, chunkManager.getSurfaceY(t, e) + 1, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    const yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
+    } else if ("ufo_saucer" === this.type) {
+        this.isAggressive = !0;
     } else {
         const t = makeSeededRandom(worldSeed + "_crawley_aggro")();
         this.isAggressive = t > .5
@@ -111,6 +114,46 @@ function Mob(t, e, s, i = "crawley") {
             color: 16711680
         });
         this.redMaterials = Array(a.length).fill(T)
+    } else if ("ufo_saucer" === this.type) {
+        this.hp = 200;
+        this.mesh = new THREE.Group();
+        // A flat wedge shape
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 40); // nose
+        shape.lineTo(25, -40); // back right
+        shape.lineTo(-25, -40); // back left
+        shape.lineTo(0, 40); // back to nose
+
+        const extrudeSettings = { depth: 10, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 1, bevelThickness: 1 };
+        const bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+        // Center the geometry so it pivots correctly
+        bodyGeo.computeBoundingBox();
+        const centerOffset = new THREE.Vector3();
+        bodyGeo.boundingBox.getCenter(centerOffset);
+        bodyGeo.translate(-centerOffset.x, -centerOffset.y, -centerOffset.z);
+
+        // Rotate so it lays flat (X/Z plane) and points forward (+Z or -Z depending on orientation, we want nose forward)
+        bodyGeo.rotateX(Math.PI / 2);
+        bodyGeo.rotateY(Math.PI); // Point nose in the correct direction
+
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+        this.mesh.add(bodyMesh);
+
+        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight1.position.set(-8, 5, -35);
+        this.mesh.add(engineLight1);
+
+        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight2.position.set(8, 5, -35);
+        this.mesh.add(engineLight2);
+
+        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 50);
+        engineLight3.position.set(0, 8, -35);
+        this.mesh.add(engineLight3);
+
+        this.originalColor = null;
     }
     this.mesh.userData.mobId = this.id, this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
 }
@@ -248,7 +291,15 @@ function manageMobs() {
             if ("crawley" === type) maxCount = 10;
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
-            else continue;
+            else if ("ufo_saucer" === type) {
+                maxCount = 1;
+                let highestScore = player.score;
+                for (const p of Object.values(userPositions)) {
+                    if (p.score > highestScore) highestScore = p.score;
+                }
+                if (highestScore < 100) continue;
+                if (Math.random() > 0.02) continue;
+            } else continue;
 
             // Count mobs of this type in this specific area
             let countInArea = 0;
@@ -363,6 +414,122 @@ Mob.prototype.update = function (t) {
             const e = t.userData.originalMaterial;
             e && (t.material = e)
         })) : this.originalColor && (this.mesh.material ? this.mesh.material.color.copy(this.originalColor) : this.mesh.children[0].material.color.copy(this.originalColor))
+    } else if ("ufo_saucer" === this.type) {
+        this.lingerTime += t * 1000;
+
+        const lights = this.mesh.children.filter(c => c.isPointLight);
+        if (lights.length > 0) {
+            const intensity = 5 + Math.sin(Date.now() * 0.01) * 5;
+            lights.forEach(l => l.intensity = intensity);
+        }
+
+        if (!this.lastRumbleTime || Date.now() - this.lastRumbleTime > 2000) {
+            const a = document.getElementById(`rumble${Math.floor(Math.random() * 6)}`);
+            if (a) {
+                const distToPlayer = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+                const maxAudioDistance = 192;
+                let volume = 0;
+                if (distToPlayer < maxAudioDistance) {
+                    volume = Math.max(0, 1 - distToPlayer / maxAudioDistance);
+                }
+                a.volume = volume;
+                a.currentTime = 0;
+                a.play().catch(e => {});
+            }
+            this.lastRumbleTime = Date.now();
+        }
+
+        if (this.lingerTime > 180000) {
+            this.aiState = "LEAVING";
+        }
+
+        if (this.aiState === "LEAVING") {
+            this.pos.y += 20 * t;
+            this.pos.x += Math.cos(this.mesh.rotation.y) * 20 * t;
+            this.pos.z -= Math.sin(this.mesh.rotation.y) * 20 * t;
+            if (this.pos.y > 800) {
+                try {
+                    scene.remove(this.mesh);
+                    disposeObject(this.mesh);
+                } catch (e) {}
+                mobs = mobs.filter((t => t.id !== this.id));
+                const s = JSON.stringify({ type: "mob_despawn", id: this.id, world: worldName });
+                for (const [peerName, peer] of peers.entries()) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(s);
+                    }
+                }
+                return;
+            }
+        } else {
+            let targetPos = new THREE.Vector3(player.x, player.y, player.z);
+            let highestScore = player.score;
+
+            for (const [peerName, pos] of Object.entries(userPositions)) {
+                if (pos.score !== undefined && pos.score > highestScore) {
+                    highestScore = pos.score;
+                    targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
+                }
+            }
+
+            const dx = targetPos.x - this.pos.x;
+            const dz = targetPos.z - this.pos.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist > 40) {
+                this.pos.x += (dx / dist) * 5 * t;
+                this.pos.z += (dz / dist) * 5 * t;
+            }
+
+            // Hover closer to the ground than 220, e.g. targetPos.y + 60
+            const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 60;
+            if (this.pos.y > targetY) {
+                this.pos.y -= 5 * t;
+            } else if (this.pos.y < targetY) {
+                this.pos.y += 5 * t;
+            }
+
+            // Smoothly rotate towards the target
+            const targetRotation = Math.atan2(dx, dz);
+            // Angle difference clamping to make the massive ship turn slowly
+            let angleDiff = targetRotation - this.mesh.rotation.y;
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+            this.mesh.rotation.y += angleDiff * 0.5 * t;
+
+            this.attackCooldown -= t;
+            if (this.attackCooldown <= 0 && dist < 120) {
+                if (typeof createProjectile === "function") {
+                    const offsets = [
+                        new THREE.Vector3(-8, 0, 0),
+                        new THREE.Vector3(8, 0, 0),
+                        new THREE.Vector3(0, 0, -8),
+                        new THREE.Vector3(0, 0, 8)
+                    ];
+
+                    for (let i = 0; i < offsets.length; i++) {
+                        const pid = this.id + '-' + Date.now() + '-' + i;
+                        const pPos = this.pos.clone().add(offsets[i]);
+                        const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
+
+                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
+
+                        if (typeof window.laserFireQueue !== "undefined") {
+                            window.laserFireQueue.push({
+                                id: pid,
+                                user: this.id,
+                                world: typeof window.worldName !== "undefined" ? window.worldName : "",
+                                position: { x: pPos.x, y: pPos.y, z: pPos.z },
+                                direction: { x: laserDir.x, y: laserDir.y, z: laserDir.z },
+                                color: "blue"
+                            });
+                        }
+                    }
+                }
+                this.attackCooldown = 1.0;
+            }
+        }
+        this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
     } else {
         if (this.pos.x += this.vx * t, this.pos.z += this.vz * t, this.vx *= 1 - 2 * t, this.vz *= 1 - 2 * t, "crawley" === this.type) {
             for (const t of mobs)
@@ -841,13 +1008,45 @@ Mob.prototype.update = function (t) {
     } catch (t) { }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
     let e = 10;
-    if ("red" === this.eyeColor ? e = 20 : "blue" === this.eyeColor && (e = 30), t === userName) player.score += e, document.getElementById("score").innerText = player.score, addMessage(`+${e} score`), safePlayAudio(soundHit);
-    else {
+    if ("ufo_saucer" === this.type) { e = 1000; } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
+    if (t === userName) {
+        player.score += e;
+        document.getElementById("score").innerText = player.score;
+        addMessage(`+${e} score`);
+        safePlayAudio(soundHit);
+
+        // Broadcast new score to host so it updates all clients
+        if (!isHost) {
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(JSON.stringify({
+                        type: "peer_score_update",
+                        username: userName,
+                        score: player.score
+                    }));
+                    break;
+                }
+            }
+        } else {
+            // Host updates its own score and broadcasts to clients
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(JSON.stringify({
+                        type: "peer_score_update",
+                        username: userName,
+                        score: player.score
+                    }));
+                }
+            }
+        }
+    } else {
         const s = peers.get(t);
-        s && s.dc && "open" === s.dc.readyState && s.dc.send(JSON.stringify({
-            type: "add_score",
-            amount: e
-        }))
+        if (s && s.dc && "open" === s.dc.readyState) {
+            s.dc.send(JSON.stringify({
+                type: "add_score",
+                amount: e
+            }));
+        }
     }
     const s = JSON.stringify({
         type: "mob_kill",
