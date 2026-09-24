@@ -4492,7 +4492,6 @@ function switchWorld(newWorldName, targetSpawn) {
         if (mob.particles) scene.remove(mob.particles);
     });
     mobs = [];
-    window.mobsByWorld = {}; // Clear cached mobs so they don't respawn from previous worlds
 
     // Clear volcanoes and related particles
     volcanoes = [];
