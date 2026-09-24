@@ -499,7 +499,6 @@ Mob.prototype.update = function (t) {
 
             this.attackCooldown -= t;
             if (this.attackCooldown <= 0 && dist < 120) {
-                const dir = new THREE.Vector3().subVectors(targetPos, this.pos).normalize();
                 if (typeof createProjectile === "function") {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
@@ -511,7 +510,9 @@ Mob.prototype.update = function (t) {
                     for (let i = 0; i < offsets.length; i++) {
                         const pid = this.id + '-' + Date.now() + '-' + i;
                         const pPos = this.pos.clone().add(offsets[i]);
-                        createProjectile(pid, this.id, pPos, dir.clone(), "blue");
+                        const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
+
+                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
 
                         if (typeof window.laserFireQueue !== "undefined") {
                             window.laserFireQueue.push({
@@ -519,7 +520,7 @@ Mob.prototype.update = function (t) {
                                 user: this.id,
                                 world: typeof window.worldName !== "undefined" ? window.worldName : "",
                                 position: { x: pPos.x, y: pPos.y, z: pPos.z },
-                                direction: { x: dir.x, y: dir.y, z: dir.z },
+                                direction: { x: laserDir.x, y: laserDir.y, z: laserDir.z },
                                 color: "blue"
                             });
                         }
