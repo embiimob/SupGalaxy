@@ -5218,6 +5218,21 @@ function gameLoop(e) {
                             }
                         }
                     }
+                    if (o.isBlue) {
+                        const impactAudioId = Math.random() < 0.5 ? 'ufoCannonImpact1' : 'ufoCannonImpact2';
+                        const impactTemplate = document.getElementById(impactAudioId);
+                        if (impactTemplate) {
+                            const impactAudio = impactTemplate.cloneNode(true);
+                            const distToPlayer = Math.hypot(player.x - a, player.y - n, player.z - r);
+                            let vol = 0;
+                            if (distToPlayer < 192) {
+                                vol = Math.max(0, 1 - distToPlayer / 192);
+                            }
+                            impactAudio.volume = vol;
+                            impactAudio.play().catch(e => {});
+                        }
+                    }
+
                     createBlockParticles(a, n, r, getBlockAt(a, n, r));
                     releaseProjectileMesh(o.mesh);
                     releaseProjectileLight(o.light);

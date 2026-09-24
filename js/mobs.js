@@ -423,20 +423,39 @@ Mob.prototype.update = function (t) {
             lights.forEach(l => l.intensity = intensity);
         }
 
-        if (!this.lastRumbleTime || Date.now() - this.lastRumbleTime > 2000) {
-            const a = document.getElementById(`rumble${Math.floor(Math.random() * 6)}`);
-            if (a) {
-                const distToPlayer = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-                const maxAudioDistance = 192;
-                let volume = 0;
-                if (distToPlayer < maxAudioDistance) {
-                    volume = Math.max(0, 1 - distToPlayer / maxAudioDistance);
-                }
-                a.volume = volume;
-                a.currentTime = 0;
-                a.play().catch(e => {});
+        if (!this.engineAudio) {
+            const engineTemplate = document.getElementById('ufoEngine');
+            if (engineTemplate) {
+                this.engineAudio = engineTemplate.cloneNode(true);
+                this.engineAudio.loop = true;
+                this.engineAudio.play().catch(e => {});
             }
-            this.lastRumbleTime = Date.now();
+            this.engineAudioStartTime = Date.now();
+            this.engineAudio2Delay = 20000 + Math.random() * 20000; // 20-40 seconds delay
+            this.engineAudio2Started = false;
+        }
+
+        if (this.engineAudio && !this.engineAudio2Started && Date.now() - this.engineAudioStartTime > this.engineAudio2Delay) {
+            const engineTemplate = document.getElementById('ufoEngine');
+            if (engineTemplate) {
+                this.engineAudio2 = engineTemplate.cloneNode(true);
+                this.engineAudio2.loop = true;
+                this.engineAudio2.play().catch(e => {});
+                this.engineAudio2Started = true;
+            }
+        }
+
+        if (this.engineAudio) {
+            const distToPlayer = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+            const maxAudioDistance = 192;
+            let volume = 0;
+            if (distToPlayer < maxAudioDistance) {
+                volume = Math.max(0, 1 - distToPlayer / maxAudioDistance);
+            }
+            this.engineAudio.volume = volume;
+            if (this.engineAudio2) {
+                this.engineAudio2.volume = volume;
+            }
         }
 
         if (this.lingerTime > 180000) {
@@ -444,6 +463,12 @@ Mob.prototype.update = function (t) {
         }
 
         if (this.aiState === "LEAVING") {
+            if (this.engineAudio) {
+                this.engineAudio.pause();
+            }
+            if (this.engineAudio2) {
+                this.engineAudio2.pause();
+            }
             this.pos.y += 20 * t;
             this.pos.x += Math.cos(this.mesh.rotation.y) * 20 * t;
             this.pos.z -= Math.sin(this.mesh.rotation.y) * 20 * t;
@@ -513,6 +538,18 @@ Mob.prototype.update = function (t) {
                         const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
 
                         createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
+
+                        const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                        if (fireAudioTemplate) {
+                            const fireAudio = fireAudioTemplate.cloneNode(true);
+                            const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
+                            let vol = 0;
+                            if (distToPlayer < 192) {
+                                vol = Math.max(0, 1 - distToPlayer / 192);
+                            }
+                            fireAudio.volume = vol;
+                            fireAudio.play().catch(e => {});
+                        }
 
                         if (typeof window.laserFireQueue !== "undefined") {
                             window.laserFireQueue.push({
@@ -1006,6 +1043,12 @@ Mob.prototype.update = function (t) {
     try {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
+    if (this.engineAudio) {
+        this.engineAudio.pause();
+    }
+    if (this.engineAudio2) {
+        this.engineAudio2.pause();
+    }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
     let e = 10;
     if ("ufo_saucer" === this.type) { e = 1000; } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
