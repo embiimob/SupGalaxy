@@ -286,7 +286,9 @@ function setupDataChannel(e, t) {
         // and perform a switch to the same world, effectively syncing with the host.
         if (!isHost) {
             WORLD_STATES.clear();
-            console.log(`[WebRTC] Client cleared all world states to sync with host.`);
+            processedMessages.clear();
+            worker.postMessage({ type: "clear_processed" });
+            console.log(`[WebRTC] Client cleared all world states and processed messages to sync with host.`);
             switchWorld(worldName);
             // Stop polling for offers when connected as a client
             // (hosts should continue polling for offers from other players)
