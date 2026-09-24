@@ -757,7 +757,14 @@ function setupDataChannel(e, t) {
                         }
                         // Only despawn if we are NOT the host (host manages despawns naturally)
                         if (!isHost) {
-                            mobs = mobs.filter((t => !!e.has(t.id) || (scene.remove(t.mesh), disposeObject(t.mesh), !1)));
+                            mobs = mobs.filter((t => {
+                                if (e.has(t.id)) return true;
+                                if (t.engineAudio) t.engineAudio.pause();
+                                if (t.engineAudio2) t.engineAudio2.pause();
+                                scene.remove(t.mesh);
+                                disposeObject(t.mesh);
+                                return false;
+                            }));
                         }
                     }
                     break;
@@ -817,6 +824,8 @@ function setupDataChannel(e, t) {
                 case "mob_kill":
                     const p = mobs.find((e => e.id === s.id));
                     if (p) {
+                        if (p.engineAudio) p.engineAudio.pause();
+                        if (p.engineAudio2) p.engineAudio2.pause();
                         try {
                             scene.remove(p.mesh), disposeObject(p.mesh)
                         } catch (e) { }

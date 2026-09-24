@@ -62,10 +62,10 @@ function Mob(t, e, s, i = "crawley") {
             e = createMobTexture(worldSeed, "grub_body"),
             s = createMobTexture(worldSeed, "grub_body", !0),
             i = createMobTexture(worldSeed, "grub_mouth"),
-            o = new THREE.MeshStandardMaterial({
+            o = new THREE.MeshLambertMaterial({
                 map: e
             }),
-            h = new THREE.MeshStandardMaterial({
+            h = new THREE.MeshLambertMaterial({
                 map: s
             }),
             a = [h, h, h, h, h, h];
@@ -97,7 +97,7 @@ function Mob(t, e, s, i = "crawley") {
         const d = new THREE.Mesh(p, l);
         d.position.set(.6 * t, .2 * t, 0), r.add(d);
         const m = new THREE.BoxGeometry(.4 * t, .1 * t, .1 * t),
-            y = new THREE.MeshStandardMaterial({
+            y = new THREE.MeshLambertMaterial({
                 map: i
             }),
             g = new THREE.Mesh(m, y);
@@ -110,52 +110,106 @@ function Mob(t, e, s, i = "crawley") {
         const M = makeSeededRandom(worldSeed + "_grub_glow_" + this.id),
             w = (new THREE.Color).setHSL(M(), .7 + .3 * M(), .5 + .2 * M());
         this.glowLight = new THREE.PointLight(w, 0, 10 * t), this.mesh.add(this.glowLight);
-        const T = new THREE.MeshStandardMaterial({
+        const T = new THREE.MeshLambertMaterial({
             color: 16711680
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
         this.hp = 200;
         this.mesh = new THREE.Group();
-        // A flat wedge shape
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 40); // nose
-        shape.lineTo(25, -40); // back right
-        shape.lineTo(-25, -40); // back left
-        shape.lineTo(0, 40); // back to nose
 
-        const extrudeSettings = { depth: 10, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 1, bevelThickness: 1 };
-        const bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        // Build Star Destroyer voxel construct
+        const voxelSize = 2;
+        const width = 60; // Max width at the back
+        const length = 100; // Total length
+        const height = 15; // Max height of main body
 
-        // Center the geometry so it pivots correctly
-        bodyGeo.computeBoundingBox();
-        const centerOffset = new THREE.Vector3();
-        bodyGeo.boundingBox.getCenter(centerOffset);
-        bodyGeo.translate(-centerOffset.x, -centerOffset.y, -centerOffset.z);
+        const voxelPositions = [];
+        const voxelColors = [];
+
+        // Colors for voxels
+        const hullColor = new THREE.Color(0x888888);
+        const darkHullColor = new THREE.Color(0x666666);
+        const engineColor = new THREE.Color(0x00ffff);
+        const bridgeColor = new THREE.Color(0x777777);
+
+        // Generate main triangular wedge
+        for (let z = 0; z < length; z += voxelSize) {
+            const currentWidth = width * (z / length); // Tapers to 0 at z=0 (nose)
+            const currentHeight = height * (z / length);
+
+            for (let x = -currentWidth / 2; x <= currentWidth / 2; x += voxelSize) {
+                // Outer edges are thinner, center is thicker
+                const distanceToEdge = (currentWidth / 2) - Math.abs(x);
+                const localMaxHeight = Math.max(1, currentHeight * (distanceToEdge / (currentWidth / 2)));
+
+                for (let y = -voxelSize; y < localMaxHeight; y += voxelSize) {
+                    // Introduce greebling by occasionally omitting surface voxels or raising them
+                    const isSurface = (y + voxelSize >= localMaxHeight) || (y === -voxelSize);
+                    let yOffset = 0;
+                    let color = hullColor;
+
+                    if (isSurface) {
+                        const r = Math.random();
+                        if (r < 0.05) continue; // Small holes/greebling
+                        if (r > 0.85) {
+                            yOffset += voxelSize; // Raised greebling
+                            color = darkHullColor;
+                        } else if (r > 0.7) {
+                            color = darkHullColor;
+                        }
+                    }
+
+                    voxelPositions.push(new THREE.Vector3(x, y + yOffset, z - length/2));
+                    voxelColors.push(color);
+                }
+            }
+        }
+
+        // Remove the bridge completely
+
+        // Use InstancedMesh for performance
+        const geo = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+        const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.2 });
+        const instancedMesh = new THREE.InstancedMesh(geo, mat, voxelPositions.length);
+
+        const dummy = new THREE.Object3D();
+        const tempColor = new THREE.Color();
+
+        for (let i = 0; i < voxelPositions.length; i++) {
+            dummy.position.copy(voxelPositions[i]);
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+            tempColor.copy(voxelColors[i]);
+            instancedMesh.setColorAt(i, tempColor);
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        instancedMesh.instanceColor.needsUpdate = true;
 
         // Rotate so it lays flat (X/Z plane) and points forward (+Z or -Z depending on orientation, we want nose forward)
-        bodyGeo.rotateX(Math.PI / 2);
-        bodyGeo.rotateY(Math.PI); // Point nose in the correct direction
+        // Nose is currently at z = -length/2 because of `z - length/2`. We want nose forward, which is +Z in three.js typically?
+        // Let's match original rotation logic where nose points in target direction
+        instancedMesh.rotation.y = Math.PI; // Point nose in the correct direction
 
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        this.mesh.add(bodyMesh);
+        this.mesh.add(instancedMesh);
 
-        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight1.position.set(-8, 5, -35);
+        // Engines at the rear (z = length/2 rotated by PI, so effectively -length/2 in mesh space)
+        const rearZ = length/2 - voxelSize;
+        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight1.position.set(-width*0.2, 0, rearZ);
         this.mesh.add(engineLight1);
 
-        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight2.position.set(8, 5, -35);
+        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight2.position.set(width*0.2, 0, rearZ);
         this.mesh.add(engineLight2);
 
-        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 50);
-        engineLight3.position.set(0, 8, -35);
+        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 100);
+        engineLight3.position.set(0, height*0.3, rearZ);
         this.mesh.add(engineLight3);
 
         this.originalColor = null;
     }
-    this.mesh.userData.mobId = this.id, this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), scene.add(this.mesh), this.lastSentPos = new THREE.Vector3().copy(this.pos), this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion)
+    if (this.mesh) { this.mesh.userData.mobId = this.id; this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z); scene.add(this.mesh); this.lastSentPos = new THREE.Vector3().copy(this.pos); this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion); }
 }
 
 function manageMobs() {
@@ -262,6 +316,8 @@ function manageMobs() {
             // If we are a spawner for the area the mob *was* in, broadcast despawn.
             // A simpler approach: Anyone can locally despawn if it's too far from everyone.
             // If they are a spawner, they broadcast it.
+            if (mob.engineAudio) mob.engineAudio.pause();
+            if (mob.engineAudio2) mob.engineAudio2.pause();
             scene.remove(mob.mesh);
             disposeObject(mob.mesh);
 
