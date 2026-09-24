@@ -638,15 +638,15 @@ Mob.prototype.update = function (t) {
                 health: player.health,
                 username: userName
             });
-            for (const [s, i] of peers.entries())
-                if (userPositions[s]) {
-                    const i = userPositions[s],
-                        o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
-                    o < e && Math.abs(i.y - this.pos.y) < 30 && (e = o, t = {
-                        x: i.x,
-                        z: i.z,
-                        health: 20,
-                        username: s
+            for (const [peerName, peerData] of peers.entries())
+                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
+                    const pos = userPositions[peerName],
+                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
+                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
+                        x: pos.targetX,
+                        z: pos.targetZ,
+                        health: pos.health || 20,
+                        username: peerName
                     })
                 } if (t && e < 10 && (i = {
                     x: t.x,
@@ -864,15 +864,15 @@ Mob.prototype.update = function (t) {
                 health: player.health,
                 username: userName
             });
-            for (const [s, i] of peers.entries())
-                if (userPositions[s]) {
-                    const i = userPositions[s],
-                        o = Math.hypot(i.x - this.pos.x, i.y - this.pos.y, i.z - this.pos.z);
-                    o < e && Math.abs(i.y - this.pos.y) < 30 && (e = o, t = {
-                        x: i.x,
-                        z: i.z,
-                        health: 20,
-                        username: s
+            for (const [peerName, peerData] of peers.entries())
+                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
+                    const pos = userPositions[peerName],
+                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
+                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
+                        x: pos.targetX,
+                        z: pos.targetZ,
+                        health: pos.health || 20,
+                        username: peerName
                     })
                 } if (t && e < 10 && (i = {
                     x: t.x,
