@@ -5298,7 +5298,6 @@ function gameLoop(e) {
                 projectiles.splice(e, 1);
             }
         }
-        }
 
         // Magician stone media playback and animation logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
