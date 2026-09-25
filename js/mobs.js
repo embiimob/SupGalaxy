@@ -349,13 +349,14 @@ function manageMobs() {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
 
-        if (mob.type === "ufo_saucer" && !isAllowedType) {
-            // If the player is no longer idle, transition the UFO to LEAVING instead of instantly despawning
+        if (mob.type === "ufo_saucer" && (!isAllowedType || !isNearAnyPlayer)) {
+            // If the player is no longer idle or too far, transition the UFO to LEAVING instead of instantly despawning
             if (mob.aiState !== "LEAVING") {
                 mob.aiState = "LEAVING";
                 mob.lingerTime = 180001; // Force leaving behavior
             }
-            // Do not despawn instantly
+            // Do not despawn instantly. Wait for the y > 800 check in update()
+            return true;
         } else if (!isNearAnyPlayer || !isAllowedType) {
             // Only the person who "owns" the despawn should send it, but let's have everyone clean up their own locally.
             // If we are a spawner for the area the mob *was* in, broadcast despawn.
