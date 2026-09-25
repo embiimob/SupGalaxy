@@ -5181,7 +5181,7 @@ function gameLoop(e) {
                                 if (distToPlayer < 192) {
                                     vol = Math.max(0, 1 - distToPlayer / 192);
                                 }
-                                fireAudio.volume = vol;
+                                fireAudio.volume = vol * 0.75;
                                 fireAudio.play().catch(err => {});
                                 playedBlueSoundThisFrame = true;
                             }
@@ -5199,7 +5199,7 @@ function gameLoop(e) {
                         if (distToPlayer < 192) {
                             vol = Math.max(0, 1 - distToPlayer / 192);
                         }
-                        fireAudio.volume = vol;
+                        fireAudio.volume = vol * 0.75;
                         fireAudio.play().catch(err => {});
                         playedBlueSoundThisFrame = true;
                     }

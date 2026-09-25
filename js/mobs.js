@@ -308,8 +308,9 @@ function manageMobs() {
 
     // Check if any player in the world is idle
     let hasIdlePlayer = false;
+    let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 60000; // 60 seconds
+    const IDLE_THRESHOLD = 3600000; // 1 hour
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -317,11 +318,13 @@ function manageMobs() {
             if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
                 if (now - window.lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             } else if (typeof lastMoveTime !== 'undefined') {
                 if (now - lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             }
@@ -329,6 +332,8 @@ function manageMobs() {
             const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
             if (now - peerMoveTime > IDLE_THRESHOLD) {
                 hasIdlePlayer = true;
+                const pos = userPositions[p.name];
+                idlePlayerPos = { x: pos.targetX || pos.prevX, z: pos.targetZ || pos.prevZ };
                 break;
             }
         }
@@ -396,12 +401,23 @@ function manageMobs() {
             }
 
             if (countInArea < maxCount) {
-                const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
-                const angle = Math.random() * Math.PI * 2;
-                const distance = 32 + 64 * Math.random() / 2;
+                let spawnX, spawnZ;
+
+                if (type === "ufo_saucer" && idlePlayerPos) {
+                    // Spawn directly above the idle player
+                    spawnX = idlePlayerPos.x;
+                    spawnZ = idlePlayerPos.z;
+                } else {
+                    const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 32 + 64 * Math.random() / 2;
+                    spawnX = modWrap(randomPlayer.x + Math.cos(angle) * distance, MAP_SIZE);
+                    spawnZ = modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE);
+                }
+
                 const newMob = new Mob(
-                    modWrap(randomPlayer.x + Math.cos(angle) * distance, MAP_SIZE),
-                    modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE),
+                    spawnX,
+                    spawnZ,
                     Date.now() + Math.random(),
                     type
                 );
@@ -575,7 +591,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 60000;
+            const IDLE_THRESHOLD = 3600000; // 1 hour
 
             // Check if local player is idle
             let localIdle = false;
@@ -655,7 +671,7 @@ Mob.prototype.update = function (t) {
                             if (distToPlayer < 192) {
                                 vol = Math.max(0, 1 - distToPlayer / 192);
                             }
-                            fireAudio.volume = vol;
+                            fireAudio.volume = vol * 0.75;
                             fireAudio.play().catch(e => {});
                         }
 
