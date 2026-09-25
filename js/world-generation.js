@@ -336,16 +336,49 @@ function updateSky(e) {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
     const r = Math.max(0, n);
-    scene.background = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
+
+    let isUnderground = false;
+    if (typeof chunkManager !== 'undefined' && chunkManager && camera) {
+        let playerY = Math.floor(camera.position.y);
+        let surfaceY = chunkManager.getSurfaceYForBoulders ? chunkManager.getSurfaceYForBoulders(camera.position.x, camera.position.z) : chunkManager.getSurfaceY(camera.position.x, camera.position.z);
+        // Only consider it underground if we are somewhat below the top surface level.
+        if (playerY < surfaceY + 2) {
+            let cx = Math.floor(camera.position.x / CHUNK_SIZE);
+            let cz = Math.floor(camera.position.z / CHUNK_SIZE);
+            let chunk = chunkManager.getChunk(cx, cz);
+            if (chunk && chunk.generated) {
+                let lx = Math.floor(camera.position.x) % CHUNK_SIZE;
+                if (lx < 0) lx += CHUNK_SIZE;
+                let lz = Math.floor(camera.position.z) % CHUNK_SIZE;
+                if (lz < 0) lz += CHUNK_SIZE;
+
+                for (let y = playerY; y < MAX_HEIGHT; y++) {
+                    let blockId = chunk.get(lx, y, lz);
+                    if (blockId !== 0 && (!BLOCKS[blockId] || !BLOCKS[blockId].transparent)) {
+                        isUnderground = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let targetTransition = isUnderground ? 1 : 0;
+    window.undergroundTransition = window.undergroundTransition || 0;
+    window.undergroundTransition += (targetTransition - window.undergroundTransition) * e * 5.0;
+    let ug = window.undergroundTransition;
+
+    let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
+    scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     const i = scene.getObjectByProperty("type", "AmbientLight"),
         l = scene.getObjectByProperty("type", "DirectionalLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
-    if (i && (i.intensity = .01 + .19 * s), l && (l.intensity = 0 + .95 * s), d) {
+    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), l && (l.intensity = (0 + .95 * s) * (1 - ug)), d) {
         const e = .6,
             t = .02;
-        d.intensity = t + (e - t) * s
+        d.intensity = (t + (e - t) * s) * (1 - ug);
     }
     for (let o = blockParticles.length - 1; o >= 0; o--) {
         const a = blockParticles[o];

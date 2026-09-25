@@ -442,6 +442,42 @@ Chunk.prototype.idx = function (e, t, o) {
     for (var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE), d = MAX_HEIGHT - 1; d >= 0; d--)
         if (s.get(i, d, l) !== BLOCK_AIR && 6 !== s.get(i, d, l)) return d + 1;
     return SEA_LEVEL
+}, ChunkManager.prototype.getCeilingY = function (e, t, startY) {
+    var o = modWrap(Math.floor(e), MAP_SIZE),
+        a = modWrap(Math.floor(t), MAP_SIZE),
+        n = Math.floor(o / CHUNK_SIZE),
+        r = Math.floor(a / CHUNK_SIZE),
+        s = this.getChunk(n, r);
+    if (!s) return startY;
+    s.generated || this.generateChunk(s);
+    var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE);
+    var currentIsSolid = s.get(i, Math.floor(startY), l) !== BLOCK_AIR && s.get(i, Math.floor(startY), l) !== 6;
+    if (currentIsSolid) {
+        for (var d = Math.floor(startY); d >= 0; d--) {
+            const blockId = s.get(i, d, l);
+            if (blockId === BLOCK_AIR || blockId === 6) return d;
+        }
+    } else {
+        for (var d = Math.floor(startY); d < MAX_HEIGHT; d++) {
+            const blockId = s.get(i, d, l);
+            if (blockId !== BLOCK_AIR && blockId !== 6) return d - 1;
+        }
+    }
+    return startY;
+}, ChunkManager.prototype.getFloorY = function (e, t, startY) {
+    var o = modWrap(Math.floor(e), MAP_SIZE),
+        a = modWrap(Math.floor(t), MAP_SIZE),
+        n = Math.floor(o / CHUNK_SIZE),
+        r = Math.floor(a / CHUNK_SIZE),
+        s = this.getChunk(n, r);
+    if (!s) return Math.max(1, startY);
+    s.generated || this.generateChunk(s);
+    var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE);
+    for (var d = Math.floor(startY); d >= 0; d--) {
+        const blockId = s.get(i, d, l);
+        if (blockId !== BLOCK_AIR && blockId !== 6) return d + 1;
+    }
+    return Math.max(1, startY);
 }, ChunkManager.prototype.getSurfaceYForBoulders = function (e, t) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),

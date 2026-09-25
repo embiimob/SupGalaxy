@@ -146,7 +146,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley'], night: ['crawley'] },
+        mobSpawnRules: { day: ['crawley', 'spider'], night: ['crawley', 'spider'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
@@ -201,6 +201,7 @@ const BLOCKS = {
         109: { name: 'Marble', color: '#f0f0f0' }, 110: { name: 'Obsidian', color: '#2d004d' },
         111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true }, 112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
         113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
+        134: { name: 'Glowing Blue Stone', color: '#4da6ff', light: true },
         115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
@@ -431,6 +432,8 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
     const resourceNoise = makeNoise(worldSeed + '_resources');
+    const cavernNoise = makeNoise(worldSeed + '_caverns');
+    const cavernYNoise = makeNoise(worldSeed + '_caverny');
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
     const baseX = cx * CHUNK_SIZE;
@@ -446,6 +449,11 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             // Sharper peaks and deeper valleys
             let mountainHeight = fbm(mountainNoise, nx * 0.3, nz * 0.3, 8, 0.55);
             mountainHeight = Math.pow(mountainHeight, 2.5) * 220;
+
+            // Caverns (same scale as mountains)
+            let cavernHeightRadius = fbm(cavernNoise, nx * 0.3, nz * 0.3, 8, 0.55);
+            cavernHeightRadius = Math.pow(cavernHeightRadius, 2.5) * 220 / 2;
+            let cavernCenterY = 20 + fbm(cavernYNoise, nx * 0.2, nz * 0.2, 3, 0.5) * 60;
 
             let groundHeight = 10 + fbm(noise, nx * 0.1, nz * 0.1, 6, 0.5) * 20;
             let baseHeight = Math.max(mountainHeight, groundHeight);
@@ -479,16 +487,50 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
 
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, Math.floor(height)));
 
+            let prevWasCavern = false;
+
             for (let y = 0; y <= height; y++) {
                 let id;
+                let isCavern = false;
                 if (y < height - 10) {
                     id = 110; // Obsidian
+
+                    // Cavern carving only in obsidian
+                    if (y > cavernCenterY - cavernHeightRadius && y < cavernCenterY + cavernHeightRadius) {
+                        isCavern = true;
+                        if (y < 15) {
+                            id = 6; // Water in deepest areas
+                        } else {
+                            id = 0; // Air
+                        }
+                    } else {
+                        // Plentiful emeralds in remaining obsidian
+                        const r = resourceNoise(nx * 5, y * 0.2, nz * 5);
+                        if (r > 0.85) {
+                            id = 125; // Emerald
+                        }
+                    }
                 } else {
                     id = 4; // Stone
                 }
                 if (y === 0) id = 1; // Bedrock
 
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
+
+                // Glowing blue stone on ceiling
+                if (!isCavern && prevWasCavern && id === 110 && y > 15) {
+                    // Ceiling detected (transition from cavern to solid obsidian). Add glowing stone randomly.
+                    if (Math.random() < 0.05) { // Rare
+                        let length = 1 + Math.floor(Math.random() * 3); // Up to 3 blocks
+                        for (let cl = 1; cl <= length; cl++) {
+                            if (y - cl > 0 && chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 0) {
+                                chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 134; // Glowing Blue Stone
+                            }
+                        }
+                    }
+                }
+
+                prevWasCavern = isCavern;
 
                 // Add coal and a new block for iron ore
                 if (id === 4) { // Only replace stone

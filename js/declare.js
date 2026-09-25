@@ -271,6 +271,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#00ff7b",
             strength: 4
         },
+        134: {
+            name: "Glowing Blue Stone",
+            color: "#4da6ff",
+            strength: 3,
+            light: !0
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",
