@@ -310,7 +310,7 @@ function manageMobs() {
     let hasIdlePlayer = false;
     let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 300000; // 5 minutes
+    const IDLE_THRESHOLD = 3600000; // 1 hour
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -348,7 +348,15 @@ function manageMobs() {
     mobs = mobs.filter((mob) => {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
-        if (!isNearAnyPlayer || !isAllowedType) {
+
+        if (mob.type === "ufo_saucer" && !isAllowedType) {
+            // If the player is no longer idle, transition the UFO to LEAVING instead of instantly despawning
+            if (mob.aiState !== "LEAVING") {
+                mob.aiState = "LEAVING";
+                mob.lingerTime = 180001; // Force leaving behavior
+            }
+            // Do not despawn instantly
+        } else if (!isNearAnyPlayer || !isAllowedType) {
             // Only the person who "owns" the despawn should send it, but let's have everyone clean up their own locally.
             // If we are a spawner for the area the mob *was* in, broadcast despawn.
             // A simpler approach: Anyone can locally despawn if it's too far from everyone.
@@ -591,7 +599,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 300000; // 5 minutes
+            const IDLE_THRESHOLD = 3600000; // 1 hour
 
             // Check if local player is idle
             let localIdle = false;
@@ -657,6 +665,8 @@ Mob.prototype.update = function (t) {
                         new THREE.Vector3(0, 0, 8)
                     ];
 
+                    let playedAudioThisFrame = false;
+
                     for (let i = 0; i < offsets.length; i++) {
                         const pid = this.id + '-' + Date.now() + '-' + i;
                         const pPos = this.pos.clone().add(offsets[i]);
@@ -664,16 +674,19 @@ Mob.prototype.update = function (t) {
 
                         createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
 
-                        const fireAudioTemplate = document.getElementById('ufoCannonFire');
-                        if (fireAudioTemplate) {
-                            const fireAudio = fireAudioTemplate.cloneNode(true);
-                            const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
-                            let vol = 0;
-                            if (distToPlayer < 192) {
-                                vol = Math.max(0, 1 - distToPlayer / 192);
+                        if (!playedAudioThisFrame) {
+                            const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                            if (fireAudioTemplate) {
+                                const fireAudio = fireAudioTemplate.cloneNode(true);
+                                const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
+                                let vol = 0;
+                                if (distToPlayer < 192) {
+                                    vol = Math.max(0, 1 - distToPlayer / 192);
+                                }
+                                fireAudio.volume = vol * 0.75;
+                                fireAudio.play().catch(e => {});
                             }
-                            fireAudio.volume = vol * 0.75;
-                            fireAudio.play().catch(e => {});
+                            playedAudioThisFrame = true;
                         }
 
                         if (typeof window.laserFireQueue !== "undefined") {

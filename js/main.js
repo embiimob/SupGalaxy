@@ -5235,24 +5235,28 @@ function gameLoop(e) {
                         } else {
                             removeBlockAt(a, n, r, o.user);
                         }
-                    } else if (o.user === userName) {
-                        const depths = o.isBlue ? [0, 1, 2] : [0];
-                        for (const d of depths) {
-                            const currentY = n - d;
-                            const blockId = getBlockAt(a, currentY, r);
-                            if (blockId > 0) {
-                                const blockHitMsg = JSON.stringify({
-                                    type: 'block_hit',
-                                    x: a,
-                                    y: currentY,
-                                    z: r,
-                                    username: o.user,
-                                    world: worldName,
-                                    blockId: blockId
-                                });
-                                for (const [, peer] of peers.entries()) {
-                                    if (peer.dc && peer.dc.readyState === 'open') {
-                                        peer.dc.send(blockHitMsg);
+                    } else {
+                        // Clients only broadcast block hit if they own the projectile, OR if it's the host simulating it
+                        const shouldSendBlockHit = (o.user === userName) || (o.isBlue && (isHost || peers.size === 0));
+                        if (shouldSendBlockHit) {
+                            const depths = o.isBlue ? [0, 1, 2] : [0];
+                            for (const d of depths) {
+                                const currentY = n - d;
+                                const blockId = getBlockAt(a, currentY, r);
+                                if (blockId > 0) {
+                                    const blockHitMsg = JSON.stringify({
+                                        type: 'block_hit',
+                                        x: a,
+                                        y: currentY,
+                                        z: r,
+                                        username: o.user,
+                                        world: worldName,
+                                        blockId: blockId
+                                    });
+                                    for (const [, peer] of peers.entries()) {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(blockHitMsg);
+                                        }
                                     }
                                 }
                             }
