@@ -310,7 +310,7 @@ function manageMobs() {
     let hasIdlePlayer = false;
     let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 3600000; // 1 hour
+    const IDLE_THRESHOLD = 180000; // 3 minutes
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -599,7 +599,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 3600000; // 1 hour
+            const IDLE_THRESHOLD = 180000; // 3 minutes
 
             // Check if local player is idle
             let localIdle = false;
