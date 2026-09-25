@@ -3,6 +3,11 @@ function Mob(t, e, s, i = "crawley") {
     let yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
     if (i === "spider") {
         yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
+        // Check if spawn was in sky
+        if (yPos >= chunkManager.getSurfaceY(t, e)) {
+             yPos = chunkManager.getSurfaceY(t, e) + 1; // Put it on surface temporarily
+             this.invalidSpawn = true; // Flag for instant death
+        }
     }
     if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
@@ -71,7 +76,11 @@ function Mob(t, e, s, i = "crawley") {
         if (e < 0.33) s = 0xcccccc; // Pale white
         else if (e < 0.66) s = 0x888888; // Grey
         else s = 0x000000; // Black
-        this.hp = 15;
+        if (this.invalidSpawn) {
+             this.hp = -1;
+        } else {
+             this.hp = 15;
+        }
         this.speed = 0.05 + 0.02 * Math.random();
         const i = new THREE.MeshBasicMaterial({
             color: s
