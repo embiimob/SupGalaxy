@@ -2398,6 +2398,7 @@ function removeBlockAt(e, t, o, breaker) {
     if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
 
     const n = BLOCKS[a];
+    if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (!n || n.strength > 5) return void addMessage("Cannot break that block");
 
     // Check ownership BEFORE showing any visual feedback
@@ -2619,6 +2620,8 @@ function placeBlockAt(e, t, o, a) {
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
+                    lastMoveTime = performance.now();
+                    window.lastMoveTime = lastMoveTime;
                     for (var s of mobs)
                         if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
 
@@ -4996,7 +4999,13 @@ function gameLoop(e) {
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01;
         if (e - lastUpdateTime > 50 && (I || k)) {
-            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e, lastMoveTime = e, window.lastMoveTime = e, lastSentPosition = {
+            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
+            // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
+            if (I || isAttacking) {
+                lastMoveTime = e;
+                window.lastMoveTime = e;
+            }
+            lastSentPosition = {
                 x: player.x,
                 y: player.y,
                 z: player.z,
@@ -5082,7 +5091,7 @@ function gameLoop(e) {
                     t.volume = o < a ? Math.max(0, 1 - o / a) : 0
                 }
             }
-        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastMoveTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
+        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
         for (let o = eruptedBlocks.length - 1; o >= 0; o--) {
             const a = eruptedBlocks[o];
             if (isHost || 0 === peers.size)
@@ -5168,9 +5177,47 @@ function gameLoop(e) {
         }
         if (laserQueue.length > 0) {
             const e = laserQueue.shift();
-            if ("laser_fired_batch" === e.type)
-                for (const t of e.projectiles) t.user !== userName && createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
-            else e.user !== userName && createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color)
+
+            // Decouple audio to prevent stuttering/jank on batched projectiles
+            let playedBlueSoundThisFrame = false;
+
+            if ("laser_fired_batch" === e.type) {
+                for (const t of e.projectiles) {
+                    if (t.user !== userName) {
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+                        if (t.color === "blue" && !playedBlueSoundThisFrame) {
+                            const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                            if (fireAudioTemplate) {
+                                const fireAudio = fireAudioTemplate.cloneNode(true);
+                                const distToPlayer = Math.hypot(player.x - t.position.x, player.y - t.position.y, player.z - t.position.z);
+                                let vol = 0;
+                                if (distToPlayer < 192) {
+                                    vol = Math.max(0, 1 - distToPlayer / 192);
+                                }
+                                fireAudio.volume = vol * 0.75;
+                                fireAudio.play().catch(err => {});
+                                playedBlueSoundThisFrame = true;
+                            }
+                        }
+                    }
+                }
+            } else if (e.user !== userName) {
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
+                if (e.color === "blue" && !playedBlueSoundThisFrame) {
+                    const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                    if (fireAudioTemplate) {
+                        const fireAudio = fireAudioTemplate.cloneNode(true);
+                        const distToPlayer = Math.hypot(player.x - e.position.x, player.y - e.position.y, player.z - e.position.z);
+                        let vol = 0;
+                        if (distToPlayer < 192) {
+                            vol = Math.max(0, 1 - distToPlayer / 192);
+                        }
+                        fireAudio.volume = vol * 0.75;
+                        fireAudio.play().catch(err => {});
+                        playedBlueSoundThisFrame = true;
+                    }
+                }
+            }
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
@@ -5202,23 +5249,27 @@ function gameLoop(e) {
                             removeBlockAt(a, n, r, o.user);
                         }
                     } else {
-                        const depths = o.isBlue ? [0, 1, 2] : [0];
-                        for (const d of depths) {
-                            const currentY = n - d;
-                            const blockId = getBlockAt(a, currentY, r);
-                            if (blockId > 0) {
-                                const blockHitMsg = JSON.stringify({
-                                    type: 'block_hit',
-                                    x: a,
-                                    y: currentY,
-                                    z: r,
-                                    username: o.user,
-                                    world: worldName,
-                                    blockId: blockId
-                                });
-                                for (const [, peer] of peers.entries()) {
-                                    if (peer.dc && peer.dc.readyState === 'open') {
-                                        peer.dc.send(blockHitMsg);
+                        // Clients only broadcast block hit if they own the projectile, OR if it's the host simulating it
+                        const shouldSendBlockHit = (o.user === userName) || (o.isBlue && (isHost || peers.size === 0));
+                        if (shouldSendBlockHit) {
+                            const depths = o.isBlue ? [0, 1, 2] : [0];
+                            for (const d of depths) {
+                                const currentY = n - d;
+                                const blockId = getBlockAt(a, currentY, r);
+                                if (blockId > 0) {
+                                    const blockHitMsg = JSON.stringify({
+                                        type: 'block_hit',
+                                        x: a,
+                                        y: currentY,
+                                        z: r,
+                                        username: o.user,
+                                        world: worldName,
+                                        blockId: blockId
+                                    });
+                                    for (const [, peer] of peers.entries()) {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(blockHitMsg);
+                                        }
                                     }
                                 }
                             }
@@ -5250,6 +5301,9 @@ function gameLoop(e) {
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
                     if (stepPos.distanceTo(mob.pos) < 1.5) { // Mob hit threshold
+                        if (o.user === userName) {
+                            lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
+                        }
                         const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
                         if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
                         else {
