@@ -521,7 +521,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
                 if (!isCavern && prevWasCavern && id === 110 && y > 15) {
                     // Ceiling detected (transition from cavern to solid obsidian). Add glowing stone randomly.
                     if (Math.random() < 0.025) { // Rare, cut in half
-                        let length = 1 + Math.floor(Math.random() * 2); // Up to 2 blocks
+                        let length = 1 + Math.floor(Math.random() * 11); // Up to 11 blocks
                         for (let cl = 1; cl <= length; cl++) {
                             if (y - cl > 0 && chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 0) {
                                 chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 134; // Blue Stalactite

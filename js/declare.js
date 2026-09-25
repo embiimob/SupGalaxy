@@ -775,11 +775,13 @@ const lightManager = {
             if (e < t.length) {
                 const o = t[e],
                     a = this.lights[e];
-                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 0.9;
+                a.position.set(o.x + .5, o.y + .5, o.z + .5);
                 if (o.type === 134) {
+                    a.intensity = 0.45;
                     a.color.setHex(0x4da6ff);
                     a.distance = 36;
                 } else {
+                    a.intensity = 0.9;
                     a.color.setHex(16755251);
                     a.distance = 18;
                 }

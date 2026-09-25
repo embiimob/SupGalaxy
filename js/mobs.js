@@ -704,13 +704,51 @@ Mob.prototype.update = function (t) {
 
             if (this.aiState === "FALLING") {
                 this.pos.y -= 16 * t; // Fall down
-                let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y);
-                if (this.pos.y <= floorY) {
+                let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y + 16 * t);
+
+                // Check if we hit the player
+                if (pExists) {
+                    let playerDistXZ = Math.hypot(this.pos.x - player.x, this.pos.z - player.z);
+                    if (playerDistXZ < 1.5) {
+                        let playerTopY = player.y + 1.6;
+                        if (this.pos.y <= playerTopY && this.pos.y > player.y) {
+                            this.pos.y = playerTopY;
+                            this.aiState = "ATTACKING_PLAYER";
+                            this.attackLinger = 0;
+
+                            // Deal drop damage
+                            this.lastEatTime = this.lastEatTime || 0;
+                            if (Date.now() - this.lastEatTime > 1000) {
+                                player.health = Math.max(0, player.health - 2);
+                                document.getElementById("health").innerText = player.health;
+                                if (typeof updateHealthBar === 'function') updateHealthBar();
+                                addMessage("Spider dropped on you! HP: " + player.health, 1000);
+                                if (player.health <= 0 && typeof handlePlayerDeath === 'function') handlePlayerDeath();
+                                this.lastEatTime = Date.now();
+                            }
+                        }
+                    }
+                }
+
+                if (this.pos.y <= floorY && this.aiState === "FALLING") {
                     this.pos.y = floorY;
                     this.aiState = "SEARCHING"; // Landed
                 }
+            } else if (this.aiState === "ATTACKING_PLAYER") {
+                if (pExists) {
+                    this.pos.x = player.x;
+                    this.pos.z = player.z;
+                    this.pos.y = player.y + 1.6;
+
+                    this.attackLinger += t;
+                    if (this.attackLinger > 2.0) {
+                        this.aiState = "SEARCHING";
+                    }
+                } else {
+                    this.aiState = "SEARCHING";
+                }
             } else {
-                 let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y);
+                 let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y + 1);
                  // Don't clip through floor
                  if (this.pos.y < floorY) this.pos.y = floorY;
                  // Don't clip through ceiling
@@ -829,7 +867,7 @@ Mob.prototype.update = function (t) {
                     }
                 }
             }
-            if (s && this.aiState !== "FALLING") {
+            if (s && this.aiState !== "FALLING" && this.aiState !== "ATTACKING_PLAYER") {
                 this.isMoving = !0;
                 this.pos.add(e.multiplyScalar(this.speed * t * 60));
 
@@ -840,7 +878,7 @@ Mob.prototype.update = function (t) {
                 } else if (targetY < this.pos.y) {
                     this.pos.y -= Math.min(this.pos.y - targetY, maxClimbSpeed);
                 }
-            } else if (!s && this.aiState !== "FALLING") {
+            } else if (!s && this.aiState !== "FALLING" && this.aiState !== "ATTACKING_PLAYER") {
                 // Return to ceiling
                 this.pos.y += 4 * t;
                 if (this.pos.y > ceilingY) this.pos.y = ceilingY;
