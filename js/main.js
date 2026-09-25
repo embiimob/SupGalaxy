@@ -5164,9 +5164,47 @@ function gameLoop(e) {
         }
         if (laserQueue.length > 0) {
             const e = laserQueue.shift();
-            if ("laser_fired_batch" === e.type)
-                for (const t of e.projectiles) t.user !== userName && createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
-            else e.user !== userName && createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color)
+
+            // Decouple audio to prevent stuttering/jank on batched projectiles
+            let playedBlueSoundThisFrame = false;
+
+            if ("laser_fired_batch" === e.type) {
+                for (const t of e.projectiles) {
+                    if (t.user !== userName) {
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+                        if (t.color === "blue" && !playedBlueSoundThisFrame) {
+                            const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                            if (fireAudioTemplate) {
+                                const fireAudio = fireAudioTemplate.cloneNode(true);
+                                const distToPlayer = Math.hypot(player.x - t.position.x, player.y - t.position.y, player.z - t.position.z);
+                                let vol = 0;
+                                if (distToPlayer < 192) {
+                                    vol = Math.max(0, 1 - distToPlayer / 192);
+                                }
+                                fireAudio.volume = vol;
+                                fireAudio.play().catch(err => {});
+                                playedBlueSoundThisFrame = true;
+                            }
+                        }
+                    }
+                }
+            } else if (e.user !== userName) {
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
+                if (e.color === "blue" && !playedBlueSoundThisFrame) {
+                    const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                    if (fireAudioTemplate) {
+                        const fireAudio = fireAudioTemplate.cloneNode(true);
+                        const distToPlayer = Math.hypot(player.x - e.position.x, player.y - e.position.y, player.z - e.position.z);
+                        let vol = 0;
+                        if (distToPlayer < 192) {
+                            vol = Math.max(0, 1 - distToPlayer / 192);
+                        }
+                        fireAudio.volume = vol;
+                        fireAudio.play().catch(err => {});
+                        playedBlueSoundThisFrame = true;
+                    }
+                }
+            }
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
@@ -5197,7 +5235,7 @@ function gameLoop(e) {
                         } else {
                             removeBlockAt(a, n, r, o.user);
                         }
-                    } else {
+                    } else if (o.user === userName) {
                         const depths = o.isBlue ? [0, 1, 2] : [0];
                         for (const d of depths) {
                             const currentY = n - d;

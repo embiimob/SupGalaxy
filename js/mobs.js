@@ -309,23 +309,25 @@ function manageMobs() {
     // Check if any player in the world is idle
     let hasIdlePlayer = false;
     const now = performance.now();
+    const IDLE_THRESHOLD = 60000; // 60 seconds
+
     for (const p of playersInWorld) {
         if (p.name === userName) {
             // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
             if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
-                if (now - window.lastMoveTime > 3600000) {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
                     break;
                 }
             } else if (typeof lastMoveTime !== 'undefined') {
-                if (now - lastMoveTime > 3600000) {
+                if (now - lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
                     break;
                 }
             }
         } else if (userPositions[p.name]) {
             const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
-            if (now - peerMoveTime > 3600000) {
+            if (now - peerMoveTime > IDLE_THRESHOLD) {
                 hasIdlePlayer = true;
                 break;
             }
@@ -570,9 +572,34 @@ Mob.prototype.update = function (t) {
         } else {
             let targetPos = new THREE.Vector3(player.x, player.y, player.z);
             let highestScore = player.score;
+            let foundIdlePlayer = false;
+
+            const now = performance.now();
+            const IDLE_THRESHOLD = 60000;
+
+            // Check if local player is idle
+            let localIdle = false;
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            } else if (typeof lastMoveTime !== 'undefined') {
+                if (now - lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            }
+
+            if (localIdle) {
+                foundIdlePlayer = true;
+            }
 
             for (const [peerName, pos] of Object.entries(userPositions)) {
-                if (pos.score !== undefined && pos.score > highestScore) {
+                const peerMoveTime = pos.lastMoveTime || pos.lastUpdate || now;
+                const isPeerIdle = (now - peerMoveTime > IDLE_THRESHOLD);
+
+                if (isPeerIdle) {
+                    // Prioritize idle players. If multiple, we just take the first we find or the current one.
+                    targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
+                    foundIdlePlayer = true;
+                    break;
+                } else if (!foundIdlePlayer && pos.score !== undefined && pos.score > highestScore) {
+                    // Fallback to highest score if no idle player found yet
                     highestScore = pos.score;
                     targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
                 }
@@ -605,7 +632,7 @@ Mob.prototype.update = function (t) {
 
             this.attackCooldown -= t;
             if (this.attackCooldown <= 0 && dist < 120) {
-                if (typeof createProjectile === "function") {
+                if (typeof createProjectile === "function" && (typeof isHost === "undefined" || isHost || peers.size === 0)) {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
                         new THREE.Vector3(8, 0, 0),
