@@ -201,7 +201,8 @@ const BLOCKS = {
         109: { name: 'Marble', color: '#f0f0f0' }, 110: { name: 'Obsidian', color: '#2d004d' },
         111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true }, 112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
         113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
-        134: { name: 'Blue Stalactite', color: '#4da6ff', light: true },
+        132: { name: 'Blue Calcite', color: '#4da6ff', light: true },
+        133: { name: 'Blue Laser Gun', color: '#0000ff', hand_attachable: true },
         115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
@@ -524,7 +525,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
                         let length = 1 + Math.floor(Math.random() * 11); // Up to 11 blocks
                         for (let cl = 1; cl <= length; cl++) {
                             if (y - cl > 0 && chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 0) {
-                                chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 134; // Blue Stalactite
+                                chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 132; // Blue Calcite
                             }
                         }
                     }

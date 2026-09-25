@@ -2026,6 +2026,50 @@ function onPointerDown(e) {
         });
         return
     }
+    if (t && 133 === t.id) {
+        const e = Date.now();
+        if (e - (player.lastFireTime || 0) < 500) return;
+        let t = -1;
+        for (let e = 0; e < INVENTORY.length; e++)
+            if (INVENTORY[e] && 132 === INVENTORY[e].id) {
+                t = e;
+                break
+            } if (-1 === t) return void addMessage("No blue calcite to fire!", 1e3);
+        INVENTORY[t].count--, INVENTORY[t].count <= 0 && (INVENTORY[t] = null), updateHotbarUI(), player.lastFireTime = e;
+        const o = new THREE.Vector3;
+        camera.getWorldDirection(o);
+        const a = new THREE.Vector3;
+        let n;
+        "third" === cameraMode && avatarGroup && avatarGroup.gun ? (avatarGroup.gun.getWorldPosition(a), n = a) : n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+
+        const r = userName + "-" + Date.now();
+        createProjectile(r, userName, n, o.clone(), "blue", true);
+        laserFireQueue.push({
+            id: r,
+            user: userName,
+            world: worldName,
+            position: {
+                x: n.x,
+                y: n.y,
+                z: n.z
+            },
+            direction: {
+                x: o.x,
+                y: o.y,
+                z: o.z
+            },
+            color: "blue",
+            isBlue: true
+        });
+
+        const fireAudioTemplate = document.getElementById('ufoCannonFire');
+        if (fireAudioTemplate) {
+            const fireAudio = fireAudioTemplate.cloneNode(true);
+            fireAudio.volume = 0.75;
+            fireAudio.play().catch(err => {});
+        }
+        return
+    }
     if (t && 126 === t.id) {
         const e = Date.now();
         if (e - (player.lastFireTime || 0) < 500) return;
@@ -3922,7 +3966,7 @@ function setupMobile() {
                     // If item is a gun (121, 126) or consumable (122), use Left Click (Button 0)
                     // because Right Click with hand_attachable items triggers 'drop' logic.
                     // Guns and honey are usually 0 to fire/eat.
-                    if (item && (item.id === 121 || item.id === 126 || item.id === 122)) {
+                    if (item && (item.id === 121 || item.id === 126 || item.id === 133 || item.id === 122)) {
                         button = 0;
                     }
 
