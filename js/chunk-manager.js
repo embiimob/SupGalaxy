@@ -100,17 +100,23 @@ function buildGreedyMesh(e, t, o) {
             if (!o) continue;
             let a;
             if (o.light) {
-                if (!emberTexture && typeof worldSeed !== 'undefined') {
-                    console.warn("[ChunkManager] emberTexture missing, regenerating...");
-                    emberTexture = createEmberTexture(worldSeed);
+                if (t === 134) {
+                    a = new THREE.MeshBasicMaterial({
+                        color: 0x4da6ff
+                    });
+                } else {
+                    if (!emberTexture && typeof worldSeed !== 'undefined') {
+                        console.warn("[ChunkManager] emberTexture missing, regenerating...");
+                        emberTexture = createEmberTexture(worldSeed);
+                    }
+                    a = new THREE.MeshBasicMaterial({
+                        map: emberTexture,
+                        color: 0xffaa00, // Fallback tint
+                        transparent: !0,
+                        opacity: .8,
+                        side: THREE.DoubleSide
+                    });
                 }
-                a = new THREE.MeshBasicMaterial({
-                    map: emberTexture,
-                    color: 0xffaa00, // Fallback tint
-                    transparent: !0,
-                    opacity: .8,
-                    side: THREE.DoubleSide
-                });
             }
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
@@ -288,17 +294,23 @@ Chunk.prototype.idx = function (e, t, o) {
                 color: "#ff00ff"
             };
             if (K.light) {
-                if (!emberTexture && typeof worldSeed !== 'undefined') {
-                    console.warn("[ChunkManager] emberTexture missing, regenerating...");
-                    emberTexture = createEmberTexture(worldSeed);
+                if (parseInt(w) === 134) {
+                    D = new THREE.MeshBasicMaterial({
+                        color: 0x4da6ff
+                    });
+                } else {
+                    if (!emberTexture && typeof worldSeed !== 'undefined') {
+                        console.warn("[ChunkManager] emberTexture missing, regenerating...");
+                        emberTexture = createEmberTexture(worldSeed);
+                    }
+                    D = new THREE.MeshBasicMaterial({
+                        map: emberTexture,
+                        color: 0xffaa00, // Fallback tint
+                        transparent: !0,
+                        opacity: .8,
+                        side: THREE.DoubleSide
+                    });
                 }
-                D = new THREE.MeshBasicMaterial({
-                    map: emberTexture,
-                    color: 0xffaa00, // Fallback tint
-                    transparent: !0,
-                    opacity: .8,
-                    side: THREE.DoubleSide
-                });
             }
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
@@ -442,6 +454,40 @@ Chunk.prototype.idx = function (e, t, o) {
     for (var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE), d = MAX_HEIGHT - 1; d >= 0; d--)
         if (s.get(i, d, l) !== BLOCK_AIR && 6 !== s.get(i, d, l)) return d + 1;
     return SEA_LEVEL
+}, ChunkManager.prototype.getCeilingY = function (e, t, startY) {
+    var o = modWrap(Math.floor(e), MAP_SIZE),
+        a = modWrap(Math.floor(t), MAP_SIZE),
+        n = Math.floor(o / CHUNK_SIZE),
+        r = Math.floor(a / CHUNK_SIZE),
+        s = this.getChunk(n, r);
+    if (!s || !s.generated) return startY;
+    var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE);
+    var currentIsSolid = s.get(i, Math.floor(startY), l) !== BLOCK_AIR && s.get(i, Math.floor(startY), l) !== 6;
+    if (currentIsSolid) {
+        for (var d = Math.floor(startY); d >= 0; d--) {
+            const blockId = s.get(i, d, l);
+            if (blockId === BLOCK_AIR || blockId === 6) return d;
+        }
+    } else {
+        for (var d = Math.floor(startY); d < MAX_HEIGHT; d++) {
+            const blockId = s.get(i, d, l);
+            if (blockId !== BLOCK_AIR && blockId !== 6) return d - 1;
+        }
+    }
+    return startY;
+}, ChunkManager.prototype.getFloorY = function (e, t, startY) {
+    var o = modWrap(Math.floor(e), MAP_SIZE),
+        a = modWrap(Math.floor(t), MAP_SIZE),
+        n = Math.floor(o / CHUNK_SIZE),
+        r = Math.floor(a / CHUNK_SIZE),
+        s = this.getChunk(n, r);
+    if (!s || !s.generated) return Math.max(1, startY);
+    var i = Math.floor(o % CHUNK_SIZE), l = Math.floor(a % CHUNK_SIZE);
+    for (var d = Math.floor(startY); d >= 0; d--) {
+        const blockId = s.get(i, d, l);
+        if (blockId !== BLOCK_AIR && blockId !== 6) return d + 1;
+    }
+    return Math.max(1, startY);
 }, ChunkManager.prototype.getSurfaceYForBoulders = function (e, t) {
     var o = modWrap(Math.floor(e), MAP_SIZE),
         a = modWrap(Math.floor(t), MAP_SIZE),

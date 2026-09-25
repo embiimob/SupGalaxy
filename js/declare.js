@@ -271,6 +271,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#00ff7b",
             strength: 4
         },
+        134: {
+            name: "Blue Stalactite",
+            color: "#4da6ff",
+            strength: 3,
+            light: !0
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",
@@ -765,12 +771,32 @@ const lightManager = {
         }
 
         const t = Array.from(torchRegistry.values()).sort(((t, o) => e.distanceTo(new THREE.Vector3(t.x, t.y, t.z)) - e.distanceTo(new THREE.Vector3(o.x, o.y, o.z))));
-        for (let e = 0; e < this.poolSize; e++)
-            if (e < t.length) {
-                const o = t[e],
-                    a = this.lights[e];
-                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 0.9, a.distance = 18
-            } else this.lights[e].intensity = 0
+        // e is the player position Vector3
+        const playerIsOnSurface = e.y >= chunkManager.getSurfaceY(e.x, e.z);
+
+        for (let idx = 0; idx < this.poolSize; idx++)
+            if (idx < t.length) {
+                const o = t[idx],
+                    a = this.lights[idx];
+                a.position.set(o.x + .5, o.y + .5, o.z + .5);
+
+                // Prevent underground lights bleeding through surface
+                const lightIsDeep = o.y < chunkManager.getSurfaceY(o.x, o.z) - 5;
+                if (playerIsOnSurface && lightIsDeep) {
+                    a.intensity = 0;
+                    continue;
+                }
+
+                if (o.type === 134) {
+                    a.intensity = 0.45;
+                    a.color.setHex(0x4da6ff);
+                    a.distance = 36;
+                } else {
+                    a.intensity = 0.9;
+                    a.color.setHex(16755251);
+                    a.distance = 18;
+                }
+            } else this.lights[idx].intensity = 0
     }
 };
 

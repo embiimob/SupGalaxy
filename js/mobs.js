@@ -1,10 +1,20 @@
 function Mob(t, e, s, i = "crawley") {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    const yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    let yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    if (i === "spider") {
+        yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
+        // Check if spawn was in sky
+        if (yPos >= chunkManager.getSurfaceY(t, e)) {
+             yPos = chunkManager.getSurfaceY(t, e) + 1; // Put it on surface temporarily
+             this.invalidSpawn = true; // Flag for instant death
+        }
+    }
     if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
     } else if ("ufo_saucer" === this.type) {
+        this.isAggressive = !0;
+    } else if ("spider" === this.type) {
         this.isAggressive = !0;
     } else {
         const t = makeSeededRandom(worldSeed + "_crawley_aggro")();
@@ -56,6 +66,45 @@ function Mob(t, e, s, i = "crawley") {
             s.position.set(.45 * i, 0, .3 * (Math.floor(e / 2) - 1)), this.mesh.add(s), this.mesh.legs.push(s)
         }
         this.originalColor = new THREE.Color(4868682)
+    } else if ("spider" === this.type) {
+        this.mesh = new THREE.Group;
+        const t = new THREE.MeshLambertMaterial({
+            color: 0x1a1a1a
+        });
+        const e = makeSeededRandom(worldSeed + "_spider_eye_color_" + this.id)();
+        let s;
+        if (e < 0.33) s = 0xcccccc; // Pale white
+        else if (e < 0.66) s = 0x888888; // Grey
+        else s = 0x000000; // Black
+        if (this.invalidSpawn) {
+             this.hp = -1;
+        } else {
+             this.hp = 15;
+        }
+        this.speed = 0.05 + 0.02 * Math.random();
+        const i = new THREE.MeshBasicMaterial({
+            color: s
+        });
+        const o = new THREE.BoxGeometry(.9, .4, .9);
+        const h = new THREE.Mesh(o, t);
+        this.mesh.add(h);
+        const a = new THREE.BoxGeometry(.2, .2, .1);
+        const n = new THREE.Mesh(a, i);
+        n.position.set(-.25, .1, -.45);
+        this.mesh.add(n);
+        const r = new THREE.Mesh(a, i);
+        r.position.set(.25, .1, -.45);
+        this.mesh.add(r);
+        this.mesh.legs = [];
+        const p = new THREE.BoxGeometry(.1, .8, .1);
+        for (let e = 0; e < 8; e++) {
+            const s = new THREE.Mesh(p, t),
+                i = e % 2 == 0 ? 1 : -1;
+            s.position.set(.45 * i, 0, .3 * (Math.floor(e / 2) - 1.5));
+            this.mesh.add(s);
+            this.mesh.legs.push(s);
+        }
+        this.originalColor = new THREE.Color(0x1a1a1a);
     } else if ("grub" === this.type) {
         this.hp = 40, this.speed = (.01 + .005 * Math.random()) / 2, this.aiState = "IDLE", this.animationTime = Math.random() * Math.PI * 2, this.cactusEaten = 0, this.isAggressive = !1;
         const t = 3,
@@ -209,7 +258,7 @@ function Mob(t, e, s, i = "crawley") {
 
         this.originalColor = null;
     }
-    if (this.mesh) { this.mesh.userData.mobId = this.id; this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z); scene.add(this.mesh); this.lastSentPos = new THREE.Vector3().copy(this.pos); this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion); }
+    if (this.mesh) { this.mesh.userData.mobId = this.id; this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z); scene.add(this.mesh); this.lastSentPos = new THREE.Vector3().copy(this.pos); this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion); }
 }
 
 function manageMobs() {
@@ -377,6 +426,7 @@ function manageMobs() {
             if ("crawley" === type) maxCount = 10;
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
+            else if ("spider" === type) maxCount = 6;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
@@ -477,18 +527,18 @@ Mob.prototype.update = function (t) {
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
 
-    if (!isLocalSpawner && this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isLocalSpawner) {
+    if (!isLocalSpawner && this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isLocalSpawner) {
         if (this.lastUpdateTime > 0) {
             const t = performance.now(),
                 e = t - this.lastUpdateTime;
             let s = Math.min(1, e / 300);
             s = isNaN(s) ? 1 : s;
-            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z), this.lastQuaternionUpdate > 0) {
+            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z), this.lastQuaternionUpdate > 0) {
                 const e = t - this.lastQuaternionUpdate;
                 let s = Math.min(1, e / 300);
                 s = isNaN(s) ? 1 : s, this.mesh.quaternion.copy(this.prevQuaternion).slerp(this.targetQuaternion, s)
             }
-        } else this.pos.copy(this.targetPos), this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
+        } else this.pos.copy(this.targetPos), this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z);
         Date.now() < this.flashEnd ? "grub" === this.type ? this.segments.forEach((t => {
             t.material = this.redMaterials
         })) : this.mesh.material ? this.mesh.material.color.set(16711680) : this.mesh.children[0].material.color.set(16711680) : "grub" === this.type ? this.segments.forEach((t => {
@@ -649,7 +699,71 @@ Mob.prototype.update = function (t) {
         }
         this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
     } else {
-        if (this.pos.x += this.vx * t, this.pos.z += this.vz * t, this.vx *= 1 - 2 * t, this.vz *= 1 - 2 * t, "crawley" === this.type) {
+        if (this.pos.x += this.vx * t, this.pos.z += this.vz * t, this.vx *= 1 - 2 * t, this.vz *= 1 - 2 * t, "spider" === this.type) {
+            let ceilingY = chunkManager.getCeilingY(this.pos.x, this.pos.z, this.pos.y) - 0.5;
+
+            // Safe access to player
+            let pExists = typeof player !== 'undefined' && player !== null;
+            if (pExists && this.aiState !== "FALLING") {
+                let playerDist = Math.hypot(this.pos.x - player.x, this.pos.z - player.z);
+                if (playerDist < 2.0 && this.pos.y > player.y + 1) {
+                    this.aiState = "FALLING";
+                }
+            }
+
+            if (this.aiState === "FALLING") {
+                this.pos.y -= 16 * t; // Fall down
+                let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y + 16 * t);
+
+                // Check if we hit the player
+                if (pExists) {
+                    let playerDistXZ = Math.hypot(this.pos.x - player.x, this.pos.z - player.z);
+                    if (playerDistXZ < 1.5) {
+                        let playerTopY = player.y + 1.6;
+                        if (this.pos.y <= playerTopY && this.pos.y > player.y) {
+                            this.pos.y = playerTopY;
+                            this.aiState = "ATTACKING_PLAYER";
+                            this.attackLinger = 0;
+
+                            // Deal drop damage
+                            this.lastEatTime = this.lastEatTime || 0;
+                            if (Date.now() - this.lastEatTime > 1000) {
+                                player.health = Math.max(0, player.health - 2);
+                                document.getElementById("health").innerText = player.health;
+                                if (typeof updateHealthBar === 'function') updateHealthBar();
+                                addMessage("Spider dropped on you! HP: " + player.health, 1000);
+                                if (player.health <= 0 && typeof handlePlayerDeath === 'function') handlePlayerDeath();
+                                this.lastEatTime = Date.now();
+                            }
+                        }
+                    }
+                }
+
+                if (this.pos.y <= floorY && this.aiState === "FALLING") {
+                    this.pos.y = floorY;
+                    this.aiState = "SEARCHING"; // Landed
+                }
+            } else if (this.aiState === "ATTACKING_PLAYER") {
+                if (pExists) {
+                    this.pos.x = player.x;
+                    this.pos.z = player.z;
+                    this.pos.y = player.y + 1.6;
+
+                    this.attackLinger += t;
+                    if (this.attackLinger > 2.0) {
+                        this.aiState = "SEARCHING";
+                    }
+                } else {
+                    this.aiState = "SEARCHING";
+                }
+            } else {
+                 let floorY = chunkManager.getFloorY(this.pos.x, this.pos.z, this.pos.y + 1);
+                 // Don't clip through floor
+                 if (this.pos.y < floorY) this.pos.y = floorY;
+                 // Don't clip through ceiling
+                 if (this.pos.y > ceilingY) this.pos.y = ceilingY;
+            }
+        } else if ("crawley" === this.type) {
             for (const t of mobs)
                 if (t.id !== this.id && "crawley" === t.type) {
                     const e = this.pos.x - t.pos.x,
@@ -676,7 +790,109 @@ Mob.prototype.update = function (t) {
         }
         let e = new THREE.Vector3(0, 0, 0),
             s = !1;
-        if ("crawley" === this.type) {
+        if ("spider" === this.type) {
+            const i = 12;
+            let o = 1 / 0;
+            let targetY = this.pos.y; // Keep track of target Y for climbing
+            let ceilingY = chunkManager.getCeilingY(this.pos.x, this.pos.z, this.pos.y) - 0.5;
+
+            // Periodically scan for light blocks to avoid 15k checks per frame
+            this.lastBlockScanTime = this.lastBlockScanTime || 0;
+            if (Date.now() - this.lastBlockScanTime > 1000) {
+                this.lastBlockScanTime = Date.now();
+                this.spiderTargetBlock = null;
+                let closestDist = Infinity;
+                let r = Math.ceil(i);
+                for (let x = Math.floor(this.pos.x) - r; x <= Math.floor(this.pos.x) + r; x++) {
+                    for (let y = Math.floor(this.pos.y) - r; y <= Math.floor(this.pos.y) + r; y++) {
+                        if (y < 0 || y >= MAX_HEIGHT) continue;
+                        for (let z = Math.floor(this.pos.z) - r; z <= Math.floor(this.pos.z) + r; z++) {
+                            let cx = Math.floor(x / CHUNK_SIZE);
+                            let cz = Math.floor(z / CHUNK_SIZE);
+                            let chunk = chunkManager.getChunk(cx, cz);
+                            if (!chunk) continue;
+                            let lx = modWrap(x, CHUNK_SIZE);
+                            let lz = modWrap(z, CHUNK_SIZE);
+                            const blockId = chunk.get(lx, y, lz);
+                            if (blockId === 120 || blockId === 134) {
+                                const h = Math.hypot(x - this.pos.x, y - this.pos.y, z - this.pos.z);
+                                if (h < closestDist && h < i) {
+                                    closestDist = h;
+                                    this.spiderTargetBlock = new THREE.Vector3(x, y, z);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (this.spiderTargetBlock) {
+                const h = this.pos.distanceTo(this.spiderTargetBlock);
+                if (h < i && h < o) {
+                    o = h;
+                    targetY = this.spiderTargetBlock.y;
+                    e.subVectors(this.spiderTargetBlock, this.pos).normalize(); // ATTRACT
+                    s = !0;
+                    if (h < 1.5) {
+                        chunkManager.setBlockGlobal(this.spiderTargetBlock.x, this.spiderTargetBlock.y, this.spiderTargetBlock.z, 0); // Eat the block
+
+                        // Cleanup ghost lights
+                        var d = `${this.spiderTargetBlock.x},${this.spiderTargetBlock.y},${this.spiderTargetBlock.z}`;
+                        if (torchRegistry.delete(d) && typeof torchParticles !== 'undefined' && torchParticles.has(d)) {
+                            var c = torchParticles.get(d);
+                            scene.remove(c);
+                            if (c.geometry) c.geometry.dispose();
+                            if (c.material) c.material.dispose();
+                            torchParticles.delete(d);
+                        }
+                        if (typeof lightManager !== 'undefined' && typeof player !== 'undefined') {
+                            lightManager.update(new THREE.Vector3(player.x, player.y, player.z));
+                        }
+                        this.spiderTargetBlock = null;
+                    }
+                }
+            }
+
+            if (typeof selectedBlockId !== 'undefined' && (selectedBlockId === 120 || selectedBlockId === 134) && typeof player !== 'undefined' && player !== null) {
+                const playerPos = new THREE.Vector3(player.x, player.y, player.z);
+                const h = this.pos.distanceTo(playerPos);
+                if (h < i && h < o) {
+                    o = h;
+                    targetY = playerPos.y;
+                    e.subVectors(playerPos, this.pos).normalize(); // ATTRACT
+                    s = !0;
+                    if (h < 1.5 && typeof INVENTORY !== 'undefined' && typeof selectedHotIndex !== 'undefined' && INVENTORY[selectedHotIndex]) {
+                        // Eat torch/stone from inventory with cooldown
+                        this.lastEatTime = this.lastEatTime || 0;
+                        if (Date.now() - this.lastEatTime > 1000) {
+                            INVENTORY[selectedHotIndex].count--;
+                            if (INVENTORY[selectedHotIndex].count <= 0) {
+                                INVENTORY[selectedHotIndex] = null;
+                                selectedBlockId = null;
+                            }
+                            if (typeof updateHotbarUI === 'function') updateHotbarUI();
+                            this.lastEatTime = Date.now();
+                        }
+                    }
+                }
+            }
+            if (s && this.aiState !== "FALLING" && this.aiState !== "ATTACKING_PLAYER") {
+                this.isMoving = !0;
+                this.pos.add(e.multiplyScalar(this.speed * t * 60));
+
+                // Allow vertical climbing towards target
+                let maxClimbSpeed = 8 * t;
+                if (targetY > this.pos.y) {
+                    this.pos.y += Math.min(targetY - this.pos.y, maxClimbSpeed);
+                } else if (targetY < this.pos.y) {
+                    this.pos.y -= Math.min(this.pos.y - targetY, maxClimbSpeed);
+                }
+            } else if (!s && this.aiState !== "FALLING" && this.aiState !== "ATTACKING_PLAYER") {
+                // Return to ceiling
+                this.pos.y += 4 * t;
+                if (this.pos.y > ceilingY) this.pos.y = ceilingY;
+            }
+        } else if ("crawley" === this.type) {
             const i = 8;
             let o = 1 / 0;
             for (const t of torchRegistry.values()) {
