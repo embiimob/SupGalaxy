@@ -520,14 +520,15 @@ function updateTorchRegistry(e) {
             for (let r = 0; r < MAX_HEIGHT; r++) {
                 const s = e.get(a, r, n);
                 if (BLOCKS[s] && BLOCKS[s].light) {
-                    const e = t + a,
-                        s = o + n,
+                    const bx = t + a,
+                        bz = o + n,
                         i = r,
-                        l = `${e},${i},${s}`;
+                        l = `${bx},${i},${bz}`;
                     torchRegistry.set(l, {
-                        x: e,
+                        x: bx,
                         y: i,
-                        z: s
+                        z: bz,
+                        type: s
                     })
                 }
             }
@@ -2699,14 +2700,17 @@ function placeBlockAt(e, t, o, a) {
                             addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
                         }
                         if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
-                            const a = `${e},${t},${o}`;
-                            torchRegistry.set(a, {
+                            const key = `${e},${t},${o}`;
+                            torchRegistry.set(key, {
                                 x: e,
                                 y: t,
-                                z: o
+                                z: o,
+                                type: a
                             });
-                            var c = createFlameParticles(e, t + .5, o);
-                            scene.add(c), torchParticles.set(a, c);
+                            if (a !== 134) {
+                                var c = createFlameParticles(e, t + .5, o);
+                                scene.add(c), torchParticles.set(key, c);
+                            }
                         }
 
                         // Broadcast to clients

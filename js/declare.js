@@ -272,7 +272,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 4
         },
         134: {
-            name: "Glowing Blue Stone",
+            name: "Blue Stalactite",
             color: "#4da6ff",
             strength: 3,
             light: !0
@@ -775,7 +775,14 @@ const lightManager = {
             if (e < t.length) {
                 const o = t[e],
                     a = this.lights[e];
-                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 0.9, a.distance = 18
+                a.position.set(o.x + .5, o.y + .5, o.z + .5), a.intensity = 0.9;
+                if (o.type === 134) {
+                    a.color.setHex(0x4da6ff);
+                    a.distance = 36;
+                } else {
+                    a.color.setHex(16755251);
+                    a.distance = 18;
+                }
             } else this.lights[e].intensity = 0
     }
 };

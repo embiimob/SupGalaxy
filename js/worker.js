@@ -201,7 +201,7 @@ const BLOCKS = {
         109: { name: 'Marble', color: '#f0f0f0' }, 110: { name: 'Obsidian', color: '#2d004d' },
         111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true }, 112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
         113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
-        134: { name: 'Glowing Blue Stone', color: '#4da6ff', light: true },
+        134: { name: 'Blue Stalactite', color: '#4da6ff', light: true },
         115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
@@ -517,14 +517,14 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
 
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
 
-                // Glowing blue stone on ceiling
+                // Blue stalactite on ceiling
                 if (!isCavern && prevWasCavern && id === 110 && y > 15) {
                     // Ceiling detected (transition from cavern to solid obsidian). Add glowing stone randomly.
-                    if (Math.random() < 0.05) { // Rare
-                        let length = 1 + Math.floor(Math.random() * 3); // Up to 3 blocks
+                    if (Math.random() < 0.025) { // Rare, cut in half
+                        let length = 1 + Math.floor(Math.random() * 2); // Up to 2 blocks
                         for (let cl = 1; cl <= length; cl++) {
                             if (y - cl > 0 && chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 0) {
-                                chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 134; // Glowing Blue Stone
+                                chunkData[(y - cl) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 134; // Blue Stalactite
                             }
                         }
                     }

@@ -417,6 +417,7 @@ function manageMobs() {
             if ("crawley" === type) maxCount = 10;
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
+            else if ("spider" === type) maxCount = 6;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
