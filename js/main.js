@@ -2434,8 +2434,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     };
     s.hits += damageAmount;
 
-    // UFO lasers can break unbreakable blocks by treating them as strength 20 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 20 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 2 : n.strength;
+    // UFO lasers can break unbreakable blocks by treating them as strength 40 if hit repeatedly (reduced damage)
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 40 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 4 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
@@ -5431,7 +5431,7 @@ function gameLoop(e) {
                         if (o.user === userName) {
                             lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
                         }
-                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                        const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                         if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
                         else {
                             for (const [peerId, peer] of peers.entries()) {
@@ -5465,7 +5465,7 @@ function gameLoop(e) {
                         // Make blue laser slightly more forgiving
                         const hitThreshold = o.isBlue ? 2.5 : 1.5;
                         if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
-                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                            const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                             player.health -= damage;
                             document.getElementById("health").innerText = player.health;
                             updateHealthBar();
@@ -5493,7 +5493,7 @@ function gameLoop(e) {
 
                             const hitThreshold = o.isBlue ? 2.5 : 1.5;
                             if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
-                                const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                                const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                                 const peer = peers.get(username);
                                 if (peer && peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(JSON.stringify({
