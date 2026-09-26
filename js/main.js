@@ -2400,7 +2400,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const n = BLOCKS[a];
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (!n || n.strength > 5) {
-        if (breaker && breaker.startsWith("ufo_saucer")) {
+        if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
             // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
         } else {
             return void addMessage("Cannot break that block");
@@ -2435,7 +2435,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     s.hits += damageAmount;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 20 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && breaker.startsWith("ufo_saucer")) ? 20 : (n.strength > 0 && breaker && breaker.startsWith("ufo_saucer")) ? n.strength * 2 : n.strength;
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 20 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 2 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
@@ -5263,7 +5263,7 @@ function gameLoop(e) {
                             let batchedMessages = [];
 
                             // Temporarily suppress chunk rebuilds to prevent massive stutter
-                            const originalSetBlockGlobal = chunkManager.setBlockGlobal;
+                            const originalSetBlockGlobal = ChunkManager.prototype.setBlockGlobal;
                             const modifiedChunks = new Set();
 
                             chunkManager.setBlockGlobal = function(e, t, o, a, n = !0, r = null, source = 'local') {
@@ -5323,7 +5323,7 @@ function gameLoop(e) {
                             }
 
                             // Restore original function and rebuild modified chunks
-                            chunkManager.setBlockGlobal = originalSetBlockGlobal;
+                            delete chunkManager.setBlockGlobal;
                             for (const chunk of modifiedChunks) {
                                 chunk.needsRebuild = true;
                             }
