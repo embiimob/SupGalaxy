@@ -1109,7 +1109,7 @@ function releaseProjectileMesh(mesh) {
 function createProjectile(e, t, o, a, n = "red") {
     const b = "blue" === n,
         r = "green" === n,
-        s = r || b ? 20 : 10,
+        s = b ? 30 : (r ? 20 : 10), // Adjust speeds based on color
         i = b ? 0x0000FF : (r ? 65280 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
@@ -1138,6 +1138,12 @@ function createDroppedItemOrb(e, t, o, a, n, count = 1) {
             emissiveIntensity: .5
         }),
         l = new THREE.Mesh(s, i);
+
+    // Give dropping blue laser guns the same visual scale as their fired projectiles
+    if (o === 133) {
+        l.scale.set(3, 3, 6);
+    }
+
     l.position.copy(t);
     const c = {
         id: e,
@@ -2078,6 +2084,47 @@ function onPointerDown(e) {
             color: "green"
         });
         return
+    }
+    if (t && 133 === t.id) {
+        const e = Date.now();
+        if (e - (player.lastFireTime || 0) < 500) return;
+        let tIndex = -1;
+        for (let e = 0; e < INVENTORY.length; e++)
+            if (INVENTORY[e] && 134 === INVENTORY[e].id) {
+                tIndex = e;
+                break
+            }
+        if (-1 === tIndex) return void addMessage("No Blue Calcite to fire!", 1e3);
+        INVENTORY[tIndex].count--;
+        if (INVENTORY[tIndex].count <= 0) INVENTORY[tIndex] = null;
+        updateHotbarUI();
+        player.lastFireTime = e;
+        const o = new THREE.Vector3;
+        camera.getWorldDirection(o);
+        const a = new THREE.Vector3;
+        let n;
+        a.crossVectors(camera.up, o).normalize();
+        if ("third" === cameraMode && avatarGroup && avatarGroup.gun) {
+            n = new THREE.Vector3;
+            avatarGroup.gun.getWorldPosition(n);
+        } else {
+            n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+        }
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                const r = `${userName}-${Date.now()}-blue-${i}`;
+                createProjectile(r, userName, n.clone(), o.clone(), "blue");
+                laserFireQueue.push({
+                    id: r,
+                    user: userName,
+                    world: worldName,
+                    position: {x: n.x, y: n.y, z: n.z},
+                    direction: {x: o.x, y: o.y, z: o.z},
+                    color: "blue"
+                });
+            }, i * 150);
+        }
+        return;
     }
     raycaster.setFromCamera(pointer, camera), raycaster.far = 5;
     const o = mobs.map((e => e.mesh)).filter((e => e.visible)),
@@ -5191,11 +5238,11 @@ function gameLoop(e) {
             for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
             laserFireQueue = [], lastLaserBatchTime = e
         }
-        if (laserQueue.length > 0) {
-            const e = laserQueue.shift();
+        // Process ALL batched laser messages in the queue per frame to prevent backlog stuttering
+        let playedBlueSoundThisFrame = false;
 
-            // Decouple audio to prevent stuttering/jank on batched projectiles
-            let playedBlueSoundThisFrame = false;
+        while (laserQueue.length > 0) {
+            const e = laserQueue.shift();
 
             if ("laser_fired_batch" === e.type) {
                 for (const t of e.projectiles) {
@@ -5649,6 +5696,21 @@ function gameLoop(e) {
                             mediaElement.pause();
                         }
                     }
+                }
+            }
+        }
+        if (window.activeExplosions) {
+            for (let i = window.activeExplosions.length - 1; i >= 0; i--) {
+                const expl = window.activeExplosions[i];
+                if (e - expl.createdAt > 2000) {
+                    scene.remove(expl.mesh);
+                    disposeObject(expl.mesh);
+                    window.activeExplosions.splice(i, 1);
+                } else {
+                    expl.mesh.position.add(expl.velocity);
+                    expl.velocity.y -= 0.01; // Gravity
+                    expl.mesh.rotation.x += expl.velocity.y;
+                    expl.mesh.rotation.y += expl.velocity.x;
                 }
             }
         }

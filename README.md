@@ -60,6 +60,9 @@ Real-time text chat with all connected players via WebRTC. Press `/` to open cha
 - **Honey** — restores +5 HP  
 - **Night Crawlers (Night)** — hunt honey & smash hives  
 - **Torches** — repel night creatures with light  
+- **Red Laser Gun** — deals 5 damage per shot (no ammo needed)
+- **Green Laser Gun** — deals 10 damage per shot, fires two blasts at once (consumes Emerald)
+- **Blue Laser Gun** — deals 15 damage per shot, fires three blasts at once (consumes Blue Calcite, drops from UFOs)
 
 ---
 
