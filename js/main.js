@@ -2399,7 +2399,13 @@ function removeBlockAt(e, t, o, breaker) {
 
     const n = BLOCKS[a];
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
-    if (!n || n.strength > 5) return void addMessage("Cannot break that block");
+    if (!n || n.strength > 5) {
+        if (breaker && breaker.startsWith("ufo_saucer")) {
+            // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
+        } else {
+            return void addMessage("Cannot break that block");
+        }
+    }
 
     // Check ownership BEFORE showing any visual feedback
     var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
@@ -2428,7 +2434,9 @@ function removeBlockAt(e, t, o, breaker) {
     };
     s.hits++;
 
-    if (s.hits < n.strength) {
+    // UFO lasers can break unbreakable blocks by treating them as strength 10 if hit repeatedly
+    const effectiveStrength = (n.strength > 5 && breaker && breaker.startsWith("ufo_saucer")) ? 10 : n.strength;
+    if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
         if (s.mesh) {
             crackMeshes.remove(s.mesh);
@@ -5242,9 +5250,16 @@ function gameLoop(e) {
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isHost || peers.size === 0) {
                         if (o.isBlue) {
-                            removeBlockAt(a, n, r, o.user);
-                            removeBlockAt(a, n - 1, r, o.user);
-                            removeBlockAt(a, n - 2, r, o.user);
+                            // Apply 3 hits of damage per block, ensuring tougher blocks like obsidian take longer
+                            for (let dx = -1; dx <= 1; dx++) {
+                                for (let dz = -1; dz <= 1; dz++) {
+                                    for (let dy = 0; dy < 8; dy++) {
+                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
+                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
+                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
+                                    }
+                                }
+                            }
                         } else {
                             removeBlockAt(a, n, r, o.user);
                         }
@@ -5252,7 +5267,7 @@ function gameLoop(e) {
                         // Clients only broadcast block hit if they own the projectile, OR if it's the host simulating it
                         const shouldSendBlockHit = (o.user === userName) || (o.isBlue && (isHost || peers.size === 0));
                         if (shouldSendBlockHit) {
-                            const depths = o.isBlue ? [0, 1, 2] : [0];
+                            const depths = o.isBlue ? [0, 1, 2, 3, 4, 5, 6, 7] : [0];
                             for (const d of depths) {
                                 const currentY = n - d;
                                 const blockId = getBlockAt(a, currentY, r);
