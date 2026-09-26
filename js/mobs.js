@@ -164,7 +164,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
-        this.hp = 200;
+        this.hp = 1;
         this.mesh = new THREE.Group();
 
         // Build Star Destroyer voxel construct
@@ -1398,6 +1398,26 @@ Mob.prototype.update = function (t) {
 }, Mob.prototype.die = function (t) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
+
+    if (this.type === "ufo_saucer") {
+        if (!window.activeExplosions) window.activeExplosions = [];
+        const geom = new THREE.BoxGeometry(1, 1, 1);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+        for (let i = 0; i < 20; i++) {
+            const particle = new THREE.Mesh(geom, mat);
+            particle.position.copy(this.pos);
+            particle.position.x += (Math.random() - 0.5) * 4;
+            particle.position.y += (Math.random() - 0.5) * 4;
+            particle.position.z += (Math.random() - 0.5) * 4;
+            scene.add(particle);
+            window.activeExplosions.push({
+                mesh: particle,
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5),
+                createdAt: performance.now()
+            });
+        }
+    }
+
     try {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
@@ -1409,7 +1429,14 @@ Mob.prototype.update = function (t) {
     }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
     let e = 10;
-    if ("ufo_saucer" === this.type) { e = 1000; } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
+    if ("ufo_saucer" === this.type) {
+        e = 1000;
+        if (Math.random() < (1/3)) {
+            if (typeof window.createDroppedItemOrb === 'function') {
+                window.createDroppedItemOrb(`${userName}-${Date.now()}-ufo-drop`, this.pos.clone(), 133, worldSeed, userName, 1);
+            }
+        }
+    } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
     if (t === userName) {
         player.score += e;
         document.getElementById("score").innerText = player.score;
