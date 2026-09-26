@@ -1109,7 +1109,7 @@ function releaseProjectileMesh(mesh) {
 function createProjectile(e, t, o, a, n = "red") {
     const b = "blue" === n,
         r = "green" === n,
-        s = r || b ? 20 : 10,
+        s = b ? 30 : (r ? 20 : 10), // Adjust speeds based on color
         i = b ? 0x0000FF : (r ? 65280 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
@@ -4291,8 +4291,11 @@ async function startGame() {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
-        id: 121,
+        id: 133,
         count: 1
+    }, INVENTORY[2] = {
+        id: 134,
+        count: 64
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
