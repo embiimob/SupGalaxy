@@ -2434,8 +2434,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     };
     s.hits += damageAmount;
 
-    // UFO lasers can break unbreakable blocks by treating them as strength 500 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 500 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 16 : n.strength;
+    // UFO lasers can break unbreakable blocks by treating them as strength 1500 if hit repeatedly (reduced damage)
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 1500 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 48 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
