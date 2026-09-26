@@ -1138,6 +1138,12 @@ function createDroppedItemOrb(e, t, o, a, n, count = 1) {
             emissiveIntensity: .5
         }),
         l = new THREE.Mesh(s, i);
+
+    // Give dropping blue laser guns the same visual scale as their fired projectiles
+    if (o === 133) {
+        l.scale.set(3, 3, 6);
+    }
+
     l.position.copy(t);
     const c = {
         id: e,
@@ -4291,8 +4297,11 @@ async function startGame() {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
-        id: 121,
+        id: 133,
         count: 1
+    }, INVENTORY[2] = {
+        id: 134,
+        count: 64
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;

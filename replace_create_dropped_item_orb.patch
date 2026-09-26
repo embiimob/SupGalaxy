@@ -1,0 +1,33 @@
+<<<<<<< SEARCH
+function createDroppedItemOrb(e, t, o, a, n, count = 1) {
+    const r = BLOCKS[o];
+    if (!r) return;
+    const s = new THREE.SphereGeometry(.25, 16, 16),
+        i = new THREE.MeshStandardMaterial({
+            color: r.color,
+            emissive: r.color,
+            emissiveIntensity: .5
+        }),
+        l = new THREE.Mesh(s, i);
+    l.position.copy(t);
+=======
+function createDroppedItemOrb(e, t, o, a, n, count = 1) {
+    const r = BLOCKS[o];
+    if (!r) return;
+    const s = new THREE.SphereGeometry(.25, 16, 16),
+        i = new THREE.MeshStandardMaterial({
+            color: r.color,
+            emissive: r.color,
+            emissiveIntensity: .5
+        }),
+        l = new THREE.Mesh(s, i);
+
+    // Give dropping laser guns the same visual scale as their fired projectiles
+    if (o === 121 || o === 126 || o === 133) {
+        if (o === 133) {
+            l.scale.set(3, 3, 6);
+        }
+    }
+
+    l.position.copy(t);
+>>>>>>> REPLACE
