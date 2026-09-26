@@ -2393,7 +2393,7 @@ function checkAndDeactivateHive(e, t, o) {
     0 === r && (console.log(`[HIVE] All blocks for hive at ${a.x},${a.y},${a.z} are gone. Deactivating.`), hiveLocations = hiveLocations.filter((e => e.x !== a.x || e.y !== a.y || e.z !== a.z)), addMessage("A bee hive has been destroyed!", 3e3))
 }
 
-function removeBlockAt(e, t, o, breaker) {
+function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
 
@@ -2432,52 +2432,55 @@ function removeBlockAt(e, t, o, breaker) {
         hits: 0,
         mesh: null
     };
-    s.hits++;
+    s.hits += damageAmount;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 20 if hit repeatedly (reduced damage)
     const effectiveStrength = (n.strength > 5 && breaker && breaker.startsWith("ufo_saucer")) ? 20 : (n.strength > 0 && breaker && breaker.startsWith("ufo_saucer")) ? n.strength * 2 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
-        if (s.mesh) {
-            crackMeshes.remove(s.mesh);
-            disposeObject(s.mesh);
-        }
-        let canvas = s.canvas;
-        if (!canvas) {
-            canvas = document.createElement('canvas');
-            canvas.width = 16;
-            canvas.height = 16;
-            s.canvas = canvas;
-        }
-        drawCracksOnCanvas(canvas);
-        const newCrackTexture = new THREE.CanvasTexture(canvas);
-        newCrackTexture.magFilter = THREE.NearestFilter;
-        newCrackTexture.minFilter = THREE.NearestFilter;
-        newCrackTexture.needsUpdate = true;
-        const l = new THREE.MeshBasicMaterial({
-            map: newCrackTexture,
-            transparent: true,
-            opacity: 1
-        });
-        const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
-        d.position.set(e + 0.5, t + 0.5, o + 0.5);
-        s.mesh = d;
-        crackMeshes.add(d);
-        const c = `pick${Math.floor(Math.random() * 3)}`;
-        const u = document.getElementById(c);
-        safePlayAudio(u);
 
-        if (isHost) {
-            const blockDamagedMsg = JSON.stringify({
-                type: 'block_damaged',
-                x: e,
-                y: t,
-                z: o,
-                hits: s.hits
+        if (!silent) {
+            if (s.mesh) {
+                crackMeshes.remove(s.mesh);
+                disposeObject(s.mesh);
+            }
+            let canvas = s.canvas;
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                s.canvas = canvas;
+            }
+            drawCracksOnCanvas(canvas);
+            const newCrackTexture = new THREE.CanvasTexture(canvas);
+            newCrackTexture.magFilter = THREE.NearestFilter;
+            newCrackTexture.minFilter = THREE.NearestFilter;
+            newCrackTexture.needsUpdate = true;
+            const l = new THREE.MeshBasicMaterial({
+                map: newCrackTexture,
+                transparent: true,
+                opacity: 1
             });
-            for (const [, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(blockDamagedMsg);
+            const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
+            d.position.set(e + 0.5, t + 0.5, o + 0.5);
+            s.mesh = d;
+            crackMeshes.add(d);
+            const c = `pick${Math.floor(Math.random() * 3)}`;
+            const u = document.getElementById(c);
+            safePlayAudio(u);
+
+            if (isHost) {
+                const blockDamagedMsg = JSON.stringify({
+                    type: 'block_damaged',
+                    x: e,
+                    y: t,
+                    z: o,
+                    hits: s.hits
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(blockDamagedMsg);
+                    }
                 }
             }
         }
@@ -2495,22 +2498,25 @@ function removeBlockAt(e, t, o, breaker) {
             const l = worldState.foreignBlockOrigins.get(r);
             chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
-            if (breaker === userName) {
-                addToInventory(a, 1, l);
-                addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
-                safePlayAudio(soundBreak);
-            } else if (isHost) {
-                const peer = peers.get(breaker);
-                if (peer && peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(JSON.stringify({
-                        type: 'add_to_inventory',
-                        blockId: a,
-                        count: 1,
-                        originSeed: l
-                    }));
+
+            if (!silent) {
+                if (breaker === userName) {
+                    addToInventory(a, 1, l);
+                    addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+                    safePlayAudio(soundBreak);
+                } else if (isHost) {
+                    const peer = peers.get(breaker);
+                    if (peer && peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(JSON.stringify({
+                            type: 'add_to_inventory',
+                            blockId: a,
+                            count: 1,
+                            originSeed: l
+                        }));
+                    }
                 }
+                createBlockParticles(e, t, o, a);
             }
-            createBlockParticles(e, t, o, a);
 
             if (BLOCKS[a] && BLOCKS[a].light) {
                 var d = `${e},${t},${o}`;
@@ -5254,9 +5260,8 @@ function gameLoop(e) {
                             for (let dx = -1; dx <= 1; dx++) {
                                 for (let dz = -1; dz <= 1; dz++) {
                                     for (let dy = 0; dy < 8; dy++) {
-                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
-                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
-                                        removeBlockAt(a + dx, n - dy, r + dz, o.user);
+                                        // Use silent = true and damageAmount = 3 to reduce CPU and Network flood
+                                        removeBlockAt(a + dx, n - dy, r + dz, o.user, 3, true);
                                     }
                                 }
                             }
@@ -5264,18 +5269,43 @@ function gameLoop(e) {
                             removeBlockAt(a, n, r, o.user);
                         }
                     } else {
-                        // Clients only broadcast block hit if they own the projectile, OR if it's the host simulating it
-                        const shouldSendBlockHit = (o.user === userName) || (o.isBlue && (isHost || peers.size === 0));
+                        // Clients only broadcast block hit if they own the projectile
+                        const shouldSendBlockHit = (o.user === userName);
                         if (shouldSendBlockHit) {
-                            const depths = o.isBlue ? [0, 1, 2, 3, 4, 5, 6, 7] : [0];
-                            for (const d of depths) {
-                                const currentY = n - d;
-                                const blockId = getBlockAt(a, currentY, r);
+                            if (o.isBlue) {
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    for (let dz = -1; dz <= 1; dz++) {
+                                        for (let dy = 0; dy < 8; dy++) {
+                                            const currentX = a + dx;
+                                            const currentY = n - dy;
+                                            const currentZ = r + dz;
+                                            const blockId = getBlockAt(currentX, currentY, currentZ);
+                                            if (blockId > 0) {
+                                                const blockHitMsg = JSON.stringify({
+                                                    type: 'block_hit',
+                                                    x: currentX,
+                                                    y: currentY,
+                                                    z: currentZ,
+                                                    username: o.user,
+                                                    world: worldName,
+                                                    blockId: blockId
+                                                });
+                                                for (const [, peer] of peers.entries()) {
+                                                    if (peer.dc && peer.dc.readyState === 'open') {
+                                                        peer.dc.send(blockHitMsg);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                const blockId = getBlockAt(a, n, r);
                                 if (blockId > 0) {
                                     const blockHitMsg = JSON.stringify({
                                         type: 'block_hit',
                                         x: a,
-                                        y: currentY,
+                                        y: n,
                                         z: r,
                                         username: o.user,
                                         world: worldName,
