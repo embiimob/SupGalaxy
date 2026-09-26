@@ -357,25 +357,33 @@ function manageMobs() {
 
     // Check if any player in the world is idle
     let hasIdlePlayer = false;
+    let idlePlayerPos = null;
     const now = performance.now();
+    const IDLE_THRESHOLD = 900000; // 15 minutes
+
     for (const p of playersInWorld) {
         if (p.name === userName) {
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime === 'undefined') { window.lastMoveTime = now; }
             // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
             if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
-                if (now - window.lastMoveTime > 3600000) {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             } else if (typeof lastMoveTime !== 'undefined') {
-                if (now - lastMoveTime > 3600000) {
+                if (now - lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             }
         } else if (userPositions[p.name]) {
             const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
-            if (now - peerMoveTime > 3600000) {
+            if (now - peerMoveTime > IDLE_THRESHOLD) {
                 hasIdlePlayer = true;
+                const pos = userPositions[p.name];
+                idlePlayerPos = { x: pos.targetX || pos.prevX, z: pos.targetZ || pos.prevZ };
                 break;
             }
         }
@@ -390,7 +398,16 @@ function manageMobs() {
     mobs = mobs.filter((mob) => {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
-        if (!isNearAnyPlayer || !isAllowedType) {
+
+        if (mob.type === "ufo_saucer" && (!isAllowedType || !isNearAnyPlayer)) {
+            // If the player is no longer idle or too far, transition the UFO to LEAVING instead of instantly despawning
+            if (mob.aiState !== "LEAVING") {
+                mob.aiState = "LEAVING";
+                mob.lingerTime = 180001; // Force leaving behavior
+            }
+            // Do not despawn instantly. Wait for the y > 800 check in update()
+            return true;
+        } else if (!isNearAnyPlayer || !isAllowedType) {
             // Only the person who "owns" the despawn should send it, but let's have everyone clean up their own locally.
             // If we are a spawner for the area the mob *was* in, broadcast despawn.
             // A simpler approach: Anyone can locally despawn if it's too far from everyone.
@@ -437,19 +454,30 @@ function manageMobs() {
             for (const mob of mobs) {
                 if (mob.type === type) {
                     // Check if mob is near this area
-                    if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) {
-                        countInArea++;
-                    }
+                    // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
+                    // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
+                    if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 
             if (countInArea < maxCount) {
-                const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
-                const angle = Math.random() * Math.PI * 2;
-                const distance = 32 + 64 * Math.random() / 2;
+                let spawnX, spawnZ;
+
+                if (type === "ufo_saucer" && idlePlayerPos) {
+                    // Spawn directly above the idle player
+                    spawnX = idlePlayerPos.x;
+                    spawnZ = idlePlayerPos.z;
+                } else {
+                    const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 32 + 64 * Math.random() / 2;
+                    spawnX = modWrap(randomPlayer.x + Math.cos(angle) * distance, MAP_SIZE);
+                    spawnZ = modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE);
+                }
+
                 const newMob = new Mob(
-                    modWrap(randomPlayer.x + Math.cos(angle) * distance, MAP_SIZE),
-                    modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE),
+                    spawnX,
+                    spawnZ,
                     Date.now() + Math.random(),
                     type
                 );
@@ -505,6 +533,7 @@ function manageMobs() {
 
 function handleMobHit(t) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    // We shouldn't set lastMoveTime here, we do it in projectile logic (main.js). If we do it here, it will trigger for anyone handling the hit, not just the user.
     if (isLocalSpawner) {
         t.hurt(4, userName);
     } else {
@@ -620,9 +649,35 @@ Mob.prototype.update = function (t) {
         } else {
             let targetPos = new THREE.Vector3(player.x, player.y, player.z);
             let highestScore = player.score;
+            let foundIdlePlayer = false;
+
+            const now = performance.now();
+            const IDLE_THRESHOLD = 900000; // 15 minutes
+
+            // Check if local player is idle
+            let localIdle = false;
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            } else if (typeof lastMoveTime !== 'undefined') {
+                if (now - lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            }
+
+            if (localIdle) {
+                foundIdlePlayer = true;
+                targetPos.set(player.x, player.y, player.z);
+            }
 
             for (const [peerName, pos] of Object.entries(userPositions)) {
-                if (pos.score !== undefined && pos.score > highestScore) {
+                const peerMoveTime = pos.lastMoveTime || pos.lastUpdate || now;
+                const isPeerIdle = (now - peerMoveTime > IDLE_THRESHOLD);
+
+                if (isPeerIdle) {
+                    // Prioritize idle players. If multiple, we just take the first we find or the current one.
+                    targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
+                    foundIdlePlayer = true;
+                    break;
+                } else if (!foundIdlePlayer && pos.score !== undefined && pos.score > highestScore) {
+                    // Fallback to highest score if no idle player found yet
                     highestScore = pos.score;
                     targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
                 }
@@ -638,7 +693,8 @@ Mob.prototype.update = function (t) {
             }
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
-            const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 60;
+            const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
+            const targetY = baseTargetY + 60;
             if (this.pos.y > targetY) {
                 this.pos.y -= 5 * t;
             } else if (this.pos.y < targetY) {
@@ -655,13 +711,15 @@ Mob.prototype.update = function (t) {
 
             this.attackCooldown -= t;
             if (this.attackCooldown <= 0 && dist < 120) {
-                if (typeof createProjectile === "function") {
+                if (typeof createProjectile === "function" && (typeof isHost === "undefined" || isHost || peers.size === 0)) {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
                         new THREE.Vector3(8, 0, 0),
                         new THREE.Vector3(0, 0, -8),
                         new THREE.Vector3(0, 0, 8)
                     ];
+
+                    let playedAudioThisFrame = false;
 
                     for (let i = 0; i < offsets.length; i++) {
                         const pid = this.id + '-' + Date.now() + '-' + i;
@@ -670,16 +728,19 @@ Mob.prototype.update = function (t) {
 
                         createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
 
-                        const fireAudioTemplate = document.getElementById('ufoCannonFire');
-                        if (fireAudioTemplate) {
-                            const fireAudio = fireAudioTemplate.cloneNode(true);
-                            const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
-                            let vol = 0;
-                            if (distToPlayer < 192) {
-                                vol = Math.max(0, 1 - distToPlayer / 192);
+                        if (!playedAudioThisFrame) {
+                            const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                            if (fireAudioTemplate) {
+                                const fireAudio = fireAudioTemplate.cloneNode(true);
+                                const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
+                                let vol = 0;
+                                if (distToPlayer < 192) {
+                                    vol = Math.max(0, 1 - distToPlayer / 192);
+                                }
+                                fireAudio.volume = vol * 0.75;
+                                fireAudio.play().catch(e => {});
                             }
-                            fireAudio.volume = vol;
-                            fireAudio.play().catch(e => {});
+                            playedAudioThisFrame = true;
                         }
 
                         if (typeof window.laserFireQueue !== "undefined") {

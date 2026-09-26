@@ -2393,12 +2393,19 @@ function checkAndDeactivateHive(e, t, o) {
     0 === r && (console.log(`[HIVE] All blocks for hive at ${a.x},${a.y},${a.z} are gone. Deactivating.`), hiveLocations = hiveLocations.filter((e => e.x !== a.x || e.y !== a.y || e.z !== a.z)), addMessage("A bee hive has been destroyed!", 3e3))
 }
 
-function removeBlockAt(e, t, o, breaker) {
+function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
 
     const n = BLOCKS[a];
-    if (!n || n.strength > 5) return void addMessage("Cannot break that block");
+    if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
+    if (!n || n.strength > 5) {
+        if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
+            // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
+        } else {
+            return void addMessage("Cannot break that block");
+        }
+    }
 
     // Check ownership BEFORE showing any visual feedback
     var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
@@ -2425,50 +2432,55 @@ function removeBlockAt(e, t, o, breaker) {
         hits: 0,
         mesh: null
     };
-    s.hits++;
+    s.hits += damageAmount;
 
-    if (s.hits < n.strength) {
+    // UFO lasers can break unbreakable blocks by treating them as strength 100000 if hit repeatedly (reduced damage)
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 100000 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 3000 : n.strength;
+    if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
-        if (s.mesh) {
-            crackMeshes.remove(s.mesh);
-            disposeObject(s.mesh);
-        }
-        let canvas = s.canvas;
-        if (!canvas) {
-            canvas = document.createElement('canvas');
-            canvas.width = 16;
-            canvas.height = 16;
-            s.canvas = canvas;
-        }
-        drawCracksOnCanvas(canvas);
-        const newCrackTexture = new THREE.CanvasTexture(canvas);
-        newCrackTexture.magFilter = THREE.NearestFilter;
-        newCrackTexture.minFilter = THREE.NearestFilter;
-        newCrackTexture.needsUpdate = true;
-        const l = new THREE.MeshBasicMaterial({
-            map: newCrackTexture,
-            transparent: true,
-            opacity: 1
-        });
-        const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
-        d.position.set(e + 0.5, t + 0.5, o + 0.5);
-        s.mesh = d;
-        crackMeshes.add(d);
-        const c = `pick${Math.floor(Math.random() * 3)}`;
-        const u = document.getElementById(c);
-        safePlayAudio(u);
 
-        if (isHost) {
-            const blockDamagedMsg = JSON.stringify({
-                type: 'block_damaged',
-                x: e,
-                y: t,
-                z: o,
-                hits: s.hits
+        if (!silent) {
+            if (s.mesh) {
+                crackMeshes.remove(s.mesh);
+                disposeObject(s.mesh);
+            }
+            let canvas = s.canvas;
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                s.canvas = canvas;
+            }
+            drawCracksOnCanvas(canvas);
+            const newCrackTexture = new THREE.CanvasTexture(canvas);
+            newCrackTexture.magFilter = THREE.NearestFilter;
+            newCrackTexture.minFilter = THREE.NearestFilter;
+            newCrackTexture.needsUpdate = true;
+            const l = new THREE.MeshBasicMaterial({
+                map: newCrackTexture,
+                transparent: true,
+                opacity: 1
             });
-            for (const [, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(blockDamagedMsg);
+            const d = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), l);
+            d.position.set(e + 0.5, t + 0.5, o + 0.5);
+            s.mesh = d;
+            crackMeshes.add(d);
+            const c = `pick${Math.floor(Math.random() * 3)}`;
+            const u = document.getElementById(c);
+            safePlayAudio(u);
+
+            if (isHost) {
+                const blockDamagedMsg = JSON.stringify({
+                    type: 'block_damaged',
+                    x: e,
+                    y: t,
+                    z: o,
+                    hits: s.hits
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(blockDamagedMsg);
+                    }
                 }
             }
         }
@@ -2484,24 +2496,29 @@ function removeBlockAt(e, t, o, breaker) {
             // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
-            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName, null, 'local');
+
+            // Revert changes back to broadcast so blocks correctly disappear on clients when broken by UFO
+            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
-            if (breaker === userName) {
-                addToInventory(a, 1, l);
-                addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
-                safePlayAudio(soundBreak);
-            } else if (isHost) {
-                const peer = peers.get(breaker);
-                if (peer && peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(JSON.stringify({
-                        type: 'add_to_inventory',
-                        blockId: a,
-                        count: 1,
-                        originSeed: l
-                    }));
+
+            if (!silent) {
+                if (breaker === userName) {
+                    addToInventory(a, 1, l);
+                    addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+                    safePlayAudio(soundBreak);
+                } else if (isHost) {
+                    const peer = peers.get(breaker);
+                    if (peer && peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(JSON.stringify({
+                            type: 'add_to_inventory',
+                            blockId: a,
+                            count: 1,
+                            originSeed: l
+                        }));
+                    }
                 }
+                createBlockParticles(e, t, o, a);
             }
-            createBlockParticles(e, t, o, a);
 
             if (BLOCKS[a] && BLOCKS[a].light) {
                 var d = `${e},${t},${o}`;
@@ -2619,6 +2636,8 @@ function placeBlockAt(e, t, o, a) {
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
+                    lastMoveTime = performance.now();
+                    window.lastMoveTime = lastMoveTime;
                     for (var s of mobs)
                         if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
 
@@ -4996,7 +5015,13 @@ function gameLoop(e) {
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01;
         if (e - lastUpdateTime > 50 && (I || k)) {
-            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e, lastMoveTime = e, window.lastMoveTime = e, lastSentPosition = {
+            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
+            // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
+            if (I || isAttacking) {
+                lastMoveTime = e;
+                window.lastMoveTime = e;
+            }
+            lastSentPosition = {
                 x: player.x,
                 y: player.y,
                 z: player.z,
@@ -5082,7 +5107,7 @@ function gameLoop(e) {
                     t.volume = o < a ? Math.max(0, 1 - o / a) : 0
                 }
             }
-        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastMoveTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
+        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
         for (let o = eruptedBlocks.length - 1; o >= 0; o--) {
             const a = eruptedBlocks[o];
             if (isHost || 0 === peers.size)
@@ -5168,9 +5193,47 @@ function gameLoop(e) {
         }
         if (laserQueue.length > 0) {
             const e = laserQueue.shift();
-            if ("laser_fired_batch" === e.type)
-                for (const t of e.projectiles) t.user !== userName && createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
-            else e.user !== userName && createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color)
+
+            // Decouple audio to prevent stuttering/jank on batched projectiles
+            let playedBlueSoundThisFrame = false;
+
+            if ("laser_fired_batch" === e.type) {
+                for (const t of e.projectiles) {
+                    if (t.user !== userName) {
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+                        if (t.color === "blue" && !playedBlueSoundThisFrame) {
+                            const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                            if (fireAudioTemplate) {
+                                const fireAudio = fireAudioTemplate.cloneNode(true);
+                                const distToPlayer = Math.hypot(player.x - t.position.x, player.y - t.position.y, player.z - t.position.z);
+                                let vol = 0;
+                                if (distToPlayer < 192) {
+                                    vol = Math.max(0, 1 - distToPlayer / 192);
+                                }
+                                fireAudio.volume = vol * 0.75;
+                                fireAudio.play().catch(err => {});
+                                playedBlueSoundThisFrame = true;
+                            }
+                        }
+                    }
+                }
+            } else if (e.user !== userName) {
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
+                if (e.color === "blue" && !playedBlueSoundThisFrame) {
+                    const fireAudioTemplate = document.getElementById('ufoCannonFire');
+                    if (fireAudioTemplate) {
+                        const fireAudio = fireAudioTemplate.cloneNode(true);
+                        const distToPlayer = Math.hypot(player.x - e.position.x, player.y - e.position.y, player.z - e.position.z);
+                        let vol = 0;
+                        if (distToPlayer < 192) {
+                            vol = Math.max(0, 1 - distToPlayer / 192);
+                        }
+                        fireAudio.volume = vol * 0.75;
+                        fireAudio.play().catch(err => {});
+                        playedBlueSoundThisFrame = true;
+                    }
+                }
+            }
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
@@ -5195,30 +5258,145 @@ function gameLoop(e) {
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isHost || peers.size === 0) {
                         if (o.isBlue) {
-                            removeBlockAt(a, n, r, o.user);
-                            removeBlockAt(a, n - 1, r, o.user);
-                            removeBlockAt(a, n - 2, r, o.user);
+                            // Apply 3 hits of damage per block, ensuring tougher blocks like obsidian take longer
+                            // Batch updates to avoid freezing main thread
+                            let batchedMessages = [];
+
+                            // Temporarily suppress chunk rebuilds to prevent massive stutter
+                            const originalSetBlockGlobal = ChunkManager.prototype.setBlockGlobal;
+                            const modifiedChunks = new Set();
+
+                            chunkManager.setBlockGlobal = function(e, t, o, a, n = !0, r = null, source = 'local') {
+                                if (t < 0 || t >= MAX_HEIGHT) return;
+                                var s = modWrap(e, MAP_SIZE), i = modWrap(o, MAP_SIZE);
+                                var l = Math.floor(s / CHUNK_SIZE), d = Math.floor(i / CHUNK_SIZE);
+                                var c = Math.floor(s % CHUNK_SIZE), u = Math.floor(i % CHUNK_SIZE);
+                                var p = this.getChunk(l, d);
+                                p.generated || this.generateChunk(p);
+                                var m = p.get(c, t, u);
+                                if (m !== a) {
+                                    p.set(c, t, u, a);
+                                    if (a === BLOCK_AIR) {
+                                        const key = `${e},${t},${o}`;
+                                        const damagedBlock = damagedBlocks.get(key);
+                                        if (damagedBlock && damagedBlock.mesh) {
+                                            crackMeshes.remove(damagedBlock.mesh);
+                                            disposeObject(damagedBlock.mesh);
+                                            damagedBlocks.delete(key);
+                                        }
+                                    }
+                                    var y = p.key;
+                                    const worldState = getCurrentWorldState();
+                                    if (!worldState.chunkDeltas.has(y)) worldState.chunkDeltas.set(y, []);
+                                    worldState.chunkDeltas.get(y).push({x: c, y: t, z: u, b: a, source: source});
+
+                                    // Track modified chunks instead of rebuilding immediately
+                                    modifiedChunks.add(p);
+                                    if (c === 0) modifiedChunks.add(this.getChunk(l - 1, d));
+                                    if (c === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l + 1, d));
+                                    if (u === 0) modifiedChunks.add(this.getChunk(l, d - 1));
+                                    if (u === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l, d + 1));
+
+                                    if (n) {
+                                        batchedMessages.push({
+                                            type: "block_change",
+                                            world: worldName,
+                                            wx: e,
+                                            wy: t,
+                                            wz: o,
+                                            bid: a,
+                                            prevBid: m,
+                                            username: userName,
+                                            originSeed: r
+                                        });
+                                    }
+                                }
+                            };
+
+                            for (let dx = -1; dx <= 1; dx++) {
+                                for (let dz = -1; dz <= 1; dz++) {
+                                    for (let dy = 0; dy < 2; dy++) {
+                                        // Use silent = true and damageAmount = 1 to drastically slow down the mining speed per user request
+                                        removeBlockAt(a + dx, n - dy, r + dz, o.user, 1, true);
+                                    }
+                                }
+                            }
+
+                            // Restore original function and rebuild modified chunks
+                            delete chunkManager.setBlockGlobal;
+                            for (const chunk of modifiedChunks) {
+                                chunk.needsRebuild = true;
+                            }
+                            updateSaveChangesButton();
+
+                            // Send batched updates over network to prevent packet flood blocking the stream
+                            if (batchedMessages.length > 0) {
+                                // Batch messages to prevent sending thousands of tiny packets
+                                const batchSize = 25;
+                                for (let i = 0; i < batchedMessages.length; i += batchSize) {
+                                    const batch = batchedMessages.slice(i, i + batchSize);
+                                    const batchedMsg = JSON.stringify({
+                                        type: "batch_block_change",
+                                        messages: batch
+                                    });
+                                    for (const [peerName, peer] of peers.entries()) {
+                                        if (peerName !== userName && peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(batchedMsg);
+                                        }
+                                    }
+                                }
+                            }
+
                         } else {
                             removeBlockAt(a, n, r, o.user);
                         }
                     } else {
-                        const depths = o.isBlue ? [0, 1, 2] : [0];
-                        for (const d of depths) {
-                            const currentY = n - d;
-                            const blockId = getBlockAt(a, currentY, r);
-                            if (blockId > 0) {
-                                const blockHitMsg = JSON.stringify({
-                                    type: 'block_hit',
-                                    x: a,
-                                    y: currentY,
-                                    z: r,
-                                    username: o.user,
-                                    world: worldName,
-                                    blockId: blockId
-                                });
-                                for (const [, peer] of peers.entries()) {
-                                    if (peer.dc && peer.dc.readyState === 'open') {
-                                        peer.dc.send(blockHitMsg);
+                        // Clients only broadcast block hit if they own the projectile
+                        const shouldSendBlockHit = (o.user === userName);
+                        if (shouldSendBlockHit) {
+                            if (o.isBlue) {
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    for (let dz = -1; dz <= 1; dz++) {
+                                        for (let dy = 0; dy < 2; dy++) {
+                                            const currentX = a + dx;
+                                            const currentY = n - dy;
+                                            const currentZ = r + dz;
+                                            const blockId = getBlockAt(currentX, currentY, currentZ);
+                                            if (blockId > 0) {
+                                                const blockHitMsg = JSON.stringify({
+                                                    type: 'block_hit',
+                                                    x: currentX,
+                                                    y: currentY,
+                                                    z: currentZ,
+                                                    username: o.user,
+                                                    world: worldName,
+                                                    blockId: blockId
+                                                });
+                                                for (const [, peer] of peers.entries()) {
+                                                    if (peer.dc && peer.dc.readyState === 'open') {
+                                                        peer.dc.send(blockHitMsg);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                const blockId = getBlockAt(a, n, r);
+                                if (blockId > 0) {
+                                    const blockHitMsg = JSON.stringify({
+                                        type: 'block_hit',
+                                        x: a,
+                                        y: n,
+                                        z: r,
+                                        username: o.user,
+                                        world: worldName,
+                                        blockId: blockId
+                                    });
+                                    for (const [, peer] of peers.entries()) {
+                                        if (peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(blockHitMsg);
+                                        }
                                     }
                                 }
                             }
@@ -5250,7 +5428,10 @@ function gameLoop(e) {
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
                     if (stepPos.distanceTo(mob.pos) < 1.5) { // Mob hit threshold
-                        const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                        if (o.user === userName) {
+                            lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
+                        }
+                        const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                         if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
                         else {
                             for (const [peerId, peer] of peers.entries()) {
@@ -5284,7 +5465,7 @@ function gameLoop(e) {
                         // Make blue laser slightly more forgiving
                         const hitThreshold = o.isBlue ? 2.5 : 1.5;
                         if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
-                            const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                            const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                             player.health -= damage;
                             document.getElementById("health").innerText = player.health;
                             updateHealthBar();
@@ -5312,7 +5493,7 @@ function gameLoop(e) {
 
                             const hitThreshold = o.isBlue ? 2.5 : 1.5;
                             if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
-                                const damage = o.isBlue ? 30 : (o.isGreen ? 10 : 5);
+                                const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                                 const peer = peers.get(username);
                                 if (peer && peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(JSON.stringify({

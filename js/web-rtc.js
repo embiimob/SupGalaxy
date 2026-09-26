@@ -569,9 +569,9 @@ function setupDataChannel(e, t) {
                         for (const e of s.players) {
                             const t = e.username;
                             if (t === userName) continue;
-                            userPositions[t] || (userPositions[t] = {}, createAndSetupAvatar(t, !1, e.yaw));
+                            userPositions[t] || (userPositions[t] = { lastMoveTime: performance.now() }, createAndSetupAvatar(t, !1, e.yaw));
                             const o = userPositions[t];
-                            (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || Math.abs(e.yaw - o.prevYaw) > 0.01 || Math.abs(e.pitch - o.prevPitch) > 0.01) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
+                            (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
                             if (playerAvatars.has(t)) {
                                 const avatar = playerAvatars.get(t);
@@ -621,7 +621,7 @@ function setupDataChannel(e, t) {
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
 
-                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || Math.abs(s.yaw - l.prevYaw) > 0.01 || Math.abs(s.pitch - l.prevPitch) > 0.01) && (l.lastMoveTime = performance.now()));
+                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
 
                     if (playerAvatars.has(n)) {
                         const avatar = playerAvatars.get(n);
@@ -688,6 +688,39 @@ function setupDataChannel(e, t) {
                         (a = new THREE.PointLight(16755251, 1.2, 18)).position.set(s.wx, s.wy + .5, s.wz), scene.add(a), torchLights.set(`${s.wx},${s.wy},${s.wz}`, a);
                         r = createFlameParticles(s.wx, s.wy + .5, s.wz);
                         scene.add(r), torchParticles.set(`${s.wx},${s.wy},${s.wz}`, r)
+                    }
+                    break;
+                case "batch_block_change":
+                    if (s.messages && Array.isArray(s.messages)) {
+                        for (const msg of s.messages) {
+                            if (isHost) {
+                                if (!WORLD_STATES.has(msg.world)) {
+                                    WORLD_STATES.set(msg.world, { chunkDeltas: new Map(), foreignBlockOrigins: new Map(), ipfsTruncatedDates: new Map() });
+                                }
+                                const worldState = WORLD_STATES.get(msg.world);
+                                if (!worldState.ipfsTruncatedDates) worldState.ipfsTruncatedDates = new Map();
+                                const chunkKey = makeChunkKey(msg.world, Math.floor(modWrap(msg.wx, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(msg.wz, MAP_SIZE) / CHUNK_SIZE));
+                                if (!worldState.chunkDeltas.has(chunkKey)) worldState.chunkDeltas.set(chunkKey, []);
+                                worldState.chunkDeltas.get(chunkKey).push({ x: modWrap(msg.wx, CHUNK_SIZE), y: msg.wy, z: modWrap(msg.wz, CHUNK_SIZE), b: msg.bid });
+                                if (msg.originSeed && msg.originSeed !== msg.world) {
+                                    worldState.foreignBlockOrigins.set(`${msg.wx},${msg.wy},${msg.wz}`, msg.originSeed);
+                                }
+                            }
+                            if (msg.world === worldName) {
+                                chunkManager.setBlockGlobal(msg.wx, msg.wy, msg.wz, msg.bid, !1, msg.originSeed, 'network');
+                                if (msg.originSeed && msg.originSeed !== worldSeed) {
+                                    getCurrentWorldState().foreignBlockOrigins.set(`${msg.wx},${msg.wy},${msg.wz}`, msg.originSeed);
+                                }
+                            }
+                        }
+                        if (isHost) {
+                            for (const [t, o] of peers.entries()) {
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState) {
+                                    // Could filter by world, but for simplicity re-broadcast the entire batch
+                                    o.dc.send(e.data);
+                                }
+                            }
+                        }
                     }
                     break;
                 case "mob_spawn":
