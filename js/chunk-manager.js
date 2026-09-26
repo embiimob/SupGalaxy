@@ -100,7 +100,7 @@ function buildGreedyMesh(e, t, o) {
             if (!o) continue;
             let a;
             if (o.light) {
-                if (t === 134) {
+                if (t === 132) {
                     a = new THREE.MeshBasicMaterial({
                         color: 0x4da6ff
                     });
@@ -294,7 +294,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 color: "#ff00ff"
             };
             if (K.light) {
-                if (parseInt(w) === 134) {
+                if (parseInt(w) === 132) {
                     D = new THREE.MeshBasicMaterial({
                         color: 0x4da6ff
                     });

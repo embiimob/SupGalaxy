@@ -271,8 +271,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#00ff7b",
             strength: 4
         },
-        134: {
-            name: "Blue Stalactite",
+        132: {
+            name: "Blue Calcite",
             color: "#4da6ff",
             strength: 3,
             light: !0
@@ -308,6 +308,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#654321",
             strength: 2,
             transparent: !0
+        },
+        133: {
+            name: "Blue Laser Gun",
+            color: "#0000ff",
+            hand_attachable: !0,
+            strength: 1
         }
     },
     BIOMES = [{

@@ -14,6 +14,7 @@ function Mob(t, e, s, i = "crawley") {
         this.isAggressive = t > .5
     } else if ("ufo_saucer" === this.type) {
         this.isAggressive = !0;
+        this.hp = 5000;
     } else if ("spider" === this.type) {
         this.isAggressive = !0;
     } else {
@@ -357,25 +358,31 @@ function manageMobs() {
 
     // Check if any player in the world is idle
     let hasIdlePlayer = false;
+    let idlePlayerPos = null;
     const now = performance.now();
+    const IDLE_THRESHOLD = 120000;
     for (const p of playersInWorld) {
         if (p.name === userName) {
             // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
             if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
-                if (now - window.lastMoveTime > 3600000) {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             } else if (typeof lastMoveTime !== 'undefined') {
-                if (now - lastMoveTime > 3600000) {
+                if (now - lastMoveTime > IDLE_THRESHOLD) {
                     hasIdlePlayer = true;
+                    idlePlayerPos = { x: player.x, z: player.z };
                     break;
                 }
             }
         } else if (userPositions[p.name]) {
             const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
-            if (now - peerMoveTime > 3600000) {
+            if (now - peerMoveTime > IDLE_THRESHOLD) {
                 hasIdlePlayer = true;
+                const pos = userPositions[p.name];
+                idlePlayerPos = { x: pos.targetX || pos.prevX, z: pos.targetZ || pos.prevZ };
                 break;
             }
         }
@@ -620,9 +627,42 @@ Mob.prototype.update = function (t) {
         } else {
             let targetPos = new THREE.Vector3(player.x, player.y, player.z);
             let highestScore = player.score;
+            let foundIdlePlayer = false;
+
+            const now = performance.now();
+            const IDLE_THRESHOLD = 120000; // 2 minutes
+
+            // Check if local player is idle
+            let localIdle = false;
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
+                if (now - window.lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            } else if (typeof lastMoveTime !== 'undefined') {
+                if (now - lastMoveTime > IDLE_THRESHOLD) localIdle = true;
+            }
+
+            if (localIdle) {
+                foundIdlePlayer = true;
+                targetPos.set(player.x, player.y, player.z);
+            }
 
             for (const [peerName, pos] of Object.entries(userPositions)) {
-                if (pos.score !== undefined && pos.score > highestScore) {
+                const peerMoveTime = pos.lastMoveTime || pos.lastUpdate || now;
+                const isPeerIdle = (now - peerMoveTime > IDLE_THRESHOLD);
+
+                if (isPeerIdle) {
+                    if (!foundIdlePlayer) {
+                        targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
+                        foundIdlePlayer = true;
+                    } else {
+                        // If we already found an idle player, let's pick the closest one
+                        let currentDist = Math.hypot(targetPos.x - this.pos.x, targetPos.z - this.pos.z);
+                        let newDist = Math.hypot((pos.targetX || pos.prevX) - this.pos.x, (pos.targetZ || pos.prevZ) - this.pos.z);
+                        if (newDist < currentDist) {
+                            targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
+                        }
+                    }
+                } else if (!foundIdlePlayer && pos.score !== undefined && pos.score > highestScore) {
+                    // Fallback to highest score if no idle player found yet
                     highestScore = pos.score;
                     targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
                 }
@@ -1348,7 +1388,27 @@ Mob.prototype.update = function (t) {
     }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
     let e = 10;
-    if ("ufo_saucer" === this.type) { e = 1000; } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
+    if ("ufo_saucer" === this.type) {
+        e = 1000;
+        if (isHost && Math.random() < 0.1) {
+            const dropId = "ufo_drop-" + Date.now();
+            createDroppedItemOrb(dropId, this.pos.clone(), 133, worldSeed, "host");
+            const t = JSON.stringify({
+                type: "item_dropped",
+                dropId: dropId,
+                world: worldName,
+                blockId: 133,
+                originSeed: worldSeed,
+                position: { x: this.pos.x, y: this.pos.y, z: this.pos.z },
+                dropper: "host"
+            });
+            for (const [, peer] of peers.entries()) {
+                if (peer.dc && peer.dc.readyState === "open") {
+                    peer.dc.send(t);
+                }
+            }
+        }
+    } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
     if (t === userName) {
         player.score += e;
         document.getElementById("score").innerText = player.score;

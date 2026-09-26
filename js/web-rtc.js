@@ -621,7 +621,7 @@ function setupDataChannel(e, t) {
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
 
-                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || Math.abs(s.yaw - l.prevYaw) > 0.01 || Math.abs(s.pitch - l.prevPitch) > 0.01) && (l.lastMoveTime = performance.now()));
+                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
 
                     if (playerAvatars.has(n)) {
                         const avatar = playerAvatars.get(n);
