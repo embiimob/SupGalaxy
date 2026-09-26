@@ -2434,8 +2434,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     };
     s.hits += damageAmount;
 
-    // UFO lasers can break unbreakable blocks by treating them as strength 40 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 40 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 4 : n.strength;
+    // UFO lasers can break unbreakable blocks by treating them as strength 80 if hit repeatedly (reduced damage)
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 80 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 8 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
@@ -5315,7 +5315,7 @@ function gameLoop(e) {
 
                             for (let dx = -1; dx <= 1; dx++) {
                                 for (let dz = -1; dz <= 1; dz++) {
-                                    for (let dy = 0; dy < 8; dy++) {
+                                    for (let dy = 0; dy < 4; dy++) {
                                         // Use silent = true and damageAmount = 3 to reduce CPU and Network flood
                                         removeBlockAt(a + dx, n - dy, r + dz, o.user, 3, true);
                                     }
@@ -5357,7 +5357,7 @@ function gameLoop(e) {
                             if (o.isBlue) {
                                 for (let dx = -1; dx <= 1; dx++) {
                                     for (let dz = -1; dz <= 1; dz++) {
-                                        for (let dy = 0; dy < 8; dy++) {
+                                        for (let dy = 0; dy < 4; dy++) {
                                             const currentX = a + dx;
                                             const currentY = n - dy;
                                             const currentZ = r + dz;
