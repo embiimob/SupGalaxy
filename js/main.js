@@ -2496,7 +2496,9 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
             // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
-            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, userName, null, 'local');
+
+            // Revert changes back to broadcast so blocks correctly disappear on clients when broken by UFO
+            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
 
             if (!silent) {
@@ -5257,6 +5259,60 @@ function gameLoop(e) {
                     if (isHost || peers.size === 0) {
                         if (o.isBlue) {
                             // Apply 3 hits of damage per block, ensuring tougher blocks like obsidian take longer
+                            // Batch updates to avoid freezing main thread
+                            let batchedMessages = [];
+
+                            // Temporarily suppress chunk rebuilds to prevent massive stutter
+                            const originalSetBlockGlobal = chunkManager.setBlockGlobal;
+                            const modifiedChunks = new Set();
+
+                            chunkManager.setBlockGlobal = function(e, t, o, a, n = !0, r = null, source = 'local') {
+                                if (t < 0 || t >= MAX_HEIGHT) return;
+                                var s = modWrap(e, MAP_SIZE), i = modWrap(o, MAP_SIZE);
+                                var l = Math.floor(s / CHUNK_SIZE), d = Math.floor(i / CHUNK_SIZE);
+                                var c = Math.floor(s % CHUNK_SIZE), u = Math.floor(i % CHUNK_SIZE);
+                                var p = this.getChunk(l, d);
+                                p.generated || this.generateChunk(p);
+                                var m = p.get(c, t, u);
+                                if (m !== a) {
+                                    p.set(c, t, u, a);
+                                    if (a === BLOCK_AIR) {
+                                        const key = `${e},${t},${o}`;
+                                        const damagedBlock = damagedBlocks.get(key);
+                                        if (damagedBlock && damagedBlock.mesh) {
+                                            crackMeshes.remove(damagedBlock.mesh);
+                                            disposeObject(damagedBlock.mesh);
+                                            damagedBlocks.delete(key);
+                                        }
+                                    }
+                                    var y = p.key;
+                                    const worldState = getCurrentWorldState();
+                                    if (!worldState.chunkDeltas.has(y)) worldState.chunkDeltas.set(y, []);
+                                    worldState.chunkDeltas.get(y).push({x: c, y: t, z: u, b: a, source: source});
+
+                                    // Track modified chunks instead of rebuilding immediately
+                                    modifiedChunks.add(p);
+                                    if (c === 0) modifiedChunks.add(this.getChunk(l - 1, d));
+                                    if (c === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l + 1, d));
+                                    if (u === 0) modifiedChunks.add(this.getChunk(l, d - 1));
+                                    if (u === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l, d + 1));
+
+                                    if (n) {
+                                        batchedMessages.push({
+                                            type: "block_change",
+                                            world: worldName,
+                                            wx: e,
+                                            wy: t,
+                                            wz: o,
+                                            bid: a,
+                                            prevBid: m,
+                                            username: userName,
+                                            originSeed: r
+                                        });
+                                    }
+                                }
+                            };
+
                             for (let dx = -1; dx <= 1; dx++) {
                                 for (let dz = -1; dz <= 1; dz++) {
                                     for (let dy = 0; dy < 8; dy++) {
@@ -5265,6 +5321,32 @@ function gameLoop(e) {
                                     }
                                 }
                             }
+
+                            // Restore original function and rebuild modified chunks
+                            chunkManager.setBlockGlobal = originalSetBlockGlobal;
+                            for (const chunk of modifiedChunks) {
+                                chunk.needsRebuild = true;
+                            }
+                            updateSaveChangesButton();
+
+                            // Send batched updates over network to prevent packet flood blocking the stream
+                            if (batchedMessages.length > 0) {
+                                // Batch messages to prevent sending thousands of tiny packets
+                                const batchSize = 25;
+                                for (let i = 0; i < batchedMessages.length; i += batchSize) {
+                                    const batch = batchedMessages.slice(i, i + batchSize);
+                                    const batchedMsg = JSON.stringify({
+                                        type: "batch_block_change",
+                                        messages: batch
+                                    });
+                                    for (const [peerName, peer] of peers.entries()) {
+                                        if (peerName !== userName && peer.dc && peer.dc.readyState === 'open') {
+                                            peer.dc.send(batchedMsg);
+                                        }
+                                    }
+                                }
+                            }
+
                         } else {
                             removeBlockAt(a, n, r, o.user);
                         }

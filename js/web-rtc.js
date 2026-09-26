@@ -690,6 +690,39 @@ function setupDataChannel(e, t) {
                         scene.add(r), torchParticles.set(`${s.wx},${s.wy},${s.wz}`, r)
                     }
                     break;
+                case "batch_block_change":
+                    if (s.messages && Array.isArray(s.messages)) {
+                        for (const msg of s.messages) {
+                            if (isHost) {
+                                if (!WORLD_STATES.has(msg.world)) {
+                                    WORLD_STATES.set(msg.world, { chunkDeltas: new Map(), foreignBlockOrigins: new Map(), ipfsTruncatedDates: new Map() });
+                                }
+                                const worldState = WORLD_STATES.get(msg.world);
+                                if (!worldState.ipfsTruncatedDates) worldState.ipfsTruncatedDates = new Map();
+                                const chunkKey = makeChunkKey(msg.world, Math.floor(modWrap(msg.wx, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(msg.wz, MAP_SIZE) / CHUNK_SIZE));
+                                if (!worldState.chunkDeltas.has(chunkKey)) worldState.chunkDeltas.set(chunkKey, []);
+                                worldState.chunkDeltas.get(chunkKey).push({ x: modWrap(msg.wx, CHUNK_SIZE), y: msg.wy, z: modWrap(msg.wz, CHUNK_SIZE), b: msg.bid });
+                                if (msg.originSeed && msg.originSeed !== msg.world) {
+                                    worldState.foreignBlockOrigins.set(`${msg.wx},${msg.wy},${msg.wz}`, msg.originSeed);
+                                }
+                            }
+                            if (msg.world === worldName) {
+                                chunkManager.setBlockGlobal(msg.wx, msg.wy, msg.wz, msg.bid, !1, msg.originSeed, 'network');
+                                if (msg.originSeed && msg.originSeed !== worldSeed) {
+                                    getCurrentWorldState().foreignBlockOrigins.set(`${msg.wx},${msg.wy},${msg.wz}`, msg.originSeed);
+                                }
+                            }
+                        }
+                        if (isHost) {
+                            for (const [t, o] of peers.entries()) {
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState) {
+                                    // Could filter by world, but for simplicity re-broadcast the entire batch
+                                    o.dc.send(e.data);
+                                }
+                            }
+                        }
+                    }
+                    break;
                 case "mob_spawn":
                     // Keep a global dictionary of mobs by world to manage them properly if players switch worlds
                     if (!window.mobsByWorld) window.mobsByWorld = {};
