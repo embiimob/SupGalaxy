@@ -996,6 +996,7 @@ self.onmessage = async function(e) {
             var ownershipByChunk = new Map();
             var magicianStonesUpdates = [];
             var calligraphyStonesUpdates = [];
+            var chestsUpdates = [];
             if (runChunkPolling) for (var chunkKey of chunkKeys) {
                 try {
                     var normalizedChunkKey = chunkKey.replace(/^#/, "");
@@ -1089,6 +1090,30 @@ self.onmessage = async function(e) {
                                     }
                                 }
 
+
+                                if (processData.chests) {
+                                     chestsUpdates.push({ chests: processData.chests, transactionId: msg.TransactionId });
+                                     for (const key in processData.chests) {
+                                        if (Object.hasOwnProperty.call(processData.chests, key)) {
+                                            const chest = processData.chests[key];
+                                            const cx = Math.floor((chest.x % 16384 + 16384) % 16384 / 16);
+                                            const cz = Math.floor((chest.z % 16384 + 16384) % 16384 / 16);
+
+                                            const chunkKey = "" + processData.world + ":" + cx + ":" + cz;
+                                            const newDelta = {
+                                                chunk: chunkKey,
+                                                changes: [{
+                                                    x: (chest.x % 16 + 16) % 16,
+                                                    y: chest.y,
+                                                    z: (chest.z % 16 + 16) % 16,
+                                                    b: 131
+                                                }]
+                                            };
+                                            normalizedDeltas.push(newDelta);
+                                        }
+                                    }
+                                }
+
                                 updatesByTransaction.set(msg.TransactionId, {
                                     changes: normalizedDeltas,
                                     address: msg.FromAddress,
@@ -1096,6 +1121,7 @@ self.onmessage = async function(e) {
                                     transactionId: msg.TransactionId,
                                     magicianStones: processData.magicianStones || null,
                                     calligraphyStones: processData.calligraphyStones || null,
+                                    chests: processData.chests || null,
                                     foreignBlockOrigins: processData.foreignBlockOrigins || null
                                 });
                                 for (var delta of normalizedDeltas) {
@@ -1126,7 +1152,7 @@ self.onmessage = async function(e) {
                 for (var entry of updatesByTransaction) {
                     var transactionId = entry[0];
                     var update = entry[1];
-                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, foreignBlockOrigins: update.foreignBlockOrigins }] });
+                    self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, chests: update.chests, foreignBlockOrigins: update.foreignBlockOrigins }] });
                 }
             }
             if (magicianStonesUpdates.length > 0) {
@@ -1134,9 +1160,15 @@ self.onmessage = async function(e) {
                     self.postMessage({ type: 'magician_stones_update', stones: update.stones, transactionId: update.transactionId });
                 }
             }
+
             if (calligraphyStonesUpdates.length > 0) {
                 for (var update of calligraphyStonesUpdates) {
                     self.postMessage({ type: 'calligraphy_stones_update', stones: update.stones, transactionId: update.transactionId });
+                }
+            }
+            if (chestsUpdates.length > 0) {
+                for (var update of chestsUpdates) {
+                    self.postMessage({ type: 'chests_update', chests: update.chests, transactionId: update.transactionId });
                 }
             }
             if (ownershipByChunk.size > 0) {
@@ -1908,6 +1940,7 @@ self.onmessage = async function(e) {
                         deltas: update.changes,
                         magicianStones: update.magicianStones || null,
                         calligraphyStones: update.calligraphyStones || null,
+                        chests: update.chests || null,
                         foreignBlockOrigins: update.foreignBlockOrigins || null
                     };
                     // sourceUsername is undefined to indicate this is from local worker (IPFS fetch)
@@ -1934,6 +1967,7 @@ self.onmessage = async function(e) {
                         }
                     }
                 }
+
             } else if (data.type === 'calligraphy_stones_update') {
                 if (data.stones) {
                     for (const key in data.stones) {
