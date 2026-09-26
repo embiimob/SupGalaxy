@@ -164,7 +164,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
-        this.hp = 100;
+        this.hp = 200;
         this.mesh = new THREE.Group();
 
         // Build Star Destroyer voxel construct
@@ -359,7 +359,7 @@ function manageMobs() {
     let hasIdlePlayer = false;
     let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 60000; // 1 minute
+    const IDLE_THRESHOLD = 900000; // 15 minutes
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -652,7 +652,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 60000; // 1 minute
+            const IDLE_THRESHOLD = 900000; // 15 minutes
 
             // Check if local player is idle
             let localIdle = false;
