@@ -5232,11 +5232,11 @@ function gameLoop(e) {
             for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
             laserFireQueue = [], lastLaserBatchTime = e
         }
-        if (laserQueue.length > 0) {
-            const e = laserQueue.shift();
+        // Process ALL batched laser messages in the queue per frame to prevent backlog stuttering
+        let playedBlueSoundThisFrame = false;
 
-            // Decouple audio to prevent stuttering/jank on batched projectiles
-            let playedBlueSoundThisFrame = false;
+        while (laserQueue.length > 0) {
+            const e = laserQueue.shift();
 
             if ("laser_fired_batch" === e.type) {
                 for (const t of e.projectiles) {
