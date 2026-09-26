@@ -569,7 +569,7 @@ function setupDataChannel(e, t) {
                         for (const e of s.players) {
                             const t = e.username;
                             if (t === userName) continue;
-                            userPositions[t] || (userPositions[t] = {}, createAndSetupAvatar(t, !1, e.yaw));
+                            userPositions[t] || (userPositions[t] = { lastMoveTime: performance.now() }, createAndSetupAvatar(t, !1, e.yaw));
                             const o = userPositions[t];
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 

@@ -363,6 +363,7 @@ function manageMobs() {
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
+            if (typeof window !== 'undefined' && typeof window.lastMoveTime === 'undefined') { window.lastMoveTime = now; }
             // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
             if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
                 if (now - window.lastMoveTime > IDLE_THRESHOLD) {
@@ -453,9 +454,9 @@ function manageMobs() {
             for (const mob of mobs) {
                 if (mob.type === type) {
                     // Check if mob is near this area
-                    if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) {
-                        countInArea++;
-                    }
+                    // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
+                    // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
+                    if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 
@@ -692,7 +693,8 @@ Mob.prototype.update = function (t) {
             }
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
-            const targetY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 60;
+            const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
+            const targetY = baseTargetY + 60;
             if (this.pos.y > targetY) {
                 this.pos.y -= 5 * t;
             } else if (this.pos.y < targetY) {
