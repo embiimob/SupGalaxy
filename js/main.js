@@ -5040,7 +5040,13 @@ function gameLoop(e) {
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01;
         if (e - lastUpdateTime > 50 && (I || k)) {
-            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e, lastMoveTime = e, window.lastMoveTime = e, lastSentPosition = {
+            isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
+            // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
+            if (I || isAttacking) {
+                lastMoveTime = e;
+                window.lastMoveTime = e;
+            }
+            lastSentPosition = {
                 x: player.x,
                 y: player.y,
                 z: player.z,
