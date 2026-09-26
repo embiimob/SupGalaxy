@@ -164,7 +164,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
-        this.hp = 1;
+        this.hp = 1000;
         this.mesh = new THREE.Group();
 
         // Build Star Destroyer voxel construct
