@@ -78,6 +78,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         8: {
             name: "Leaves",
             color: "#2f8f46",
+            transparent: !0,
             strength: 1
         },
         9: {
@@ -254,6 +255,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         122: {
             name: "Honey",
             color: "#ffb74a",
+            transparent: !0,
             strength: 1
         },
         123: {
@@ -274,6 +276,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         134: {
             name: "Blue Calcite",
             color: "#4da6ff",
+            transparent: !0,
             strength: 3,
             light: !0
         },

@@ -495,6 +495,7 @@ async function applySaveFile(e, t, o) {
                 }
             }
         }
+
         if (e.calligraphyStones) {
             for (const key in e.calligraphyStones) {
                 if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
@@ -504,6 +505,24 @@ async function applySaveFile(e, t, o) {
         } else if (e.deltas) {
             // If no calligraphyStones metadata but deltas exist, reconstruct orphaned stones
             reconstructCalligraphyStonesFromDeltas(e.deltas);
+        }
+
+        if (e.chests) {
+            for (const key in e.chests) {
+                if (Object.hasOwnProperty.call(e.chests, key)) {
+                    const chestData = e.chests[key];
+                    if (chests[key] && typeof cleanupChest === 'function') {
+                        cleanupChest(chests[key], key);
+                    }
+                    const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
+                    chests[key] = {
+                        ...chestData,
+                        mesh: meshData.mesh,
+                        lid: meshData.lid,
+                        isOpen: false
+                    };
+                }
+            }
         }
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }

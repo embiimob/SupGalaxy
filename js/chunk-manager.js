@@ -779,6 +779,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                 }
             }
+
             if (e.calligraphyStones) {
                 for (const key in e.calligraphyStones) {
                     if (Object.hasOwnProperty.call(e.calligraphyStones, key)) {
@@ -786,6 +787,25 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                     }
                 }
             }
+            if (e.chests) {
+                for (const key in e.chests) {
+                    if (Object.hasOwnProperty.call(e.chests, key)) {
+                        const chestData = e.chests[key];
+                        // If chest already exists, clean it up
+                        if (chests[key] && typeof cleanupChest === 'function') {
+                            cleanupChest(chests[key], key);
+                        }
+                        const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
+                        chests[key] = {
+                            ...chestData,
+                            mesh: meshData.mesh,
+                            lid: meshData.lid,
+                            isOpen: false
+                        };
+                    }
+                }
+            }
+
         }
 
         const showProgress = chunksArray.length > 5;
