@@ -164,7 +164,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
-        this.hp = 200;
+        this.hp = 1;
         this.mesh = new THREE.Group();
 
         // Build Star Destroyer voxel construct
@@ -359,7 +359,7 @@ function manageMobs() {
     let hasIdlePlayer = false;
     let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 900000; // 15 minutes
+    const IDLE_THRESHOLD = 60000; // 1 minute
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -618,7 +618,7 @@ Mob.prototype.update = function (t) {
             }
         }
 
-        if (this.lingerTime > 180000) {
+        if (this.lingerTime > 300000) {
             this.aiState = "LEAVING";
         }
 
@@ -629,9 +629,9 @@ Mob.prototype.update = function (t) {
             if (this.engineAudio2) {
                 this.engineAudio2.pause();
             }
-            this.pos.y += 20 * t;
-            this.pos.x += Math.cos(this.mesh.rotation.y) * 20 * t;
-            this.pos.z -= Math.sin(this.mesh.rotation.y) * 20 * t;
+            this.pos.y += 10 * t;
+            this.pos.x += Math.cos(this.mesh.rotation.y) * 10 * t;
+            this.pos.z -= Math.sin(this.mesh.rotation.y) * 10 * t;
             if (this.pos.y > 800) {
                 try {
                     scene.remove(this.mesh);
@@ -652,7 +652,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 900000; // 15 minutes
+            const IDLE_THRESHOLD = 60000; // 1 minute
 
             // Check if local player is idle
             let localIdle = false;
@@ -688,17 +688,17 @@ Mob.prototype.update = function (t) {
             const dist = Math.hypot(dx, dz);
 
             if (dist > 40) {
-                this.pos.x += (dx / dist) * 5 * t;
-                this.pos.z += (dz / dist) * 5 * t;
+                this.pos.x += (dx / dist) * 2.5 * t; // Slower movement speed
+                this.pos.z += (dz / dist) * 2.5 * t;
             }
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
             const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
-            const targetY = baseTargetY + 60;
+            const targetY = baseTargetY + 40; // Lower hover altitude
             if (this.pos.y > targetY) {
-                this.pos.y -= 5 * t;
+                this.pos.y -= 2.5 * t; // Slower altitude adjustment
             } else if (this.pos.y < targetY) {
-                this.pos.y += 5 * t;
+                this.pos.y += 2.5 * t;
             }
 
             // Smoothly rotate towards the target
@@ -707,10 +707,10 @@ Mob.prototype.update = function (t) {
             let angleDiff = targetRotation - this.mesh.rotation.y;
             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-            this.mesh.rotation.y += angleDiff * 0.5 * t;
+            this.mesh.rotation.y += angleDiff * 0.25 * t; // Slower rotation
 
             this.attackCooldown -= t;
-            if (this.attackCooldown <= 0 && dist < 120) {
+            if (this.attackCooldown <= 0 && dist < 60) { // Closer distance required to shoot
                 if (typeof createProjectile === "function" && (typeof isHost === "undefined" || isHost || peers.size === 0)) {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
@@ -1398,6 +1398,26 @@ Mob.prototype.update = function (t) {
 }, Mob.prototype.die = function (t) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
+
+    if (this.type === "ufo_saucer") {
+        if (!window.activeExplosions) window.activeExplosions = [];
+        const geom = new THREE.BoxGeometry(1, 1, 1);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+        for (let i = 0; i < 20; i++) {
+            const particle = new THREE.Mesh(geom, mat);
+            particle.position.copy(this.pos);
+            particle.position.x += (Math.random() - 0.5) * 4;
+            particle.position.y += (Math.random() - 0.5) * 4;
+            particle.position.z += (Math.random() - 0.5) * 4;
+            scene.add(particle);
+            window.activeExplosions.push({
+                mesh: particle,
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5),
+                createdAt: performance.now()
+            });
+        }
+    }
+
     try {
         scene.remove(this.mesh), disposeObject(this.mesh)
     } catch (t) { }
@@ -1409,7 +1429,14 @@ Mob.prototype.update = function (t) {
     }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
     let e = 10;
-    if ("ufo_saucer" === this.type) { e = 1000; } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
+    if ("ufo_saucer" === this.type) {
+        e = 1000;
+        if (Math.random() < (1/3)) {
+            if (typeof window.createDroppedItemOrb === 'function') {
+                window.createDroppedItemOrb(`${userName}-${Date.now()}-ufo-drop`, this.pos.clone(), 133, worldSeed, userName, 1);
+            }
+        }
+    } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
     if (t === userName) {
         player.score += e;
         document.getElementById("score").innerText = player.score;

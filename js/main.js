@@ -1109,7 +1109,7 @@ function releaseProjectileMesh(mesh) {
 function createProjectile(e, t, o, a, n = "red") {
     const b = "blue" === n,
         r = "green" === n,
-        s = r || b ? 20 : 10,
+        s = b ? 30 : (r ? 20 : 10), // Adjust speeds based on color
         i = b ? 0x0000FF : (r ? 65280 : 16711680),
         c = getProjectileMesh(i),
         u = new THREE.Quaternion;
@@ -2078,6 +2078,47 @@ function onPointerDown(e) {
             color: "green"
         });
         return
+    }
+    if (t && 133 === t.id) {
+        const e = Date.now();
+        if (e - (player.lastFireTime || 0) < 500) return;
+        let tIndex = -1;
+        for (let e = 0; e < INVENTORY.length; e++)
+            if (INVENTORY[e] && 134 === INVENTORY[e].id) {
+                tIndex = e;
+                break
+            }
+        if (-1 === tIndex) return void addMessage("No Blue Calcite to fire!", 1e3);
+        INVENTORY[tIndex].count--;
+        if (INVENTORY[tIndex].count <= 0) INVENTORY[tIndex] = null;
+        updateHotbarUI();
+        player.lastFireTime = e;
+        const o = new THREE.Vector3;
+        camera.getWorldDirection(o);
+        const a = new THREE.Vector3;
+        let n;
+        a.crossVectors(camera.up, o).normalize();
+        if ("third" === cameraMode && avatarGroup && avatarGroup.gun) {
+            n = new THREE.Vector3;
+            avatarGroup.gun.getWorldPosition(n);
+        } else {
+            n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+        }
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                const r = `${userName}-${Date.now()}-blue-${i}`;
+                createProjectile(r, userName, n.clone(), o.clone(), "blue");
+                laserFireQueue.push({
+                    id: r,
+                    user: userName,
+                    world: worldName,
+                    position: {x: n.x, y: n.y, z: n.z},
+                    direction: {x: o.x, y: o.y, z: o.z},
+                    color: "blue"
+                });
+            }, i * 150);
+        }
+        return;
     }
     raycaster.setFromCamera(pointer, camera), raycaster.far = 5;
     const o = mobs.map((e => e.mesh)).filter((e => e.visible)),
@@ -4250,8 +4291,11 @@ async function startGame() {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
-        id: 121,
+        id: 133,
         count: 1
+    }, INVENTORY[2] = {
+        id: 134,
+        count: 64
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
@@ -5649,6 +5693,21 @@ function gameLoop(e) {
                             mediaElement.pause();
                         }
                     }
+                }
+            }
+        }
+        if (window.activeExplosions) {
+            for (let i = window.activeExplosions.length - 1; i >= 0; i--) {
+                const expl = window.activeExplosions[i];
+                if (e - expl.createdAt > 2000) {
+                    scene.remove(expl.mesh);
+                    disposeObject(expl.mesh);
+                    window.activeExplosions.splice(i, 1);
+                } else {
+                    expl.mesh.position.add(expl.velocity);
+                    expl.velocity.y -= 0.01; // Gravity
+                    expl.mesh.rotation.x += expl.velocity.y;
+                    expl.mesh.rotation.y += expl.velocity.x;
                 }
             }
         }
