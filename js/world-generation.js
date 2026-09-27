@@ -338,6 +338,7 @@ function updateSky(e) {
     const r = Math.max(0, n);
 
     let isUnderground = false;
+    let targetTransition = 0;
     if (typeof chunkManager !== 'undefined' && chunkManager && camera) {
         let playerY = Math.floor(camera.position.y);
         let surfaceY = chunkManager.getSurfaceYForBoulders ? chunkManager.getSurfaceYForBoulders(camera.position.x, camera.position.z) : chunkManager.getSurfaceY(camera.position.x, camera.position.z);
@@ -352,18 +353,30 @@ function updateSky(e) {
                 let lz = Math.floor(camera.position.z) % CHUNK_SIZE;
                 if (lz < 0) lz += CHUNK_SIZE;
 
-                for (let y = playerY; y < MAX_HEIGHT; y++) {
+                let shadowSurfaceY = playerY;
+                for (let y = MAX_HEIGHT - 1; y >= playerY; y--) {
                     let blockId = chunk.get(lx, y, lz);
-                    if (blockId !== 0 && (!BLOCKS[blockId] || !BLOCKS[blockId].transparent)) {
+                    if (blockId !== 0 && (!BLOCKS[blockId] || (!BLOCKS[blockId].transparent && !BLOCKS[blockId].noShadow))) {
+                        shadowSurfaceY = y;
                         isUnderground = true;
                         break;
+                    }
+                }
+
+                if (isUnderground) {
+                    let depth = shadowSurfaceY - playerY;
+                    if (depth <= 2) {
+                        targetTransition = 0.5;
+                    } else if (depth >= 4) {
+                        targetTransition = 1.0;
+                    } else {
+                        targetTransition = 0.5 + ((depth - 2) / 2.0) * 0.5;
                     }
                 }
             }
         }
     }
 
-    let targetTransition = isUnderground ? 1 : 0;
     window.undergroundTransition = window.undergroundTransition || 0;
     window.undergroundTransition += (targetTransition - window.undergroundTransition) * e * 5.0;
     let ug = window.undergroundTransition;
