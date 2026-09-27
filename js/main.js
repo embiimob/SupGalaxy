@@ -2439,8 +2439,21 @@ function handlePlayerHit(e) {
 }
 
 function attackAtPoint(e) {
-    for (var t of mobs)
-        if (t.mesh.position.distanceTo(e) < 1.5) return handleMobHit(t), !0;
+    for (var t of mobs) {
+        let hitMob = false;
+        if (t.type === "ufo_saucer") {
+            const dx = Math.abs(e.x - t.mesh.position.x);
+            const dy = Math.abs(e.y - t.mesh.position.y);
+            const dz = Math.abs(e.z - t.mesh.position.z);
+            if (dx < 30 && dy < 15 && dz < 50) {
+                hitMob = true;
+            }
+        } else if (t.mesh.position.distanceTo(e) < 1.5) {
+            hitMob = true;
+        }
+
+        if (hitMob) return handleMobHit(t), !0;
+    }
     return !1
 }
 
@@ -5493,7 +5506,24 @@ function gameLoop(e) {
 
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
-                    if (stepPos.distanceTo(mob.pos) < 1.5) { // Mob hit threshold
+                    // Prevent mobs from hitting themselves
+                    if (o.user === mob.id) continue;
+
+                    let hitMob = false;
+                    if (mob.type === "ufo_saucer") {
+                        // UFO is large, use a bounding box collision
+                        const dx = Math.abs(stepPos.x - mob.pos.x);
+                        const dy = Math.abs(stepPos.y - mob.pos.y);
+                        const dz = Math.abs(stepPos.z - mob.pos.z);
+                        // width = 60, height = 15, length = 100
+                        if (dx < 30 && dy < 15 && dz < 50) {
+                            hitMob = true;
+                        }
+                    } else if (stepPos.distanceTo(mob.pos) < 1.5) { // Regular mob hit threshold
+                        hitMob = true;
+                    }
+
+                    if (hitMob) {
                         if (o.user === userName) {
                             lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
                         }
@@ -5721,13 +5751,13 @@ function gameLoop(e) {
         if (window.activeExplosions) {
             for (let i = window.activeExplosions.length - 1; i >= 0; i--) {
                 const expl = window.activeExplosions[i];
-                if (e - expl.createdAt > 2000) {
+                if (e - expl.createdAt > 6000) {
                     scene.remove(expl.mesh);
                     disposeObject(expl.mesh);
                     window.activeExplosions.splice(i, 1);
                 } else {
                     expl.mesh.position.add(expl.velocity);
-                    expl.velocity.y -= 0.01; // Gravity
+                    expl.velocity.y -= 0.005; // Reduced Gravity for slower fall
                     expl.mesh.rotation.x += expl.velocity.y;
                     expl.mesh.rotation.y += expl.velocity.x;
                 }
