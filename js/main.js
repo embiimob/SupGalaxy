@@ -5751,13 +5751,13 @@ function gameLoop(e) {
         if (window.activeExplosions) {
             for (let i = window.activeExplosions.length - 1; i >= 0; i--) {
                 const expl = window.activeExplosions[i];
-                if (e - expl.createdAt > 2000) {
+                if (e - expl.createdAt > 6000) {
                     scene.remove(expl.mesh);
                     disposeObject(expl.mesh);
                     window.activeExplosions.splice(i, 1);
                 } else {
                     expl.mesh.position.add(expl.velocity);
-                    expl.velocity.y -= 0.01; // Gravity
+                    expl.velocity.y -= 0.005; // Reduced Gravity for slower fall
                     expl.mesh.rotation.x += expl.velocity.y;
                     expl.mesh.rotation.y += expl.velocity.x;
                 }

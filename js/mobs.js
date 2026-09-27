@@ -164,7 +164,7 @@ function Mob(t, e, s, i = "crawley") {
         });
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
-        this.hp = 200;
+        this.hp = 3000;
         this.mesh = new THREE.Group();
 
         // Build Star Destroyer voxel construct
@@ -359,7 +359,7 @@ function manageMobs() {
     let hasIdlePlayer = false;
     let idlePlayerPos = null;
     const now = performance.now();
-    const IDLE_THRESHOLD = 900000; // 15 minutes
+    const IDLE_THRESHOLD = 0; // TEMPORARY for testing: instant spawn (was 900000; 15 minutes)
 
     for (const p of playersInWorld) {
         if (p.name === userName) {
@@ -652,7 +652,7 @@ Mob.prototype.update = function (t) {
             let foundIdlePlayer = false;
 
             const now = performance.now();
-            const IDLE_THRESHOLD = 900000; // 15 minutes
+            const IDLE_THRESHOLD = 0; // TEMPORARY for testing: instant spawn (was 900000; 15 minutes)
 
             // Check if local player is idle
             let localIdle = false;
@@ -1401,18 +1401,18 @@ Mob.prototype.update = function (t) {
 
     if (this.type === "ufo_saucer") {
         if (!window.activeExplosions) window.activeExplosions = [];
-        const geom = new THREE.BoxGeometry(1, 1, 1);
+        const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
         const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 60; i++) {
             const particle = new THREE.Mesh(geom, mat);
             particle.position.copy(this.pos);
-            particle.position.x += (Math.random() - 0.5) * 4;
-            particle.position.y += (Math.random() - 0.5) * 4;
-            particle.position.z += (Math.random() - 0.5) * 4;
+            particle.position.x += (Math.random() - 0.5) * 16;
+            particle.position.y += (Math.random() - 0.5) * 16;
+            particle.position.z += (Math.random() - 0.5) * 16;
             scene.add(particle);
             window.activeExplosions.push({
                 mesh: particle,
-                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5),
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.25, Math.random() * 0.2, (Math.random() - 0.5) * 0.25),
                 createdAt: performance.now()
             });
         }
