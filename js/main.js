@@ -5506,6 +5506,9 @@ function gameLoop(e) {
 
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
+                    // Prevent mobs from hitting themselves
+                    if (o.user === mob.id) continue;
+
                     let hitMob = false;
                     if (mob.type === "ufo_saucer") {
                         // UFO is large, use a bounding box collision

@@ -746,7 +746,7 @@ Mob.prototype.update = function (t) {
                         if (typeof window.laserFireQueue !== "undefined") {
                             window.laserFireQueue.push({
                                 id: pid,
-                                user: this.id,
+                                user: this.id, // Ensure this identifies the mob
                                 world: typeof window.worldName !== "undefined" ? window.worldName : "",
                                 position: { x: pPos.x, y: pPos.y, z: pPos.z },
                                 direction: { x: laserDir.x, y: laserDir.y, z: laserDir.z },
