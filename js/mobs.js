@@ -694,7 +694,7 @@ Mob.prototype.update = function (t) {
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
             const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
-            const targetY = baseTargetY + 40; // Lower hover altitude
+            let targetY = Math.max(baseTargetY + 40, 120); // Lower hover altitude, minimum height 120
             if (this.pos.y > targetY) {
                 this.pos.y -= 2.5 * t; // Slower altitude adjustment
             } else if (this.pos.y < targetY) {
@@ -1014,7 +1014,7 @@ Mob.prototype.update = function (t) {
                     const t = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion),
                         e = this.pos.clone().add(t.multiplyScalar(-7.5)),
                         s = chunkManager.getSurfaceY(e.x, e.z);
-                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 125, !0, worldSeed)
+                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 120, !0, worldSeed)
                 }
                 const t = {
                     x: this.targetBlock.x,
