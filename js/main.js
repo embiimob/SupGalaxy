@@ -625,6 +625,9 @@ function initThree() {
         passive: !1
     }), document.addEventListener("pointerlockchange", (function () {
         mouseLocked = document.pointerLockElement === renderer.domElement, document.getElementById("crosshair").style.display = mouseLocked && "first" === cameraMode ? "block" : "none"
+        if (!mouseLocked && typeof clearPointerHold === 'function') {
+            clearPointerHold();
+        }
     })), renderer.domElement.addEventListener("mousemove", (function (e) {
         if ("first" === cameraMode && mouseLocked) {
             player.yaw -= .002 * e.movementX, player.pitch -= .002 * e.movementY, player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), avatarGroup && avatarGroup.children[3].rotation.set(player.pitch, 0, 0)
@@ -2021,8 +2024,18 @@ function dropSelectedItem(dropAll = false) {
     updateHotbarUI();
 }
 
+let lastPointerDownTime = 0;
 function onPointerDown(e) {
     if ("first" !== cameraMode || isPromptOpen) return;
+
+    // Require pointer lock to perform actions if not on mobile
+    if (!isMobile() && !mouseLocked) return;
+
+    // Throttle to prevent overwhelming the game loop
+    const now = performance.now();
+    if (now - lastPointerDownTime < 100) return;
+    lastPointerDownTime = now;
+
     e.preventDefault();
     const t = INVENTORY[selectedHotIndex];
     if (2 === e.button && t && BLOCKS[t.id] && BLOCKS[t.id].hand_attachable) return void dropSelectedItem();
@@ -3221,6 +3234,7 @@ function isModalInputActive() {
 
 function registerKeyEvents() {
     function e(e) {
+        if (e.repeat) return; // Ignore OS key repeats
         // Check if chat input is focused - if so, don't process game controls
         const chatInputActive = typeof isChatInputActive === 'function' && isChatInputActive();
         
