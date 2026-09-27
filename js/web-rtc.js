@@ -1192,7 +1192,11 @@ function setupDataChannel(e, t) {
                                 worldSeed = blockWorld;
                             }
 
-                            removeBlockAt(s.x, s.y, s.z, s.username);
+                            if (s.isBlue && typeof applyBlueLaserDamage === 'function') {
+                                applyBlueLaserDamage(s.x, s.y, s.z, s.username);
+                            } else {
+                                removeBlockAt(s.x, s.y, s.z, s.username);
+                            }
 
                         } catch (error) {
                             console.error(`[WebRTC] Error processing block_hit in world ${blockWorld}:`, error);

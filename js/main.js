@@ -2485,6 +2485,90 @@ function checkAndDeactivateHive(e, t, o) {
     0 === r && (console.log(`[HIVE] All blocks for hive at ${a.x},${a.y},${a.z} are gone. Deactivating.`), hiveLocations = hiveLocations.filter((e => e.x !== a.x || e.y !== a.y || e.z !== a.z)), addMessage("A bee hive has been destroyed!", 3e3))
 }
 
+
+function applyBlueLaserDamage(cx, cy, cz, user) {
+    let batchedMessages = [];
+    const modifiedChunks = new Set();
+
+    if (typeof chunkManager !== 'undefined' && chunkManager.setBlockGlobal) {
+        chunkManager.setBlockGlobal = function(e, t, o, a, n = !0, r = null, source = 'local') {
+            if (t < 0 || t >= MAX_HEIGHT) return;
+            var s = modWrap(e, MAP_SIZE), i = modWrap(o, MAP_SIZE);
+            var l = Math.floor(s / CHUNK_SIZE), d = Math.floor(i / CHUNK_SIZE);
+            var c = Math.floor(s % CHUNK_SIZE), u = Math.floor(i % CHUNK_SIZE);
+            var p = this.getChunk(l, d);
+            p.generated || this.generateChunk(p);
+            var m = p.get(c, t, u);
+            if (m !== a) {
+                p.set(c, t, u, a);
+                if (a === BLOCK_AIR) {
+                    const key = `${e},${t},${o}`;
+                    const damagedBlock = damagedBlocks.get(key);
+                    if (damagedBlock && damagedBlock.mesh) {
+                        crackMeshes.remove(damagedBlock.mesh);
+                        disposeObject(damagedBlock.mesh);
+                        damagedBlocks.delete(key);
+                    }
+                }
+                var y = p.key;
+                const worldState = getCurrentWorldState();
+                if (!worldState.chunkDeltas.has(y)) worldState.chunkDeltas.set(y, []);
+                worldState.chunkDeltas.get(y).push({x: c, y: t, z: u, b: a, source: source});
+
+                modifiedChunks.add(p);
+                if (c === 0) modifiedChunks.add(this.getChunk(l - 1, d));
+                if (c === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l + 1, d));
+                if (u === 0) modifiedChunks.add(this.getChunk(l, d - 1));
+                if (u === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l, d + 1));
+
+                if (n) {
+                    batchedMessages.push({
+                        type: "block_change",
+                        world: worldName,
+                        wx: e,
+                        wy: t,
+                        wz: o,
+                        bid: a,
+                        prevBid: m,
+                        username: userName,
+                        originSeed: r
+                    });
+                }
+            }
+        };
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                for (let dy = 0; dy < 2; dy++) {
+                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true);
+                }
+            }
+        }
+
+        delete chunkManager.setBlockGlobal;
+        for (const chunk of modifiedChunks) {
+            chunk.needsRebuild = true;
+        }
+        updateSaveChangesButton();
+
+        if (batchedMessages.length > 0) {
+            const batchSize = 25;
+            for (let i = 0; i < batchedMessages.length; i += batchSize) {
+                const batch = batchedMessages.slice(i, i + batchSize);
+                const batchedMsg = JSON.stringify({
+                    type: "batch_block_change",
+                    messages: batch
+                });
+                for (const [peerName, peer] of peers.entries()) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(batchedMsg);
+                    }
+                }
+            }
+        }
+    }
+}
+
 function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
@@ -5351,94 +5435,7 @@ function gameLoop(e) {
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isHost || peers.size === 0) {
                         if (o.isBlue) {
-                            // Apply 3 hits of damage per block, ensuring tougher blocks like obsidian take longer
-                            // Batch updates to avoid freezing main thread
-                            let batchedMessages = [];
-
-                            // Temporarily suppress chunk rebuilds to prevent massive stutter
-                            const originalSetBlockGlobal = ChunkManager.prototype.setBlockGlobal;
-                            const modifiedChunks = new Set();
-
-                            chunkManager.setBlockGlobal = function(e, t, o, a, n = !0, r = null, source = 'local') {
-                                if (t < 0 || t >= MAX_HEIGHT) return;
-                                var s = modWrap(e, MAP_SIZE), i = modWrap(o, MAP_SIZE);
-                                var l = Math.floor(s / CHUNK_SIZE), d = Math.floor(i / CHUNK_SIZE);
-                                var c = Math.floor(s % CHUNK_SIZE), u = Math.floor(i % CHUNK_SIZE);
-                                var p = this.getChunk(l, d);
-                                p.generated || this.generateChunk(p);
-                                var m = p.get(c, t, u);
-                                if (m !== a) {
-                                    p.set(c, t, u, a);
-                                    if (a === BLOCK_AIR) {
-                                        const key = `${e},${t},${o}`;
-                                        const damagedBlock = damagedBlocks.get(key);
-                                        if (damagedBlock && damagedBlock.mesh) {
-                                            crackMeshes.remove(damagedBlock.mesh);
-                                            disposeObject(damagedBlock.mesh);
-                                            damagedBlocks.delete(key);
-                                        }
-                                    }
-                                    var y = p.key;
-                                    const worldState = getCurrentWorldState();
-                                    if (!worldState.chunkDeltas.has(y)) worldState.chunkDeltas.set(y, []);
-                                    worldState.chunkDeltas.get(y).push({x: c, y: t, z: u, b: a, source: source});
-
-                                    // Track modified chunks instead of rebuilding immediately
-                                    modifiedChunks.add(p);
-                                    if (c === 0) modifiedChunks.add(this.getChunk(l - 1, d));
-                                    if (c === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l + 1, d));
-                                    if (u === 0) modifiedChunks.add(this.getChunk(l, d - 1));
-                                    if (u === CHUNK_SIZE - 1) modifiedChunks.add(this.getChunk(l, d + 1));
-
-                                    if (n) {
-                                        batchedMessages.push({
-                                            type: "block_change",
-                                            world: worldName,
-                                            wx: e,
-                                            wy: t,
-                                            wz: o,
-                                            bid: a,
-                                            prevBid: m,
-                                            username: userName,
-                                            originSeed: r
-                                        });
-                                    }
-                                }
-                            };
-
-                            for (let dx = -1; dx <= 1; dx++) {
-                                for (let dz = -1; dz <= 1; dz++) {
-                                    for (let dy = 0; dy < 2; dy++) {
-                                        // Use silent = true and damageAmount = 1 to drastically slow down the mining speed per user request
-                                        removeBlockAt(a + dx, n - dy, r + dz, o.user, 1, true);
-                                    }
-                                }
-                            }
-
-                            // Restore original function and rebuild modified chunks
-                            delete chunkManager.setBlockGlobal;
-                            for (const chunk of modifiedChunks) {
-                                chunk.needsRebuild = true;
-                            }
-                            updateSaveChangesButton();
-
-                            // Send batched updates over network to prevent packet flood blocking the stream
-                            if (batchedMessages.length > 0) {
-                                // Batch messages to prevent sending thousands of tiny packets
-                                const batchSize = 25;
-                                for (let i = 0; i < batchedMessages.length; i += batchSize) {
-                                    const batch = batchedMessages.slice(i, i + batchSize);
-                                    const batchedMsg = JSON.stringify({
-                                        type: "batch_block_change",
-                                        messages: batch
-                                    });
-                                    for (const [peerName, peer] of peers.entries()) {
-                                        if (peerName !== userName && peer.dc && peer.dc.readyState === 'open') {
-                                            peer.dc.send(batchedMsg);
-                                        }
-                                    }
-                                }
-                            }
+                            applyBlueLaserDamage(a, n, r, o.user);
 
                         } else {
                             removeBlockAt(a, n, r, o.user);
@@ -5448,30 +5445,19 @@ function gameLoop(e) {
                         const shouldSendBlockHit = (o.user === userName);
                         if (shouldSendBlockHit) {
                             if (o.isBlue) {
-                                for (let dx = -1; dx <= 1; dx++) {
-                                    for (let dz = -1; dz <= 1; dz++) {
-                                        for (let dy = 0; dy < 2; dy++) {
-                                            const currentX = a + dx;
-                                            const currentY = n - dy;
-                                            const currentZ = r + dz;
-                                            const blockId = getBlockAt(currentX, currentY, currentZ);
-                                            if (blockId > 0) {
-                                                const blockHitMsg = JSON.stringify({
-                                                    type: 'block_hit',
-                                                    x: currentX,
-                                                    y: currentY,
-                                                    z: currentZ,
-                                                    username: o.user,
-                                                    world: worldName,
-                                                    blockId: blockId
-                                                });
-                                                for (const [, peer] of peers.entries()) {
-                                                    if (peer.dc && peer.dc.readyState === 'open') {
-                                                        peer.dc.send(blockHitMsg);
-                                                    }
-                                                }
-                                            }
-                                        }
+                                const blockHitMsg = JSON.stringify({
+                                    type: 'block_hit',
+                                    x: a,
+                                    y: n,
+                                    z: r,
+                                    username: o.user,
+                                    world: worldName,
+                                    blockId: getBlockAt(a, n, r),
+                                    isBlue: true
+                                });
+                                for (const [, peer] of peers.entries()) {
+                                    if (peer.dc && peer.dc.readyState === 'open') {
+                                        peer.dc.send(blockHitMsg);
                                     }
                                 }
                             } else {
