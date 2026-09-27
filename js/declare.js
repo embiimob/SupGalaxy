@@ -78,7 +78,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         8: {
             name: "Leaves",
             color: "#2f8f46",
-            strength: 1
+            strength: 1,
+            noShadow: true
         },
         9: {
             name: "Cactus",
