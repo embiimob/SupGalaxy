@@ -2551,7 +2551,7 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
         }
         updateSaveChangesButton();
 
-        if (batchedMessages.length > 0) {
+        if (batchedMessages.length > 0 && isHost) {
             const batchSize = 25;
             for (let i = 0; i < batchedMessages.length; i += batchSize) {
                 const batch = batchedMessages.slice(i, i + batchSize);
@@ -4427,9 +4427,12 @@ async function startGame() {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
-        id: 121,
+        id: 133,
         count: 1
-    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, INVENTORY[2] = {
+        id: 134,
+        count: 64
+    }, selectedHotIndex = 1, selectedBlockId = 133, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 
@@ -5457,6 +5460,7 @@ function gameLoop(e) {
                                 });
                                 for (const [, peer] of peers.entries()) {
                                     if (peer.dc && peer.dc.readyState === 'open') {
+                                        // Send to host. If hostUser is known, send only to them. Otherwise broadcast.
                                         peer.dc.send(blockHitMsg);
                                     }
                                 }
