@@ -4427,12 +4427,9 @@ async function startGame() {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
-        id: 133,
+        id: 121,
         count: 1
-    }, INVENTORY[2] = {
-        id: 134,
-        count: 64
-    }, selectedHotIndex = 1, selectedBlockId = 133, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 
