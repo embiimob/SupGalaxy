@@ -2576,7 +2576,9 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const n = BLOCKS[a];
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (!n || n.strength > 5) {
-        if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
+        const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+        const isUfoBreaker = breaker && typeof breaker === 'string' && ufoTypes.some(type => breaker.startsWith(type));
+        if (isUfoBreaker) {
             // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
         } else {
             return void addMessage("Cannot break that block");
@@ -2611,7 +2613,9 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     s.hits += damageAmount;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 100000 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 100000 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 3000 : n.strength;
+    const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+    const isUfoBreaker = breaker && typeof breaker === 'string' && ufoTypes.some(type => breaker.startsWith(type));
+    const effectiveStrength = (n.strength > 5 && isUfoBreaker) ? 100000 : (n.strength > 0 && isUfoBreaker) ? n.strength * 3000 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 

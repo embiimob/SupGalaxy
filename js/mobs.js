@@ -1,6 +1,7 @@
 function Mob(t, e, s, i = "crawley") {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    let yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+    let yPos = ufoTypes.includes(i) ? 220 : chunkManager.getSurfaceY(t, e) + 1;
     if (i === "spider") {
         yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
         // Check if spawn was in sky
@@ -12,8 +13,61 @@ function Mob(t, e, s, i = "crawley") {
     if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
-    } else if ("ufo_saucer" === this.type) {
+
+    } else if ("treant" === this.type) {
+        this.mesh = new THREE.Group;
+        this.hp = 30;
+        this.speed = 0.01;
+        const matWood = new THREE.MeshLambertMaterial({color: 0x8b5a33});
+        const matLeaves = new THREE.MeshLambertMaterial({color: 0x2f8f46});
+        const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, 0.8), matWood);
+        const leaves = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), matLeaves);
+        trunk.position.y = 0.8;
+        leaves.position.y = 2.4;
+        this.mesh.add(trunk);
+        this.mesh.add(leaves);
+        this.originalColor = new THREE.Color(0x8b5a33);
+    } else if ("lunar_mite" === this.type) {
+        this.mesh = new THREE.Group;
+        this.hp = 10;
+        this.speed = 0.06;
+        const mat = new THREE.MeshLambertMaterial({color: 0xeeeeee});
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.4), mat);
+        this.mesh.add(body);
+        this.originalColor = new THREE.Color(0xeeeeee);
+    } else if ("lava_slug" === this.type) {
+        this.mesh = new THREE.Group;
+        this.hp = 40;
+        this.speed = 0.005;
+        const mat = new THREE.MeshLambertMaterial({color: 0xff6a00});
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.6), mat);
+        this.mesh.add(body);
+        this.originalColor = new THREE.Color(0xff6a00);
+    } else if ("scorpion" === this.type) {
+        this.mesh = new THREE.Group;
+        this.hp = 20;
+        this.speed = 0.05;
+        const mat = new THREE.MeshLambertMaterial({color: 0xccaa00});
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.6), mat);
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), mat);
+        tail.position.set(0, 0.4, -0.4);
+        this.mesh.add(body);
+        this.mesh.add(tail);
+        this.originalColor = new THREE.Color(0xccaa00);
+    } else if ("giant" === this.type) {
+        this.mesh = new THREE.Group;
+        this.hp = 100;
+        this.speed = 0.02;
+        const mat = new THREE.MeshLambertMaterial({color: 0x88bb88});
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8), mat);
+        this.mesh.add(body);
+        this.originalColor = new THREE.Color(0x88bb88);
+    } else if (ufoTypes.includes(this.type)) {
         this.isAggressive = !0;
+    } else if (["spider", "lunar_mite", "scorpion"].includes(this.type)) {
+        this.isAggressive = !0;
+    } else if (["treant", "lava_slug", "giant"].includes(this.type)) {
+        this.isAggressive = !1;
     } else if ("spider" === this.type) {
         this.isAggressive = !0;
     } else {
@@ -163,6 +217,27 @@ function Mob(t, e, s, i = "crawley") {
             color: 16711680
         });
         this.redMaterials = Array(a.length).fill(T)
+
+    } else if (["earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"].includes(this.type)) {
+        this.hp = 3000;
+        this.mesh = new THREE.Group();
+        const voxelSize = 2;
+        const hullColor = this.type === "earth_guardian" ? 0x2f8f46 :
+                          this.type === "moon_golem" ? 0xaaaaaa :
+                          this.type === "magma_titan" ? 0xff0000 :
+                          this.type === "sand_worm" ? 0xddcc88 : 0x444444;
+        const mat = new THREE.MeshLambertMaterial({color: hullColor});
+
+        for (let x = -20; x <= 20; x += voxelSize) {
+            for (let z = -20; z <= 20; z += voxelSize) {
+                if (Math.abs(x) + Math.abs(z) <= 20) {
+                    const v = new THREE.Mesh(new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize), mat);
+                    v.position.set(x, 0, z);
+                    this.mesh.add(v);
+                }
+            }
+        }
+        this.lingerTime = 0;
     } else if ("ufo_saucer" === this.type) {
         this.hp = 3000;
         this.mesh = new THREE.Group();
@@ -391,15 +466,38 @@ function manageMobs() {
 
     // Despawn mobs that are too far from ANY player in their active area
     const allowedTypes = (isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day).slice();
+
+    let maxScore = player.score;
+    for (const [peerName, pos] of Object.entries(userPositions)) {
+        if (pos.score !== undefined && pos.score > maxScore) maxScore = pos.score;
+    }
+
     if (hasIdlePlayer) {
         allowedTypes.push("ufo_saucer");
+    }
+
+    if (maxScore >= 0) {
+        if (worldArchetype.name === 'Earth') allowedTypes.push('treant');
+        if (worldArchetype.name === 'Moon') allowedTypes.push('lunar_mite');
+        if (worldArchetype.name === 'Vulcan') allowedTypes.push('lava_slug');
+        if (worldArchetype.name === 'Desert') allowedTypes.push('scorpion');
+        if (worldArchetype.name === 'Massive') allowedTypes.push('giant');
+    }
+
+    if (maxScore >= 0 && hasIdlePlayer) {
+        if (worldArchetype.name === 'Earth') allowedTypes.push('earth_guardian');
+        if (worldArchetype.name === 'Moon') allowedTypes.push('moon_golem');
+        if (worldArchetype.name === 'Vulcan') allowedTypes.push('magma_titan');
+        if (worldArchetype.name === 'Desert') allowedTypes.push('sand_worm');
+        if (worldArchetype.name === 'Massive') allowedTypes.push('titan');
     }
 
     mobs = mobs.filter((mob) => {
         const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = allowedTypes.includes(mob.type);
 
-        if (mob.type === "ufo_saucer" && (!isAllowedType || !isNearAnyPlayer)) {
+        const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+        if (ufoTypes.includes(mob.type) && (!isAllowedType || !isNearAnyPlayer)) {
             // If the player is no longer idle or too far, transition the UFO to LEAVING instead of instantly despawning
             if (mob.aiState !== "LEAVING") {
                 mob.aiState = "LEAVING";
@@ -447,6 +545,11 @@ function manageMobs() {
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
+            } else if (["treant", "lunar_mite", "lava_slug", "scorpion", "giant"].includes(type)) {
+                maxCount = 3;
+            } else if (["earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"].includes(type)) {
+                maxCount = 1;
+                if (Math.random() > 0.02) continue;
             } else continue;
 
             // Count mobs of this type in this specific area
@@ -456,14 +559,16 @@ function manageMobs() {
                     // Check if mob is near this area
                     // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
                     // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
-                    if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
+                    const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+                    if (ufoTypes.includes(type)) { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 
             if (countInArea < maxCount) {
                 let spawnX, spawnZ;
 
-                if (type === "ufo_saucer" && idlePlayerPos) {
+                const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+                if (ufoTypes.includes(type) && idlePlayerPos) {
                     // Spawn directly above the idle player
                     spawnX = idlePlayerPos.x;
                     spawnZ = idlePlayerPos.z;
@@ -574,7 +679,7 @@ Mob.prototype.update = function (t) {
             const e = t.userData.originalMaterial;
             e && (t.material = e)
         })) : this.originalColor && (this.mesh.material ? this.mesh.material.color.copy(this.originalColor) : this.mesh.children[0].material.color.copy(this.originalColor))
-    } else if ("ufo_saucer" === this.type) {
+    } else if (["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"].includes(this.type)) {
         this.lingerTime += t * 1000;
 
         const lights = this.mesh.children.filter(c => c.isPointLight);
@@ -726,7 +831,10 @@ Mob.prototype.update = function (t) {
                         const pPos = this.pos.clone().add(offsets[i]);
                         const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
 
-                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
+                        let c = "blue";
+                        if (this.type === "earth_guardian" || this.type === "titan") c = "green";
+                        if (this.type === "magma_titan" || this.type === "sand_worm") c = "red";
+                        createProjectile(pid, this.id, pPos, laserDir.clone(), c);
 
                         if (!playedAudioThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
@@ -851,6 +959,43 @@ Mob.prototype.update = function (t) {
         }
         let e = new THREE.Vector3(0, 0, 0),
             s = !1;
+
+        if (this.type === "treant" && (typeof isHost === "undefined" || isHost)) {
+            let blockId = getBlockAt(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z));
+            if (blockId === 3) {
+                if (Math.random() < 0.05) chunkManager.setBlockGlobal(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z), 2);
+            }
+        }
+        if (this.type === "lunar_mite" && (typeof isHost === "undefined" || isHost)) {
+            let blockId = getBlockAt(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z));
+            if (blockId === 4) {
+                if (Math.random() < 0.05) chunkManager.setBlockGlobal(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z), 15);
+            }
+        }
+        if (this.type === "lava_slug" && (typeof isHost === "undefined" || isHost)) {
+            let blockId = getBlockAt(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z));
+            if (blockId === 4) {
+                if (Math.random() < 0.05) chunkManager.setBlockGlobal(Math.floor(this.pos.x), Math.floor(this.pos.y - 1), Math.floor(this.pos.z), 16);
+            }
+        }
+        if (this.type === "scorpion" && (typeof isHost === "undefined" || isHost)) {
+            let blockId = getBlockAt(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z));
+            if (blockId === 9) {
+                if (Math.random() < 0.1) {
+                    chunkManager.setBlockGlobal(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z), 0);
+                    this.hp = Math.min(this.hp + 5, 20);
+                }
+            }
+        }
+        if (this.type === "giant" && (typeof isHost === "undefined" || isHost)) {
+            let blockId = getBlockAt(Math.floor(this.pos.x), Math.floor(this.pos.y + 1), Math.floor(this.pos.z));
+            if (blockId === 8) {
+                if (Math.random() < 0.1) {
+                    chunkManager.setBlockGlobal(Math.floor(this.pos.x), Math.floor(this.pos.y + 1), Math.floor(this.pos.z), 0);
+                }
+            }
+        }
+
         if ("spider" === this.type) {
             const i = 12;
             let o = 1 / 0;
@@ -1399,7 +1544,24 @@ Mob.prototype.update = function (t) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
 
-    if (this.type === "ufo_saucer") {
+
+
+    if (this.type === "treant" || this.type === "giant") {
+        if (Math.random() < 0.5 && typeof window.createDroppedItemOrb === 'function') {
+            window.createDroppedItemOrb(`${userName}-${Date.now()}-drop`, this.pos.clone(), 7, worldSeed, userName, 1);
+        }
+    } else if (this.type === "lunar_mite") {
+        if (Math.random() < 0.5 && typeof window.createDroppedItemOrb === 'function') {
+            window.createDroppedItemOrb(`${userName}-${Date.now()}-drop`, this.pos.clone(), 15, worldSeed, userName, 1);
+        }
+    } else if (this.type === "scorpion") {
+        if (Math.random() < 0.5 && typeof window.createDroppedItemOrb === 'function') {
+            window.createDroppedItemOrb(`${userName}-${Date.now()}-drop`, this.pos.clone(), 9, worldSeed, userName, 1);
+        }
+    }
+
+    const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
+    if (ufoTypes.includes(this.type)) {
         if (!window.activeExplosions) window.activeExplosions = [];
         const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
         const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
