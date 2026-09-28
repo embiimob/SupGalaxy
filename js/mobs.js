@@ -694,7 +694,7 @@ Mob.prototype.update = function (t) {
 
             // Hover closer to the ground than 220, e.g. targetPos.y + 60
             const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
-            let targetY = Math.max(baseTargetY + 40, 120); // Lower hover altitude, minimum height 120
+            let targetY = Math.max(baseTargetY + 40, 108); // Lower hover altitude, minimum height 108
             if (this.pos.y > targetY) {
                 this.pos.y -= 2.5 * t; // Slower altitude adjustment
             } else if (this.pos.y < targetY) {
