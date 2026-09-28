@@ -214,6 +214,18 @@ const BLOCKS = {
         127: { name: "Magician's Stone", color: "#8A2BE2" },
         133: { name: 'Blue Laser Gun', color: '#0000ff', hand_attachable: true },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
+
+        200: { name: 'Golden Apple', color: '#ffcc00' },
+        201: { name: 'Ember Heart', color: '#ff3300' },
+        202: { name: 'Stardust', color: '#ffffff' },
+        203: { name: 'Desert Dew', color: '#00ccff' },
+        204: { name: 'Titan Berry', color: '#aa00aa' },
+
+        210: { name: 'Root of Strength', color: '#8b4513' },
+        211: { name: 'Dragon Scale', color: '#cc0000' },
+        212: { name: 'Lunar Core', color: '#cccccc' },
+        213: { name: 'Sun Stone', color: '#ffaa00' },
+        214: { name: 'Core of Power', color: '#000000' },
 };
 
 const BIOMES = [

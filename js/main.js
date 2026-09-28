@@ -2200,6 +2200,71 @@ function onPointerDown(e) {
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
 
+    if (0 === e.button && t && t.id >= 200 && t.id <= 214) {
+        if (!window.activeBuffs) {
+            window.activeBuffs = { heals: 0, str: 0, healTimeout: null, strTimeout: null };
+            window.playerDamageMultiplier = 1.0;
+        }
+
+        let isHeal = t.id >= 200 && t.id <= 204;
+        let isStr = t.id >= 210 && t.id <= 214;
+        let msg = "";
+
+        if (isHeal) {
+            window.activeBuffs.heals++;
+            let healAmt = 50 + (50 * window.activeBuffs.heals);
+            healAmt = Math.min(healAmt, 200); // Up to 200 HP
+            player.health = Math.min(999, player.health + healAmt);
+            msg = `Consumed ${t.name}! +${healAmt} HP`;
+
+            if (window.activeBuffs.healTimeout) clearTimeout(window.activeBuffs.healTimeout);
+            window.activeBuffs.healTimeout = setTimeout(() => {
+                window.activeBuffs.heals = 0;
+                updateTorchColor();
+            }, 300000); // 5 minutes
+        }
+
+        if (isStr) {
+            window.activeBuffs.str++;
+            let strAmt = 0.5 * window.activeBuffs.str;
+            strAmt = Math.min(strAmt, 3.0); // Up to 300% added
+            window.playerDamageMultiplier = 1.0 + strAmt;
+            msg = `Consumed ${t.name}! Damage +${Math.round(strAmt*100)}%`;
+
+            if (window.activeBuffs.strTimeout) clearTimeout(window.activeBuffs.strTimeout);
+            window.activeBuffs.strTimeout = setTimeout(() => {
+                window.activeBuffs.str = 0;
+                window.playerDamageMultiplier = 1.0;
+                updateTorchColor();
+            }, 300000); // 5 minutes
+        }
+
+        function updateTorchColor() {
+            if (!avatarGroup || !avatarGroup.torchLight) return;
+            const hasHeal = window.activeBuffs.heals > 0;
+            const hasStr = window.activeBuffs.str > 0;
+            if (hasHeal && hasStr) {
+                avatarGroup.torchLight.color.setHex(0x800080); // Purple
+            } else if (hasHeal) {
+                avatarGroup.torchLight.color.setHex(0x0000ff); // Blue
+            } else if (hasStr) {
+                avatarGroup.torchLight.color.setHex(0xff0000); // Red
+            } else {
+                avatarGroup.torchLight.color.setHex(0xffddaa); // Default torch color
+            }
+        }
+
+        updateTorchColor();
+        updateHealthBar();
+        document.getElementById("health").innerText = player.health;
+        addMessage(msg, 3000);
+
+        INVENTORY[selectedHotIndex].count--;
+        if (INVENTORY[selectedHotIndex].count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
+
     // Check for Chest Intersections
     const chestMeshes = Object.values(chests).map(c => c.mesh).filter(m => m);
     const chestIntersects = raycaster.intersectObjects(chestMeshes, true);
@@ -2576,9 +2641,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const n = BLOCKS[a];
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (!n || n.strength > 5) {
-        const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
-        const isUfoBreaker = breaker && typeof breaker === 'string' && ufoTypes.some(type => breaker.startsWith(type));
-        if (isUfoBreaker) {
+        if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
             // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
         } else {
             return void addMessage("Cannot break that block");
@@ -2613,9 +2676,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     s.hits += damageAmount;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 100000 if hit repeatedly (reduced damage)
-    const ufoTypes = ["ufo_saucer", "earth_guardian", "moon_golem", "magma_titan", "sand_worm", "titan"];
-    const isUfoBreaker = breaker && typeof breaker === 'string' && ufoTypes.some(type => breaker.startsWith(type));
-    const effectiveStrength = (n.strength > 5 && isUfoBreaker) ? 100000 : (n.strength > 0 && isUfoBreaker) ? n.strength * 3000 : n.strength;
+    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 100000 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 3000 : n.strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
@@ -3427,7 +3488,10 @@ function performAttack() {
     })).sort((function (e, t) {
         return e.intersect.distance - t.intersect.distance
     }));
-    if (o.length > 0) return o[0].mob.hurt(4), safePlayAudio(soundHit), void addMessage("Hit mob!", 800);
+    if (o.length > 0) {
+        let dmg = 4 * (window.playerDamageMultiplier || 1.0);
+        return o[0].mob.hurt(dmg), safePlayAudio(soundHit), void addMessage("Hit mob!", 800);
+    }
     for (var a = .6; a < 3; a += .6) {
         var n = t.clone().addScaledVector(e, a),
             r = Math.round(n.x),
@@ -5532,7 +5596,10 @@ function gameLoop(e) {
                         if (o.user === userName) {
                             lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
                         }
-                        const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                        let damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                        if (o.user === userName && window.playerDamageMultiplier) {
+                            damage *= window.playerDamageMultiplier;
+                        }
                         if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
                         else {
                             for (const [peerId, peer] of peers.entries()) {
