@@ -1303,9 +1303,25 @@ Mob.prototype.update = function (t) {
             }
             checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
         } else {
-            const e = .5 * this.speed,
-                s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE),
+            let s, i;
+            if ("crawley" === this.type) {
+                if (!this.nextWanderChange || Date.now() > this.nextWanderChange) {
+                    this.nextWanderChange = Date.now() + 2000 + Math.random() * 3000;
+                    if (Math.random() < 0.3) {
+                        this.wanderDir = new THREE.Vector3(0, 0, 0); // pause
+                    } else {
+                        const angle = Math.random() * Math.PI * 2;
+                        this.wanderDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
+                    }
+                }
+                const e = 0.5 * this.speed;
+                s = this.pos.x + (this.wanderDir ? this.wanderDir.x : 0) * e * t * 60;
+                i = this.pos.z + (this.wanderDir ? this.wanderDir.z : 0) * e * t * 60;
+            } else {
+                const e = .5 * this.speed;
+                s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
+            }
             if ("grub" === this.type || "crawley" === this.type) {
                 if (checkCollisionWithBlock(s, this.pos.y, i)) {
                     if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
@@ -1317,12 +1333,32 @@ Mob.prototype.update = function (t) {
                     }
                 }
             }
-            checkCollisionWithBlock(s, this.pos.y, i) || (this.pos.x = s, this.pos.z = i, h = !0)
+            if (!checkCollisionWithBlock(s, this.pos.y, i)) {
+                this.pos.x = s;
+                this.pos.z = i;
+                if ("crawley" === this.type && this.wanderDir && this.wanderDir.lengthSq() > 0) {
+                    h = !0;
+                } else if ("crawley" !== this.type) {
+                    h = !0;
+                }
+            }
         }
         if (this.isMoving = h, "grub" === this.type && i) {
             const t = (new THREE.Vector3).subVectors(new THREE.Vector3(i.x, this.pos.y, i.z), this.pos).normalize(),
                 e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05)
+        } else if (this.isMoving && "crawley" === this.type && this.wanderDir && this.wanderDir.lengthSq() > 0 && !i) {
+            // Point the crawley in the direction of its wanderDir
+            const t = this.wanderDir.clone().normalize();
+            const e = Math.atan2(t.x, t.z);
+            this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);
+        } else if (this.isMoving && "crawley" === this.type && i && typeof o !== 'undefined' && o > 0.01) {
+            // Point towards the target when seeking
+            const targetVec = new THREE.Vector3(i.x - this.pos.x, 0, i.z - this.pos.z).normalize();
+            if (targetVec.lengthSq() > 0) {
+                 const e = Math.atan2(targetVec.x, targetVec.z);
+                 this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);
+            }
         }
         this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
