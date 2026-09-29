@@ -156,15 +156,6 @@ function createBlockTexture(e, t) {
         s = makeSeededRandom(e + "_block_texture_" + t),
         blockDef = BLOCKS[t] || { color: "#ff00ff" },
         i = new THREE.Color(blockDef.color);
-
-    // Add flower variety
-    if (t === 12) {
-        const hueShift = s() * 0.4 - 0.2; // slight hue variation
-        const hsl = {};
-        i.getHSL(hsl);
-        i.setHSL((hsl.h + hueShift + 1.0) % 1.0, hsl.s, hsl.l);
-    }
-
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
     const d = Math.floor(5 * s()),
