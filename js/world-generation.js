@@ -156,6 +156,15 @@ function createBlockTexture(e, t) {
         s = makeSeededRandom(e + "_block_texture_" + t),
         blockDef = BLOCKS[t] || { color: "#ff00ff" },
         i = new THREE.Color(blockDef.color);
+
+    // Add flower variety
+    if (t === 12) {
+        const hueShift = s() * 0.4 - 0.2; // slight hue variation
+        const hsl = {};
+        i.getHSL(hsl);
+        i.setHSL((hsl.h + hueShift + 1.0) % 1.0, hsl.s, hsl.l);
+    }
+
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
     const d = Math.floor(5 * s()),
@@ -710,6 +719,67 @@ function safePlayAudio(e) {
                 audioErrorLogged || (addMessage("Audio playback issue detected", 3e3), audioErrorLogged = !0);
             }
         }))
+    }
+}
+
+function manageTreeSeeds() {
+    if (isHost || 0 === peers.size) {
+        const now = Date.now();
+        const state = typeof getCurrentWorldState !== "undefined" ? getCurrentWorldState() : null;
+        if (!state || !state.treeSeeds) return;
+
+        for (const [key, seedData] of state.treeSeeds.entries()) {
+            if (now - seedData.plantedTime >= 300000) { // 5 minutes
+                // Grow tree
+                const cx = seedData.x;
+                const cy = seedData.y;
+                const cz = seedData.z;
+                const originSeed = seedData.originSeed;
+
+                // Determine tree shape
+                const rnd = makeSeededRandom(originSeed + "_tree_" + cx + "_" + cy + "_" + cz);
+                const treeHeight = 5 + Math.floor(rnd() * 6);
+                const canopySize = 2 + Math.floor(rnd() * 2);
+
+                // Clear the seed block
+                chunkManager.setBlockGlobal(cx, cy, cz, BLOCK_AIR, true, null, 'local');
+                if (state.foreignBlockOrigins.has(key)) state.foreignBlockOrigins.delete(key);
+
+                // Place trunk
+                for (let i = 0; i < treeHeight; i++) {
+                    const trunkKey = `${cx},${cy+i},${cz}`;
+                    chunkManager.setBlockGlobal(cx, cy + i, cz, 7, true, originSeed, 'local');
+                    if (originSeed && originSeed !== worldSeed) {
+                        state.foreignBlockOrigins.set(trunkKey, originSeed);
+                    }
+                }
+
+                // Place canopy
+                for (let dy = -canopySize; dy <= canopySize; dy++) {
+                    for (let dx = -canopySize; dx <= canopySize; dx++) {
+                        for (let dz = -canopySize; dz <= canopySize; dz++) {
+                            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                            if (d <= canopySize + 0.5 * rnd()) {
+                                const rx = cx + dx;
+                                const ry = cy + treeHeight + dy;
+                                const rz = cz + dz;
+                                // Only place leaves in air
+                                if (getBlockAt(rx, ry, rz) === BLOCK_AIR) {
+                                    const leafKey = `${rx},${ry},${rz}`;
+                                    chunkManager.setBlockGlobal(rx, ry, rz, 8, true, originSeed, 'local');
+                                    if (originSeed && originSeed !== worldSeed) {
+                                        state.foreignBlockOrigins.set(leafKey, originSeed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Remove from treeSeeds
+                state.treeSeeds.delete(key);
+            }
+        }
     }
 }
 
