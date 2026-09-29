@@ -118,6 +118,16 @@ function buildGreedyMesh(e, t, o) {
                     });
                 }
             }
+            else if (t.blockId === 6) a = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(o.color),
+                transparent: !0,
+                transmission: 0.9,
+                opacity: 1.0,
+                roughness: 0.1,
+                ior: 1.33,
+                thickness: 1.0,
+                side: THREE.DoubleSide
+            });
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -312,6 +322,16 @@ Chunk.prototype.idx = function (e, t, o) {
                     });
                 }
             }
+            else if (w === "6" || w === 6) D = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(K.color),
+                transparent: !0,
+                transmission: 0.9,
+                opacity: 1.0,
+                roughness: 0.1,
+                ior: 1.33,
+                thickness: 1.0,
+                side: THREE.DoubleSide
+            });
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,

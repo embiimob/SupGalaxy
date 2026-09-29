@@ -3368,7 +3368,13 @@ function registerKeyEvents() {
 }
 
 function playerJump() {
-    player.onGround && (player.vy = isSprinting ? 25.5 : 8.5, player.onGround = !1)
+    if (window.playerInWater) {
+        player.vy = 8.5;
+        player.onGround = !1;
+    } else if (player.onGround) {
+        player.vy = isSprinting ? 25.5 : 8.5;
+        player.onGround = !1;
+    }
 }
 
 function toggleCameraMode() {
@@ -5016,9 +5022,14 @@ function gameLoop(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
+        const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6;
+        window.playerInWater = inWater;
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
             i = 0;
+        if (inWater) {
+            r *= 0.5;
+        }
         isMobile() ? (joystick.up && (i += 1), joystick.down && (i -= 1), joystick.left && (s -= 1), joystick.right && (s += 1)) : (keys.w && (i += 1), keys.s && (i -= 1), keys.a && (s -= 1), keys.d && (s += 1), i <= 0 && isSprinting && (isSprinting = !1, addMessage("Sprinting disabled", 1500)), "first" === cameraMode && (keys.arrowup && (player.pitch += .02), keys.arrowdown && (player.pitch -= .02), keys.arrowleft && (player.yaw += .02), keys.arrowright && (player.yaw -= .02), player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"))), "first" === cameraMode ? a = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0, "YXZ")) : (a = new THREE.Vector3, camera.getWorldDirection(a)), a.y = 0, a.normalize(), n = (new THREE.Vector3).crossVectors(a, new THREE.Vector3(0, 1, 0));
         var l = new THREE.Vector3;
         l.addScaledVector(a, i), l.addScaledVector(n, s);
@@ -5030,7 +5041,10 @@ function gameLoop(e) {
         let M = player.x + d;
         checkCollision(M, player.y, player.z) ? player.vx = 0 : player.x = M;
         let S = player.z + c;
-        checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= gravity * t;
+        checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
+        if (inWater && player.vy < -2.0) {
+            player.vy = -2.0;
+        }
         var u = player.vy * t,
             p = player.y + u;
         if (checkCollision(player.x, p, player.z)) {
