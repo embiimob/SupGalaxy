@@ -5024,7 +5024,7 @@ function gameLoop(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
-        const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6;
+        const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
