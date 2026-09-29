@@ -3343,7 +3343,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -3359,7 +3359,8 @@ function registerKeyEvents() {
         if (chatInputActive || modalInputActive) {
             return;
         }
-        keys[e.key.toLowerCase()] = !1
+        keys[e.key.toLowerCase()] = !1;
+        keys[e.key] = !1;
     }
     return window.addEventListener("keydown", e), window.addEventListener("keyup", t),
         function () {
@@ -3368,10 +3369,7 @@ function registerKeyEvents() {
 }
 
 function playerJump() {
-    if (window.playerInWater) {
-        player.vy = 8.5;
-        player.onGround = !1;
-    } else if (player.onGround) {
+    if (!window.playerInWater && player.onGround) {
         player.vy = isSprinting ? 25.5 : 8.5;
         player.onGround = !1;
     }
@@ -4195,7 +4193,11 @@ function setupMobile() {
     // Buttons
     document.getElementById("mobileJumpBtn").addEventListener("touchstart", (e) => {
         e.preventDefault();
+        document.getElementById("mobileJumpBtn").dataset.active = "true";
         playerJump();
+    });
+    document.getElementById("mobileJumpBtn").addEventListener("touchend", (e) => {
+        document.getElementById("mobileJumpBtn").dataset.active = "false";
     });
 
     document.getElementById("mobileSprintBtn").addEventListener("touchstart", (e) => {
@@ -5035,6 +5037,16 @@ function gameLoop(e) {
         l.addScaledVector(a, i), l.addScaledVector(n, s);
         const o = l.length() > .001;
         o && (l.normalize(), "third" === cameraMode && (player.yaw = Math.atan2(l.x, l.z)));
+
+        if (inWater && (keys[" "] || (document.getElementById("mobileJumpBtn") && document.getElementById("mobileJumpBtn").dataset.active === "true"))) {
+            var swimDir = new THREE.Vector3();
+            camera.getWorldDirection(swimDir);
+            player.vx += swimDir.x * 40 * t;
+            player.vy += swimDir.y * 40 * t;
+            player.vz += swimDir.z * 40 * t;
+            player.onGround = !1;
+        }
+
         var d = l.x * r * t,
             c = l.z * r * t;
         d += player.vx * t, c += player.vz * t, player.vx *= 1 - 2 * t, player.vz *= 1 - 2 * t;
@@ -5042,7 +5054,7 @@ function gameLoop(e) {
         checkCollision(M, player.y, player.z) ? player.vx = 0 : player.x = M;
         let S = player.z + c;
         checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
-        if (inWater && player.vy < -2.0) {
+        if (inWater && player.vy < -2.0 && !(keys[" "] || document.getElementById("mobileJumpBtn").dataset.active === "true")) {
             player.vy = -2.0;
         }
         var u = player.vy * t,
