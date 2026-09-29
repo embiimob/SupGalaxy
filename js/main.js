@@ -3107,7 +3107,7 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 12 !== e && 8 !== e && 16 !== e && 17 !== e && 100 !== e && 101 !== e && 102 !== e && 103 !== e && 104 !== e && 111 !== e && 112 !== e && 113 !== e && 114 !== e && 116 !== e && 117 !== e
+    return 0 !== e && 6 !== e && 12 !== e && 8 !== e && 16 !== e
 }
 
 function checkCollisionWithBlock(e, t, o) {

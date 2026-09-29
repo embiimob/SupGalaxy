@@ -118,7 +118,7 @@ function buildGreedyMesh(e, t, o) {
                     });
                 }
             }
-            else if (t.blockId === 6) a = new THREE.MeshPhysicalMaterial({
+            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -322,7 +322,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     });
                 }
             }
-            else if (w === "6" || w === 6) D = new THREE.MeshPhysicalMaterial({
+            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
                 transmission: 0.9,
