@@ -29,6 +29,7 @@ function getCurrentWorldState() {
         WORLD_STATES.set(worldName, {
             chunkDeltas: new Map,
             foreignBlockOrigins: new Map,
+            treeSeeds: new Map,
             // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
             ipfsTruncatedDates: new Map
         });
@@ -37,6 +38,9 @@ function getCurrentWorldState() {
     const state = WORLD_STATES.get(worldName);
     if (!state.ipfsTruncatedDates) {
         state.ipfsTruncatedDates = new Map;
+    }
+    if (!state.treeSeeds) {
+        state.treeSeeds = new Map;
     }
     return state;
 }
@@ -195,9 +199,16 @@ async function applySaveFile(e, t, o) {
     if (e.isHostSession) {
         WORLD_STATES.clear();
         for (const [worldName, data] of e.worldStates) {
+            // Reset tree seed timers on load
+            const treeSeedsMap = new Map(data.treeSeeds || []);
+            const now = Date.now();
+            for (const [key, seedData] of treeSeedsMap.entries()) {
+                seedData.plantedTime = now; // Reset timer so it takes 5 mins from load
+            }
             WORLD_STATES.set(worldName, {
                 chunkDeltas: new Map(data.chunkDeltas),
                 foreignBlockOrigins: new Map(data.foreignBlockOrigins),
+                treeSeeds: treeSeedsMap,
                 ipfsTruncatedDates: new Map(data.ipfsTruncatedDates || [])
             });
         }
@@ -277,6 +288,14 @@ async function applySaveFile(e, t, o) {
         if (t.foreignBlockOrigins) {
             getCurrentWorldState().foreignBlockOrigins = new Map(t.foreignBlockOrigins);
             console.log(`[LOGIN] Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign block origins before applying deltas`);
+        }
+        if (t.treeSeeds) {
+            const treeSeedsMap = new Map(t.treeSeeds);
+            const now = Date.now();
+            for (const [key, seedData] of treeSeedsMap.entries()) {
+                seedData.plantedTime = now;
+            }
+            getCurrentWorldState().treeSeeds = treeSeedsMap;
         }
         if (t.deltas) {
             showLoadingIndicator(0, "Loading File...");
@@ -790,7 +809,14 @@ function updateHotbarUI() {
             a = o ? o.id : null,
             n = o ? o.count : 0,
             r = a && BLOCKS[a] ? hexToRgb(BLOCKS[a].color) : [0, 0, 0];
-        e.style.background = "rgba(" + r.join(",") + ", " + (a ? .45 : .2) + ")", e.querySelector(".hot-label").innerText = a && BLOCKS[a] ? BLOCKS[a].name : "", e.querySelector(".hot-count").innerText = n > 0 ? n : "", e.classList.toggle("active", t === selectedHotIndex)
+        let displayName = "";
+        if (a && BLOCKS[a]) {
+            displayName = BLOCKS[a].name;
+            if (o.originSeed && o.originSeed !== worldSeed) {
+                displayName += " " + o.originSeed;
+            }
+        }
+        e.style.background = "rgba(" + r.join(",") + ", " + (a ? .45 : .2) + ")", e.querySelector(".hot-label").innerText = displayName, e.querySelector(".hot-count").innerText = n > 0 ? n : "", e.classList.toggle("active", t === selectedHotIndex)
     })), selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null
 }
 
@@ -1051,7 +1077,11 @@ function createInventorySlot(e) {
     var o = INVENTORY[e];
     if (o && o.id) {
         var a = BLOCKS[o.id] ? hexToRgb(BLOCKS[o.id].color) : [128, 128, 128];
-        if (t.style.backgroundColor = `rgba(${a.join(",")}, 0.6)`, t.innerText = BLOCKS[o.id] ? BLOCKS[o.id].name.substring(0, 6) : "Unknown", o.count > 1) {
+        let displayName = BLOCKS[o.id] ? BLOCKS[o.id].name.substring(0, 6) : "Unknown";
+        if (o.originSeed && o.originSeed !== worldSeed) {
+            displayName += " " + o.originSeed.substring(0, 4);
+        }
+        if (t.style.backgroundColor = `rgba(${a.join(",")}, 0.6)`, t.innerText = displayName, o.count > 1) {
             var n = document.createElement("div");
             n.className = "inv-count", n.innerText = o.count, t.appendChild(n)
         }
@@ -1322,7 +1352,11 @@ function createChestInventorySlot(index) {
     if (item) {
         const color = BLOCKS[item.id] ? hexToRgb(BLOCKS[item.id].color) : [128, 128, 128];
         slot.style.backgroundColor = `rgba(${color.join(",")}, 0.6)`;
-        slot.innerText = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : "???";
+        let displayName = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : "???";
+        if (item.originSeed && item.originSeed !== worldSeed) {
+            displayName += " " + item.originSeed.substring(0, 4);
+        }
+        slot.innerText = displayName;
         if (item.count > 1) {
             const countDiv = document.createElement("div");
             countDiv.className = "inv-count";
@@ -2681,6 +2715,12 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
                 if (breaker === userName) {
                     addToInventory(a, 1, l);
                     addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+
+                    if (a === 8 && Math.random() < 0.1) { // 1/10 chance on leaves
+                        addToInventory(135, 5, l);
+                        addMessage("Found 5 Tree Seeds" + (l ? ` from ${l}` : ""));
+                    }
+
                     safePlayAudio(soundBreak);
                 } else if (isHost) {
                     const peer = peers.get(breaker);
@@ -2906,6 +2946,12 @@ function placeBlockAt(e, t, o, a) {
                                 var c = createFlameParticles(e, t + .5, o);
                                 scene.add(c), torchParticles.set(key, c);
                             }
+                        }
+                        if (a === 135) { // Tree Seed planted
+                            const r = `${e},${t},${o}`;
+                            getCurrentWorldState().treeSeeds.set(r, {
+                                x: e, y: t, z: o, originSeed: n.originSeed || worldSeed, plantedTime: Date.now()
+                            });
                         }
 
                         // Broadcast to clients
@@ -3474,6 +3520,7 @@ async function downloadHostSession() {
         return [worldName, {
             chunkDeltas: Array.from(data.chunkDeltas.entries()),
             foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries()),
+            treeSeeds: Array.from((data.treeSeeds || new Map()).entries()),
             ipfsTruncatedDates: Array.from((data.ipfsTruncatedDates || new Map()).entries())
         }];
     });
@@ -3647,6 +3694,7 @@ async function publishToTestnet() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
+        treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
         chests: serializableChests,
@@ -3828,6 +3876,7 @@ async function downloadSinglePlayerSession() {
         savedAt: (new Date).toISOString(),
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
+        treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
         chests: serializableChests,
@@ -5157,7 +5206,7 @@ function gameLoop(e) {
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
             e.update(t)
-        })), manageMobs(), manageVolcanoes(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        })), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
 
         // Update chest animations
         for (const key in chests) {

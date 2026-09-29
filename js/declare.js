@@ -280,6 +280,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 3,
             light: !0
         },
+        135: {
+            name: "Tree Seed",
+            color: "#4a3c31",
+            strength: 1
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",

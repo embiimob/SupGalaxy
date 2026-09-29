@@ -713,6 +713,67 @@ function safePlayAudio(e) {
     }
 }
 
+function manageTreeSeeds() {
+    if (isHost || 0 === peers.size) {
+        const now = Date.now();
+        const state = typeof getCurrentWorldState !== "undefined" ? getCurrentWorldState() : null;
+        if (!state || !state.treeSeeds) return;
+
+        for (const [key, seedData] of state.treeSeeds.entries()) {
+            if (now - seedData.plantedTime >= 300000) { // 5 minutes
+                // Grow tree
+                const cx = seedData.x;
+                const cy = seedData.y;
+                const cz = seedData.z;
+                const originSeed = seedData.originSeed;
+
+                // Determine tree shape
+                const rnd = makeSeededRandom(originSeed + "_tree_" + cx + "_" + cy + "_" + cz);
+                const treeHeight = 5 + Math.floor(rnd() * 6);
+                const canopySize = 2 + Math.floor(rnd() * 2);
+
+                // Clear the seed block
+                chunkManager.setBlockGlobal(cx, cy, cz, BLOCK_AIR, true, null, 'local');
+                if (state.foreignBlockOrigins.has(key)) state.foreignBlockOrigins.delete(key);
+
+                // Place trunk
+                for (let i = 0; i < treeHeight; i++) {
+                    const trunkKey = `${cx},${cy+i},${cz}`;
+                    chunkManager.setBlockGlobal(cx, cy + i, cz, 7, true, originSeed, 'local');
+                    if (originSeed && originSeed !== worldSeed) {
+                        state.foreignBlockOrigins.set(trunkKey, originSeed);
+                    }
+                }
+
+                // Place canopy
+                for (let dy = -canopySize; dy <= canopySize; dy++) {
+                    for (let dx = -canopySize; dx <= canopySize; dx++) {
+                        for (let dz = -canopySize; dz <= canopySize; dz++) {
+                            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                            if (d <= canopySize + 0.5 * rnd()) {
+                                const rx = cx + dx;
+                                const ry = cy + treeHeight + dy;
+                                const rz = cz + dz;
+                                // Only place leaves in air
+                                if (getBlockAt(rx, ry, rz) === BLOCK_AIR) {
+                                    const leafKey = `${rx},${ry},${rz}`;
+                                    chunkManager.setBlockGlobal(rx, ry, rz, 8, true, originSeed, 'local');
+                                    if (originSeed && originSeed !== worldSeed) {
+                                        state.foreignBlockOrigins.set(leafKey, originSeed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Remove from treeSeeds
+                state.treeSeeds.delete(key);
+            }
+        }
+    }
+}
+
 function manageVolcanoes() {
     if (isHost || 0 === peers.size) {
         if (Date.now() - lastVolcanoManagement < 1e4) return;
