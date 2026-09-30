@@ -285,6 +285,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#4a3c31",
             strength: 1
         },
+        136: {
+            name: "Fish",
+            color: "#ff7f50",
+            hand_attachable: !0,
+            strength: 1
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",

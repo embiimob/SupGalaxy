@@ -2232,7 +2232,10 @@ function onPointerDown(e) {
         }
         return
     }
+
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 136 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Fish! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+
 
     // Check for Chest Intersections
     const chestMeshes = Object.values(chests).map(c => c.mesh).filter(m => m);
@@ -2377,7 +2380,7 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
         const blockId = getBlockAt(x, y, z);
 
-        if (blockId === 130) { // Crafting Table
+                if (blockId === 130) { // Crafting Table
             openCrafting();
             return;
         } else if (blockId === 131) { // Chest
@@ -2385,7 +2388,64 @@ function onPointerDown(e) {
             return;
         }
 
-        placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
+        const placeX = Math.floor(i.x + .5 * l.x);
+        const placeY = Math.floor(i.y + .5 * l.y);
+        const placeZ = Math.floor(i.z + .5 * l.z);
+
+        if (selectedBlockId === 136) {
+            // Fish item placement
+            if (getBlockAt(placeX, placeY, placeZ) === 6 || getBlockAt(placeX, placeY - 1, placeZ) === 6) {
+                // Spawn a fish mob and remove 1 from inventory
+                if (INVENTORY[selectedHotIndex]) {
+                    INVENTORY[selectedHotIndex].count--;
+                    if (INVENTORY[selectedHotIndex].count <= 0) INVENTORY[selectedHotIndex] = null;
+                    updateHotbarUI();
+
+                    const newFish = new Mob(placeX + 0.5, placeZ + 0.5, Date.now() + Math.random(), "fish");
+                    newFish.pos.y = placeY + 0.5;
+                    mobs.push(newFish);
+
+                    if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+                    window.mobUpdateQueue.push({
+                        id: newFish.id,
+                        x: newFish.pos.x,
+                        y: newFish.pos.y,
+                        z: newFish.pos.z,
+                        quaternion: newFish.mesh.quaternion.toArray(),
+                        isMoving: newFish.isMoving,
+                        aiState: newFish.aiState,
+                        type: newFish.type,
+                        hp: newFish.hp,
+                        isAggressive: newFish.isAggressive
+                    });
+
+                    const spawnMsg = JSON.stringify({
+                        type: "mob_spawn",
+                        id: newFish.id,
+                        x: newFish.pos.x,
+                        y: newFish.pos.y,
+                        z: newFish.pos.z,
+                        hp: newFish.hp,
+                        mobType: newFish.type,
+                        isAggressive: newFish.isAggressive,
+                        world: worldName,
+                        username: userName
+                    });
+
+                    for (const [peerName, peer] of peers.entries()) {
+                        if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
+                            peer.dc.send(spawnMsg);
+                        }
+                    }
+                    addMessage("Spawned a fish!", 1500);
+                }
+            } else {
+                addMessage("Can only place fish in water!", 1500);
+            }
+            return;
+        }
+
+        placeBlockAt(placeX, placeY, placeZ, selectedBlockId)
     }
 }
 

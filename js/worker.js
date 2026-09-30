@@ -128,7 +128,7 @@ const ARCHETYPES = {
         name: 'Earth',
         gravity: 16.0,
         skyType: 'earth',
-        mobSpawnRules: { day: ['bee'], night: ['crawley'] },
+        mobSpawnRules: { day: ['bee', 'fish', 'whale'], night: ['crawley', 'fish', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: {},
         flora: ['trees', 'flowers', 'hives']
@@ -164,7 +164,7 @@ const ARCHETYPES = {
         name: 'Massive',
         gravity: 30.0,
         skyType: 'earth',
-        mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
+        mobSpawnRules: { day: ['fish', 'whale'], night: ['bee', 'crawley', 'fish', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: { largeBiomes: true },
         flora: ['trees', 'flowers', 'hives']
