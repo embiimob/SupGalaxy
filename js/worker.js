@@ -146,7 +146,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley', 'spider'], night: ['crawley', 'spider'] },
+        mobSpawnRules: { day: ['crawley', 'spider', 'fish', 'whale'], night: ['crawley', 'spider', 'fish', 'whale'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
