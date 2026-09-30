@@ -62,11 +62,24 @@ function buildGreedyMesh(e, t, o) {
                         f[i] = d;
                         const [g, E] = o.split("|"), v = "+" === E, M = [0, 0, 0];
                         M[n] = v ? 1 : -1;
+                        const blockIdForScale = parseInt(g.split("-")[0]);
+
                         const S = [l[0], l[1], l[2]],
                             I = [l[0] + h[0], l[1] + h[1], l[2] + h[2]],
                             k = [l[0] + f[0], l[1] + f[1], l[2] + f[2]],
                             w = [l[0] + h[0] + f[0], l[1] + h[1] + f[1], l[2] + h[2] + f[2]];
                         v && (S[n] += 1, I[n] += 1, k[n] += 1, w[n] += 1);
+
+                        if (blockIdForScale === 129) {
+                            if (n === 1) { // y-axis
+                                if (v) { S[1] -= 0.5; I[1] -= 0.5; k[1] -= 0.5; w[1] -= 0.5; }
+                            } else { // x or z axis
+                                if (S[1] > l[1]) S[1] -= 0.5;
+                                if (I[1] > l[1]) I[1] -= 0.5;
+                                if (k[1] > l[1]) k[1] -= 0.5;
+                                if (w[1] > l[1]) w[1] -= 0.5;
+                            }
+                        }
                         const b = new THREE.BufferGeometry,
                             x = new Float32Array([S[0], S[1], S[2], k[0], k[1], k[2], I[0], I[1], I[2], w[0], w[1], w[2]]),
                             T = new Float32Array([...M, ...M, ...M, ...M]),
@@ -118,7 +131,17 @@ function buildGreedyMesh(e, t, o) {
                     });
                 }
             }
-            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
+            else if (t.blockId === 17) a = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(o.color).lerp(new THREE.Color(0xffffff), 0.2),
+                transparent: !0,
+                transmission: 0.95,
+                opacity: 1.0,
+                roughness: 0.05,
+                ior: 1.31,
+                thickness: 2.0,
+                side: THREE.FrontSide
+            });
+            else if ([6, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -287,14 +310,19 @@ Chunk.prototype.idx = function (e, t, o) {
         if (e.positions && 0 !== e.positions.length) {
             var w = e.blockId,
                 b = e.seed,
-                x = new THREE.BoxGeometry(1, 1, 1),
+                x = Number(w) === 129 ? new THREE.BoxGeometry(1, 0.5, 1) : new THREE.BoxGeometry(1, 1, 1),
                 T = [],
                 C = [],
                 H = [],
                 N = [],
                 R = 0;
             for (var B of e.positions) {
-                for (var P = x.attributes.position.array, A = x.attributes.normal.array, L = x.attributes.uv.array, O = x.index.array, _ = 0; _ < x.attributes.position.count; _++) T.push(P[3 * _ + 0] + B.x + .5, P[3 * _ + 1] + B.y + .5, P[3 * _ + 2] + B.z + .5), C.push(A[3 * _ + 0], A[3 * _ + 1], A[3 * _ + 2]), H.push(L[2 * _ + 0], L[2 * _ + 1]);
+                for (var P = x.attributes.position.array, A = x.attributes.normal.array, L = x.attributes.uv.array, O = x.index.array, _ = 0; _ < x.attributes.position.count; _++) {
+                    let yOffset = Number(w) === 129 ? 0.25 : 0.5;
+                    T.push(P[3 * _ + 0] + B.x + .5, P[3 * _ + 1] + B.y + yOffset, P[3 * _ + 2] + B.z + .5);
+                    C.push(A[3 * _ + 0], A[3 * _ + 1], A[3 * _ + 2]);
+                    H.push(L[2 * _ + 0], L[2 * _ + 1]);
+                }
                 for (var z = 0; z < O.length; z++) N.push(O[z] + R);
                 R += x.attributes.position.count
             }
@@ -322,7 +350,17 @@ Chunk.prototype.idx = function (e, t, o) {
                     });
                 }
             }
-            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
+            else if (Number(w) === 17) D = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(K.color).lerp(new THREE.Color(0xffffff), 0.2),
+                transparent: !0,
+                transmission: 0.95,
+                opacity: 1.0,
+                roughness: 0.05,
+                ior: 1.31,
+                thickness: 2.0,
+                side: THREE.FrontSide
+            });
+            else if ([6, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
                 transmission: 0.9,

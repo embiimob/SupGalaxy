@@ -157,36 +157,117 @@ function createBlockTexture(e, t) {
         blockDef = BLOCKS[t] || { color: "#ff00ff" },
         i = new THREE.Color(blockDef.color);
     let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
-    r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
-    const d = Math.floor(5 * s()),
-        c = makeNoise(e + "_pattern_noise_" + t);
-    if (r.strokeStyle = l.getStyle(), r.lineWidth = 1 + Math.floor(2 * s()), 0 === d)
-        for (let e = 2; e < a; e += 4) {
-            r.beginPath();
-            for (let t = 0; t < a; t++) c(t / 8, e / 8) > .4 && (r.moveTo(t, e), r.lineTo(t + 1, e));
-            r.stroke()
-        } else if (1 === d)
-        for (let e = 2; e < a; e += 4) {
-            r.beginPath();
-            for (let t = 0; t < a; t++) c(e / 8, t / 8) > .4 && (r.moveTo(e, t), r.lineTo(e, t + 1));
-            r.stroke()
-        } else if (2 === d)
-        for (let e = -16; e < a; e += 4) {
-            r.beginPath();
-            for (let t = 0; t < 32; t++) c(e / 8, t / 8) > .6 && (r.moveTo(e + t, t), r.lineTo(e + t + 1, t + 1));
-            r.stroke()
-        } else if (3 === d)
-        for (let e = 0; e < a; e += 4) {
-            r.beginPath(), r.moveTo(0, e);
-            for (let t = 0; t < a; t++) {
-                const o = 2 * Math.sin(t / 4 + 10 * s());
-                c(t / 8, e / 8) > .3 ? r.lineTo(t, e + o) : r.moveTo(t, e + o)
-            }
-            r.stroke()
+
+    // Custom textures for specific blocks
+    let numT = Number(t);
+    if (numT === 2) { // Grass
+        r.fillStyle = i.getStyle(); r.fillRect(0, 0, a, a);
+        const dirtColor = new THREE.Color("#7a4f29");
+        r.fillStyle = dirtColor.getStyle(); r.fillRect(0, 8, a, 8); // bottom half dirt
+        const c = makeNoise(e + "_grass_" + t);
+        for (let x = 0; x < a; x++) {
+            let h = 4 + Math.floor(4 * c(x/2, s()));
+            r.fillStyle = i.clone().multiplyScalar(0.8 + 0.4*s()).getStyle();
+            r.fillRect(x, 0, 1, h);
         }
-    if (s() > .8) {
-        const e = i.clone().multiplyScalar(.7);
-        r.strokeStyle = e.getStyle(), r.lineWidth = 1, r.strokeRect(.5, .5, 15, 15)
+    } else if (numT === 3) { // Dirt
+        r.fillStyle = i.getStyle(); r.fillRect(0, 0, a, a);
+        const c = makeNoise(e + "_dirt_" + t);
+        for(let px = 0; px < a; px++) {
+            for(let py = 0; py < a; py++) {
+                if (c(px/4, py/4) > 0.5) {
+                    r.fillStyle = i.clone().multiplyScalar(0.8 + 0.4*s()).getStyle();
+                    r.fillRect(px, py, 1, 1);
+                }
+            }
+        }
+    } else if (numT === 5) { // Sand
+        r.fillStyle = i.getStyle(); r.fillRect(0, 0, a, a);
+        const c = makeNoise(e + "_sand_" + t);
+        r.strokeStyle = i.clone().multiplyScalar(0.9).getStyle();
+        r.lineWidth = 1;
+        for (let py = 0; py < a; py+=3) {
+            r.beginPath();
+            r.moveTo(0, py);
+            for(let px=0; px<a; px++) {
+                r.lineTo(px, py + 2*c(px/4, py/4) - 1);
+            }
+            r.stroke();
+        }
+        for(let px = 0; px < a; px++) {
+            for(let py = 0; py < a; py++) {
+                if (s() > 0.8) {
+                    r.fillStyle = i.clone().multiplyScalar(0.8 + 0.4*s()).getStyle();
+                    r.fillRect(px, py, 1, 1);
+                }
+            }
+        }
+    } else if (numT === 7) { // Wood
+        r.fillStyle = i.getStyle(); r.fillRect(0, 0, a, a);
+        const c = makeNoise(e + "_wood_" + t);
+        r.strokeStyle = i.clone().multiplyScalar(0.6).getStyle();
+        r.lineWidth = 1;
+        for (let px = 0; px < a; px+=2 + Math.floor(2*s())) {
+            r.beginPath();
+            r.moveTo(px, 0);
+            for(let py=0; py<a; py++) {
+                r.lineTo(px + 2*c(px/4, py/4) - 1, py);
+            }
+            r.stroke();
+        }
+    } else if (numT === 129) { // Wooden Planks
+        r.fillStyle = i.getStyle(); r.fillRect(0, 0, a, a);
+        const c = makeNoise(e + "_planks_" + t);
+        r.strokeStyle = i.clone().multiplyScalar(0.7).getStyle();
+        r.lineWidth = 1;
+        r.fillStyle = i.clone().multiplyScalar(0.4).getStyle(); // for nails
+        let plankHeight = 4;
+        for (let py = 0; py < a; py+=plankHeight) {
+            r.beginPath(); r.moveTo(0, py); r.lineTo(a, py); r.stroke();
+            for(let px = 0; px < a; px++) {
+                if(c(px/2, py/2) > 0.6) {
+                    let oldFS = r.fillStyle;
+                    r.fillStyle = i.clone().multiplyScalar(0.8 + 0.4*s()).getStyle();
+                    r.fillRect(px, py+1, 1, plankHeight-1);
+                    r.fillStyle = oldFS;
+                }
+            }
+            // nails
+            if (s() > 0.5) r.fillRect(2, py + 1, 1, 1);
+            if (s() > 0.5) r.fillRect(a - 3, py + 1, 1, 1);
+        }
+    } else {
+        r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
+        const d = Math.floor(5 * s()),
+            c = makeNoise(e + "_pattern_noise_" + t);
+        if (r.strokeStyle = l.getStyle(), r.lineWidth = 1 + Math.floor(2 * s()), 0 === d)
+            for (let e = 2; e < a; e += 4) {
+                r.beginPath();
+                for (let t = 0; t < a; t++) c(t / 8, e / 8) > .4 && (r.moveTo(t, e), r.lineTo(t + 1, e));
+                r.stroke()
+            } else if (1 === d)
+            for (let e = 2; e < a; e += 4) {
+                r.beginPath();
+                for (let t = 0; t < a; t++) c(e / 8, t / 8) > .4 && (r.moveTo(e, t), r.lineTo(e, t + 1));
+                r.stroke()
+            } else if (2 === d)
+            for (let e = -16; e < a; e += 4) {
+                r.beginPath();
+                for (let t = 0; t < 32; t++) c(e / 8, t / 8) > .6 && (r.moveTo(e + t, t), r.lineTo(e + t + 1, t + 1));
+                r.stroke()
+            } else if (3 === d)
+            for (let e = 0; e < a; e += 4) {
+                r.beginPath(), r.moveTo(0, e);
+                for (let t = 0; t < a; t++) {
+                    const o = 2 * Math.sin(t / 4 + 10 * s());
+                    c(t / 8, e / 8) > .3 ? r.lineTo(t, e + o) : r.moveTo(t, e + o)
+                }
+                r.stroke()
+            }
+        if (s() > .8) {
+            const e = i.clone().multiplyScalar(.7);
+            r.strokeStyle = e.getStyle(), r.lineWidth = 1, r.strokeRect(.5, .5, 15, 15)
+        }
     }
     const u = new THREE.CanvasTexture(n);
     return u.magFilter = THREE.NearestFilter, u.minFilter = THREE.NearestFilter, textureCache.set(o, u), u
@@ -258,6 +339,10 @@ function initSky() {
             a = new THREE.Mesh(new THREE.SphereGeometry(t, 32, 32), new THREE.MeshBasicMaterial({
                 color: o
             }));
+
+        const glowMat = new THREE.MeshBasicMaterial({ color: o.clone().lerp(new THREE.Color(0xffffff), 0.5), transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending });
+        const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(t * 1.5, 32, 32), glowMat);
+        a.add(glowMesh);
         skyProps.suns.push({
             mesh: a,
             angleOffset: e() * Math.PI * 2
@@ -282,6 +367,10 @@ function initSky() {
         const l = new THREE.Mesh(n, new THREE.MeshBasicMaterial({
             color: a
         }));
+
+        const moonGlowMat = new THREE.MeshBasicMaterial({ color: a.clone().lerp(new THREE.Color(0xffffff), 0.3), transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending });
+        const moonGlowMesh = new THREE.Mesh(new THREE.SphereGeometry(o * 1.3, 32, 32), moonGlowMat);
+        l.add(moonGlowMesh);
         skyProps.moons.push({
             mesh: l,
             angleOffset: e() * Math.PI * 2
@@ -383,6 +472,10 @@ function updateSky(e) {
 
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
     scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
+    if (scene.fog) {
+        scene.fog.color.copy(scene.background);
+        scene.fog.density = 0.003 + (1 - r) * 0.002;
+    }
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     const i = scene.getObjectByProperty("type", "AmbientLight"),

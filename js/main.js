@@ -580,6 +580,7 @@ function initThree() {
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.003);
 
     let pointerHoldTimeout = null;
     let pointerHoldInterval = null;
