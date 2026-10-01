@@ -5066,17 +5066,6 @@ function gameLoop(e) {
         return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"), renderer.render(scene, camera), void requestAnimationFrame(gameLoop)
     }
     var t = Math.min(.06, (e - lastFrame) / 1e3);
-    if (window.globalWaterTime) {
-        window.globalWaterTime.value += t;
-    }
-    window.globalWaterTime = window.globalWaterTime || { value: 0 };
-    if (window.waterMaterials) { // Cleanup old logic if it somehow runs
-        window.waterMaterials.forEach(shader => {
-            if (shader && shader.uniforms && shader.uniforms.time) {
-                shader.uniforms.time.value += t;
-            }
-        });
-    }
     if (lastFrame = e, player.health <= 0 && !isDying && handlePlayerDeath(), deathScreenShown) {
         mobs.forEach((function (e) {
             e.update(t)
