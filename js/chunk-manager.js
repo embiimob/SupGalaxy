@@ -118,7 +118,7 @@ function buildGreedyMesh(e, t, o) {
                     });
                 }
             }
-            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
+            else if ([17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -128,6 +128,41 @@ function buildGreedyMesh(e, t, o) {
                 thickness: 1.0,
                 side: THREE.FrontSide
             });
+            else if (t.blockId === 6) {
+                a = new THREE.MeshPhysicalMaterial({
+                    color: new THREE.Color(o.color),
+                    transparent: true,
+                    transmission: 0.95, // Higher transmission for water
+                    opacity: 0.8,
+                    roughness: 0.05,
+                    ior: 1.33,
+                    thickness: 2.0,
+                    side: THREE.FrontSide
+                });
+
+                // Add onBeforeCompile for water shader
+                a.onBeforeCompile = (shader) => {
+                    shader.uniforms.time = { value: 0 };
+                    window.waterMaterials = window.waterMaterials || [];
+                    window.waterMaterials.push(shader);
+
+                    shader.vertexShader = shader.vertexShader.replace(
+                        '#include <common>',
+                        `#include <common>
+                        uniform float time;`
+                    );
+
+                    shader.vertexShader = shader.vertexShader.replace(
+                        '#include <begin_vertex>',
+                        `#include <begin_vertex>
+                        if (position.y > 0.5 || normal.y > 0.5) {
+                            float wave = sin(position.x * 2.0 + time * 3.0) * 0.05 + cos(position.z * 2.0 + time * 2.0) * 0.05;
+                            transformed.y += wave;
+                        }
+                        `
+                    );
+                };
+            }
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -322,7 +357,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     });
                 }
             }
-            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
+            else if ([17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -332,6 +367,41 @@ Chunk.prototype.idx = function (e, t, o) {
                 thickness: 1.0,
                 side: THREE.FrontSide
             });
+            else if (Number(w) === 6) {
+                D = new THREE.MeshPhysicalMaterial({
+                    color: new THREE.Color(K.color),
+                    transparent: true,
+                    transmission: 0.95,
+                    opacity: 0.8,
+                    roughness: 0.05,
+                    ior: 1.33,
+                    thickness: 2.0,
+                    side: THREE.FrontSide
+                });
+
+                // Add onBeforeCompile for water shader
+                D.onBeforeCompile = (shader) => {
+                    shader.uniforms.time = { value: 0 };
+                    window.waterMaterials = window.waterMaterials || [];
+                    window.waterMaterials.push(shader);
+
+                    shader.vertexShader = shader.vertexShader.replace(
+                        '#include <common>',
+                        `#include <common>
+                        uniform float time;`
+                    );
+
+                    shader.vertexShader = shader.vertexShader.replace(
+                        '#include <begin_vertex>',
+                        `#include <begin_vertex>
+                        if (position.y > 0.0 || normal.y > 0.5) {
+                            float wave = sin((position.x + modelMatrix[3][0]) * 2.0 + time * 3.0) * 0.05 + cos((position.z + modelMatrix[3][2]) * 2.0 + time * 2.0) * 0.05;
+                            transformed.y += wave;
+                        }
+                        `
+                    );
+                };
+            }
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
