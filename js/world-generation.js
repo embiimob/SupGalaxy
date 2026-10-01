@@ -256,7 +256,8 @@ function initSky() {
         const t = 80 + 120 * e(),
             o = (new THREE.Color).setHSL(e(), .8 + .2 * e(), .6 + .2 * e()),
             a = new THREE.Mesh(new THREE.SphereGeometry(t, 32, 32), new THREE.MeshBasicMaterial({
-                color: o
+                color: o,
+                fog: false
             }));
         skyProps.suns.push({
             mesh: a,
@@ -280,7 +281,8 @@ function initSky() {
         }
         n.computeVertexNormals();
         const l = new THREE.Mesh(n, new THREE.MeshBasicMaterial({
-            color: a
+            color: a,
+            fog: false
         }));
         skyProps.moons.push({
             mesh: l,
@@ -302,7 +304,8 @@ function initSky() {
     i.setAttribute("position", new THREE.Float32BufferAttribute(l, 3));
     const c = new THREE.PointsMaterial({
         color: 16777215,
-        size: 2 + 3 * e()
+        size: 2 + 3 * e(),
+        fog: false
     }),
         u = new THREE.Points(i, c);
     stars.add(u), scene.add(stars), clouds = new THREE.Group;
@@ -314,7 +317,8 @@ function initSky() {
             color: skyProps.cloudColor,
             transparent: !0,
             opacity: .6 + .3 * e(),
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            fog: false
         }));
         t.position.set(8e3 * (e() - .5), 200 + 150 * e(), 8e3 * (e() - .5)), t.rotation.y = e() * Math.PI * 2, clouds.add(t)
     }
