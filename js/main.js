@@ -588,7 +588,7 @@ function initThree() {
     e.shadow.camera.bottom = -200;
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), scene.fog = new THREE.FogExp2(scene.background, 0.005), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
+    scene.add(t), console.log("[initThree] Lights added"), scene.fog = new THREE.FogExp2(scene.background, 0.001), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
 
     let pointerHoldTimeout = null;
     let pointerHoldInterval = null;

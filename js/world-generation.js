@@ -383,13 +383,19 @@ function updateSky(e) {
 
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
     scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
-    if (scene.fog) scene.fog.color.copy(scene.background);
+
+    let fogDensity = 0.001 + 0.002 * (Math.sin(e * 0.1 + camera.position.x * 0.05) * Math.sin(e * 0.08 + camera.position.z * 0.05) * 0.5 + 0.5);
+    if (scene.fog) {
+        scene.fog.color.copy(scene.background);
+        scene.fog.density = Math.max(0.0001, fogDensity * (1 - ug));
+    }
+
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     const i = scene.getObjectByProperty("type", "AmbientLight"),
         l = scene.getObjectByProperty("type", "DirectionalLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
-    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), l && (l.intensity = (0 + .95 * s) * (1 - ug)), d) {
+    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), l && (l.intensity = (0 + .95 * s) * (1 - ug) * (1 - (fogDensity / 0.005))), d) {
         const e = .6,
             t = .02;
         d.intensity = (t + (e - t) * s) * (1 - ug);
