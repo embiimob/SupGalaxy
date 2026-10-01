@@ -327,38 +327,38 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     BIOMES = [{
         key: "plains",
         palette: [2, 3, 4, 13, 15],
-        heightScale: .8,
-        roughness: .3,
+        heightScale: 2.4,
+        roughness: 0.45,
         featureDensity: .05
     }, {
         key: "desert",
         palette: [5, 118, 4],
-        heightScale: .6,
-        roughness: .4,
+        heightScale: 1.8,
+        roughness: 0.6,
         featureDensity: .02
     }, {
         key: "forest",
         palette: [2, 3, 14, 4],
-        heightScale: 1.3,
-        roughness: .4,
+        heightScale: 3.9,
+        roughness: 0.6,
         featureDensity: .03
     }, {
         key: "snow",
         palette: [10, 17, 4],
-        heightScale: 1.2,
-        roughness: .5,
+        heightScale: 3.6,
+        roughness: 0.75,
         featureDensity: .02
     }, {
         key: "mountain",
         palette: [4, 11, 3, 15, 1, 16],
-        heightScale: 1,
-        roughness: .6,
+        heightScale: 3,
+        roughness: 0.9,
         featureDensity: .01
     }, {
         key: "swamp",
         palette: [2, 3, 6, 14, 13],
-        heightScale: .5,
-        roughness: .2,
+        heightScale: 1.5,
+        roughness: 0.3,
         featureDensity: .04
     }],
     RECIPES = [{

@@ -141,6 +141,8 @@ function buildGreedyMesh(e, t, o) {
                 })
             }
             const n = new THREE.Mesh(e, a);
+            n.castShadow = true;
+            n.receiveShadow = true;
             s.add(n)
         }
     }
@@ -345,6 +347,8 @@ Chunk.prototype.idx = function (e, t, o) {
                 })
             }
             var G = new THREE.Mesh(U, D);
+            G.castShadow = true;
+            G.receiveShadow = true;
             I.add(G)
         }
     }

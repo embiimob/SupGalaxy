@@ -383,6 +383,7 @@ function updateSky(e) {
 
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
     scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
+    if (scene.fog) scene.fog.color.copy(scene.background);
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     const i = scene.getObjectByProperty("type", "AmbientLight"),
@@ -392,6 +393,11 @@ function updateSky(e) {
         const e = .6,
             t = .02;
         d.intensity = (t + (e - t) * s) * (1 - ug);
+    }
+    if (skyProps.suns.length > 0 && l) {
+        l.position.copy(skyProps.suns[0].mesh.position);
+        l.target.position.set(camera.position.x, 0, camera.position.z);
+        l.target.updateMatrixWorld();
     }
     for (let o = blockParticles.length - 1; o >= 0; o--) {
         const a = blockParticles[o];

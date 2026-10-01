@@ -575,11 +575,20 @@ function updateTorchRegistry(e) {
 function initThree() {
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
-    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     var e = new THREE.DirectionalLight(16777215, 1);
+    e.castShadow = true;
+    e.shadow.mapSize.width = 2048;
+    e.shadow.mapSize.height = 2048;
+    e.shadow.camera.near = 0.5;
+    e.shadow.camera.far = 10000;
+    e.shadow.camera.left = -200;
+    e.shadow.camera.right = 200;
+    e.shadow.camera.top = 200;
+    e.shadow.camera.bottom = -200;
     e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
-    scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
+    scene.add(t), console.log("[initThree] Lights added"), scene.fog = new THREE.FogExp2(scene.background, 0.005), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
 
     let pointerHoldTimeout = null;
     let pointerHoldInterval = null;
