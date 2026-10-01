@@ -32,7 +32,7 @@ function buildGreedyMesh(e, t, o) {
                         p = !a || i.transparent;
                     let h = null;
                     let shouldRender = p !== (!s || u.transparent);
-                    if (a === 6 && s === 6) shouldRender = false;
+                    if (a === 6 && (s === 6 || (s !== 0 && u && !u.transparent))) shouldRender = false;
                     if (shouldRender)
                         if (p) {
                             const a = `${e.cx * CHUNK_SIZE + l[0] + d[0]},${l[1] + d[1]},${e.cz * CHUNK_SIZE + l[2] + d[2]}`;
@@ -295,12 +295,12 @@ Chunk.prototype.idx = function (e, t, o) {
                     x: 0,
                     y: 0,
                     z: -1
-                }], g = BLOCKS[w] && BLOCKS[w].transparent, E = !1, v = 0; v < f.length; v++) {
+                }], g = BLOCKS[w] && BLOCKS[w].transparent, E = 0, v = 0; v < f.length; v++) {
                     var M = f[v],
                         S = this.getBlockGlobal(e.cx, e.cz, d + M.x, u + M.y, c + M.z);
                     if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S) {
-                        E = !0;
-                        break
+                        if (w === 6 && (S === 6 || (S !== BLOCK_AIR && BLOCKS[S] && !BLOCKS[S].transparent))) continue;
+                        E |= (1 << v);
                     }
                 }
                 if (!E) continue;
@@ -314,7 +314,8 @@ Chunk.prototype.idx = function (e, t, o) {
                 }), o[n].positions.push({
                     x: y,
                     y: u,
-                    z: h
+                    z: h,
+                    mask: E
                 })
             }
     var I = new THREE.Group;
@@ -330,9 +331,22 @@ Chunk.prototype.idx = function (e, t, o) {
                 N = [],
                 R = 0;
             for (var B of e.positions) {
-                for (var P = x.attributes.position.array, A = x.attributes.normal.array, L = x.attributes.uv.array, O = x.index.array, _ = 0; _ < x.attributes.position.count; _++) T.push(P[3 * _ + 0] + B.x + .5, P[3 * _ + 1] + B.y + .5, P[3 * _ + 2] + B.z + .5), C.push(A[3 * _ + 0], A[3 * _ + 1], A[3 * _ + 2]), H.push(L[2 * _ + 0], L[2 * _ + 1]);
-                for (var z = 0; z < O.length; z++) N.push(O[z] + R);
-                R += x.attributes.position.count
+                var P = x.attributes.position.array, A = x.attributes.normal.array, L = x.attributes.uv.array, O = x.index.array;
+                for (let face = 0; face < 6; face++) {
+                    if ((B.mask & (1 << face)) === 0) continue;
+                    let vOffset = face * 4;
+                    for (let _ = 0; _ < 4; _++) {
+                        let vIdx = vOffset + _;
+                        T.push(P[3 * vIdx + 0] + B.x + .5, P[3 * vIdx + 1] + B.y + .5, P[3 * vIdx + 2] + B.z + .5);
+                        C.push(A[3 * vIdx + 0], A[3 * vIdx + 1], A[3 * vIdx + 2]);
+                        H.push(L[2 * vIdx + 0], L[2 * vIdx + 1]);
+                    }
+                    let iOffset = face * 6;
+                    for (let z = 0; z < 6; z++) {
+                        N.push(O[iOffset + z] - vOffset + R);
+                    }
+                    R += 4;
+                }
             }
             var U = new THREE.BufferGeometry;
             U.setAttribute("position", new THREE.Float32BufferAttribute(T, 3)), U.setAttribute("normal", new THREE.Float32BufferAttribute(C, 3)), U.setAttribute("uv", new THREE.Float32BufferAttribute(H, 2)), U.setIndex(N), U.computeBoundingSphere();
