@@ -218,12 +218,12 @@ const BLOCKS = {
 };
 
 const BIOMES = [
-        { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 2.4, roughness: 0.45, featureDensity: 0.05 },
-        { key: 'desert', palette: [5, 118, 4], heightScale: 1.8, roughness: 0.6, featureDensity: 0.02 },
-        { key: 'forest', palette: [2, 3, 14, 4], heightScale: 3.9, roughness: 0.6, featureDensity: 0.03 },
-        { key: 'snow', palette: [10, 17, 4], heightScale: 3.6, roughness: 0.75, featureDensity: 0.02 },
-        { key: 'mountain', palette: [4, 11, 3, 15, 1], heightScale: 31.5, roughness: 0.9, featureDensity: 0.01 },
-        { key: 'swamp', palette: [2, 3, 6, 14, 13], heightScale: 1.5, roughness: 0.3, featureDensity: 0.04 },
+        { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 1.2, roughness: 0.36, featureDensity: 0.05 },
+        { key: 'desert', palette: [5, 118, 4], heightScale: 0.9, roughness: 0.48, featureDensity: 0.02 },
+        { key: 'forest', palette: [2, 3, 14, 4], heightScale: 1.95, roughness: 0.48, featureDensity: 0.03 },
+        { key: 'snow', palette: [10, 17, 4], heightScale: 1.8, roughness: 0.6, featureDensity: 0.02 },
+        { key: 'mountain', palette: [4, 11, 3, 15, 1], heightScale: 15.0, roughness: 0.72, featureDensity: 0.01 },
+        { key: 'swamp', palette: [2, 3, 6, 14, 13], heightScale: 0.75, roughness: 0.24, featureDensity: 0.04 },
 ];
 
 function makeSeededRandom(seed) {
@@ -363,7 +363,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
             var biome = pickBiome(n, modifiedBiomes, archetype);
             var heightScale = biome.heightScale;
             var roughness = biome.roughness;
-            var height = Math.floor(n * 40 * heightScale + 8);
+            var height = Math.floor(n * 40 * heightScale + 2);
             if (n > 0.7) height += Math.floor((n - 0.7) * 60 * heightScale);
             var localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5);
             height += Math.floor(localN * 15 * roughness);

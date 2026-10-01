@@ -399,13 +399,25 @@ function updateSky(e) {
     const i = scene.getObjectByProperty("type", "AmbientLight"),
         l = scene.getObjectByProperty("type", "DirectionalLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
-    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), l && (l.intensity = (0 + .95 * s) * (1 - ug) * (1 - (fogDensity / 0.005))), d) {
+    if (i) i.intensity = (.05 + .15 * s) * (1 - ug);
+    if (d) {
         const e = .6,
             t = .02;
         d.intensity = (t + (e - t) * s) * (1 - ug);
     }
-    if (skyProps.suns.length > 0 && l) {
-        l.position.copy(skyProps.suns[0].mesh.position);
+    if (l) {
+        let lightPos = new THREE.Vector3();
+        if (s > 0 && skyProps.suns.length > 0) {
+            skyProps.suns[0].mesh.getWorldPosition(lightPos);
+            l.intensity = (0 + .95 * s) * (1 - ug) * (1 - (fogDensity / 0.005));
+        } else if (skyProps.moons.length > 0) {
+            skyProps.moons[0].mesh.getWorldPosition(lightPos);
+            l.intensity = 0.1 * (1 - ug);
+        }
+        if (lightPos.lengthSq() > 0) {
+            let dir = new THREE.Vector3().subVectors(lightPos, camera.position).normalize();
+            l.position.copy(camera.position).add(dir.multiplyScalar(200));
+        }
         l.target.position.set(camera.position.x, 0, camera.position.z);
         l.target.updateMatrixWorld();
     }
