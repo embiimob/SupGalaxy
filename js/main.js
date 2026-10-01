@@ -573,6 +573,19 @@ function updateTorchRegistry(e) {
 }
 
 function initThree() {
+    let waterOverlay = document.createElement("div");
+    waterOverlay.id = "waterOverlay";
+    waterOverlay.style.position = "absolute";
+    waterOverlay.style.top = "0";
+    waterOverlay.style.left = "0";
+    waterOverlay.style.width = "100%";
+    waterOverlay.style.height = "100%";
+    waterOverlay.style.backgroundColor = "rgba(0, 50, 70, 0.6)";
+    waterOverlay.style.pointerEvents = "none";
+    waterOverlay.style.zIndex = "10";
+    waterOverlay.style.display = "none";
+    document.body.appendChild(waterOverlay);
+
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
@@ -5079,6 +5092,10 @@ function gameLoop(e) {
     } else {
         const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
+        const waterOverlay = document.getElementById("waterOverlay");
+        if (waterOverlay) {
+            waterOverlay.style.display = inWater ? "block" : "none";
+        }
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
             i = 0;
