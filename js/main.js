@@ -5100,9 +5100,38 @@ function gameLoop(e) {
             c = l.z * r * t;
         d += player.vx * t, c += player.vz * t, player.vx *= 1 - 2 * t, player.vz *= 1 - 2 * t;
         let M = player.x + d;
-        checkCollision(M, player.y, player.z) ? player.vx = 0 : player.x = M;
+        if (checkCollision(M, player.y, player.z)) {
+            if (inWater && !checkCollision(M, player.y + 1, player.z)) {
+                player.y += 1;
+                player.x = M;
+            } else if (inWater && !checkCollision(M, player.y + 2, player.z)) {
+                player.y += 2;
+                player.x = M;
+            } else {
+                player.vx = 0;
+            }
+        } else {
+            player.x = M;
+        }
+
         let S = player.z + c;
-        checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
+        if (checkCollision(player.x, player.y, S)) {
+            if (inWater && !checkCollision(player.x, player.y + 1, S)) {
+                player.y += 1;
+                player.z = S;
+            } else if (inWater && !checkCollision(player.x, player.y + 2, S)) {
+                player.y += 2;
+                player.z = S;
+            } else {
+                player.vz = 0;
+            }
+        } else {
+            player.z = S;
+        }
+
+        player.x = modWrap(player.x, MAP_SIZE);
+        player.z = modWrap(player.z, MAP_SIZE);
+        player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
         if (inWater && player.vy < -2.0 && !(keys[" "] || document.getElementById("mobileJumpBtn").dataset.active === "true")) {
             player.vy = -2.0;
         }
