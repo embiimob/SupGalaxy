@@ -282,7 +282,23 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         135: {
             name: "Tree Seed",
-            color: "#4a3c31",
+            color: "#4a3c31"
+        },
+        136: {
+            name: "Seaweed",
+            color: "#2b8a57",
+            strength: 0.5,
+            noShadow: true
+        },
+        137: {
+            name: "Rare Fish",
+            color: "#ff9bcb",
+            itemOnly: true
+        },
+        138: {
+            name: "Schooling Fish",
+            color: "#55d8e8",
+            itemOnly: true,
             strength: 1
         },
         126: {
