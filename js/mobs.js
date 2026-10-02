@@ -167,13 +167,14 @@ function Mob(t, e, s, i = "crawley") {
         this.hp = 10;
         this.speed = 0.03 + 0.02 * Math.random();
         this.mesh = new THREE.Group();
-        const t = 6;
-        const e = createMobTexture(worldSeed, "whale_body");
-        const o = new THREE.MeshLambertMaterial({ map: e });
+        const t = 3; // Reduced from 6 for a smaller, cuter whale
+        this.normalTexture = createMobTexture(worldSeed, "whale_body");
+        this.angryTexture = createMobTexture(worldSeed, "whale_angry");
+        const o = new THREE.MeshLambertMaterial({ map: this.normalTexture });
 
         const bodyGeo = new THREE.BoxGeometry(1 * t, 0.8 * t, 2 * t);
-        const bodyMesh = new THREE.Mesh(bodyGeo, o);
-        this.mesh.add(bodyMesh);
+        this.bodyMesh = new THREE.Mesh(bodyGeo, o);
+        this.mesh.add(this.bodyMesh);
 
         this.tailPivot = new THREE.Object3D();
         this.tailPivot.position.set(0, 0, -1 * t);
@@ -183,24 +184,31 @@ function Mob(t, e, s, i = "crawley") {
         tailMesh.position.set(0, 0, -0.5 * t);
         this.tailPivot.add(tailMesh);
 
-        const finGeo = new THREE.BoxGeometry(1.2 * t, 0.1 * t, 0.4 * t);
+        const finGeo = new THREE.BoxGeometry(1.4 * t, 0.1 * t, 0.4 * t); // slightly wider tail fins
         const finMesh = new THREE.Mesh(finGeo, o);
         finMesh.position.set(0, 0, -1 * t);
         this.tailPivot.add(finMesh);
 
         this.mesh.add(this.tailPivot);
 
+        // Face that wraps around (black eyes, cute blush maybe? or simple black dots + smile)
         const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const eyeGeo = new THREE.BoxGeometry(0.1 * t, 0.1 * t, 0.1 * t);
+        const eyeGeo = new THREE.BoxGeometry(0.1 * t, 0.15 * t, 0.1 * t);
         const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.51 * t, 0.1 * t, 0.5 * t);
+        leftEye.position.set(-0.51 * t, 0.1 * t, 0.6 * t); // moved forward
         this.mesh.add(leftEye);
         const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        rightEye.position.set(0.51 * t, 0.1 * t, 0.5 * t);
+        rightEye.position.set(0.51 * t, 0.1 * t, 0.6 * t); // moved forward
         this.mesh.add(rightEye);
+
+        const mouthGeo = new THREE.BoxGeometry(0.8 * t, 0.05 * t, 0.1 * t);
+        const mouthMesh = new THREE.Mesh(mouthGeo, eyeMat);
+        mouthMesh.position.set(0, -0.1 * t, 1.01 * t); // on the front
+        this.mesh.add(mouthMesh);
 
         this.originalColor = null;
         this.squirtCooldown = 0;
+        this.animationTime = 0;
     } else if ("fish" === this.type) {
         this.hp = 10;
         this.speed = 0.05 + 0.03 * Math.random();
@@ -234,6 +242,7 @@ function Mob(t, e, s, i = "crawley") {
         this.mesh.add(rightEye);
 
         this.originalColor = null;
+        this.animationTime = 0;
     } else if ("ufo_saucer" === this.type) {
         this.hp = 3000;
         this.mesh = new THREE.Group();
@@ -701,10 +710,14 @@ Mob.prototype.update = function (t) {
             e && (t.material = e)
         })) : this.originalColor && (this.mesh.material ? this.mesh.material.color.copy(this.originalColor) : this.mesh.children[0].material.color.copy(this.originalColor))
     } else if ("whale" === this.type || "fish" === this.type) {
+        if ("whale" === this.type && this.bodyMesh && this.bodyMesh.material) {
+            this.bodyMesh.material.map = this.isAggressive ? this.angryTexture : this.normalTexture;
+        }
         if (this.isMoving) {
             this.animationTime += t * 10;
             if (this.tailPivot) {
-                this.tailPivot.rotation.y = Math.sin(this.animationTime) * 0.4;
+                const angleMult = "whale" === this.type ? 0.8 : 0.4;
+                this.tailPivot.rotation.y = Math.sin(this.animationTime) * angleMult;
             }
         } else {
             if (this.tailPivot) {
@@ -1167,38 +1180,70 @@ Mob.prototype.update = function (t) {
                 }
             }
         } else if ("fish" === this.type) {
-            // Flee from whales
-            let fleeTarget = null;
-            let closestWhaleDist = 1 / 0;
-            for (const mob of mobs) {
-                if (mob.type === "whale") {
-                    const dist = Math.hypot(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
-                    if (dist < 20 && dist < closestWhaleDist) {
-                        closestWhaleDist = dist;
-                        fleeTarget = mob;
-                    }
+            if (this.isAggressive) {
+                // Seek player if aggressive
+                let s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+                if (s < o && Math.abs(player.y - this.pos.y) < 30) {
+                    o = s;
+                    i = { x: player.x, z: player.z, y: player.y, username: userName };
                 }
-            }
-            if (fleeTarget) {
-                // Flee in opposite direction
-                this.wanderDir = new THREE.Vector3(this.pos.x - fleeTarget.pos.x, 0, this.pos.z - fleeTarget.pos.z).normalize();
-                this.nextWanderChange = Date.now() + 2000;
-            } else {
-                // Maybe form schools? Group up with other fish
-                let closestFishDist = 1 / 0;
-                let closestFish = null;
-                for (const mob of mobs) {
-                    if (mob.id !== this.id && mob.type === "fish") {
-                        const dist = Math.hypot(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
-                        if (dist < 10 && dist > 2 && dist < closestFishDist) {
-                            closestFishDist = dist;
-                            closestFish = mob;
+                for (const [peerName, pos] of Object.entries(userPositions)) {
+                    if (pos.world === worldName) {
+                        const peerDist = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
+                        if (peerDist < o && Math.abs(pos.targetY - this.pos.y) < 30) {
+                            o = peerDist;
+                            i = { x: pos.targetX, z: pos.targetZ, y: pos.targetY, username: peerName };
                         }
                     }
                 }
-                if (closestFish && Math.random() < 0.1) {
-                    this.wanderDir = new THREE.Vector3(closestFish.pos.x - this.pos.x, 0, closestFish.pos.z - this.pos.z).normalize();
-                    this.nextWanderChange = Date.now() + 1000;
+                if (i && o < 3 && Date.now() - this.attackCooldown > 1500) {
+                    this.attackCooldown = Date.now();
+                    const peer = peers.get(i.username);
+                    if (peer && peer.dc && "open" === peer.dc.readyState) {
+                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 1, attacker: "mob" }));
+                    } else if (i.username === userName && Date.now() - lastDamageTime > 1500) {
+                        player.health = Math.max(0, player.health - 1);
+                        lastDamageTime = Date.now();
+                        document.getElementById("health").innerText = player.health;
+                        if (typeof updateHealthBar === 'function') updateHealthBar();
+                        addMessage("Bitten by Fish! HP: " + player.health, 1000);
+                        if (player.health <= 0 && typeof handlePlayerDeath === 'function') handlePlayerDeath();
+                    }
+                }
+            } else {
+                // Flee from whales
+                let fleeTarget = null;
+                let closestWhaleDist = 1 / 0;
+                for (const mob of mobs) {
+                    if (mob.type === "whale") {
+                        const dist = Math.hypot(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
+                        if (dist < 20 && dist < closestWhaleDist) {
+                            closestWhaleDist = dist;
+                            fleeTarget = mob;
+                        }
+                    }
+                }
+                if (fleeTarget) {
+                    // Flee in opposite direction
+                    this.wanderDir = new THREE.Vector3(this.pos.x - fleeTarget.pos.x, 0, this.pos.z - fleeTarget.pos.z).normalize();
+                    this.nextWanderChange = Date.now() + 2000;
+                } else {
+                    // Maybe form schools? Group up with other fish
+                    let closestFishDist = 1 / 0;
+                    let closestFish = null;
+                    for (const mob of mobs) {
+                        if (mob.id !== this.id && mob.type === "fish") {
+                            const dist = Math.hypot(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
+                            if (dist < 10 && dist > 2 && dist < closestFishDist) {
+                                closestFishDist = dist;
+                                closestFish = mob;
+                            }
+                        }
+                    }
+                    if (closestFish && Math.random() < 0.1) {
+                        this.wanderDir = new THREE.Vector3(closestFish.pos.x - this.pos.x, 0, closestFish.pos.z - this.pos.z).normalize();
+                        this.nextWanderChange = Date.now() + 1000;
+                    }
                 }
             }
         } else if ("grub" === this.type) {
@@ -1249,36 +1294,40 @@ Mob.prototype.update = function (t) {
                 9 === getBlockAt(t.x, t.y, t.z) ? (this.targetBlock = t, this.lingerTime = Date.now()) : (this.aiState = "IDLE", this.targetBlock = null)
             }
         } else if (this.isAggressive || !i) {
-            let t = null,
-                e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
-                x: player.x,
-                z: player.z,
-                health: player.health,
-                username: userName
-            });
-            for (const [peerName, peerData] of peers.entries())
-                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
-                    const pos = userPositions[peerName],
-                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
-                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
-                        x: pos.targetX,
-                        z: pos.targetZ,
-                        health: pos.health || 20,
-                        username: peerName
-                    })
-                } if (t && e < 10 && (i = {
-                    x: t.x,
-                    z: t.z
-                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
-                this.attackCooldown = Date.now();
-                const e = peers.get(t.username);
-                e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
-                    type: "player_damage",
-                    damage: 1,
-                    attacker: "mob"
-                })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+            if ("fish" === this.type || "whale" === this.type) {
+                // let them wander naturally without forcing player lock-on
+            } else {
+                let t = null,
+                    e = 1 / 0,
+                    s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+                s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
+                    x: player.x,
+                    z: player.z,
+                    health: player.health,
+                    username: userName
+                });
+                for (const [peerName, peerData] of peers.entries())
+                    if (userPositions[peerName] && userPositions[peerName].world === worldName) {
+                        const pos = userPositions[peerName],
+                            o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
+                        o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
+                            x: pos.targetX,
+                            z: pos.targetZ,
+                            health: pos.health || 20,
+                            username: peerName
+                        })
+                    } if (t && e < 10 && (i = {
+                        x: t.x,
+                        z: t.z
+                    }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
+                    this.attackCooldown = Date.now();
+                    const e = peers.get(t.username);
+                    e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
+                        type: "player_damage",
+                        damage: 1,
+                        attacker: "mob"
+                    })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+                }
             }
         }
         if ("crawley" === this.type) {
@@ -1475,36 +1524,40 @@ Mob.prototype.update = function (t) {
             }
         }
         if (this.isAggressive || !i) {
-            let t = null,
-                e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
-                x: player.x,
-                z: player.z,
-                health: player.health,
-                username: userName
-            });
-            for (const [peerName, peerData] of peers.entries())
-                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
-                    const pos = userPositions[peerName],
-                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
-                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
-                        x: pos.targetX,
-                        z: pos.targetZ,
-                        health: pos.health || 20,
-                        username: peerName
-                    })
-                } if (t && e < 10 && (i = {
-                    x: t.x,
-                    z: t.z
-                }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
-                this.attackCooldown = Date.now();
-                const e = peers.get(t.username);
-                e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
-                    type: "player_damage",
-                    damage: 1,
-                    attacker: "mob"
-                })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+            if ("fish" === this.type || "whale" === this.type) {
+                // let them wander naturally without forcing player lock-on
+            } else {
+                let t = null,
+                    e = 1 / 0,
+                    s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
+                s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
+                    x: player.x,
+                    z: player.z,
+                    health: player.health,
+                    username: userName
+                });
+                for (const [peerName, peerData] of peers.entries())
+                    if (userPositions[peerName] && userPositions[peerName].world === worldName) {
+                        const pos = userPositions[peerName],
+                            o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
+                        o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
+                            x: pos.targetX,
+                            z: pos.targetZ,
+                            health: pos.health || 20,
+                            username: peerName
+                        })
+                    } if (t && e < 10 && (i = {
+                        x: t.x,
+                        z: t.z
+                    }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
+                    this.attackCooldown = Date.now();
+                    const e = peers.get(t.username);
+                    e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
+                        type: "player_damage",
+                        damage: 1,
+                        attacker: "mob"
+                    })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+                }
             }
         }
         let h = !1;
