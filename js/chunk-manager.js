@@ -32,7 +32,7 @@ function buildGreedyMesh(e, t, o) {
                         p = !a || i.transparent;
                     let h = null;
                     let shouldRender = p !== (!s || u.transparent);
-                    if (a === 6 && (s === 6 || (s !== 0 && u && !u.transparent))) shouldRender = false;
+                    if (a === 6 && s === 6) shouldRender = false;
                     if (shouldRender)
                         if (p) {
                             const a = `${e.cx * CHUNK_SIZE + l[0] + d[0]},${l[1] + d[1]},${e.cz * CHUNK_SIZE + l[2] + d[2]}`;
@@ -151,14 +151,19 @@ function buildGreedyMesh(e, t, o) {
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <common>',
                         `#include <common>
+                        uniform float time;
                         varying vec3 vWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <begin_vertex>',
                         `#include <begin_vertex>
-                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                        vWorldPosition = worldPosition.xyz;`
+                        if (normal.y > 0.5) {
+                            float wave = sin(position.x * 2.0 + time * 3.0) * 0.1 + cos(position.z * 2.0 + time * 2.0) * 0.1;
+                            transformed.y += wave;
+                        }
+                        vec4 vWPos = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = vWPos.xyz;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
@@ -174,8 +179,9 @@ function buildGreedyMesh(e, t, o) {
                         if (abs(normal.y) > 0.5) {
                             float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
                             float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
-                            vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            normal = normalize(normal + waveNormal * 1.5);
+                            vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
+                            vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
+                            normal = normalize(normal + viewWaveNormal * 0.5);
                         }`
                     );
                 };
@@ -424,14 +430,19 @@ Chunk.prototype.idx = function (e, t, o) {
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <common>',
                         `#include <common>
+                        uniform float time;
                         varying vec3 vWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <begin_vertex>',
                         `#include <begin_vertex>
-                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                        vWorldPosition = worldPosition.xyz;`
+                        if (normal.y > 0.5) {
+                            float wave = sin((position.x + modelMatrix[3][0]) * 2.0 + time * 3.0) * 0.1 + cos((position.z + modelMatrix[3][2]) * 2.0 + time * 2.0) * 0.1;
+                            transformed.y += wave;
+                        }
+                        vec4 vWPos = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = vWPos.xyz;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
@@ -447,8 +458,9 @@ Chunk.prototype.idx = function (e, t, o) {
                         if (abs(normal.y) > 0.5) {
                             float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
                             float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
-                            vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            normal = normalize(normal + waveNormal * 1.5);
+                            vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
+                            vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
+                            normal = normalize(normal + viewWaveNormal * 0.5);
                         }`
                     );
                 };
