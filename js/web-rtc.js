@@ -775,7 +775,8 @@ function setupDataChannel(e, t) {
                         if (Number.isInteger(s.x) && Number.isInteger(s.y) && Number.isInteger(s.z) &&
                             (waterBlock === 6 || waterBlock === 136) &&
                             checkChunkOwnership(chunkKey, n) &&
-                            (!requester || requester.targetX === undefined || Math.hypot(requester.targetX - s.x, requester.targetY - s.y, requester.targetZ - s.z) <= 8)) {
+                            requester && Number.isFinite(requester.targetX) && Number.isFinite(requester.targetY) && Number.isFinite(requester.targetZ) &&
+                            Math.hypot(requester.targetX - s.x, requester.targetY - s.y, requester.targetZ - s.z) <= 8) {
                             addFishSpawnCommand(s.x, s.y, s.z, s.fishType, String(s.originSeed || worldName).slice(0, 128), n);
                         }
                     }

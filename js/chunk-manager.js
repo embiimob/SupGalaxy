@@ -389,8 +389,13 @@ Chunk.prototype.idx = function (e, t, o) {
                 seaweedGeometry.setAttribute("position", new THREE.Float32BufferAttribute(T, 3));
                 seaweedGeometry.setIndex(N);
                 seaweedGeometry.computeVertexNormals();
+                const seaweedColor = new THREE.Color((BLOCKS[w] || {}).color || "#2b8a57");
+                const seaweedRandom = makeSeededRandom(b + "_seaweed_tint");
+                const seaweedHsl = {};
+                seaweedColor.getHSL(seaweedHsl);
+                seaweedColor.setHSL((seaweedHsl.h + (seaweedRandom() - 0.5) * 0.18 + 1) % 1, seaweedHsl.s, seaweedHsl.l);
                 const seaweedMaterial = new THREE.MeshLambertMaterial({
-                    color: new THREE.Color((BLOCKS[w] || {}).color || "#2b8a57"),
+                    color: seaweedColor,
                     side: THREE.DoubleSide
                 });
                 const seaweedMesh = new THREE.Mesh(seaweedGeometry, seaweedMaterial);

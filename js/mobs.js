@@ -49,12 +49,8 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     } else if (isAquaticMobType(this.type)) {
         this.mesh = new THREE.Group();
         const variant = makeSeededRandom(this.originSeed + "_aquatic_look_" + this.type)();
-        const palette = this.type === "whale"
-            ? [0x74c8e8, 0x8d9fe5, 0xe49bc8, 0x88d4bd, 0xf0b87d]
-            : this.type === "fish_rare"
-                ? [0xff8cb8, 0xffd166, 0xa98bff, 0x75d6b5, 0xff9870]
-                : [0x39b9d3, 0x6588e8, 0xf083aa, 0x70c77b, 0xe5a544];
-        this.aquaticColor = palette[Math.floor(variant * palette.length)];
+        const hue = this.type === "whale" ? 0.52 + variant * 0.22 : this.type === "fish_rare" ? (0.88 + variant * 0.34) % 1 : 0.42 + variant * 0.28;
+        this.aquaticColor = new THREE.Color().setHSL(hue, 0.72 + variant * 0.2, this.type === "whale" ? 0.62 : 0.56).getHex();
         const bodyMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
         const bellyMaterial = new THREE.MeshLambertMaterial({ color: 0xffe7d7 });
         const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x111522 });
@@ -66,10 +62,10 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             this.isAggressive = false;
             this.breachAt = Date.now() + 30000 + Math.random() * 60000;
             this.body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), bodyMaterial);
-            this.body.scale.set(4.2, 2.5, 8.5);
+            this.body.scale.set(4.2, 2.5, 15);
             this.mesh.add(this.body);
             const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), bellyMaterial);
-            belly.scale.set(3.7, 1.7, 7.4);
+            belly.scale.set(3.7, 1.7, 13.5);
             belly.position.y = -0.7;
             this.mesh.add(belly);
             this.tail = new THREE.Group();
@@ -82,8 +78,30 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
                 fluke.rotation.y = side * 0.18;
                 this.tail.add(fluke);
             }
-            this.tail.position.z = -8;
+            this.tail.position.z = -15;
             this.mesh.add(this.tail);
+            const whaleEyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (const side of [-1, 1]) {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.52, 10, 8), whaleEyeWhite);
+                eye.position.set(side * 1.35, 0.55, 13.1);
+                this.mesh.add(eye);
+                const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), eyeMaterial);
+                pupil.position.set(side * 1.35, 0.5, 13.52);
+                this.mesh.add(pupil);
+                const shine = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), shineMaterial);
+                shine.position.set(side * 1.35 - 0.07, 0.62, 13.76);
+                this.mesh.add(shine);
+                const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.38, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffa6b8 }));
+                cheek.position.set(side * 2.05, -0.55, 12.7);
+                this.mesh.add(cheek);
+            }
+            const smile = new THREE.Mesh(
+                new THREE.TorusGeometry(0.85, 0.12, 6, 14, Math.PI),
+                new THREE.MeshLambertMaterial({ color: 0x24324b })
+            );
+            smile.position.set(0, -0.48, 14.55);
+            smile.rotation.z = Math.PI;
+            this.mesh.add(smile);
             this.fins = [];
             for (const side of [-1, 1]) {
                 const fin = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 3), finMaterial);
@@ -108,9 +126,9 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             const rare = this.type === "fish_rare";
             this.hp = rare ? 12 : 8;
             this.speed = rare ? 0.045 : 0.035;
-            const body = new THREE.Mesh(new THREE.SphereGeometry(rare ? 0.58 : 0.42, 8, 6), bodyMaterial);
-            body.scale.set(rare ? 0.9 : 0.72, 0.68, rare ? 1.15 : 1.35);
-            this.mesh.add(body);
+            this.body = new THREE.Mesh(new THREE.SphereGeometry(rare ? 0.58 : 0.42, 8, 6), bodyMaterial);
+            this.body.scale.set(rare ? 0.9 : 0.72, 0.68, rare ? 1.15 : 1.35);
+            this.mesh.add(this.body);
             const belly = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 5), bellyMaterial);
             belly.scale.set(0.65, 0.35, 1.15);
             belly.position.y = -0.22;
@@ -711,6 +729,7 @@ function updateAquaticMob(t, delta) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
     const now = Date.now();
     t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
+    t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
     if (!isLocalSpawner) {
         if (t.lastUpdateTime > 0) {
             const blend = Math.min(1, (performance.now() - t.lastUpdateTime) / 300);
@@ -791,9 +810,26 @@ function updateAquaticMob(t, delta) {
                 const nx = modWrap(t.pos.x + dx / distance * speed, MAP_SIZE);
                 const nz = modWrap(t.pos.z + dz / distance * speed, MAP_SIZE);
                 const directionY = target.y === undefined ? Math.sin(t.animationTime * 0.35) * 0.25 : Math.sign(target.y - t.pos.y) * 0.35;
-                const ny = t.pos.y + directionY * delta * 60;
-                const targetBlock = getBlockAt(nx, ny, nz);
-                const nextY = targetBlock === 6 || targetBlock === 136 ? ny : t.pos.y;
+                const desiredY = t.pos.y + directionY * delta * 60;
+                let nextY = desiredY;
+                let targetBlock = getBlockAt(nx, nextY, nz);
+                if (targetBlock !== 6 && targetBlock !== 136) {
+                    let nearestWaterY = null;
+                    for (let offset = 0; offset <= 12 && nearestWaterY === null; offset++) {
+                        for (const sign of offset === 0 ? [1] : [1, -1]) {
+                            const candidateY = Math.floor(desiredY) + offset * sign;
+                            if (candidateY >= 0 && candidateY < MAX_HEIGHT) {
+                                const candidateBlock = getBlockAt(nx, candidateY, nz);
+                                if (candidateBlock === 6 || candidateBlock === 136) {
+                                    nearestWaterY = candidateY + 0.5;
+                                    targetBlock = candidateBlock;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (nearestWaterY !== null) nextY = nearestWaterY;
+                }
                 const horizontalBlock = getBlockAt(nx, nextY, nz);
                 if (horizontalBlock === 6 || horizontalBlock === 136) {
                     t.pos.set(nx, nextY, nz);
@@ -807,11 +843,6 @@ function updateAquaticMob(t, delta) {
         }
 
         if (t.type === "whale") {
-            if (!t.nextSpout || now > t.nextSpout) {
-                t.spoutUntil = now + 1100;
-                t.nextSpout = now + 45000 + Math.random() * 50000;
-            }
-            t.spout.visible = now < t.spoutUntil;
             if (!t.breach && now >= t.breachAt) {
                 const surface = findAquaticSpawnPosition(t.pos.x, t.pos.z, "fish_school");
                 if (surface) {
@@ -833,19 +864,20 @@ function updateAquaticMob(t, delta) {
                     t.pos.y = t.breachBaseY;
                 }
             }
-            t.tail.rotation.y = Math.sin(t.animationTime * 2.5) * 0.45;
-            t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.18 + Math.sin(t.animationTime * 2) * 0.12));
-        } else {
-            t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
-            t.fins[0].rotation.x = Math.sin(t.animationTime * 1.8) * 0.2;
-            t.mesh.position.y = t.pos.y + Math.sin(t.animationTime * 1.5) * 0.08;
         }
     }
 
     if (t.type === "whale") {
+        if (!t.nextSpout || now > t.nextSpout) {
+            t.spoutUntil = now + 1100;
+            t.nextSpout = now + 45000 + Math.random() * 50000;
+        }
+        t.spout.visible = now < t.spoutUntil;
         t.tail.rotation.y = Math.sin(t.animationTime * 2.5) * 0.45;
+        t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.18 + Math.sin(t.animationTime * 2) * 0.12));
     } else {
         t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
+        t.fins[0].rotation.x = Math.sin(t.animationTime * 1.8) * 0.2;
     }
     t.mesh.position.set(t.pos.x, t.pos.y + (t.type === "whale" ? 0 : Math.sin(t.animationTime * 1.5) * 0.08), t.pos.z);
     const moved = t.pos.distanceTo(t.lastSentPos) > 0.1;

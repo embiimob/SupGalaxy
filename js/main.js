@@ -31,6 +31,7 @@ function getCurrentWorldState() {
             foreignBlockOrigins: new Map,
             treeSeeds: new Map,
             spawnCommands: new Map,
+            fishInventoryDirty: false,
             // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
             ipfsTruncatedDates: new Map
         });
@@ -46,6 +47,9 @@ function getCurrentWorldState() {
     if (!state.spawnCommands) {
         state.spawnCommands = new Map;
     }
+    if (state.fishInventoryDirty === undefined) {
+        state.fishInventoryDirty = false;
+    }
     return state;
 }
 
@@ -59,6 +63,8 @@ function consumeFishInventoryItem(type, originSeed) {
     if (!itemId) return false;
     const item = INVENTORY.find(entry => entry && entry.id === itemId && (entry.originSeed || worldSeed) === seed && entry.count > 0);
     if (!item) return false;
+    getCurrentWorldState().fishInventoryDirty = true;
+    updateSaveChangesButton();
     item.count--;
     if (item.count <= 0) INVENTORY[INVENTORY.indexOf(item)] = null;
     updateHotbarUI();
@@ -90,6 +96,7 @@ function applyFishSpawnCommand(command) {
     if (getBlockAt(storedCommand.x, storedCommand.y, storedCommand.z) !== 6 &&
         getBlockAt(storedCommand.x, storedCommand.y, storedCommand.z) !== 136) return false;
     getCurrentWorldState().spawnCommands.set(key, storedCommand);
+    updateSaveChangesButton();
     const mobId = `fish-command:${worldName}:${key}`;
     if (!mobs.some(mob => mob.id === mobId)) {
         const mob = new Mob(storedCommand.x + 0.5, storedCommand.z + 0.5, mobId, storedCommand.type, storedCommand.y + 0.5, storedCommand.originSeed);
@@ -138,6 +145,7 @@ function removeFishSpawnCommandByKey(key, broadcast = true) {
     const command = getCurrentWorldState().spawnCommands.get(key);
     if (!command) return false;
     getCurrentWorldState().spawnCommands.delete(key);
+    updateSaveChangesButton();
     if (broadcast) {
         const message = JSON.stringify({ type: "fish_spawn_remove", world: worldName, key });
         for (const [, peer] of peers.entries()) {
@@ -148,13 +156,13 @@ function removeFishSpawnCommandByKey(key, broadcast = true) {
 }
 
 function restoreFishSpawnCommands() {
-    for (const command of getCurrentWorldState().spawnCommands.values()) {
-        applyFishSpawnCommand(command);
+    for (const [key, command] of getCurrentWorldState().spawnCommands) {
+        if (!applyFishSpawnCommand(command)) getCurrentWorldState().spawnCommands.delete(key);
     }
 }
 
 function placeFishFromInventory(item, x, y, z) {
-    if (!item || !fishItemIdForType(item.id === 137 ? "fish_rare" : "fish_school")) return false;
+    if (!item || (item.id !== 137 && item.id !== 138)) return false;
     const type = item.id === 137 ? "fish_rare" : "fish_school";
     const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE));
     if (!checkChunkOwnership(chunkKey, userName)) {
@@ -980,6 +988,10 @@ function updateHotbarUI() {
 
 function addToInventory(e, t, o = null) {
     const a = o || worldSeed;
+    if (e === 137 || e === 138) {
+        getCurrentWorldState().fishInventoryDirty = true;
+        updateSaveChangesButton();
+    }
     for (var n = 0; n < INVENTORY.length; n++) {
         const o = INVENTORY[n];
         if (o && o.id === e && o.originSeed === a && o.count < 64) {
@@ -2143,6 +2155,7 @@ function createCalligraphyStoneScreen(stoneData) {
 function dropSelectedItem(dropAll = false) {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
+    if (e.id === 137 || e.id === 138) return void addMessage("Fish must stay in your inventory or a chest.", 2000);
 
     // Determine how many to drop
     const countToDrop = dropAll ? e.count : 1;
@@ -2363,6 +2376,7 @@ function onPointerDown(e) {
                 placeFishFromInventory(t, x, y, z);
                 return;
             }
+            if (block !== BLOCK_AIR) break;
         }
         addMessage("Fish can only be released into water.", 2000);
         return;
@@ -2409,6 +2423,8 @@ function onPointerDown(e) {
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
     if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
+        getCurrentWorldState().fishInventoryDirty = true;
+        updateSaveChangesButton();
         player.health = Math.min(999, player.health + 2);
         updateHealthBar();
         document.getElementById("health").innerText = player.health;
@@ -3579,7 +3595,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && (getCurrentWorldState().chunkDeltas.size > 0 || getCurrentWorldState().spawnCommands.size > 0 || getCurrentWorldState().fishInventoryDirty || INVENTORY.some(item => item && (item.id === 137 || item.id === 138))) && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -4137,7 +4153,8 @@ function updateHealthBar() {
 
 function updateSaveChangesButton() {
     const worldState = getCurrentWorldState();
-    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none"
+    const hasFishInventory = INVENTORY.some(item => item && (item.id === 137 || item.id === 138) && item.count > 0);
+    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 || worldState.spawnCommands.size > 0 || worldState.fishInventoryDirty || hasFishInventory ? "inline-block" : "none"
 }
 
 function updateHudButtons() {
