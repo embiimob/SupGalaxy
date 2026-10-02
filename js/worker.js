@@ -269,11 +269,13 @@ function fbm(noiseFn, x, y, oct, persistence) {
 }
 
 function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
+    const maxDepth = seaLevel === 32 ? 16 : 20;
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
             let floorY = seaLevel;
             while (floorY > 0 && chunkData[floorY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 6) floorY--;
-            if (floorY >= seaLevel - 10) continue;
+            const depth = seaLevel - floorY;
+            if (depth <= 10 || depth > maxDepth) continue;
             const wx = baseX + lx;
             const wz = baseZ + lz;
             const patchRandom = makeSeededRandom(worldSeed + '_seaweed_' + wx + '_' + wz);
@@ -286,7 +288,8 @@ function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
                     if ((dx || dz) && patchRandom() > 0.35) continue;
                     let plantFloor = seaLevel;
                     while (plantFloor > 0 && chunkData[plantFloor * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px] === 6) plantFloor--;
-                    if (plantFloor >= seaLevel - 10) continue;
+                    const plantDepth = seaLevel - plantFloor;
+                    if (plantDepth <= 10 || plantDepth > maxDepth) continue;
                     const growth = 1 + Math.floor(patchRandom() * 8);
                     for (let dy = 1; dy <= growth && plantFloor + dy <= seaLevel; dy++) {
                         const index = (plantFloor + dy) * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px;

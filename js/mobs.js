@@ -111,7 +111,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         const finMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
         if (this.type === "whale") {
             this.hp = 40;
-            this.speed = 0.018 + 0.004 * Math.random();
+            this.speed = 0.012 + 0.003 * Math.random();
             this.isAggressive = false;
             this.breachAt = Date.now() + 30000 + Math.random() * 60000;
             this.body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), bodyMaterial);
@@ -135,10 +135,13 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             flukeShape.quadraticCurveTo(-3.5, 1.55, -2.7, 1.25);
             flukeShape.quadraticCurveTo(-1.2, 0.65, 0, 0.5);
             flukeShape.closePath();
-            const fluke = new THREE.Mesh(new THREE.ShapeGeometry(flukeShape), new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
+            const flukeGeometry = new THREE.ExtrudeGeometry(flukeShape, { depth: 1.2, bevelEnabled: false });
+            flukeGeometry.translate(0, 0, -0.6);
+            flukeGeometry.scale(1.2, 1.1, 1);
+            const fluke = new THREE.Mesh(flukeGeometry, new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
             fluke.rotation.x = -Math.PI / 2;
             this.tail.add(fluke);
-            this.tail.position.z = -6.4;
+            this.tail.position.z = -7;
             this.mesh.add(this.tail);
             const whaleEyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
             for (const side of [-1, 1]) {
@@ -1037,7 +1040,9 @@ function updateAquaticMob(t, delta) {
             t.nextSpout = now + 45000 + Math.random() * 50000;
         }
         t.spout.visible = now < t.spoutUntil;
-        t.tail.rotation.y = Math.sin(t.animationTime * 1.35) * 0.75;
+        const swimSpeed = t.swimVelocity ? t.swimVelocity.length() : t.isMoving ? t.speed * 60 * 0.7 : 0;
+        t.tailPhase = (t.tailPhase || 0) + delta * (0.25 + swimSpeed * 0.8);
+        t.tail.rotation.x = Math.sin(t.tailPhase) * 0.42;
         t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.14 + Math.sin(t.animationTime * 1.2) * 0.08));
     } else {
         t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
