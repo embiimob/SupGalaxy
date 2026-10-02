@@ -134,9 +134,10 @@ function buildGreedyMesh(e, t, o) {
                 a = new THREE.MeshPhysicalMaterial({
                     color: new THREE.Color(o.color),
                     transparent: true,
-                    transmission: 0.95,
-                    opacity: 0.8,
-                    roughness: 0.05,
+                    transmission: 0.6,
+                    opacity: 0.9,
+                    roughness: 0.1,
+                    metalness: 0.1,
                     ior: 1.33,
                     thickness: 2.0,
                     side: THREE.FrontSide,
@@ -171,10 +172,10 @@ function buildGreedyMesh(e, t, o) {
                         '#include <normal_fragment_begin>',
                         `#include <normal_fragment_begin>
                         if (abs(normal.y) > 0.5) {
-                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.1;
-                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.1;
+                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
+                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
                             vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            normal = normalize(normal + waveNormal * 0.5);
+                            normal = normalize(normal + waveNormal * 1.5);
                         }`
                     );
                 };
@@ -406,9 +407,10 @@ Chunk.prototype.idx = function (e, t, o) {
                 D = new THREE.MeshPhysicalMaterial({
                     color: new THREE.Color(K.color),
                     transparent: true,
-                    transmission: 0.95,
-                    opacity: 0.8,
-                    roughness: 0.05,
+                    transmission: 0.6,
+                    opacity: 0.9,
+                    roughness: 0.1,
+                    metalness: 0.1,
                     ior: 1.33,
                     thickness: 2.0,
                     side: THREE.FrontSide,
@@ -443,10 +445,10 @@ Chunk.prototype.idx = function (e, t, o) {
                         '#include <normal_fragment_begin>',
                         `#include <normal_fragment_begin>
                         if (abs(normal.y) > 0.5) {
-                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.1;
-                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.1;
+                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
+                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
                             vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            normal = normalize(normal + waveNormal * 0.5);
+                            normal = normalize(normal + waveNormal * 1.5);
                         }`
                     );
                 };
