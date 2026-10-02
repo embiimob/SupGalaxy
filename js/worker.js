@@ -1799,6 +1799,24 @@ self.onmessage = async function(e) {
                         chunkManager.pendingDeltas.delete(chunk.key);
                     }
                     chunk.needsRebuild = true;
+
+                    // Mark adjacent generated chunks for rebuild to cull chunk boundaries properly
+                    const adjacents = [
+                        { dx: -1, dz: 0 },
+                        { dx: 1, dz: 0 },
+                        { dx: 0, dz: -1 },
+                        { dx: 0, dz: 1 }
+                    ];
+                    for (const adj of adjacents) {
+                        const nChunks = Math.floor(MAP_SIZE / CHUNK_SIZE);
+                        const nx = modWrap(chunk.cx + adj.dx, nChunks);
+                        const nz = modWrap(chunk.cz + adj.dz, nChunks);
+                        const adjChunkKey = nx + ',' + nz;
+                        const adjChunk = chunkManager.chunks.get(adjChunkKey);
+                        if (adjChunk && adjChunk.generated) {
+                            adjChunk.needsRebuild = true;
+                        }
+                    }
                 }
             } else if (data.type === 'hive_location') {
                 hiveLocations.push(data.location);
