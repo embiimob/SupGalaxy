@@ -469,7 +469,7 @@ function manageMobs() {
     // Add deep water mobs dynamically if player is near water
     const isNearWater = playersInWorld.some(p => {
         let sy = chunkManager.getSurfaceY(p.x, p.z);
-        return sy < SEA_LEVEL - 3;
+        return sy < SEA_LEVEL - 1;
     });
     if (isNearWater) {
         allowedTypes.push("whale", "fish");
@@ -560,8 +560,8 @@ function manageMobs() {
                 // Check deep water for aquatic mobs
                 if (type === "whale" || type === "fish") {
                     let sy = chunkManager.getSurfaceY(spawnX, spawnZ);
-                    if (type === "whale" && sy >= SEA_LEVEL - 15) continue;
-                    if (type === "fish" && sy >= SEA_LEVEL - 3) continue;
+                    if (type === "whale" && sy >= SEA_LEVEL - 11) continue;
+                    if (type === "fish" && sy >= SEA_LEVEL - 1) continue;
                 }
 
                 const newMob = new Mob(
@@ -621,6 +621,43 @@ function manageMobs() {
 }
 
 function handleMobHit(t) {
+    if (t.type === "fish") {
+        const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+        if (isLocalSpawner) {
+            t.hp = 0;
+            t.die(userName);
+        } else {
+            for (const [e, s] of peers.entries()) {
+                if (s.dc && "open" === s.dc.readyState) {
+                    s.dc.send(JSON.stringify({ type: "mob_hit", id: t.id, damage: 999, username: userName }));
+                }
+            }
+        }
+
+        // Add fish to inventory
+        if (typeof INVENTORY !== 'undefined' && typeof updateHotbarUI !== 'undefined') {
+            let found = false;
+            for (let i = 0; i < INVENTORY.length; i++) {
+                if (INVENTORY[i] && INVENTORY[i].id === 136) {
+                    INVENTORY[i].count++;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                for (let i = 0; i < INVENTORY.length; i++) {
+                    if (!INVENTORY[i]) {
+                        INVENTORY[i] = { id: 136, count: 1 };
+                        break;
+                    }
+                }
+            }
+            updateHotbarUI();
+        }
+        if (typeof soundHit !== 'undefined') safePlayAudio(soundHit);
+        addMessage("Caught Fish!", 800);
+        return;
+    }
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
     // We shouldn't set lastMoveTime here, we do it in projectile logic (main.js). If we do it here, it will trigger for anyone handling the hit, not just the user.
     if (isLocalSpawner) {

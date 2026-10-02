@@ -402,7 +402,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
             else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
             else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
 
-            if (archetype.flora.includes('seaweed') && height < SEA_LEVEL - 14) {
+            if (archetype.flora.includes('seaweed') && height < SEA_LEVEL - 11) {
                 if (chunkRnd() < 0.2) {
                     placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
                 } else if (lx > 0 && lz > 0 && chunkRnd() < 0.8) {
@@ -590,7 +590,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             }
 
             const chunkRnd = makeSeededRandom(chunkKey + "_" + lx + "_" + lz);
-            if (archetype.flora.includes('seaweed') && height < VULCAN_SEA_LEVEL - 14) {
+            if (archetype.flora.includes('seaweed') && height < VULCAN_SEA_LEVEL - 11) {
                 if (chunkRnd() < 0.2) {
                     placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
                 } else if (lx > 0 && lz > 0 && chunkRnd() < 0.8) {

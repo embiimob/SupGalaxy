@@ -2246,6 +2246,7 @@ function onPointerDown(e) {
         return
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 136 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Ate Fish! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
 
     // Check for Chest Intersections
     const chestMeshes = Object.values(chests).map(c => c.mesh).filter(m => m);
@@ -2862,6 +2863,43 @@ function placeBlockAt(e, t, o, a) {
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
+
+            // Special handling for Fish (136) placed in water
+            if (a === 136) {
+                if (r === 6) { // Water
+                    if (isHost || peers.size === 0) {
+                        const newMob = new Mob(e, o, Date.now(), "fish");
+                        newMob.pos.set(e + 0.5, t + 0.5, o + 0.5);
+                        newMob.mesh.position.copy(newMob.pos);
+                        mobs.push(newMob);
+                    } else {
+                        // Let host spawn it
+                        const spawnMsg = JSON.stringify({
+                            type: 'spawn_mob',
+                            mobType: 'fish',
+                            x: e + 0.5,
+                            y: t + 0.5,
+                            z: o + 0.5,
+                            world: worldName
+                        });
+                        for (const [, peer] of peers.entries()) {
+                            if (peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(spawnMsg);
+                                break;
+                            }
+                        }
+                    }
+                    INVENTORY[selectedHotIndex].count -= 1;
+                    if (INVENTORY[selectedHotIndex].count <= 0) INVENTORY[selectedHotIndex] = null;
+                    updateHotbarUI();
+                    addMessage("Released Fish!");
+                    return;
+                } else {
+                    addMessage("Fish must be released in water!");
+                    return;
+                }
+            }
+
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
@@ -3486,7 +3524,7 @@ function performAttack() {
     })).sort((function (e, t) {
         return e.intersect.distance - t.intersect.distance
     }));
-    if (o.length > 0) return o[0].mob.hurt(4), safePlayAudio(soundHit), void addMessage("Hit mob!", 800);
+    if (o.length > 0) return handleMobHit(o[0].mob);
     for (var a = .6; a < 3; a += .6) {
         var n = t.clone().addScaledVector(e, a),
             r = Math.round(n.x),
@@ -4181,10 +4219,10 @@ function setupMobile() {
                     const item = INVENTORY[selectedHotIndex];
                     let button = 2; // Default to Right Click (Place/Interact)
 
-                    // If item is a gun (121, 126) or consumable (122), use Left Click (Button 0)
+                    // If item is a gun (121, 126) or consumable (122, 136), use Left Click (Button 0)
                     // because Right Click with hand_attachable items triggers 'drop' logic.
                     // Guns and honey are usually 0 to fire/eat.
-                    if (item && (item.id === 121 || item.id === 126 || item.id === 122)) {
+                    if (item && (item.id === 121 || item.id === 126 || item.id === 122 || item.id === 136)) {
                         button = 0;
                     }
 
