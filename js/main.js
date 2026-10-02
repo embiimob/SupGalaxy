@@ -573,6 +573,19 @@ function updateTorchRegistry(e) {
 }
 
 function initThree() {
+    let waterOverlay = document.createElement("div");
+    waterOverlay.id = "waterOverlay";
+    waterOverlay.style.position = "absolute";
+    waterOverlay.style.top = "0";
+    waterOverlay.style.left = "0";
+    waterOverlay.style.width = "100%";
+    waterOverlay.style.height = "100%";
+    waterOverlay.style.backgroundColor = "rgba(0, 50, 70, 0.6)";
+    waterOverlay.style.pointerEvents = "none";
+    waterOverlay.style.zIndex = "10";
+    waterOverlay.style.display = "none";
+    document.body.appendChild(waterOverlay);
+
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
@@ -5066,6 +5079,10 @@ function gameLoop(e) {
         return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"), renderer.render(scene, camera), void requestAnimationFrame(gameLoop)
     }
     var t = Math.min(.06, (e - lastFrame) / 1e3);
+    if (window.globalWaterTime) {
+        window.globalWaterTime.value += t;
+    }
+    window.globalWaterTime = window.globalWaterTime || { value: 0 };
     if (lastFrame = e, player.health <= 0 && !isDying && handlePlayerDeath(), deathScreenShown) {
         mobs.forEach((function (e) {
             e.update(t)
@@ -5075,6 +5092,10 @@ function gameLoop(e) {
     } else {
         const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
+        const waterOverlay = document.getElementById("waterOverlay");
+        if (waterOverlay) {
+            waterOverlay.style.display = inWater ? "block" : "none";
+        }
         var a, n, r = isSprinting ? 4.3 * 3 : 4.3,
             s = 0,
             i = 0;
@@ -5100,9 +5121,38 @@ function gameLoop(e) {
             c = l.z * r * t;
         d += player.vx * t, c += player.vz * t, player.vx *= 1 - 2 * t, player.vz *= 1 - 2 * t;
         let M = player.x + d;
-        checkCollision(M, player.y, player.z) ? player.vx = 0 : player.x = M;
+        if (checkCollision(M, player.y, player.z)) {
+            if (inWater && !checkCollision(M, player.y + 1, player.z)) {
+                player.y += 1;
+                player.x = M;
+            } else if (inWater && !checkCollision(M, player.y + 2, player.z)) {
+                player.y += 2;
+                player.x = M;
+            } else {
+                player.vx = 0;
+            }
+        } else {
+            player.x = M;
+        }
+
         let S = player.z + c;
-        checkCollision(player.x, player.y, S) ? player.vz = 0 : player.z = S, player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
+        if (checkCollision(player.x, player.y, S)) {
+            if (inWater && !checkCollision(player.x, player.y + 1, S)) {
+                player.y += 1;
+                player.z = S;
+            } else if (inWater && !checkCollision(player.x, player.y + 2, S)) {
+                player.y += 2;
+                player.z = S;
+            } else {
+                player.vz = 0;
+            }
+        } else {
+            player.z = S;
+        }
+
+        player.x = modWrap(player.x, MAP_SIZE);
+        player.z = modWrap(player.z, MAP_SIZE);
+        player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
         if (inWater && player.vy < -2.0 && !(keys[" "] || document.getElementById("mobileJumpBtn").dataset.active === "true")) {
             player.vy = -2.0;
         }
