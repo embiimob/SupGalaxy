@@ -30,6 +30,8 @@ function getCurrentWorldState() {
             chunkDeltas: new Map,
             foreignBlockOrigins: new Map,
             treeSeeds: new Map,
+            spawnCommands: new Map,
+            fishInventoryDirty: false,
             // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
             ipfsTruncatedDates: new Map
         });
@@ -42,7 +44,152 @@ function getCurrentWorldState() {
     if (!state.treeSeeds) {
         state.treeSeeds = new Map;
     }
+    if (!state.spawnCommands) {
+        state.spawnCommands = new Map;
+    }
+    if (state.fishInventoryDirty === undefined) {
+        state.fishInventoryDirty = false;
+    }
     return state;
+}
+
+function fishItemIdForType(type) {
+    return type === "fish_rare" ? 137 : type === "fish_school" ? 138 : null;
+}
+
+function consumeFishInventoryItem(type, originSeed) {
+    const itemId = fishItemIdForType(type);
+    const seed = originSeed || worldSeed;
+    if (!itemId) return false;
+    const item = INVENTORY.find(entry => entry && entry.id === itemId && (entry.originSeed || worldSeed) === seed && entry.count > 0);
+    if (!item) return false;
+    getCurrentWorldState().fishInventoryDirty = true;
+    updateSaveChangesButton();
+    item.count--;
+    if (item.count <= 0) INVENTORY[INVENTORY.indexOf(item)] = null;
+    updateHotbarUI();
+    return true;
+}
+
+function canRemoveFishSpawnCommand(key, username = userName) {
+    const command = getCurrentWorldState().spawnCommands.get(key);
+    if (!command) return false;
+    const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(command.x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(command.z, MAP_SIZE) / CHUNK_SIZE));
+    return checkChunkOwnership(chunkKey, username);
+}
+
+function applyFishSpawnCommand(command) {
+    if (!command || !Number.isInteger(command.x) || !Number.isInteger(command.y) || !Number.isInteger(command.z) ||
+        (command.type !== "fish_rare" && command.type !== "fish_school") || command.y < 0 || command.y >= MAX_HEIGHT) return false;
+    const storedX = modWrap(command.x, MAP_SIZE);
+    const storedZ = modWrap(command.z, MAP_SIZE);
+    const key = `${storedX},${command.y},${storedZ}`;
+    const storedCommand = {
+        x: storedX,
+        y: command.y,
+        z: storedZ,
+        type: command.type,
+        originSeed: String(command.originSeed || worldSeed).slice(0, 128),
+        owner: command.owner || userName,
+        spawner: command.spawner || userName
+    };
+    if (getBlockAt(storedCommand.x, storedCommand.y, storedCommand.z) !== 6 &&
+        getBlockAt(storedCommand.x, storedCommand.y, storedCommand.z) !== 136) return false;
+    getCurrentWorldState().spawnCommands.set(key, storedCommand);
+    updateSaveChangesButton();
+    const mobId = `fish-command:${worldName}:${key}`;
+    if (!mobs.some(mob => mob.id === mobId)) {
+        const mob = new Mob(storedCommand.x + 0.5, storedCommand.z + 0.5, mobId, storedCommand.type, storedCommand.y + 0.5, storedCommand.originSeed);
+        mob.spawnCommandKey = key;
+        mob.spawner = isHost || peers.size === 0 ? userName : storedCommand.spawner;
+        mobs.push(mob);
+    }
+    return true;
+}
+
+function addFishSpawnCommand(x, y, z, type, originSeed, requestedBy = userName) {
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z) ||
+        (type !== "fish_rare" && type !== "fish_school")) return false;
+    x = modWrap(x, MAP_SIZE);
+    z = modWrap(z, MAP_SIZE);
+    const key = `${x},${y},${z}`;
+    if (getCurrentWorldState().spawnCommands.has(key)) {
+        addMessage("A fish spawn command is already here.", 2000);
+        return false;
+    }
+    const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE));
+    if (!checkChunkOwnership(chunkKey, requestedBy)) {
+        addMessage(`You cannot spawn a fish in this chunk. It is owned by ${getChunkOwnerName(chunkKey) || "another player"}.`, 3000);
+        return false;
+    }
+    const command = { x, y, z, type, originSeed: String(originSeed || worldSeed).slice(0, 128), owner: requestedBy, spawner: userName };
+    if (!applyFishSpawnCommand(command)) {
+        addMessage("Fish can only be placed in water.", 2000);
+        return false;
+    }
+    const message = JSON.stringify({
+        type: "fish_spawn_command",
+        world: worldName,
+        command,
+        fishType: type,
+        originSeed: command.originSeed,
+        requestedBy
+    });
+    for (const [, peer] of peers.entries()) {
+        if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+    }
+    return true;
+}
+
+function removeFishSpawnCommandByKey(key, broadcast = true) {
+    const command = getCurrentWorldState().spawnCommands.get(key);
+    if (!command) return false;
+    getCurrentWorldState().spawnCommands.delete(key);
+    updateSaveChangesButton();
+    if (broadcast) {
+        const message = JSON.stringify({ type: "fish_spawn_remove", world: worldName, key });
+        for (const [, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+        }
+    }
+    return true;
+}
+
+function restoreFishSpawnCommands() {
+    for (const [key, command] of getCurrentWorldState().spawnCommands) {
+        if (!applyFishSpawnCommand(command)) getCurrentWorldState().spawnCommands.delete(key);
+    }
+}
+
+function placeFishFromInventory(item, x, y, z) {
+    if (!item || (item.id !== 137 && item.id !== 138)) return false;
+    const type = item.id === 137 ? "fish_rare" : "fish_school";
+    const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE));
+    if (!checkChunkOwnership(chunkKey, userName)) {
+        addMessage(`You cannot spawn a fish here. Chunk is owned by ${getChunkOwnerName(chunkKey) || "another player"}.`, 3000);
+        return false;
+    }
+    if (isHost || peers.size === 0) {
+        if (!addFishSpawnCommand(x, y, z, type, item.originSeed, userName)) return false;
+        consumeFishInventoryItem(type, item.originSeed);
+    } else {
+        const request = JSON.stringify({
+            type: "fish_spawn_request",
+            world: worldName,
+            x, y, z,
+            fishType: type,
+            originSeed: item.originSeed || worldSeed
+        });
+        for (const [, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === "open") {
+                peer.dc.send(request);
+                return true;
+            }
+        }
+        addMessage("Could not reach the world host.", 2000);
+        return false;
+    }
+    return true;
 }
 
 function simpleHash(e) {
@@ -209,6 +356,7 @@ async function applySaveFile(e, t, o) {
                 chunkDeltas: new Map(data.chunkDeltas),
                 foreignBlockOrigins: new Map(data.foreignBlockOrigins),
                 treeSeeds: treeSeedsMap,
+                spawnCommands: new Map(data.spawnCommands || []),
                 ipfsTruncatedDates: new Map(data.ipfsTruncatedDates || [])
             });
         }
@@ -296,6 +444,9 @@ async function applySaveFile(e, t, o) {
                 seedData.plantedTime = now;
             }
             getCurrentWorldState().treeSeeds = treeSeedsMap;
+        }
+        if (t.spawnCommands) {
+            getCurrentWorldState().spawnCommands = new Map(t.spawnCommands);
         }
         if (t.deltas) {
             showLoadingIndicator(0, "Loading File...");
@@ -423,6 +574,7 @@ async function applySaveFile(e, t, o) {
                 }
             }
         }
+        restoreFishSpawnCommands();
         setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ");
         if (!isMobile()) try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
@@ -442,7 +594,7 @@ async function applySaveFile(e, t, o) {
             ids: Array.from(processedMessages)
         }), startWorker()
     }
-    if (e && (e.foreignBlockOrigins && (getCurrentWorldState().foreignBlockOrigins = new Map(e.foreignBlockOrigins)), addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3), e.deltas)) {
+    if (e && (e.foreignBlockOrigins && (getCurrentWorldState().foreignBlockOrigins = new Map(e.foreignBlockOrigins)), e.spawnCommands && (getCurrentWorldState().spawnCommands = new Map(e.spawnCommands)), addMessage(`Loaded ${getCurrentWorldState().foreignBlockOrigins.size} foreign blocks.`, 2e3), e.deltas)) {
         var c = await GetProfileByAddress(t),
             u = c && c.URN ? c.URN : "anonymous",
             p = Date.now();
@@ -543,6 +695,7 @@ async function applySaveFile(e, t, o) {
                 }
             }
         }
+        restoreFishSpawnCommands();
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
 }
@@ -835,6 +988,10 @@ function updateHotbarUI() {
 
 function addToInventory(e, t, o = null) {
     const a = o || worldSeed;
+    if (e === 137 || e === 138) {
+        getCurrentWorldState().fishInventoryDirty = true;
+        updateSaveChangesButton();
+    }
     for (var n = 0; n < INVENTORY.length; n++) {
         const o = INVENTORY[n];
         if (o && o.id === e && o.originSeed === a && o.count < 64) {
@@ -1998,6 +2155,7 @@ function createCalligraphyStoneScreen(stoneData) {
 function dropSelectedItem(dropAll = false) {
     const e = INVENTORY[selectedHotIndex];
     if (!e || e.count <= 0) return void addMessage("Nothing to drop!");
+    if (e.id === 137 || e.id === 138) return void addMessage("Fish must stay in your inventory or a chest.", 2000);
 
     // Determine how many to drop
     const countToDrop = dropAll ? e.count : 1;
@@ -2205,6 +2363,24 @@ function onPointerDown(e) {
         }
         return;
     }
+    if (e.button === 2 && t && (t.id === 137 || t.id === 138)) {
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        for (let distance = 0.5; distance <= 5; distance += 0.25) {
+            const point = camera.position.clone().add(direction.clone().multiplyScalar(distance));
+            const x = Math.floor(point.x);
+            const y = Math.floor(point.y);
+            const z = Math.floor(point.z);
+            const block = getBlockAt(x, y, z);
+            if (block === 6 || block === 136) {
+                placeFishFromInventory(t, x, y, z);
+                return;
+            }
+            if (block !== BLOCK_AIR) break;
+        }
+        addMessage("Fish can only be released into water.", 2000);
+        return;
+    }
     raycaster.setFromCamera(pointer, camera), raycaster.far = 5;
     const o = mobs.map((e => e.mesh)).filter((e => e.visible)),
         a = raycaster.intersectObjects(o, !0);
@@ -2246,6 +2422,18 @@ function onPointerDown(e) {
         return
     }
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
+        getCurrentWorldState().fishInventoryDirty = true;
+        updateSaveChangesButton();
+        player.health = Math.min(999, player.health + 2);
+        updateHealthBar();
+        document.getElementById("health").innerText = player.health;
+        addMessage(`Ate ${BLOCKS[t.id].name}! +2 HP`, 1500);
+        t.count--;
+        if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
 
     // Check for Chest Intersections
     const chestMeshes = Object.values(chests).map(c => c.mesh).filter(m => m);
@@ -2721,7 +2909,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
             const l = worldState.foreignBlockOrigins.get(r);
 
             // Revert changes back to broadcast so blocks correctly disappear on clients when broken by UFO
-            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, true, null, 'local');
+            const replacementBlockId = a === 136 ? 6 : BLOCK_AIR;
+            chunkManager.setBlockGlobal(e, t, o, replacementBlockId, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
 
             if (!silent) {
@@ -2765,6 +2954,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
                     x: e,
                     y: t,
                     z: o,
+                    blockId: a,
+                    replacementBlockId: replacementBlockId,
                     username: breaker || userName,
                     world: worldName,
                     originSeed: l
@@ -2859,9 +3050,14 @@ function placeBlockAt(e, t, o, a) {
     if (a) {
         var n = INVENTORY[selectedHotIndex];
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
+        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(`${BLOCKS[a].name} can only be released into water.`, 2000);
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
+            if (a === 136 && r === 6) {
+                const below = getBlockAt(e, t - 1, o);
+                if (below === 6 || below === BLOCK_AIR) return void addMessage("Seaweed must be planted on the ocean floor or another seaweed.", 2000);
+            }
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
                 else {
@@ -3120,7 +3316,7 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 12 !== e && 8 !== e && 16 !== e
+    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e
 }
 
 function checkCollisionWithBlock(e, t, o) {
@@ -3402,7 +3598,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && getCurrentWorldState().chunkDeltas.size > 0 && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && (getCurrentWorldState().chunkDeltas.size > 0 || getCurrentWorldState().spawnCommands.size > 0 || getCurrentWorldState().fishInventoryDirty || INVENTORY.some(item => item && (item.id === 137 || item.id === 138))) && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -3534,6 +3730,7 @@ async function downloadHostSession() {
             chunkDeltas: Array.from(data.chunkDeltas.entries()),
             foreignBlockOrigins: Array.from(data.foreignBlockOrigins.entries()),
             treeSeeds: Array.from((data.treeSeeds || new Map()).entries()),
+            spawnCommands: Array.from((data.spawnCommands || new Map()).entries()),
             ipfsTruncatedDates: Array.from((data.ipfsTruncatedDates || new Map()).entries())
         }];
     });
@@ -3627,6 +3824,7 @@ async function downloadHostSession() {
             magicianStones: serializableMagicianStones,
             calligraphyStones: serializableCalligraphyStones,
             chests: serializableChests,
+            spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
             musicPlaylist: musicPlaylist,
             videoPlaylist: videoPlaylist
         }
@@ -3708,6 +3906,7 @@ async function publishToTestnet() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
+        spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
         chests: serializableChests,
@@ -3890,6 +4089,7 @@ async function downloadSinglePlayerSession() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
+        spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
         chests: serializableChests,
@@ -3956,7 +4156,8 @@ function updateHealthBar() {
 
 function updateSaveChangesButton() {
     const worldState = getCurrentWorldState();
-    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 ? "inline-block" : "none"
+    const hasFishInventory = INVENTORY.some(item => item && (item.id === 137 || item.id === 138) && item.count > 0);
+    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 || worldState.spawnCommands.size > 0 || worldState.fishInventoryDirty || hasFishInventory ? "inline-block" : "none"
 }
 
 function updateHudButtons() {
@@ -4854,6 +5055,7 @@ function switchWorld(newWorldName, targetSpawn) {
     // This reloads stone media/behaviors when returning to a previously visited world.
     // If this is a new world with no saved data, nothing is restored.
     restoreWorldStoneData(worldName);
+    restoreFishSpawnCommands();
 
     addMessage(`Switched to world: ${worldName}`, 4e3);
 

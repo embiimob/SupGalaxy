@@ -1,6 +1,93 @@
-function Mob(t, e, s, i = "crawley") {
+function isAquaticMobType(type) {
+    return type === "fish_rare" || type === "fish_school" || type === "whale";
+}
+
+function findAquaticSpawnPosition(x, z, type) {
+    const minimumDepth = type === "whale" ? 11 : 3;
+    const wx = modWrap(Math.floor(x), MAP_SIZE);
+    const wz = modWrap(Math.floor(z), MAP_SIZE);
+    let surfaceY = -1;
+    for (let y = Math.min(MAX_HEIGHT - 1, 63); y > 0; y--) {
+        if (getBlockAt(wx, y, wz) === 6 || getBlockAt(wx, y, wz) === 136) {
+            surfaceY = y;
+            break;
+        }
+    }
+    if (surfaceY < 1) return null;
+    let floorY = surfaceY;
+    while (floorY > 0 && (getBlockAt(wx, floorY, wz) === 6 || getBlockAt(wx, floorY, wz) === 136)) floorY--;
+    const depth = surfaceY - floorY;
+    if (depth < minimumDepth) return null;
+    const swimY = Math.max(floorY + 1, surfaceY - 1 - Math.floor(Math.random() * Math.max(1, depth - 1)));
+    return { x: wx + 0.5, y: swimY + 0.5, z: wz + 0.5, surfaceY };
+}
+
+function nearestAquaticSpawnPosition(x, z, type) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = type === "fish_school"
+            ? 48 + Math.random() * 48
+            : attempt === 0 ? 0 : 4 + Math.random() * 28;
+        const position = findAquaticSpawnPosition(x + Math.cos(angle) * distance, z + Math.sin(angle) * distance, type);
+        if (position) return position;
+    }
+    return null;
+}
+
+function createAquaticFishSkinTexture(seed, type, baseColor) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 64;
+    const context = canvas.getContext("2d");
+    const base = new THREE.Color(baseColor);
+    const accent = new THREE.Color().setHSL((base.getHSL({}).h + 0.34) % 1, 0.88, 0.67);
+    const random = makeSeededRandom(seed + "_fish_pattern_" + type);
+    context.fillStyle = "#" + base.getHexString();
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#" + accent.getHexString();
+    const pattern = Math.floor(random() * 3);
+    if (pattern === 0) {
+        const stripeWidth = 5 + Math.floor(random() * 8);
+        const gap = 13 + Math.floor(random() * 13);
+        for (let x = 8; x < canvas.width; x += stripeWidth + gap) {
+            context.globalAlpha = 0.68;
+            context.fillRect(x, 0, stripeWidth, canvas.height);
+        }
+    } else if (pattern === 1) {
+        for (let i = 0; i < 16; i++) {
+            context.globalAlpha = 0.55 + random() * 0.35;
+            context.beginPath();
+            context.ellipse(random() * canvas.width, random() * canvas.height, 3 + random() * 5, 4 + random() * 8, random() * Math.PI, 0, Math.PI * 2);
+            context.fill();
+        }
+    } else {
+        for (let y = -8; y < canvas.height + 8; y += 12) {
+            for (let x = (y / 12 % 2) * 8; x < canvas.width; x += 16) {
+                context.globalAlpha = 0.55;
+                context.beginPath();
+                context.ellipse(x, y, 4, 6, 0, 0, Math.PI * 2);
+                context.fill();
+            }
+        }
+    }
+    context.globalAlpha = 1;
+    if (type === "fish_rare") {
+        context.fillStyle = "#fff3a3";
+        for (let i = 0; i < 5; i++) {
+            context.beginPath();
+            context.arc(14 + i * 23, 32 + Math.sin(i * 1.3) * 15, 2, 0, Math.PI * 2);
+            context.fill();
+        }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+}
+
+function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    let yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    let yPos = i === "ufo_saucer" ? 220 : isAquaticMobType(i) && aquaticY !== null ? aquaticY : chunkManager.getSurfaceY(t, e) + 1;
     if (i === "spider") {
         yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
         // Check if spawn was in sky
@@ -9,9 +96,177 @@ function Mob(t, e, s, i = "crawley") {
              this.invalidSpawn = true; // Flag for instant death
         }
     }
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    if (this.id = s || Date.now(), this.type = i, this.originSeed = originSeed || worldSeed, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
+    } else if (isAquaticMobType(this.type)) {
+        this.mesh = new THREE.Group();
+        const variant = makeSeededRandom(this.originSeed + "_aquatic_look_" + this.type)();
+        const hue = this.type === "whale" ? 0.52 + variant * 0.22 : this.type === "fish_rare" ? (0.88 + variant * 0.34) % 1 : 0.42 + variant * 0.28;
+        this.aquaticColor = new THREE.Color().setHSL(hue, 0.72 + variant * 0.2, this.type === "whale" ? 0.62 : 0.56).getHex();
+        const bodyMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
+        const bellyMaterial = new THREE.MeshLambertMaterial({ color: 0xffe7d7 });
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x111522 });
+        const shineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const finMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
+        if (this.type === "whale") {
+            this.hp = 40;
+            this.speed = 0.012 + 0.003 * Math.random();
+            this.isAggressive = false;
+            this.breachAt = Date.now() + 30000 + Math.random() * 60000;
+            this.body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), bodyMaterial);
+            this.body.scale.set(4.2, 2.6, 6.4);
+            this.mesh.add(this.body);
+            const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), bellyMaterial);
+            belly.scale.set(3.65, 1.75, 5.8);
+            belly.position.y = -0.7;
+            this.mesh.add(belly);
+            this.tail = new THREE.Group();
+            const flukeShape = new THREE.Shape();
+            flukeShape.moveTo(0, 0.5);
+            flukeShape.quadraticCurveTo(1.2, 0.65, 2.7, 1.25);
+            flukeShape.quadraticCurveTo(3.5, 1.55, 3.8, 1.15);
+            flukeShape.quadraticCurveTo(3.45, 0.4, 3.1, -0.15);
+            flukeShape.quadraticCurveTo(2.25, -0.2, 1.55, 0.3);
+            flukeShape.quadraticCurveTo(0.7, -0.45, 0, -0.55);
+            flukeShape.quadraticCurveTo(-0.7, -0.45, -1.55, 0.3);
+            flukeShape.quadraticCurveTo(-2.25, -0.2, -3.1, -0.15);
+            flukeShape.quadraticCurveTo(-3.45, 0.4, -3.8, 1.15);
+            flukeShape.quadraticCurveTo(-3.5, 1.55, -2.7, 1.25);
+            flukeShape.quadraticCurveTo(-1.2, 0.65, 0, 0.5);
+            flukeShape.closePath();
+            const flukeGeometry = new THREE.ExtrudeGeometry(flukeShape, { depth: 1.2, bevelEnabled: false });
+            flukeGeometry.translate(0, 0, -0.6);
+            flukeGeometry.scale(1.2, 1.1, 1);
+            const fluke = new THREE.Mesh(flukeGeometry, new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
+            fluke.rotation.x = -Math.PI / 2;
+            this.tail.add(fluke);
+            this.tail.position.z = -7;
+            this.mesh.add(this.tail);
+            const whaleEyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (const side of [-1, 1]) {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.52, 10, 8), whaleEyeWhite);
+                eye.position.set(side * 2.25, 0.55, 5.05);
+                this.mesh.add(eye);
+                const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), eyeMaterial);
+                pupil.position.set(side * 2.25, 0.5, 5.5);
+                this.mesh.add(pupil);
+                const shine = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), shineMaterial);
+                shine.position.set(side * 2.17, 0.62, 5.7);
+                this.mesh.add(shine);
+                const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.38, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffa6b8 }));
+                cheek.position.set(side * 2.55, -0.55, 4.45);
+                this.mesh.add(cheek);
+            }
+            const smileGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-1.45, -0.4, 5.65),
+                new THREE.Vector3(-0.8, -0.7, 6.15),
+                new THREE.Vector3(0, -0.78, 6.4),
+                new THREE.Vector3(0.8, -0.7, 6.15),
+                new THREE.Vector3(1.45, -0.4, 5.65)
+            ]);
+            this.smile = new THREE.Line(smileGeometry, new THREE.LineBasicMaterial({ color: 0x24324b, linewidth: 4 }));
+            this.mesh.add(this.smile);
+            const angryMouthGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-1.3, -0.55, 5.75),
+                new THREE.Vector3(-0.7, -0.38, 6.2),
+                new THREE.Vector3(0, -0.32, 6.4),
+                new THREE.Vector3(0.7, -0.38, 6.2),
+                new THREE.Vector3(1.3, -0.55, 5.75)
+            ]);
+            this.angryMouth = new THREE.Line(angryMouthGeometry, new THREE.LineBasicMaterial({ color: 0x24324b, linewidth: 5 }));
+            this.angryMouth.visible = false;
+            this.mesh.add(this.angryMouth);
+            this.angryBrows = [];
+            for (const side of [-1, 1]) {
+                const brow = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.18, 0.2), new THREE.MeshLambertMaterial({ color: 0x24324b }));
+                brow.position.set(side * 2.2, 1.12, 5.1);
+                brow.rotation.z = side * -0.32;
+                brow.visible = false;
+                this.mesh.add(brow);
+                this.angryBrows.push(brow);
+            }
+            this.fins = [];
+            for (const side of [-1, 1]) {
+                const fin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.42, 5.2), finMaterial);
+                fin.position.set(side * 3.15, -0.55, 0.8);
+                fin.rotation.y = side * 0.32;
+                fin.rotation.z = side * 0.32;
+                this.mesh.add(fin);
+                this.fins.push(fin);
+            }
+            const dorsalShape = new THREE.Shape();
+            dorsalShape.moveTo(-1.3, 0.05);
+            dorsalShape.quadraticCurveTo(-0.5, 0.3, -0.1, 1.35);
+            dorsalShape.quadraticCurveTo(0.15, 0.85, 0.65, 0.45);
+            dorsalShape.quadraticCurveTo(1.05, 0.12, 1.45, 0.05);
+            dorsalShape.closePath();
+            this.dorsalFin = new THREE.Mesh(new THREE.ShapeGeometry(dorsalShape), new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
+            this.dorsalFin.rotation.y = Math.PI / 2;
+            this.dorsalFin.position.y = 2.4;
+            this.mesh.add(this.dorsalFin);
+            this.mesh.scale.setScalar(0.5);
+            this.spout = new THREE.Group();
+            const spray = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.5, 6), new THREE.MeshLambertMaterial({ color: 0xa9edff, transparent: true, opacity: 0.75 }));
+            spray.position.y = 1.25;
+            this.spout.add(spray);
+            this.spout.position.set(0, 2.3, 3.7);
+            this.mesh.add(this.spout);
+            this.spout.visible = false;
+            this.breach = false;
+            this.breachEnd = 0;
+            this.waterSurfaceY = yPos;
+            this.hp = 40;
+        } else {
+            const rare = this.type === "fish_rare";
+            this.hp = rare ? 12 : 8;
+            this.speed = rare ? 0.045 : 0.035;
+            this.body = new THREE.Mesh(new THREE.SphereGeometry(rare ? 0.58 : 0.42, 8, 6), bodyMaterial);
+            this.body.scale.set(rare ? 0.9 : 0.72, 0.68, rare ? 1.15 : 1.35);
+            this.mesh.add(this.body);
+            const belly = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 5), bellyMaterial);
+            belly.scale.set(0.65, 0.35, 1.15);
+            belly.position.y = -0.22;
+            this.mesh.add(belly);
+            this.tail = new THREE.Group();
+            const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.75, 0.75), finMaterial);
+            tailFin.position.z = -0.42;
+            this.tail.add(tailFin);
+            this.tail.position.z = -0.75;
+            this.mesh.add(this.tail);
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.55), finMaterial);
+            fin.position.set(0, 0.48, -0.05);
+            this.mesh.add(fin);
+            this.fins = [fin];
+            this.mesh.eyes = [];
+            for (const side of [-1, 1]) {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), eyeMaterial);
+                eye.position.set(side * 0.24, 0.11, 0.4);
+                this.mesh.add(eye);
+                const shine = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), shineMaterial);
+                shine.position.set(side * 0.24 - 0.025, 0.15, 0.49);
+                this.mesh.add(shine);
+                this.mesh.eyes.push(eye);
+            }
+            if (rare) {
+                const crest = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.45, 5), finMaterial);
+                crest.position.set(0, 0.58, -0.05);
+                this.mesh.add(crest);
+            }
+            const fishTraits = makeSeededRandom(this.originSeed + "_fish_traits_" + this.type + "_" + this.id);
+            this.pattern = Math.floor(fishTraits() * 3);
+            this.isAggressive = rare && fishTraits() < 0.2;
+            this.size = rare ? 1 : 0.6 + fishTraits() * 0.9;
+            if (!rare) this.mesh.scale.setScalar(this.size);
+            this.body.material.map = createAquaticFishSkinTexture(this.originSeed, this.type, this.aquaticColor);
+            this.body.material.color.set(0xffffff);
+            this.body.material.needsUpdate = true;
+            if (this.isAggressive) {
+                this.aquaticColor = new THREE.Color().setHSL(hue, 0.95, 0.48).getHex();
+                this.body.material.color.set(this.aquaticColor);
+                finMaterial.color.set(this.aquaticColor);
+            }
+        }
     } else if ("ufo_saucer" === this.type) {
         this.isAggressive = !0;
     } else if ("spider" === this.type) {
@@ -436,6 +691,13 @@ function manageMobs() {
         return true;
     });
 
+    for (const [key, command] of getCurrentWorldState().spawnCommands) {
+        const mobId = `fish-command:${worldName}:${key}`;
+        if (mobs.some(mob => mob.id === mobId)) continue;
+        const ownerArea = mySpawningAreas.find(area => area.players.some(p => Math.hypot(command.x - p.x, command.z - p.z) < 96));
+        if (ownerArea) applyFishSpawnCommand(command);
+    }
+
     // Spawn new mobs for our active areas
     for (const area of mySpawningAreas) {
         for (const type of allowedTypes) {
@@ -444,10 +706,15 @@ function manageMobs() {
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
             else if ("spider" === type) maxCount = 6;
+            else if ("fish_school" === type) maxCount = 6;
+            else if ("fish_rare" === type) maxCount = 1;
+            else if ("whale" === type) maxCount = 3;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
             } else continue;
+            if (type === "fish_rare" && Math.random() > 0.12) continue;
+            if (type === "whale" && Math.random() > 0.025) continue;
 
             // Count mobs of this type in this specific area
             let countInArea = 0;
@@ -475,12 +742,19 @@ function manageMobs() {
                     spawnZ = modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE);
                 }
 
-                const newMob = new Mob(
-                    spawnX,
-                    spawnZ,
-                    Date.now() + Math.random(),
-                    type
-                );
+                let aquaticSpawn = null;
+                if (isAquaticMobType(type)) {
+                    const spawnPlayer = area.players[Math.floor(Math.random() * area.players.length)];
+                    aquaticSpawn = nearestAquaticSpawnPosition(spawnPlayer.x, spawnPlayer.z, type);
+                    if (!aquaticSpawn) continue;
+                    spawnX = aquaticSpawn.x;
+                    spawnZ = aquaticSpawn.z;
+                }
+                const newMob = new Mob(spawnX, spawnZ, Date.now() + Math.random(), type, aquaticSpawn && aquaticSpawn.y);
+                if (aquaticSpawn) {
+                    newMob.spawner = userName;
+                    newMob.waterSurfaceY = aquaticSpawn.surfaceY;
+                }
                 mobs.push(newMob);
 
                 if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
@@ -494,7 +768,8 @@ function manageMobs() {
                     aiState: newMob.aiState,
                     type: newMob.type,
                     hp: newMob.hp,
-                    isAggressive: newMob.isAggressive
+                    isAggressive: newMob.isAggressive,
+                    originSeed: newMob.originSeed
                 });
 
                 const spawnMsg = JSON.stringify({
@@ -506,6 +781,7 @@ function manageMobs() {
                     hp: newMob.hp,
                     mobType: newMob.type,
                     isAggressive: newMob.isAggressive,
+                    originSeed: newMob.originSeed,
                     world: worldName,
                     username: userName
                 });
@@ -533,6 +809,10 @@ function manageMobs() {
 
 function handleMobHit(t) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
+        addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
+        return;
+    }
     // We shouldn't set lastMoveTime here, we do it in projectile logic (main.js). If we do it here, it will trigger for anyone handling the hit, not just the user.
     if (isLocalSpawner) {
         t.hurt(4, userName);
@@ -552,7 +832,253 @@ function handleMobHit(t) {
     }
     safePlayAudio(soundHit), addMessage("Hit mob!", 800)
 }
+function updateAquaticMob(t, delta) {
+    const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    const now = Date.now();
+    t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
+    t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
+    if (!isLocalSpawner) {
+        if (t.lastUpdateTime > 0) {
+            const blend = 1 - Math.exp(-delta * (t.type === "whale" ? 4 : 8));
+            t.pos.lerp(t.targetPos, blend);
+            if (t.lastQuaternionUpdate > 0) {
+                t.mesh.quaternion.slerp(t.targetQuaternion, blend);
+            }
+        } else {
+            t.pos.copy(t.targetPos);
+        }
+    } else {
+        let target = null;
+        let curiousAboutPlayer = false;
+        if (t.type === "whale") {
+            if (t.wasAttacked) {
+                const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+                for (const [name, pos] of Object.entries(userPositions)) {
+                    if (pos.world === worldName && pos.targetX !== undefined) {
+                        candidates.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                    }
+                }
+                candidates.sort((a, b) => Math.hypot(a.x - t.pos.x, a.y - t.pos.y, a.z - t.pos.z) - Math.hypot(b.x - t.pos.x, b.y - t.pos.y, b.z - t.pos.z));
+                target = candidates[0] || null;
+                if (target && Math.hypot(target.x - t.pos.x, target.y - t.pos.y, target.z - t.pos.z) < 3 && now - t.attackCooldown > 1400) {
+                    t.attackCooldown = now;
+                    const peer = peers.get(target.name);
+                    if (target.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 2, attacker: "whale" }));
+                    } else if (target.name === userName) {
+                        player.health = Math.max(0, player.health - 2);
+                        lastDamageTime = now;
+                        updateHealthBar();
+                        const healthElement = document.getElementById("health");
+                        if (healthElement) healthElement.innerText = player.health;
+                        addMessage("Bonked by a whale! HP: " + player.health, 1200);
+                        if (player.health <= 0) handlePlayerDeath();
+                    }
+                }
+            } else {
+                const prey = mobs.filter(m => m.type === "fish_school" || m.type === "fish_rare" || m.type === "crawley");
+                prey.sort((a, b) => t.pos.distanceTo(a.pos) - t.pos.distanceTo(b.pos));
+                const meal = prey.find(mob => t.pos.distanceTo(mob.pos) < (mob.type === "crawley" ? 32 : 48));
+                if (meal) {
+                    target = meal.pos;
+                    if (t.pos.distanceTo(meal.pos) < (meal.type === "crawley" ? 4.5 : 1.8) && now - (t.lastMealTime || 0) > 3000) {
+                        t.lastMealTime = now;
+                        meal.die("whale");
+                    }
+                }
+            }
+        } else {
+            const whales = mobs.filter(m => m.type === "whale");
+            whales.sort((a, b) => t.pos.distanceTo(a.pos) - t.pos.distanceTo(b.pos));
+            const nearbyWhale = whales[0];
+            if (nearbyWhale && t.pos.distanceTo(nearbyWhale.pos) < 30) {
+                const away = t.pos.clone().sub(nearbyWhale.pos);
+                away.y = 0;
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                target = t.pos.clone().add(away.normalize().multiplyScalar(14));
+            }
+
+            const nearbyPlayers = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+            for (const [name, pos] of Object.entries(userPositions)) {
+                if (pos.world === worldName && Number.isFinite(pos.targetX) && Number.isFinite(pos.targetY) && Number.isFinite(pos.targetZ)) {
+                    nearbyPlayers.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                }
+            }
+            nearbyPlayers.sort((a, b) =>
+                Math.hypot(a.x - t.pos.x, a.y - t.pos.y, a.z - t.pos.z) -
+                Math.hypot(b.x - t.pos.x, b.y - t.pos.y, b.z - t.pos.z));
+            const nearestPlayer = nearbyPlayers[0];
+            const playerDistance = nearestPlayer ? Math.hypot(nearestPlayer.x - t.pos.x, nearestPlayer.y - t.pos.y, nearestPlayer.z - t.pos.z) : Infinity;
+            if (t.isAggressive && playerDistance < 10) {
+                target = nearestPlayer;
+                if (playerDistance < 1.6 && now - t.attackCooldown > 1600) {
+                    t.attackCooldown = now;
+                    const peer = peers.get(nearestPlayer.name);
+                    if (nearestPlayer.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 1, attacker: "fish" }));
+                    } else if (nearestPlayer.name === userName) {
+                        player.health = Math.max(0, player.health - 1);
+                        lastDamageTime = now;
+                        updateHealthBar();
+                        const healthElement = document.getElementById("health");
+                        if (healthElement) healthElement.innerText = player.health;
+                        addMessage("Bitten by an aggressive fish! HP: " + player.health, 1200);
+                        if (player.health <= 0) handlePlayerDeath();
+                    }
+                }
+            } else if (!target && t.type === "fish_school" && playerDistance > 4 && playerDistance < 9) {
+                const away = new THREE.Vector3(t.pos.x - nearestPlayer.x, 0, t.pos.z - nearestPlayer.z);
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                away.normalize();
+                target = { x: nearestPlayer.x + away.x * 6, y: nearestPlayer.y, z: nearestPlayer.z + away.z * 6 };
+                curiousAboutPlayer = true;
+            } else if (!target && playerDistance < 4) {
+                const away = t.pos.clone().sub(new THREE.Vector3(nearestPlayer.x, nearestPlayer.y, nearestPlayer.z));
+                away.y = 0;
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                target = t.pos.clone().add(away.normalize().multiplyScalar(12));
+            }
+
+            if (!target && t.type === "fish_school") {
+                const schoolmates = mobs.filter(m => m !== t && m.type === "fish_school" && t.pos.distanceTo(m.pos) < 14);
+                if (schoolmates.length) {
+                    target = new THREE.Vector3();
+                    for (const mate of schoolmates) target.add(mate.pos);
+                    target.multiplyScalar(1 / schoolmates.length);
+                }
+            }
+        }
+
+        if (!target) {
+            if (!t.nextWanderChange || now > t.nextWanderChange) {
+                t.nextWanderChange = now + 1800 + Math.random() * 3800;
+                const angle = Math.random() * Math.PI * 2;
+                t.wanderDirection = new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle)).normalize();
+            }
+            target = t.pos.clone().add((t.wanderDirection || new THREE.Vector3(1, 0, 0)).clone().multiplyScalar(8));
+        }
+
+        if (target && target.x !== undefined) {
+            const dx = target.x - t.pos.x;
+            const dz = target.z - t.pos.z;
+            const distance = Math.hypot(dx, dz);
+            if (distance > 0.1) {
+                const maxSpeed = t.speed * 60 * (t.type === "whale" ? 0.7 : curiousAboutPlayer ? 0.2 : 1);
+                const desiredVelocity = new THREE.Vector3(dx / distance * maxSpeed, 0, dz / distance * maxSpeed);
+                t.swimVelocity = t.swimVelocity || new THREE.Vector3();
+                t.swimVelocity.lerp(desiredVelocity, 1 - Math.exp(-delta * (t.type === "whale" ? 1.8 : 3.5)));
+                const nx = modWrap(t.pos.x + t.swimVelocity.x * delta, MAP_SIZE);
+                const nz = modWrap(t.pos.z + t.swimVelocity.z * delta, MAP_SIZE);
+                const desiredY = target.y === undefined
+                    ? t.pos.y + Math.sin(t.animationTime * 0.35) * 0.08 * delta
+                    : t.pos.y + Math.max(-0.3, Math.min(0.3, target.y - t.pos.y)) * (1 - Math.exp(-delta * 0.8));
+                let nextY = desiredY;
+                let targetBlock = getBlockAt(nx, nextY, nz);
+                if (targetBlock !== 6 && targetBlock !== 136) {
+                    let nearestWaterY = null;
+                    for (let offset = 0; offset <= 12 && nearestWaterY === null; offset++) {
+                        for (const sign of offset === 0 ? [1] : [1, -1]) {
+                            const candidateY = Math.floor(desiredY) + offset * sign;
+                            if (candidateY >= 0 && candidateY < MAX_HEIGHT) {
+                                const candidateBlock = getBlockAt(nx, candidateY, nz);
+                                if (candidateBlock === 6 || candidateBlock === 136) {
+                                    nearestWaterY = candidateY + 0.5;
+                                    targetBlock = candidateBlock;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (nearestWaterY !== null) nextY = nearestWaterY;
+                }
+                const horizontalBlock = getBlockAt(nx, nextY, nz);
+                if (horizontalBlock === 6 || horizontalBlock === 136) {
+                    t.pos.set(nx, nextY, nz);
+                    const targetYaw = Math.atan2(dx, dz);
+                    const yawDifference = Math.atan2(Math.sin(targetYaw - t.mesh.rotation.y), Math.cos(targetYaw - t.mesh.rotation.y));
+                    t.mesh.rotation.y += yawDifference * (1 - Math.exp(-delta * (t.type === "whale" ? 1.4 : 4)));
+                    t.isMoving = true;
+                } else {
+                    t.wanderDirection = new THREE.Vector3(-dz, (Math.random() - 0.5) * 0.5, dx).normalize();
+                    t.isMoving = false;
+                }
+            }
+        }
+
+        if (t.type === "whale") {
+            if (!t.breach && now >= t.breachAt) {
+                const surface = findAquaticSpawnPosition(t.pos.x, t.pos.z, "fish_school");
+                if (surface) {
+                    t.breach = true;
+                    t.breachStart = now;
+                    t.breachEnd = now + 2000;
+                    t.breachBaseY = t.pos.y;
+                    t.breachSurfaceY = surface.surfaceY + 1;
+                    t.breachPeakY = t.breachSurfaceY + 5;
+                    t.breachAt = now + 45000 + Math.random() * 90000;
+                } else {
+                    t.breachAt = now + 15000;
+                }
+            }
+            if (t.breach) {
+                const progress = Math.min(1, (now - t.breachStart) / (t.breachEnd - t.breachStart));
+                t.pos.y = t.breachBaseY + (t.breachPeakY - t.breachBaseY) * Math.sin(progress * Math.PI);
+                if (now >= t.breachEnd) {
+                    t.breach = false;
+                    t.pos.y = t.breachBaseY;
+                }
+            }
+        }
+    }
+
+    if (t.type === "whale") {
+        const angry = !!t.wasAttacked;
+        t.smile.visible = !angry;
+        t.angryMouth.visible = angry;
+        t.angryBrows.forEach(brow => brow.visible = angry);
+        if (!t.nextSpout || now > t.nextSpout) {
+            t.spoutUntil = now + 1100;
+            t.nextSpout = now + 45000 + Math.random() * 50000;
+        }
+        t.spout.visible = now < t.spoutUntil;
+        const swimSpeed = t.swimVelocity ? t.swimVelocity.length() : t.isMoving ? t.speed * 60 * 0.7 : 0;
+        t.tailPhase = (t.tailPhase || 0) + delta * (0.25 + swimSpeed * 0.8);
+        t.tail.rotation.x = Math.sin(t.tailPhase) * 0.42;
+        t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.14 + Math.sin(t.animationTime * 1.2) * 0.08));
+    } else {
+        t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
+        t.fins[0].rotation.x = Math.sin(t.animationTime * 1.8) * 0.2;
+    }
+    t.mesh.position.set(t.pos.x, t.pos.y + (t.type === "whale" ? 0 : Math.sin(t.animationTime * 1.5) * 0.08), t.pos.z);
+    const moved = t.pos.distanceTo(t.lastSentPos) > 0.1;
+    const rotated = t.mesh.quaternion.angleTo(t.lastSentQuaternion) > 0.01;
+    if (isLocalSpawner && (moved || rotated || t.lastSentOriginSeed !== t.originSeed)) {
+        if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+        window.mobUpdateQueue.push({
+            id: t.id,
+            x: t.pos.x,
+            y: t.pos.y,
+            z: t.pos.z,
+            quaternion: t.mesh.quaternion.toArray(),
+            isMoving: t.isMoving,
+            aiState: t.aiState,
+            type: t.type,
+            hp: t.hp,
+            isAggressive: t.isAggressive,
+            wasAttacked: t.wasAttacked,
+            originSeed: t.originSeed,
+            spawnCommandKey: t.spawnCommandKey
+        });
+        t.lastSentPos.copy(t.pos);
+        t.lastSentQuaternion.copy(t.mesh.quaternion);
+        t.lastSentOriginSeed = t.originSeed;
+    }
+}
 Mob.prototype.update = function (t) {
+    if (isAquaticMobType(this.type)) {
+        updateAquaticMob(this, t);
+        return;
+    }
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
 
@@ -1404,6 +1930,10 @@ Mob.prototype.update = function (t) {
 }, Mob.prototype.hurt = function (t, e) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
+    if (this.type === "whale") {
+        this.wasAttacked = true;
+        this.isAggressive = true;
+    }
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
     const s = e === userName ? player : userPositions[e];
     if (s) {
@@ -1428,6 +1958,8 @@ Mob.prototype.update = function (t) {
             type: this.type,
             isMoving: this.isMoving,
             aiState: this.aiState,
+            isAggressive: this.isAggressive,
+            wasAttacked: this.wasAttacked,
             quaternion: this.mesh.quaternion.toArray()
         });
     }
@@ -1463,7 +1995,28 @@ Mob.prototype.update = function (t) {
     if (this.engineAudio2) {
         this.engineAudio2.pause();
     }
+    if (this.spawnCommandKey && typeof removeFishSpawnCommandByKey === "function") {
+        removeFishSpawnCommandByKey(this.spawnCommandKey);
+    }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
+    const isFish = this.type === "fish_rare" || this.type === "fish_school";
+    if (isFish && t !== "whale") {
+        const fishItemId = this.type === "fish_rare" ? 137 : 138;
+        if (t === userName) {
+            addToInventory(fishItemId, 1, this.originSeed);
+            addMessage(`Caught ${BLOCKS[fishItemId].name} from ${this.originSeed}!`, 2500);
+        } else if (t) {
+            const peer = peers.get(t);
+            if (peer && peer.dc && peer.dc.readyState === "open") {
+                peer.dc.send(JSON.stringify({
+                    type: "add_to_inventory",
+                    blockId: fishItemId,
+                    count: 1,
+                    originSeed: this.originSeed
+                }));
+            }
+        }
+    }
     let e = 10;
     if ("ufo_saucer" === this.type) {
         e = 1000;
@@ -1514,7 +2067,8 @@ Mob.prototype.update = function (t) {
     }
     const s = JSON.stringify({
         type: "mob_kill",
-        id: this.id
+        id: this.id,
+        world: worldName
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)
 

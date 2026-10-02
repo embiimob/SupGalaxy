@@ -750,8 +750,10 @@ function setupDataChannel(e, t) {
                     }
 
                     if (!mobs.some((e => e.id === s.id))) {
-                        const e = new Mob(s.x, s.z, s.id, s.mobType || s.type);
-                        e.isAggressive = s.isAggressive, mobs.push(e)
+                        const e = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
+                        e.spawnCommandKey = s.spawnCommandKey || null;
+                        e.spawner = s.username || n;
+                        e.isAggressive = s.isAggressive, e.wasAttacked = s.wasAttacked, mobs.push(e)
 
                         // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
                         if (isHost) {
@@ -765,6 +767,32 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "fish_spawn_request":
+                    if (isHost && s.world === worldName && (s.fishType === "fish_rare" || s.fishType === "fish_school")) {
+                        const requester = userPositions[n];
+                        const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE));
+                        const waterBlock = getBlockAt(s.x, s.y, s.z);
+                        if (Number.isInteger(s.x) && Number.isInteger(s.y) && Number.isInteger(s.z) &&
+                            (waterBlock === 6 || waterBlock === 136) &&
+                            checkChunkOwnership(chunkKey, n) &&
+                            requester && Number.isFinite(requester.targetX) && Number.isFinite(requester.targetY) && Number.isFinite(requester.targetZ) &&
+                            Math.hypot(requester.targetX - s.x, requester.targetY - s.y, requester.targetZ - s.z) <= 8) {
+                            addFishSpawnCommand(s.x, s.y, s.z, s.fishType, String(s.originSeed || worldName).slice(0, 128), n);
+                        }
+                    }
+                    break;
+                case "fish_spawn_command":
+                    if (s.world === worldName && typeof applyFishSpawnCommand === "function") {
+                        applyFishSpawnCommand(s.command, false);
+                        if (s.requestedBy === userName) consumeFishInventoryItem(s.fishType, s.originSeed);
+                    }
+                    break;
+                case "fish_spawn_remove":
+                    if (s.world === worldName && typeof removeFishSpawnCommandByKey === "function") {
+                        if (isHost && !canRemoveFishSpawnCommand(s.key, n)) break;
+                        removeFishSpawnCommandByKey(s.key, false);
+                    }
+                    break;
                 case "mob_state_batch":
                     if (!isHost || (isHost && s.world && s.world === worldName)) {
                         const e = new Set;
@@ -772,14 +800,17 @@ function setupDataChannel(e, t) {
                             e.add(t.id);
                             let o = mobs.find((e => e.id === t.id));
                             if (!o) {
-                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType);
+                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
                                 mobs.push(o);
                                 o.pos.set(t.x, t.y, t.z);
                             }
+                            if (t.originSeed) o.originSeed = t.originSeed;
+                            if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             o.prevPos.copy(o.targetPos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
@@ -821,14 +852,17 @@ function setupDataChannel(e, t) {
                         if (targetWorld === worldName) {
                             let o = mobs.find((e => e.id === t.id));
                             if (!o) {
-                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType);
+                                o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
                                 mobs.push(o);
                                 o.pos.set(t.x, t.y, t.z);
                             }
+                            if (t.originSeed) o.originSeed = t.originSeed;
+                            if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             o.prevPos.copy(o.targetPos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
@@ -853,7 +887,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
-                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
+                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.originSeed && (d.originSeed = s.originSeed), s.spawnCommandKey && (d.spawnCommandKey = s.spawnCommandKey), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), void 0 !== s.isAggressive && (d.isAggressive = s.isAggressive), void 0 !== s.wasAttacked && (d.wasAttacked = s.wasAttacked), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
                     break;
                 case "mob_despawn":
                 case "mob_kill":
@@ -874,7 +908,7 @@ function setupDataChannel(e, t) {
                 case "mob_hit":
                     if (isHost) {
                         const e = mobs.find((e => e.id === s.id));
-                        e && e.hurt(s.damage || 4, s.username)
+                        e && (!e.spawnCommandKey || canRemoveFishSpawnCommand(e.spawnCommandKey, n)) && e.hurt(s.damage || 4, s.username)
                     }
                     break;
                 case "player_hit":
@@ -1481,7 +1515,9 @@ function setupDataChannel(e, t) {
                                         aiState: m.aiState,
                                         type: m.type,
                                         hp: m.hp,
-                                        isAggressive: m.isAggressive
+                                        isAggressive: m.isAggressive,
+                                        originSeed: m.originSeed,
+                                        spawnCommandKey: m.spawnCommandKey
                                     }))
                                 });
                                 peer.dc.send(mobBatchMsg);
@@ -1497,10 +1533,24 @@ function setupDataChannel(e, t) {
                                         z: m.z,
                                         type: m.mobType || m.type,
                                         hp: m.hp,
-                                        isAggressive: m.isAggressive
+                                        isAggressive: m.isAggressive,
+                                        originSeed: m.originSeed,
+                                        spawnCommandKey: m.spawnCommandKey
                                     }))
                                 });
                                 peer.dc.send(mobBatchMsg);
+                            }
+                            const commandState = WORLD_STATES.get(targetWorld);
+                            if (commandState && commandState.spawnCommands) {
+                                for (const command of commandState.spawnCommands.values()) {
+                                    peer.dc.send(JSON.stringify({
+                                        type: "fish_spawn_command",
+                                        world: targetWorld,
+                                        command,
+                                        fishType: command.type,
+                                        originSeed: command.originSeed
+                                    }));
+                                }
                             }
                         }
                     }
@@ -1630,7 +1680,8 @@ function setupDataChannel(e, t) {
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
                             const blockId = getBlockAt(s.x, s.y, s.z);
 
-                            chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
+                            const replacementBlockId = blockId === 136 ? 6 : BLOCK_AIR;
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
                             if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
 
                             // Renew or establish ownership on edit
@@ -1690,6 +1741,8 @@ function setupDataChannel(e, t) {
                                 x: s.x,
                                 y: s.y,
                                 z: s.z,
+                                blockId: blockId,
+                                replacementBlockId: replacementBlockId,
                                 username: s.username,
                                 world: s.world,
                                 originSeed: originSeed
@@ -1753,8 +1806,9 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         // Client receives authoritative block break from host
                         console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
-                        const blockId = getBlockAt(s.x, s.y, s.z);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
+                        const blockId = s.blockId === undefined ? getBlockAt(s.x, s.y, s.z) : s.blockId;
+                        const replacementBlockId = s.replacementBlockId === undefined ? BLOCK_AIR : s.replacementBlockId;
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
 
                         const blockKey = `${s.x},${s.y},${s.z}`;
                         if (s.originSeed) {

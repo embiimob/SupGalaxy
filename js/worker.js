@@ -128,7 +128,7 @@ const ARCHETYPES = {
         name: 'Earth',
         gravity: 16.0,
         skyType: 'earth',
-        mobSpawnRules: { day: ['bee'], night: ['crawley'] },
+        mobSpawnRules: { day: ['bee', 'fish_school', 'fish_rare', 'whale'], night: ['crawley', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: {},
         flora: ['trees', 'flowers', 'hives']
@@ -146,7 +146,7 @@ const ARCHETYPES = {
         name: 'Vulcan',
         gravity: 16.0,
         skyType: 'vulcan',
-        mobSpawnRules: { day: ['crawley', 'spider'], night: ['crawley', 'spider'] },
+        mobSpawnRules: { day: ['crawley', 'spider', 'fish_school', 'fish_rare', 'whale'], night: ['crawley', 'spider', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
         flora: []
@@ -155,7 +155,7 @@ const ARCHETYPES = {
         name: 'Desert',
         gravity: 16.0,
         skyType: 'desert',
-            mobSpawnRules: { day: ['grub'], night: ['crawley', 'grub'] },
+            mobSpawnRules: { day: ['grub', 'fish_school', 'fish_rare', 'whale'], night: ['crawley', 'grub', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateDesertTerrain',
         biomeModifications: { onlyDesert: true },
         flora: ['cactus']
@@ -164,7 +164,7 @@ const ARCHETYPES = {
         name: 'Massive',
         gravity: 30.0,
         skyType: 'earth',
-        mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
+        mobSpawnRules: { day: ['fish_school', 'fish_rare', 'whale'], night: ['bee', 'crawley', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: { largeBiomes: true },
         flora: ['trees', 'flowers', 'hives']
@@ -202,7 +202,7 @@ const BLOCKS = {
         111: { name: 'Crystal - Blue', color: '#6de0ff', transparent: true }, 112: { name: 'Crystal - Purple', color: '#b26eff', transparent: true },
         113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
         134: { name: 'Blue Calcite', color: '#4da6ff', light: true },
-        135: { name: 'Tree Seed', color: '#4a3c31' },
+        135: { name: 'Tree Seed', color: '#4a3c31' }, 136: { name: 'Seaweed', color: '#2b8a57' },
         115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
@@ -268,6 +268,40 @@ function fbm(noiseFn, x, y, oct, persistence) {
         return sum / max;
 }
 
+function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
+    const maxDepth = seaLevel === 32 ? 16 : 20;
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            let floorY = seaLevel;
+            while (floorY > 0 && chunkData[floorY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 6) floorY--;
+            const depth = seaLevel - floorY;
+            if (depth <= 10 || depth > maxDepth) continue;
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const patchRandom = makeSeededRandom(worldSeed + '_seaweed_' + wx + '_' + wz);
+            if (patchRandom() > 0.006) continue;
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    const px = lx + dx;
+                    const pz = lz + dz;
+                    if (px < 0 || px >= CHUNK_SIZE || pz < 0 || pz >= CHUNK_SIZE) continue;
+                    if ((dx || dz) && patchRandom() > 0.35) continue;
+                    let plantFloor = seaLevel;
+                    while (plantFloor > 0 && chunkData[plantFloor * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px] === 6) plantFloor--;
+                    const plantDepth = seaLevel - plantFloor;
+                    if (plantDepth <= 10 || plantDepth > maxDepth) continue;
+                    const growth = 1 + Math.floor(patchRandom() * 8);
+                    for (let dy = 1; dy <= growth && plantFloor + dy <= seaLevel; dy++) {
+                        const index = (plantFloor + dy) * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px;
+                        if (chunkData[index] !== 6) break;
+                        chunkData[index] = 136;
+                    }
+                }
+            }
+        }
+    }
+}
+
 function placeTree(chunkData, lx, cy, lz, rnd) {
         const treeHeight = 5 + Math.floor(rnd() * 6);
         const canopySize = 2 + Math.floor(rnd() * 2);
@@ -279,6 +313,7 @@ function placeTree(chunkData, lx, cy, lz, rnd) {
             if (cy + i < MAX_HEIGHT) {
                 chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = trunkBlock;
             }
+
         }
 
         // Canopy
@@ -392,6 +427,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
             else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
         }
     }
+    if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL);
 }
 
 function generateMoonTerrain(chunkData, chunkKey, archetype) {
@@ -568,6 +604,8 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             }
         }
     }
+
+    addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, 32);
 
     // After generating the terrain, scan for volcanoes
     const calderaThreshold = 50; // Min lava blocks to be considered a caldera
