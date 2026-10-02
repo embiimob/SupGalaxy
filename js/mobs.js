@@ -1011,9 +1011,10 @@ function updateAquaticMob(t, delta) {
                 if (surface) {
                     t.breach = true;
                     t.breachStart = now;
-                    t.breachEnd = now + 1700;
+                    t.breachEnd = now + 2000;
                     t.breachBaseY = t.pos.y;
                     t.breachSurfaceY = surface.surfaceY + 1;
+                    t.breachPeakY = t.breachSurfaceY + 5;
                     t.breachAt = now + 45000 + Math.random() * 90000;
                 } else {
                     t.breachAt = now + 15000;
@@ -1021,7 +1022,7 @@ function updateAquaticMob(t, delta) {
             }
             if (t.breach) {
                 const progress = Math.min(1, (now - t.breachStart) / (t.breachEnd - t.breachStart));
-                t.pos.y = t.breachBaseY + (t.breachSurfaceY + 4 - t.breachBaseY) * Math.sin(progress * Math.PI);
+                t.pos.y = t.breachBaseY + (t.breachPeakY - t.breachBaseY) * Math.sin(progress * Math.PI);
                 if (now >= t.breachEnd) {
                     t.breach = false;
                     t.pos.y = t.breachBaseY;

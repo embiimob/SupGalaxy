@@ -287,6 +287,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         136: {
             name: "Seaweed",
             color: "#2b8a57",
+            transparent: true,
             strength: 0.5,
             noShadow: true
         },
