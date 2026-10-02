@@ -397,8 +397,8 @@ Chunk.prototype.idx = function (e, t, o) {
                 const seaweedMaterial = new THREE.MeshLambertMaterial({
                     color: seaweedColor,
                     transparent: true,
-                    opacity: 0.68,
-                    depthWrite: false,
+                    opacity: 0.82,
+                    depthWrite: true,
                     side: THREE.DoubleSide
                 });
                 const seaweedMesh = new THREE.Mesh(seaweedGeometry, seaweedMaterial);
