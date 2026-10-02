@@ -234,7 +234,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             }
             const fishTraits = makeSeededRandom(this.originSeed + "_fish_traits_" + this.type + "_" + this.id);
             this.pattern = Math.floor(fishTraits() * 3);
-            this.isAggressive = fishTraits() < 0.04;
+            this.isAggressive = fishTraits() < (rare ? 0.2 : 0.06);
             this.body.material.map = createAquaticFishSkinTexture(this.originSeed, this.type, this.aquaticColor);
             this.body.material.color.set(0xffffff);
             this.body.material.needsUpdate = true;
@@ -902,7 +902,7 @@ function updateAquaticMob(t, delta) {
                         if (player.health <= 0) handlePlayerDeath();
                     }
                 }
-            } else if (!target && playerDistance < 9) {
+            } else if (!target && playerDistance < 4) {
                 const away = t.pos.clone().sub(new THREE.Vector3(nearestPlayer.x, nearestPlayer.y, nearestPlayer.z));
                 away.y = 0;
                 if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
@@ -1032,6 +1032,7 @@ function updateAquaticMob(t, delta) {
             type: t.type,
             hp: t.hp,
             isAggressive: t.isAggressive,
+            wasAttacked: t.wasAttacked,
             originSeed: t.originSeed,
             spawnCommandKey: t.spawnCommandKey
         });
