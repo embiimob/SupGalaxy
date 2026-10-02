@@ -31,9 +31,7 @@ function buildGreedyMesh(e, t, o) {
                         u = BLOCKS[s] || {},
                         p = !a || i.transparent;
                     let h = null;
-                    let shouldRender = p !== (!s || u.transparent);
-                    if (a === 6 && (s === 6 || (s !== 0 && u && !u.transparent))) shouldRender = false;
-                    if (shouldRender)
+                    if (p !== (!s || u.transparent))
                         if (p) {
                             const a = `${e.cx * CHUNK_SIZE + l[0] + d[0]},${l[1] + d[1]},${e.cz * CHUNK_SIZE + l[2] + d[2]}`;
                             h = `${s}-${t.get(a) || o}|-`
@@ -120,7 +118,7 @@ function buildGreedyMesh(e, t, o) {
                     });
                 }
             }
-            else if ([17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
+            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(t.blockId)) a = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -130,60 +128,6 @@ function buildGreedyMesh(e, t, o) {
                 thickness: 1.0,
                 side: THREE.FrontSide
             });
-            else if (t.blockId === 6) {
-                a = new THREE.MeshStandardMaterial({
-                    color: new THREE.Color(o.color),
-                    transparent: true,
-                    opacity: 0.7,
-                    roughness: 0.2,
-                    metalness: 0.1,
-                    side: THREE.FrontSide,
-                    depthWrite: false
-                });
-
-                a.onBeforeCompile = (shader) => {
-                    window.globalWaterTime = window.globalWaterTime || { value: 0 };
-                    shader.uniforms.time = window.globalWaterTime;
-
-                    shader.vertexShader = shader.vertexShader.replace(
-                        '#include <common>',
-                        `#include <common>
-                        uniform float time;
-                        varying vec3 vWaveWorldPosition;`
-                    );
-
-                    shader.vertexShader = shader.vertexShader.replace(
-                        '#include <begin_vertex>',
-                        `#include <begin_vertex>
-                        if (normal.y > 0.5) {
-                            float wave = sin(position.x * 2.0 + time * 3.0) * 0.1 + cos(position.z * 2.0 + time * 2.0) * 0.1;
-                            transformed.y += wave;
-                        }
-                        vec4 vWPos = modelMatrix * vec4(position, 1.0);
-                        vWaveWorldPosition = vWPos.xyz;`
-                    );
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <common>',
-                        `#include <common>
-                        uniform float time;
-                        varying vec3 vWaveWorldPosition;`
-                    );
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <normal_fragment_begin>',
-                        `#include <normal_fragment_begin>
-                        if (vWaveWorldPosition.y > 0.5) {
-                            float waveX = sin(vWaveWorldPosition.x * 2.0 + time * 3.0) * 0.3;
-                            float waveZ = cos(vWaveWorldPosition.z * 2.0 + time * 2.0) * 0.3;
-
-                            vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
-                            normal = normalize(normal + viewWaveNormal * 0.5);
-                        }`
-                    );
-                };
-            }
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -378,7 +322,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     });
                 }
             }
-            else if ([17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
+            else if ([6, 17, 100, 101, 102, 103, 104, 111, 112, 113, 114, 116, 117].includes(Number(w))) D = new THREE.MeshPhysicalMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
                 transmission: 0.9,
@@ -388,60 +332,6 @@ Chunk.prototype.idx = function (e, t, o) {
                 thickness: 1.0,
                 side: THREE.FrontSide
             });
-            else if (Number(w) === 6) {
-                D = new THREE.MeshStandardMaterial({
-                    color: new THREE.Color(K.color),
-                    transparent: true,
-                    opacity: 0.7,
-                    roughness: 0.2,
-                    metalness: 0.1,
-                    side: THREE.FrontSide,
-                    depthWrite: false
-                });
-
-                D.onBeforeCompile = (shader) => {
-                    window.globalWaterTime = window.globalWaterTime || { value: 0 };
-                    shader.uniforms.time = window.globalWaterTime;
-
-                    shader.vertexShader = shader.vertexShader.replace(
-                        '#include <common>',
-                        `#include <common>
-                        uniform float time;
-                        varying vec3 vWaveWorldPosition;`
-                    );
-
-                    shader.vertexShader = shader.vertexShader.replace(
-                        '#include <begin_vertex>',
-                        `#include <begin_vertex>
-                        if (normal.y > 0.5) {
-                            float wave = sin((position.x + modelMatrix[3][0]) * 2.0 + time * 3.0) * 0.1 + cos((position.z + modelMatrix[3][2]) * 2.0 + time * 2.0) * 0.1;
-                            transformed.y += wave;
-                        }
-                        vec4 vWPos = modelMatrix * vec4(position, 1.0);
-                        vWaveWorldPosition = vWPos.xyz;`
-                    );
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <common>',
-                        `#include <common>
-                        uniform float time;
-                        varying vec3 vWaveWorldPosition;`
-                    );
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <normal_fragment_begin>',
-                        `#include <normal_fragment_begin>
-                        if (vWaveWorldPosition.y > 0.5) {
-                            float waveX = sin(vWaveWorldPosition.x * 2.0 + time * 3.0) * 0.3;
-                            float waveZ = cos(vWaveWorldPosition.z * 2.0 + time * 2.0) * 0.3;
-
-                            vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
-                            vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
-                            normal = normalize(normal + viewWaveNormal * 0.5);
-                        }`
-                    );
-                };
-            }
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
