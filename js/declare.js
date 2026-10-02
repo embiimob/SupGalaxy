@@ -285,6 +285,18 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#4a3c31",
             strength: 1
         },
+        136: {
+            name: "Fish",
+            color: "#ff7f50",
+            strength: 1
+        },
+        137: {
+            name: "Seaweed",
+            color: "#2e8b57",
+            transparent: !0,
+            strength: 1,
+            noShadow: !0
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",

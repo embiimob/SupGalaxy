@@ -130,13 +130,28 @@ function createMobTexture(e, t, o = !1) {
     const s = r.getContext("2d"),
         i = makeSeededRandom(e + "_mob_texture_" + t);
     let l, d;
-    t.includes("body") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
+    t.includes("body") || t.includes("whale_angry") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
     const c = makeNoise(e + "_mob_pattern_" + t);
     for (let e = 0; e < 50; e++) {
         const e = Math.floor(i() * n),
             t = Math.floor(i() * n),
             o = c(e / n, t / n) > .5 ? d : l.clone().lerp(d, .5);
         s.fillStyle = o.getStyle(), s.fillRect(e, t, 1, 1)
+    }
+
+    if (t === "whale_angry") {
+        s.fillStyle = "#ff0000"; // red angry eyes
+        s.fillRect(4, 4, 2, 2);
+        s.fillRect(10, 4, 2, 2);
+        s.fillStyle = "#000000";
+        s.fillRect(3, 3, 2, 1);
+        s.fillRect(5, 4, 1, 1);
+        s.fillRect(11, 3, 2, 1);
+        s.fillRect(10, 4, 1, 1);
+        // mouth frown
+        s.fillRect(5, 10, 6, 2);
+        s.fillRect(4, 11, 2, 2);
+        s.fillRect(10, 11, 2, 2);
     }
     if (o) {
         const e = (new THREE.Color).setHSL(i(), .5 + .3 * i(), .2 + .2 * i());

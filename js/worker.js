@@ -131,7 +131,7 @@ const ARCHETYPES = {
         mobSpawnRules: { day: ['bee'], night: ['crawley'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: {},
-        flora: ['trees', 'flowers', 'hives']
+        flora: ['trees', 'flowers', 'hives', 'seaweed']
     },
     'Moon': {
         name: 'Moon',
@@ -149,7 +149,7 @@ const ARCHETYPES = {
         mobSpawnRules: { day: ['crawley', 'spider'], night: ['crawley', 'spider'] },
         terrainGenerator: 'generateVulcanTerrain',
         biomeModifications: { moreLava: true },
-        flora: []
+        flora: ['seaweed']
     },
     'Desert': {
         name: 'Desert',
@@ -167,7 +167,7 @@ const ARCHETYPES = {
         mobSpawnRules: { day: [], night: ['bee', 'crawley'] },
         terrainGenerator: 'generateStandardTerrain',
         biomeModifications: { largeBiomes: true },
-        flora: ['trees', 'flowers', 'hives']
+        flora: ['trees', 'flowers', 'hives', 'seaweed']
     }
 };
 
@@ -203,6 +203,8 @@ const BLOCKS = {
         113: { name: 'Crystal - Green', color: '#6fff91', transparent: true }, 114: { name: 'Light Block', color: '#fffacd', transparent: true },
         134: { name: 'Blue Calcite', color: '#4da6ff', light: true },
         135: { name: 'Tree Seed', color: '#4a3c31' },
+        136: { name: 'Fish', color: '#ff7f50' },
+        137: { name: 'Seaweed', color: '#2e8b57', transparent: true },
         115: { name: 'Glow Brick', color: '#f7cc5b' }, 116: { name: 'Dark Glass', color: '#3a3a3a', transparent: true },
         117: { name: 'Glass Tile', color: '#aeeaff', transparent: true }, 118: { name: 'Sandstone', color: '#e3c27d' },
         119: { name: 'Cobblestone', color: '#7d7d7d' },
@@ -313,6 +315,15 @@ function placeCactus(chunkData, lx, cy, lz, rnd) {
         for (var i = 0; i < h; i++) if (cy + i < MAX_HEIGHT) chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 9;
 }
 
+function placeSeaweed(chunkData, lx, cy, lz, rnd) {
+    const h = 1 + Math.floor(rnd() * 12);
+    for (let i = 0; i < h; i++) {
+        if (cy + i < SEA_LEVEL) {
+            chunkData[(cy + i) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 137;
+        }
+    }
+}
+
 function placeHive(chunkData, lx, cy, lz, wx, wz) {
     const hiveHeight = 2 + Math.floor(Math.random() * 2);
     for (let i = 0; i < hiveHeight; i++) {
@@ -390,6 +401,17 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
             else if (archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
             else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
             else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+
+            if (archetype.flora.includes('seaweed') && height < SEA_LEVEL - 11) {
+                if (chunkRnd() < 0.2) {
+                    placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
+                } else if (lx > 0 && lz > 0 && chunkRnd() < 0.8) {
+                    if (chunkData[(height + 1) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + (lx - 1)] === 137 ||
+                        chunkData[(height + 1) * CHUNK_SIZE * CHUNK_SIZE + (lz - 1) * CHUNK_SIZE + lx] === 137) {
+                        placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
+                    }
+                }
+            }
         }
     }
 }
@@ -563,6 +585,18 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
                     // Convert the top layers to sand to create the beach.
                      for (let y = height; y > height - 4 && y > 0; y--) {
                         chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 5; // Sand
+                    }
+                }
+            }
+
+            const chunkRnd = makeSeededRandom(chunkKey + "_" + lx + "_" + lz);
+            if (archetype.flora.includes('seaweed') && height < VULCAN_SEA_LEVEL - 11) {
+                if (chunkRnd() < 0.2) {
+                    placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
+                } else if (lx > 0 && lz > 0 && chunkRnd() < 0.8) {
+                    if (chunkData[(height + 1) * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + (lx - 1)] === 137 ||
+                        chunkData[(height + 1) * CHUNK_SIZE * CHUNK_SIZE + (lz - 1) * CHUNK_SIZE + lx] === 137) {
+                        placeSeaweed(chunkData, lx, height + 1, lz, chunkRnd);
                     }
                 }
             }
