@@ -32,6 +32,7 @@ function buildGreedyMesh(e, t, o) {
                         p = !a || i.transparent;
                     let h = null;
                     let shouldRender = p !== (!s || u.transparent);
+                    if (a === 6 && s === 136) shouldRender = false;
                     if (a === 6 && (s === 6 || (s !== 0 && u && !u.transparent))) shouldRender = false;
                     if (shouldRender)
                         if (p) {
@@ -324,6 +325,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     var M = f[v],
                         S = this.getBlockGlobal(e.cx, e.cz, d + M.x, u + M.y, c + M.z);
                     if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S) {
+                        if (w === 6 && S === 136) continue;
                         if (w === 6 && (S === 6 || (S !== BLOCK_AIR && BLOCKS[S] && !BLOCKS[S].transparent))) continue;
                         E |= (1 << v);
                     }
