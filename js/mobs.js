@@ -1,6 +1,40 @@
-function Mob(t, e, s, i = "crawley") {
+function isAquaticMobType(type) {
+    return type === "fish_rare" || type === "fish_school" || type === "whale";
+}
+
+function findAquaticSpawnPosition(x, z, type) {
+    const minimumDepth = type === "whale" ? 11 : 3;
+    const wx = modWrap(Math.floor(x), MAP_SIZE);
+    const wz = modWrap(Math.floor(z), MAP_SIZE);
+    let surfaceY = -1;
+    for (let y = Math.min(MAX_HEIGHT - 1, 63); y > 0; y--) {
+        if (getBlockAt(wx, y, wz) === 6 || getBlockAt(wx, y, wz) === 136) {
+            surfaceY = y;
+            break;
+        }
+    }
+    if (surfaceY < 1) return null;
+    let floorY = surfaceY;
+    while (floorY > 0 && (getBlockAt(wx, floorY, wz) === 6 || getBlockAt(wx, floorY, wz) === 136)) floorY--;
+    const depth = surfaceY - floorY;
+    if (depth < minimumDepth) return null;
+    const swimY = Math.max(floorY + 1, surfaceY - 1 - Math.floor(Math.random() * Math.max(1, depth - 1)));
+    return { x: wx + 0.5, y: swimY + 0.5, z: wz + 0.5, surfaceY };
+}
+
+function nearestAquaticSpawnPosition(x, z, type) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = attempt === 0 ? 0 : 4 + Math.random() * 28;
+        const position = findAquaticSpawnPosition(x + Math.cos(angle) * distance, z + Math.sin(angle) * distance, type);
+        if (position) return position;
+    }
+    return null;
+}
+
+function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    let yPos = i === "ufo_saucer" ? 220 : chunkManager.getSurfaceY(t, e) + 1;
+    let yPos = i === "ufo_saucer" ? 220 : isAquaticMobType(i) && aquaticY !== null ? aquaticY : chunkManager.getSurfaceY(t, e) + 1;
     if (i === "spider") {
         yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
         // Check if spawn was in sky
@@ -9,9 +43,105 @@ function Mob(t, e, s, i = "crawley") {
              this.invalidSpawn = true; // Flag for instant death
         }
     }
-    if (this.id = s || Date.now(), this.type = i, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    if (this.id = s || Date.now(), this.type = i, this.originSeed = originSeed || worldSeed, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
+    } else if (isAquaticMobType(this.type)) {
+        this.mesh = new THREE.Group();
+        const variant = makeSeededRandom(this.originSeed + "_aquatic_look_" + this.type)();
+        const palette = this.type === "whale"
+            ? [0x74c8e8, 0x8d9fe5, 0xe49bc8, 0x88d4bd, 0xf0b87d]
+            : this.type === "fish_rare"
+                ? [0xff8cb8, 0xffd166, 0xa98bff, 0x75d6b5, 0xff9870]
+                : [0x39b9d3, 0x6588e8, 0xf083aa, 0x70c77b, 0xe5a544];
+        this.aquaticColor = palette[Math.floor(variant * palette.length)];
+        const bodyMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
+        const bellyMaterial = new THREE.MeshLambertMaterial({ color: 0xffe7d7 });
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x111522 });
+        const shineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const finMaterial = new THREE.MeshLambertMaterial({ color: this.aquaticColor });
+        if (this.type === "whale") {
+            this.hp = 40;
+            this.speed = 0.018 + 0.004 * Math.random();
+            this.isAggressive = false;
+            this.breachAt = Date.now() + 30000 + Math.random() * 60000;
+            this.body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), bodyMaterial);
+            this.body.scale.set(4.2, 2.5, 8.5);
+            this.mesh.add(this.body);
+            const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), bellyMaterial);
+            belly.scale.set(3.7, 1.7, 7.4);
+            belly.position.y = -0.7;
+            this.mesh.add(belly);
+            this.tail = new THREE.Group();
+            const tailStem = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 2.2), bodyMaterial);
+            tailStem.position.z = -1;
+            this.tail.add(tailStem);
+            for (const side of [-1, 1]) {
+                const fluke = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, 3.4), finMaterial);
+                fluke.position.set(side * 1.35, 0.15, -2.1);
+                fluke.rotation.y = side * 0.18;
+                this.tail.add(fluke);
+            }
+            this.tail.position.z = -8;
+            this.mesh.add(this.tail);
+            this.fins = [];
+            for (const side of [-1, 1]) {
+                const fin = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 3), finMaterial);
+                fin.position.set(side * 3.7, -0.5, 1);
+                fin.rotation.y = side * 0.25;
+                fin.rotation.z = side * 0.2;
+                this.mesh.add(fin);
+                this.fins.push(fin);
+            }
+            this.spout = new THREE.Group();
+            const spray = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.5, 6), new THREE.MeshLambertMaterial({ color: 0xa9edff, transparent: true, opacity: 0.75 }));
+            spray.position.y = 1.25;
+            this.spout.add(spray);
+            this.spout.position.set(0, 2.3, 3.7);
+            this.mesh.add(this.spout);
+            this.spout.visible = false;
+            this.breach = false;
+            this.breachEnd = 0;
+            this.waterSurfaceY = yPos;
+            this.hp = 40;
+        } else {
+            const rare = this.type === "fish_rare";
+            this.hp = rare ? 12 : 8;
+            this.speed = rare ? 0.045 : 0.035;
+            const body = new THREE.Mesh(new THREE.SphereGeometry(rare ? 0.58 : 0.42, 8, 6), bodyMaterial);
+            body.scale.set(rare ? 0.9 : 0.72, 0.68, rare ? 1.15 : 1.35);
+            this.mesh.add(body);
+            const belly = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 5), bellyMaterial);
+            belly.scale.set(0.65, 0.35, 1.15);
+            belly.position.y = -0.22;
+            this.mesh.add(belly);
+            this.tail = new THREE.Group();
+            const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.75, 0.75), finMaterial);
+            tailFin.position.z = -0.42;
+            this.tail.add(tailFin);
+            this.tail.position.z = -0.75;
+            this.mesh.add(this.tail);
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.55), finMaterial);
+            fin.position.set(0, 0.48, -0.05);
+            this.mesh.add(fin);
+            this.fins = [fin];
+            this.mesh.eyes = [];
+            for (const side of [-1, 1]) {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), eyeMaterial);
+                eye.position.set(side * 0.24, 0.11, 0.4);
+                this.mesh.add(eye);
+                const shine = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), shineMaterial);
+                shine.position.set(side * 0.24 - 0.025, 0.15, 0.49);
+                this.mesh.add(shine);
+                this.mesh.eyes.push(eye);
+            }
+            if (rare) {
+                const crest = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.45, 5), finMaterial);
+                crest.position.set(0, 0.58, -0.05);
+                this.mesh.add(crest);
+            }
+            this.isAggressive = false;
+        }
     } else if ("ufo_saucer" === this.type) {
         this.isAggressive = !0;
     } else if ("spider" === this.type) {
@@ -436,6 +566,13 @@ function manageMobs() {
         return true;
     });
 
+    for (const [key, command] of getCurrentWorldState().spawnCommands) {
+        const mobId = `fish-command:${worldName}:${key}`;
+        if (mobs.some(mob => mob.id === mobId)) continue;
+        const ownerArea = mySpawningAreas.find(area => area.players.some(p => Math.hypot(command.x - p.x, command.z - p.z) < 96));
+        if (ownerArea) applyFishSpawnCommand(command);
+    }
+
     // Spawn new mobs for our active areas
     for (const area of mySpawningAreas) {
         for (const type of allowedTypes) {
@@ -444,10 +581,15 @@ function manageMobs() {
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
             else if ("spider" === type) maxCount = 6;
+            else if ("fish_school" === type) maxCount = 12;
+            else if ("fish_rare" === type) maxCount = 1;
+            else if ("whale" === type) maxCount = 3;
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
             } else continue;
+            if (type === "fish_rare" && Math.random() > 0.12) continue;
+            if (type === "whale" && Math.random() > 0.025) continue;
 
             // Count mobs of this type in this specific area
             let countInArea = 0;
@@ -475,12 +617,19 @@ function manageMobs() {
                     spawnZ = modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE);
                 }
 
-                const newMob = new Mob(
-                    spawnX,
-                    spawnZ,
-                    Date.now() + Math.random(),
-                    type
-                );
+                let aquaticSpawn = null;
+                if (isAquaticMobType(type)) {
+                    const spawnPlayer = area.players[Math.floor(Math.random() * area.players.length)];
+                    aquaticSpawn = nearestAquaticSpawnPosition(spawnPlayer.x, spawnPlayer.z, type);
+                    if (!aquaticSpawn) continue;
+                    spawnX = aquaticSpawn.x;
+                    spawnZ = aquaticSpawn.z;
+                }
+                const newMob = new Mob(spawnX, spawnZ, Date.now() + Math.random(), type, aquaticSpawn && aquaticSpawn.y);
+                if (aquaticSpawn) {
+                    newMob.spawner = userName;
+                    newMob.waterSurfaceY = aquaticSpawn.surfaceY;
+                }
                 mobs.push(newMob);
 
                 if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
@@ -494,7 +643,8 @@ function manageMobs() {
                     aiState: newMob.aiState,
                     type: newMob.type,
                     hp: newMob.hp,
-                    isAggressive: newMob.isAggressive
+                    isAggressive: newMob.isAggressive,
+                    originSeed: newMob.originSeed
                 });
 
                 const spawnMsg = JSON.stringify({
@@ -506,6 +656,7 @@ function manageMobs() {
                     hp: newMob.hp,
                     mobType: newMob.type,
                     isAggressive: newMob.isAggressive,
+                    originSeed: newMob.originSeed,
                     world: worldName,
                     username: userName
                 });
@@ -533,6 +684,10 @@ function manageMobs() {
 
 function handleMobHit(t) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
+        addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
+        return;
+    }
     // We shouldn't set lastMoveTime here, we do it in projectile logic (main.js). If we do it here, it will trigger for anyone handling the hit, not just the user.
     if (isLocalSpawner) {
         t.hurt(4, userName);
@@ -552,7 +707,175 @@ function handleMobHit(t) {
     }
     safePlayAudio(soundHit), addMessage("Hit mob!", 800)
 }
+function updateAquaticMob(t, delta) {
+    const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    const now = Date.now();
+    t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
+    if (!isLocalSpawner) {
+        if (t.lastUpdateTime > 0) {
+            const blend = Math.min(1, (performance.now() - t.lastUpdateTime) / 300);
+            t.pos.copy(t.prevPos).lerp(t.targetPos, blend);
+            if (t.lastQuaternionUpdate > 0) {
+                const quaternionBlend = Math.min(1, (performance.now() - t.lastQuaternionUpdate) / 300);
+                t.mesh.quaternion.copy(t.prevQuaternion).slerp(t.targetQuaternion, quaternionBlend);
+            }
+        } else {
+            t.pos.copy(t.targetPos);
+        }
+    } else {
+        let target = null;
+        if (t.type === "whale") {
+            if (t.wasAttacked) {
+                const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+                for (const [name, pos] of Object.entries(userPositions)) {
+                    if (pos.world === worldName && pos.targetX !== undefined) {
+                        candidates.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                    }
+                }
+                candidates.sort((a, b) => Math.hypot(a.x - t.pos.x, a.y - t.pos.y, a.z - t.pos.z) - Math.hypot(b.x - t.pos.x, b.y - t.pos.y, b.z - t.pos.z));
+                target = candidates[0] || null;
+                if (target && Math.hypot(target.x - t.pos.x, target.y - t.pos.y, target.z - t.pos.z) < 3 && now - t.attackCooldown > 1400) {
+                    t.attackCooldown = now;
+                    const peer = peers.get(target.name);
+                    if (target.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 2, attacker: "whale" }));
+                    } else if (target.name === userName) {
+                        player.health = Math.max(0, player.health - 2);
+                        lastDamageTime = now;
+                        updateHealthBar();
+                        const healthElement = document.getElementById("health");
+                        if (healthElement) healthElement.innerText = player.health;
+                        addMessage("Bonked by a whale! HP: " + player.health, 1200);
+                        if (player.health <= 0) handlePlayerDeath();
+                    }
+                }
+            } else {
+                const prey = mobs.filter(m => m.type === "fish_school" || m.type === "fish_rare");
+                prey.sort((a, b) => t.pos.distanceTo(a.pos) - t.pos.distanceTo(b.pos));
+                const fish = prey[0];
+                if (fish && t.pos.distanceTo(fish.pos) < 48) {
+                    target = fish.pos;
+                    if (t.pos.distanceTo(fish.pos) < 1.8 && now - (t.lastMealTime || 0) > 3000) {
+                        t.lastMealTime = now;
+                        fish.die("whale");
+                    }
+                }
+            }
+        } else if (t.type === "fish_school") {
+            const schoolmates = mobs.filter(m => m !== t && m.type === "fish_school" && t.pos.distanceTo(m.pos) < 14);
+            if (schoolmates.length) {
+                target = new THREE.Vector3();
+                for (const mate of schoolmates) target.add(mate.pos);
+                target.multiplyScalar(1 / schoolmates.length);
+            }
+        }
+
+        if (!target) {
+            if (!t.nextWanderChange || now > t.nextWanderChange) {
+                t.nextWanderChange = now + 1800 + Math.random() * 3800;
+                const angle = Math.random() * Math.PI * 2;
+                t.wanderDirection = new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle)).normalize();
+            }
+            target = t.pos.clone().add((t.wanderDirection || new THREE.Vector3(1, 0, 0)).clone().multiplyScalar(8));
+        }
+
+        if (target && t.type === "whale" && !t.wasAttacked && (target.x === undefined || target.distanceTo)) {
+            if (target.distanceTo && target.distanceTo(t.pos) < 1.8) target = null;
+        }
+        if (target && target.x !== undefined) {
+            const dx = target.x - t.pos.x;
+            const dz = target.z - t.pos.z;
+            const distance = Math.hypot(dx, dz);
+            if (distance > 0.1) {
+                const speed = t.speed * delta * 60;
+                const nx = modWrap(t.pos.x + dx / distance * speed, MAP_SIZE);
+                const nz = modWrap(t.pos.z + dz / distance * speed, MAP_SIZE);
+                const directionY = target.y === undefined ? Math.sin(t.animationTime * 0.35) * 0.25 : Math.sign(target.y - t.pos.y) * 0.35;
+                const ny = t.pos.y + directionY * delta * 60;
+                const targetBlock = getBlockAt(nx, ny, nz);
+                const nextY = targetBlock === 6 || targetBlock === 136 ? ny : t.pos.y;
+                const horizontalBlock = getBlockAt(nx, nextY, nz);
+                if (horizontalBlock === 6 || horizontalBlock === 136) {
+                    t.pos.set(nx, nextY, nz);
+                    t.mesh.rotation.y = Math.atan2(dx, dz);
+                    t.isMoving = true;
+                } else {
+                    t.wanderDirection = new THREE.Vector3(-dz, (Math.random() - 0.5) * 0.5, dx).normalize();
+                    t.isMoving = false;
+                }
+            }
+        }
+
+        if (t.type === "whale") {
+            if (!t.nextSpout || now > t.nextSpout) {
+                t.spoutUntil = now + 1100;
+                t.nextSpout = now + 45000 + Math.random() * 50000;
+            }
+            t.spout.visible = now < t.spoutUntil;
+            if (!t.breach && now >= t.breachAt) {
+                const surface = findAquaticSpawnPosition(t.pos.x, t.pos.z, "fish_school");
+                if (surface) {
+                    t.breach = true;
+                    t.breachStart = now;
+                    t.breachEnd = now + 1700;
+                    t.breachBaseY = t.pos.y;
+                    t.breachSurfaceY = surface.surfaceY + 1;
+                    t.breachAt = now + 45000 + Math.random() * 90000;
+                } else {
+                    t.breachAt = now + 15000;
+                }
+            }
+            if (t.breach) {
+                const progress = Math.min(1, (now - t.breachStart) / (t.breachEnd - t.breachStart));
+                t.pos.y = t.breachBaseY + (t.breachSurfaceY + 4 - t.breachBaseY) * Math.sin(progress * Math.PI);
+                if (now >= t.breachEnd) {
+                    t.breach = false;
+                    t.pos.y = t.breachBaseY;
+                }
+            }
+            t.tail.rotation.y = Math.sin(t.animationTime * 2.5) * 0.45;
+            t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.18 + Math.sin(t.animationTime * 2) * 0.12));
+        } else {
+            t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
+            t.fins[0].rotation.x = Math.sin(t.animationTime * 1.8) * 0.2;
+            t.mesh.position.y = t.pos.y + Math.sin(t.animationTime * 1.5) * 0.08;
+        }
+    }
+
+    if (t.type === "whale") {
+        t.tail.rotation.y = Math.sin(t.animationTime * 2.5) * 0.45;
+    } else {
+        t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
+    }
+    t.mesh.position.set(t.pos.x, t.pos.y + (t.type === "whale" ? 0 : Math.sin(t.animationTime * 1.5) * 0.08), t.pos.z);
+    const moved = t.pos.distanceTo(t.lastSentPos) > 0.1;
+    const rotated = t.mesh.quaternion.angleTo(t.lastSentQuaternion) > 0.01;
+    if (isLocalSpawner && (moved || rotated || t.lastSentOriginSeed !== t.originSeed)) {
+        if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+        window.mobUpdateQueue.push({
+            id: t.id,
+            x: t.pos.x,
+            y: t.pos.y,
+            z: t.pos.z,
+            quaternion: t.mesh.quaternion.toArray(),
+            isMoving: t.isMoving,
+            aiState: t.aiState,
+            type: t.type,
+            hp: t.hp,
+            isAggressive: t.isAggressive,
+            originSeed: t.originSeed,
+            spawnCommandKey: t.spawnCommandKey
+        });
+        t.lastSentPos.copy(t.pos);
+        t.lastSentQuaternion.copy(t.mesh.quaternion);
+        t.lastSentOriginSeed = t.originSeed;
+    }
+}
 Mob.prototype.update = function (t) {
+    if (isAquaticMobType(this.type)) {
+        updateAquaticMob(this, t);
+        return;
+    }
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
 
@@ -1404,6 +1727,10 @@ Mob.prototype.update = function (t) {
 }, Mob.prototype.hurt = function (t, e) {
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
     if (!isLocalSpawner) return;
+    if (this.type === "whale") {
+        this.wasAttacked = true;
+        this.isAggressive = true;
+    }
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
     const s = e === userName ? player : userPositions[e];
     if (s) {
@@ -1463,7 +1790,28 @@ Mob.prototype.update = function (t) {
     if (this.engineAudio2) {
         this.engineAudio2.pause();
     }
+    if (this.spawnCommandKey && typeof removeFishSpawnCommandByKey === "function") {
+        removeFishSpawnCommandByKey(this.spawnCommandKey);
+    }
     mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
+    const isFish = this.type === "fish_rare" || this.type === "fish_school";
+    if (isFish && t !== "whale") {
+        const fishItemId = this.type === "fish_rare" ? 137 : 138;
+        if (t === userName) {
+            addToInventory(fishItemId, 1, this.originSeed);
+            addMessage(`Caught ${BLOCKS[fishItemId].name} from ${this.originSeed}!`, 2500);
+        } else if (t) {
+            const peer = peers.get(t);
+            if (peer && peer.dc && peer.dc.readyState === "open") {
+                peer.dc.send(JSON.stringify({
+                    type: "add_to_inventory",
+                    blockId: fishItemId,
+                    count: 1,
+                    originSeed: this.originSeed
+                }));
+            }
+        }
+    }
     let e = 10;
     if ("ufo_saucer" === this.type) {
         e = 1000;
@@ -1514,7 +1862,8 @@ Mob.prototype.update = function (t) {
     }
     const s = JSON.stringify({
         type: "mob_kill",
-        id: this.id
+        id: this.id,
+        world: worldName
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)
 

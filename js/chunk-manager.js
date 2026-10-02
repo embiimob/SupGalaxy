@@ -356,6 +356,49 @@ Chunk.prototype.idx = function (e, t, o) {
                 H = [],
                 N = [],
                 R = 0;
+            if (Number(w) === 136) {
+                for (const B of e.positions) {
+                    const phase = Math.sin(B.x * 0.7 + B.z * 0.4) * 0.12;
+                    for (let blade = 0; blade < 3; blade++) {
+                        const angle = blade * Math.PI / 3 + phase;
+                        const sideX = -Math.sin(angle);
+                        const sideZ = Math.cos(angle);
+                        for (let segment = 0; segment < 3; segment++) {
+                            const y0 = segment / 3;
+                            const y1 = (segment + 1) / 3;
+                            const bend0 = Math.sin((y0 + phase) * Math.PI) * 0.22;
+                            const bend1 = Math.sin((y1 + phase) * Math.PI) * 0.22;
+                            const width0 = 0.13 * (1 - y0 * 0.55);
+                            const width1 = 0.13 * (1 - y1 * 0.55);
+                            const centerX0 = B.x + 0.5 + Math.cos(angle) * bend0;
+                            const centerZ0 = B.z + 0.5 + Math.sin(angle) * bend0;
+                            const centerX1 = B.x + 0.5 + Math.cos(angle) * bend1;
+                            const centerZ1 = B.z + 0.5 + Math.sin(angle) * bend1;
+                            T.push(
+                                centerX0 - sideX * width0, B.y + y0, centerZ0 - sideZ * width0,
+                                centerX0 + sideX * width0, B.y + y0, centerZ0 + sideZ * width0,
+                                centerX1 - sideX * width1, B.y + y1, centerZ1 - sideZ * width1,
+                                centerX1 + sideX * width1, B.y + y1, centerZ1 + sideZ * width1
+                            );
+                            N.push(R, R + 2, R + 1, R + 2, R + 3, R + 1);
+                            R += 4;
+                        }
+                    }
+                }
+                const seaweedGeometry = new THREE.BufferGeometry();
+                seaweedGeometry.setAttribute("position", new THREE.Float32BufferAttribute(T, 3));
+                seaweedGeometry.setIndex(N);
+                seaweedGeometry.computeVertexNormals();
+                const seaweedMaterial = new THREE.MeshLambertMaterial({
+                    color: new THREE.Color((BLOCKS[w] || {}).color || "#2b8a57"),
+                    side: THREE.DoubleSide
+                });
+                const seaweedMesh = new THREE.Mesh(seaweedGeometry, seaweedMaterial);
+                seaweedMesh.castShadow = false;
+                seaweedMesh.receiveShadow = false;
+                I.add(seaweedMesh);
+                continue;
+            }
             for (var B of e.positions) {
                 var P = x.attributes.position.array, A = x.attributes.normal.array, L = x.attributes.uv.array, O = x.index.array;
                 for (let face = 0; face < 6; face++) {

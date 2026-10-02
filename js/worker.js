@@ -268,6 +268,37 @@ function fbm(noiseFn, x, y, oct, persistence) {
         return sum / max;
 }
 
+function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+            let floorY = seaLevel;
+            while (floorY > 0 && chunkData[floorY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 6) floorY--;
+            if (floorY >= seaLevel - 10) continue;
+            const wx = baseX + lx;
+            const wz = baseZ + lz;
+            const patchRandom = makeSeededRandom(worldSeed + '_seaweed_' + wx + '_' + wz);
+            if (patchRandom() > 0.004) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    const px = lx + dx;
+                    const pz = lz + dz;
+                    if (px < 0 || px >= CHUNK_SIZE || pz < 0 || pz >= CHUNK_SIZE) continue;
+                    if ((dx || dz) && patchRandom() > 0.58) continue;
+                    let plantFloor = seaLevel;
+                    while (plantFloor > 0 && chunkData[plantFloor * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px] === 6) plantFloor--;
+                    if (plantFloor >= seaLevel - 10) continue;
+                    const growth = 1 + Math.floor(patchRandom() * 8);
+                    for (let dy = 1; dy <= growth && plantFloor + dy <= seaLevel; dy++) {
+                        const index = (plantFloor + dy) * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px;
+                        if (chunkData[index] !== 6) break;
+                        chunkData[index] = 136;
+                    }
+                }
+            }
+        }
+    }
+}
+
 function placeTree(chunkData, lx, cy, lz, rnd) {
         const treeHeight = 5 + Math.floor(rnd() * 6);
         const canopySize = 2 + Math.floor(rnd() * 2);
@@ -393,36 +424,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
             else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
         }
     }
-    if (!archetype.biomeModifications.noWater) {
-        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-                let floorY = SEA_LEVEL;
-                while (floorY > 0 && chunkData[floorY * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] === 6) floorY--;
-                if (floorY >= SEA_LEVEL - 10) continue;
-                const wx = baseX + lx;
-                const wz = baseZ + lz;
-                const patchRandom = makeSeededRandom(worldSeed + '_seaweed_' + wx + '_' + wz);
-                if (patchRandom() > 0.004) continue;
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dz = -1; dz <= 1; dz++) {
-                        const px = lx + dx;
-                        const pz = lz + dz;
-                        if (px < 0 || px >= CHUNK_SIZE || pz < 0 || pz >= CHUNK_SIZE) continue;
-                        if ((dx || dz) && patchRandom() > 0.58) continue;
-                        let plantFloor = SEA_LEVEL;
-                        while (plantFloor > 0 && chunkData[plantFloor * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px] === 6) plantFloor--;
-                        if (plantFloor >= SEA_LEVEL - 10) continue;
-                        const growth = 1 + Math.floor(patchRandom() * 8);
-                        for (let dy = 1; dy <= growth && plantFloor + dy <= SEA_LEVEL; dy++) {
-                            const index = (plantFloor + dy) * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px;
-                            if (chunkData[index] !== 6) break;
-                            chunkData[index] = 136;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL);
 }
 
 function generateMoonTerrain(chunkData, chunkKey, archetype) {
@@ -599,6 +601,8 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             }
         }
     }
+
+    addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, 32);
 
     // After generating the terrain, scan for volcanoes
     const calderaThreshold = 50; // Min lava blocks to be considered a caldera
