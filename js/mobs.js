@@ -25,7 +25,9 @@ function findAquaticSpawnPosition(x, z, type) {
 function nearestAquaticSpawnPosition(x, z, type) {
     for (let attempt = 0; attempt < 20; attempt++) {
         const angle = Math.random() * Math.PI * 2;
-        const distance = attempt === 0 ? 0 : 4 + Math.random() * 28;
+        const distance = type === "fish_school"
+            ? 48 + Math.random() * 48
+            : attempt === 0 ? 0 : 4 + Math.random() * 28;
         const position = findAquaticSpawnPosition(x + Math.cos(angle) * distance, z + Math.sin(angle) * distance, type);
         if (position) return position;
     }
@@ -120,16 +122,22 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             belly.position.y = -0.7;
             this.mesh.add(belly);
             this.tail = new THREE.Group();
-            const tailStem = new THREE.Mesh(new THREE.BoxGeometry(1, 0.75, 2.2), bodyMaterial);
-            tailStem.position.z = -0.65;
-            this.tail.add(tailStem);
-            for (const side of [-1, 1]) {
-                const fluke = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 5.4), finMaterial);
-                fluke.position.set(side * 1.85, 0.2, -2.1);
-                fluke.rotation.y = side * 0.24;
-                fluke.rotation.x = -0.12;
-                this.tail.add(fluke);
-            }
+            const flukeShape = new THREE.Shape();
+            flukeShape.moveTo(0, 0.5);
+            flukeShape.quadraticCurveTo(1.2, 0.65, 2.7, 1.25);
+            flukeShape.quadraticCurveTo(3.5, 1.55, 3.8, 1.15);
+            flukeShape.quadraticCurveTo(3.45, 0.4, 3.1, -0.15);
+            flukeShape.quadraticCurveTo(2.25, -0.2, 1.55, 0.3);
+            flukeShape.quadraticCurveTo(0.7, -0.45, 0, -0.55);
+            flukeShape.quadraticCurveTo(-0.7, -0.45, -1.55, 0.3);
+            flukeShape.quadraticCurveTo(-2.25, -0.2, -3.1, -0.15);
+            flukeShape.quadraticCurveTo(-3.45, 0.4, -3.8, 1.15);
+            flukeShape.quadraticCurveTo(-3.5, 1.55, -2.7, 1.25);
+            flukeShape.quadraticCurveTo(-1.2, 0.65, 0, 0.5);
+            flukeShape.closePath();
+            const fluke = new THREE.Mesh(new THREE.ShapeGeometry(flukeShape), new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
+            fluke.rotation.x = -Math.PI / 2;
+            this.tail.add(fluke);
             this.tail.position.z = -6.4;
             this.mesh.add(this.tail);
             const whaleEyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -244,7 +252,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             }
             const fishTraits = makeSeededRandom(this.originSeed + "_fish_traits_" + this.type + "_" + this.id);
             this.pattern = Math.floor(fishTraits() * 3);
-            this.isAggressive = fishTraits() < (rare ? 0.2 : 0.06);
+            this.isAggressive = rare && fishTraits() < 0.2;
             this.size = rare ? 1 : 0.6 + fishTraits() * 0.9;
             if (!rare) this.mesh.scale.setScalar(this.size);
             this.body.material.map = createAquaticFishSkinTexture(this.originSeed, this.type, this.aquaticColor);
@@ -695,7 +703,7 @@ function manageMobs() {
             else if ("bee" === type) maxCount = 8;
             else if ("grub" === type) maxCount = 2;
             else if ("spider" === type) maxCount = 6;
-            else if ("fish_school" === type) maxCount = 12;
+            else if ("fish_school" === type) maxCount = 6;
             else if ("fish_rare" === type) maxCount = 1;
             else if ("whale" === type) maxCount = 3;
             else if ("ufo_saucer" === type) {
@@ -838,6 +846,7 @@ function updateAquaticMob(t, delta) {
         }
     } else {
         let target = null;
+        let curiousAboutPlayer = false;
         if (t.type === "whale") {
             if (t.wasAttacked) {
                 const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z }];
@@ -864,14 +873,14 @@ function updateAquaticMob(t, delta) {
                     }
                 }
             } else {
-                const prey = mobs.filter(m => m.type === "fish_school" || m.type === "fish_rare");
+                const prey = mobs.filter(m => m.type === "fish_school" || m.type === "fish_rare" || m.type === "crawley");
                 prey.sort((a, b) => t.pos.distanceTo(a.pos) - t.pos.distanceTo(b.pos));
-                const fish = prey[0];
-                if (fish && t.pos.distanceTo(fish.pos) < 48) {
-                    target = fish.pos;
-                    if (t.pos.distanceTo(fish.pos) < 1.8 && now - (t.lastMealTime || 0) > 3000) {
+                const meal = prey.find(mob => t.pos.distanceTo(mob.pos) < (mob.type === "crawley" ? 32 : 48));
+                if (meal) {
+                    target = meal.pos;
+                    if (t.pos.distanceTo(meal.pos) < (meal.type === "crawley" ? 4.5 : 1.8) && now - (t.lastMealTime || 0) > 3000) {
                         t.lastMealTime = now;
-                        fish.die("whale");
+                        meal.die("whale");
                     }
                 }
             }
@@ -914,7 +923,13 @@ function updateAquaticMob(t, delta) {
                         if (player.health <= 0) handlePlayerDeath();
                     }
                 }
-            } else if (!target && playerDistance < (t.type === "fish_school" ? 2 : 4)) {
+            } else if (!target && t.type === "fish_school" && playerDistance > 4 && playerDistance < 9) {
+                const away = new THREE.Vector3(t.pos.x - nearestPlayer.x, 0, t.pos.z - nearestPlayer.z);
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                away.normalize();
+                target = { x: nearestPlayer.x + away.x * 6, y: nearestPlayer.y, z: nearestPlayer.z + away.z * 6 };
+                curiousAboutPlayer = true;
+            } else if (!target && playerDistance < 4) {
                 const away = t.pos.clone().sub(new THREE.Vector3(nearestPlayer.x, nearestPlayer.y, nearestPlayer.z));
                 away.y = 0;
                 if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
@@ -945,7 +960,7 @@ function updateAquaticMob(t, delta) {
             const dz = target.z - t.pos.z;
             const distance = Math.hypot(dx, dz);
             if (distance > 0.1) {
-                const maxSpeed = t.speed * 60 * (t.type === "whale" ? 0.7 : 1);
+                const maxSpeed = t.speed * 60 * (t.type === "whale" ? 0.7 : curiousAboutPlayer ? 0.2 : 1);
                 const desiredVelocity = new THREE.Vector3(dx / distance * maxSpeed, 0, dz / distance * maxSpeed);
                 t.swimVelocity = t.swimVelocity || new THREE.Vector3();
                 t.swimVelocity.lerp(desiredVelocity, 1 - Math.exp(-delta * (t.type === "whale" ? 1.8 : 3.5)));

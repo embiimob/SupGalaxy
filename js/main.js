@@ -2909,7 +2909,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
             const l = worldState.foreignBlockOrigins.get(r);
 
             // Revert changes back to broadcast so blocks correctly disappear on clients when broken by UFO
-            chunkManager.setBlockGlobal(e, t, o, BLOCK_AIR, true, null, 'local');
+            const replacementBlockId = a === 136 ? 6 : BLOCK_AIR;
+            chunkManager.setBlockGlobal(e, t, o, replacementBlockId, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
 
             if (!silent) {
@@ -2953,6 +2954,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
                     x: e,
                     y: t,
                     z: o,
+                    blockId: a,
+                    replacementBlockId: replacementBlockId,
                     username: breaker || userName,
                     world: worldName,
                     originSeed: l

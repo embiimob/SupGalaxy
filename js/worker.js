@@ -277,13 +277,13 @@ function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
             const wx = baseX + lx;
             const wz = baseZ + lz;
             const patchRandom = makeSeededRandom(worldSeed + '_seaweed_' + wx + '_' + wz);
-            if (patchRandom() > 0.004) continue;
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
+            if (patchRandom() > 0.006) continue;
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
                     const px = lx + dx;
                     const pz = lz + dz;
                     if (px < 0 || px >= CHUNK_SIZE || pz < 0 || pz >= CHUNK_SIZE) continue;
-                    if ((dx || dz) && patchRandom() > 0.58) continue;
+                    if ((dx || dz) && patchRandom() > 0.35) continue;
                     let plantFloor = seaLevel;
                     while (plantFloor > 0 && chunkData[plantFloor * CHUNK_SIZE * CHUNK_SIZE + pz * CHUNK_SIZE + px] === 6) plantFloor--;
                     if (plantFloor >= seaLevel - 10) continue;

@@ -291,12 +291,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             noShadow: true
         },
         137: {
-            name: "Rare Fish",
+            name: "Tuna",
             color: "#ff9bcb",
             itemOnly: true
         },
         138: {
-            name: "Schooling Fish",
+            name: "Iwashi",
             color: "#55d8e8",
             itemOnly: true,
             strength: 1

@@ -1680,7 +1680,8 @@ function setupDataChannel(e, t) {
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
                             const blockId = getBlockAt(s.x, s.y, s.z);
 
-                            chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
+                            const replacementBlockId = blockId === 136 ? 6 : BLOCK_AIR;
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
                             if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
 
                             // Renew or establish ownership on edit
@@ -1740,6 +1741,8 @@ function setupDataChannel(e, t) {
                                 x: s.x,
                                 y: s.y,
                                 z: s.z,
+                                blockId: blockId,
+                                replacementBlockId: replacementBlockId,
                                 username: s.username,
                                 world: s.world,
                                 originSeed: originSeed
@@ -1803,8 +1806,9 @@ function setupDataChannel(e, t) {
                     if (!isHost) {
                         // Client receives authoritative block break from host
                         console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
-                        const blockId = getBlockAt(s.x, s.y, s.z);
-                        chunkManager.setBlockGlobal(s.x, s.y, s.z, BLOCK_AIR, s.username, null, 'network');
+                        const blockId = s.blockId === undefined ? getBlockAt(s.x, s.y, s.z) : s.blockId;
+                        const replacementBlockId = s.replacementBlockId === undefined ? BLOCK_AIR : s.replacementBlockId;
+                        chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
 
                         const blockKey = `${s.x},${s.y},${s.z}`;
                         if (s.originSeed) {
