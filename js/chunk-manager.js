@@ -32,7 +32,7 @@ function buildGreedyMesh(e, t, o) {
                         p = !a || i.transparent;
                     let h = null;
                     let shouldRender = p !== (!s || u.transparent);
-                    if (a === 6 && s === 6) shouldRender = false;
+                    if (a === 6 && (s === 6 || (s !== 0 && u && !u.transparent))) shouldRender = false;
                     if (shouldRender)
                         if (p) {
                             const a = `${e.cx * CHUNK_SIZE + l[0] + d[0]},${l[1] + d[1]},${e.cz * CHUNK_SIZE + l[2] + d[2]}`;
@@ -131,15 +131,12 @@ function buildGreedyMesh(e, t, o) {
                 side: THREE.FrontSide
             });
             else if (t.blockId === 6) {
-                a = new THREE.MeshPhysicalMaterial({
+                a = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(o.color),
                     transparent: true,
-                    transmission: 0.6,
-                    opacity: 0.9,
-                    roughness: 0.1,
+                    opacity: 0.7,
+                    roughness: 0.2,
                     metalness: 0.1,
-                    ior: 1.33,
-                    thickness: 2.0,
                     side: THREE.FrontSide,
                     depthWrite: false
                 });
@@ -152,7 +149,7 @@ function buildGreedyMesh(e, t, o) {
                         '#include <common>',
                         `#include <common>
                         uniform float time;
-                        varying vec3 vWorldPosition;`
+                        varying vec3 vWaveWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
@@ -163,22 +160,22 @@ function buildGreedyMesh(e, t, o) {
                             transformed.y += wave;
                         }
                         vec4 vWPos = modelMatrix * vec4(position, 1.0);
-                        vWorldPosition = vWPos.xyz;`
+                        vWaveWorldPosition = vWPos.xyz;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
                         '#include <common>',
                         `#include <common>
                         uniform float time;
-                        varying vec3 vWorldPosition;`
+                        varying vec3 vWaveWorldPosition;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
                         '#include <normal_fragment_begin>',
                         `#include <normal_fragment_begin>
                         if (abs(normal.y) > 0.5) {
-                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
-                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
+                            float waveX = sin(vWaveWorldPosition.x * 2.0 + time * 3.0) * 0.3;
+                            float waveZ = cos(vWaveWorldPosition.z * 2.0 + time * 2.0) * 0.3;
                             vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
                             vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
                             normal = normalize(normal + viewWaveNormal * 0.5);
@@ -337,8 +334,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     x: y,
                     y: u,
                     z: h,
-                    mask: E,
-                    isDeep: (w === 6 && this.getBlockGlobal(e.cx, e.cz, d, u - 1, c) === 6)
+                    mask: E
                 })
             }
     var I = new THREE.Group;
@@ -361,11 +357,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     for (let _ = 0; _ < 4; _++) {
                         let vIdx = vOffset + _;
                         T.push(P[3 * vIdx + 0] + B.x + .5, P[3 * vIdx + 1] + B.y + .5, P[3 * vIdx + 2] + B.z + .5);
-                        if (face === 2 && B.isDeep) {
-                            C.push(A[3 * vIdx + 0], A[3 * vIdx + 1] + 0.01, A[3 * vIdx + 2]);
-                        } else {
-                            C.push(A[3 * vIdx + 0], A[3 * vIdx + 1], A[3 * vIdx + 2]);
-                        }
+                        C.push(A[3 * vIdx + 0], A[3 * vIdx + 1], A[3 * vIdx + 2]);
                         H.push(L[2 * vIdx + 0], L[2 * vIdx + 1]);
                     }
                     let iOffset = face * 6;
@@ -410,15 +402,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 side: THREE.FrontSide
             });
             else if (Number(w) === 6) {
-                D = new THREE.MeshPhysicalMaterial({
+                D = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(K.color),
                     transparent: true,
-                    transmission: 0.6,
-                    opacity: 0.9,
-                    roughness: 0.1,
+                    opacity: 0.7,
+                    roughness: 0.2,
                     metalness: 0.1,
-                    ior: 1.33,
-                    thickness: 2.0,
                     side: THREE.FrontSide,
                     depthWrite: false
                 });
@@ -431,7 +420,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         '#include <common>',
                         `#include <common>
                         uniform float time;
-                        varying vec3 vWorldPosition;`
+                        varying vec3 vWaveWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
@@ -442,22 +431,22 @@ Chunk.prototype.idx = function (e, t, o) {
                             transformed.y += wave;
                         }
                         vec4 vWPos = modelMatrix * vec4(position, 1.0);
-                        vWorldPosition = vWPos.xyz;`
+                        vWaveWorldPosition = vWPos.xyz;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
                         '#include <common>',
                         `#include <common>
                         uniform float time;
-                        varying vec3 vWorldPosition;`
+                        varying vec3 vWaveWorldPosition;`
                     );
 
                     shader.fragmentShader = shader.fragmentShader.replace(
                         '#include <normal_fragment_begin>',
                         `#include <normal_fragment_begin>
                         if (abs(normal.y) > 0.5) {
-                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.3;
-                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.3;
+                            float waveX = sin(vWaveWorldPosition.x * 2.0 + time * 3.0) * 0.3;
+                            float waveZ = cos(vWaveWorldPosition.z * 2.0 + time * 2.0) * 0.3;
                             vec3 worldWaveNormal = normalize(vec3(waveX, 1.0, waveZ));
                             vec3 viewWaveNormal = normalize((viewMatrix * vec4(worldWaveNormal, 0.0)).xyz);
                             normal = normalize(normal + viewWaveNormal * 0.5);

@@ -1,4 +1,0 @@
-1. **Apply Underwater Post-Processing / Fog**:
-   - When the user is completely submerged (`window.playerInWater === true`), the camera should tint the screen with a light blue-green hue to simulate water depth.
-   - We will achieve this by overriding `scene.background` and `scene.fog` (if we add fog) or utilizing an HTML overlay/post-processing if fog isn't readily available. Wait, since `scene.background` is modified in `js/world-generation.js` by `updateSky()`, we can just alter `scene.background` to a water color when `window.playerInWater` is true. We'll also need a way to adjust light intensity so it looks right. Wait, fog is added via `scene.fog = new THREE.FogExp2(...)`. Wait, let me check if there's any fog in `js/main.js` or `js/world-generation.js` using `grep -i "fog" js/main.js js/world-generation.js`. The previous `grep -i` found nothing, so fog isn't used!
-   - Actually, let me check `initThree` in `js/main.js`.
