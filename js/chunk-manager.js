@@ -69,15 +69,9 @@ function buildGreedyMesh(e, t, o) {
                             k = [l[0] + f[0], l[1] + f[1], l[2] + f[2]],
                             w = [l[0] + h[0] + f[0], l[1] + h[1] + f[1], l[2] + h[2] + f[2]];
                         v && (S[n] += 1, I[n] += 1, k[n] += 1, w[n] += 1);
-                        let norm = [...M];
-                        if (n === 1 && v && parseInt(g.split('-')[0]) === 6) {
-                            if (l[1] > 0 && r(l[0], l[1] - 1, l[2]) === 6) {
-                                norm[1] += 0.01;
-                            }
-                        }
                         const b = new THREE.BufferGeometry,
                             x = new Float32Array([S[0], S[1], S[2], k[0], k[1], k[2], I[0], I[1], I[2], w[0], w[1], w[2]]),
-                            T = new Float32Array([...norm, ...norm, ...norm, ...norm]),
+                            T = new Float32Array([...M, ...M, ...M, ...M]),
                             C = new Float32Array([0, 0, 0, d, r, 0, r, d]),
                             H = v ? [0, 1, 2, 2, 1, 3] : [0, 2, 1, 2, 3, 1];
                         if (b.setAttribute("position", new THREE.BufferAttribute(x, 3)), b.setAttribute("normal", new THREE.BufferAttribute(T, 3)), b.setAttribute("uv", new THREE.BufferAttribute(C, 2)), b.setIndex(H), !a[g]) {
@@ -156,17 +150,32 @@ function buildGreedyMesh(e, t, o) {
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <common>',
                         `#include <common>
-                        uniform float time;`
+                        varying vec3 vWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <begin_vertex>',
                         `#include <begin_vertex>
-                        if (normal.y > 1.0) {
-                            float wave = sin(position.x * 2.0 + time * 3.0) * 0.1 + cos(position.z * 2.0 + time * 2.0) * 0.1;
-                            transformed.y += wave;
-                        }
-                        `
+                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = worldPosition.xyz;`
+                    );
+
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        '#include <common>',
+                        `#include <common>
+                        uniform float time;
+                        varying vec3 vWorldPosition;`
+                    );
+
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        '#include <normal_fragment_begin>',
+                        `#include <normal_fragment_begin>
+                        if (abs(normal.y) > 0.5) {
+                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.1;
+                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.1;
+                            vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
+                            normal = normalize(normal + waveNormal * 0.5);
+                        }`
                     );
                 };
             }
@@ -413,17 +422,32 @@ Chunk.prototype.idx = function (e, t, o) {
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <common>',
                         `#include <common>
-                        uniform float time;`
+                        varying vec3 vWorldPosition;`
                     );
 
                     shader.vertexShader = shader.vertexShader.replace(
                         '#include <begin_vertex>',
                         `#include <begin_vertex>
-                        if (normal.y > 1.0) {
-                            float wave = sin((position.x + modelMatrix[3][0]) * 2.0 + time * 3.0) * 0.1 + cos((position.z + modelMatrix[3][2]) * 2.0 + time * 2.0) * 0.1;
-                            transformed.y += wave;
-                        }
-                        `
+                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = worldPosition.xyz;`
+                    );
+
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        '#include <common>',
+                        `#include <common>
+                        uniform float time;
+                        varying vec3 vWorldPosition;`
+                    );
+
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        '#include <normal_fragment_begin>',
+                        `#include <normal_fragment_begin>
+                        if (abs(normal.y) > 0.5) {
+                            float waveX = sin(vWorldPosition.x * 2.0 + time * 3.0) * 0.1;
+                            float waveZ = cos(vWorldPosition.z * 2.0 + time * 2.0) * 0.1;
+                            vec3 waveNormal = normalize(vec3(waveX, 1.0, waveZ));
+                            normal = normalize(normal + waveNormal * 0.5);
+                        }`
                     );
                 };
             }
