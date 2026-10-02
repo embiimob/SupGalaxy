@@ -184,6 +184,16 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
                 this.mesh.add(fin);
                 this.fins.push(fin);
             }
+            const dorsalShape = new THREE.Shape();
+            dorsalShape.moveTo(-1.3, 0.05);
+            dorsalShape.quadraticCurveTo(-0.5, 0.3, -0.1, 1.35);
+            dorsalShape.quadraticCurveTo(0.15, 0.85, 0.65, 0.45);
+            dorsalShape.quadraticCurveTo(1.05, 0.12, 1.45, 0.05);
+            dorsalShape.closePath();
+            this.dorsalFin = new THREE.Mesh(new THREE.ShapeGeometry(dorsalShape), new THREE.MeshLambertMaterial({ color: this.aquaticColor, side: THREE.DoubleSide }));
+            this.dorsalFin.rotation.y = Math.PI / 2;
+            this.dorsalFin.position.y = 2.4;
+            this.mesh.add(this.dorsalFin);
             this.mesh.scale.setScalar(0.5);
             this.spout = new THREE.Group();
             const spray = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.5, 6), new THREE.MeshLambertMaterial({ color: 0xa9edff, transparent: true, opacity: 0.75 }));
@@ -235,6 +245,8 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             const fishTraits = makeSeededRandom(this.originSeed + "_fish_traits_" + this.type + "_" + this.id);
             this.pattern = Math.floor(fishTraits() * 3);
             this.isAggressive = fishTraits() < (rare ? 0.2 : 0.06);
+            this.size = rare ? 1 : 0.6 + fishTraits() * 0.9;
+            if (!rare) this.mesh.scale.setScalar(this.size);
             this.body.material.map = createAquaticFishSkinTexture(this.originSeed, this.type, this.aquaticColor);
             this.body.material.color.set(0xffffff);
             this.body.material.needsUpdate = true;
@@ -902,7 +914,7 @@ function updateAquaticMob(t, delta) {
                         if (player.health <= 0) handlePlayerDeath();
                     }
                 }
-            } else if (!target && playerDistance < 4) {
+            } else if (!target && playerDistance < (t.type === "fish_school" ? 2 : 4)) {
                 const away = t.pos.clone().sub(new THREE.Vector3(nearestPlayer.x, nearestPlayer.y, nearestPlayer.z));
                 away.y = 0;
                 if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
