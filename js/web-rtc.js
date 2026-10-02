@@ -753,7 +753,7 @@ function setupDataChannel(e, t) {
                         const e = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
                         e.spawnCommandKey = s.spawnCommandKey || null;
                         e.spawner = s.username || n;
-                        e.isAggressive = s.isAggressive, mobs.push(e)
+                        e.isAggressive = s.isAggressive, e.wasAttacked = s.wasAttacked, mobs.push(e)
 
                         // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
                         if (isHost) {
@@ -810,6 +810,7 @@ function setupDataChannel(e, t) {
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
@@ -861,6 +862,7 @@ function setupDataChannel(e, t) {
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
+                            if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
@@ -885,7 +887,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
-                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.originSeed && (d.originSeed = s.originSeed), s.spawnCommandKey && (d.spawnCommandKey = s.spawnCommandKey), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
+                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.originSeed && (d.originSeed = s.originSeed), s.spawnCommandKey && (d.spawnCommandKey = s.spawnCommandKey), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), void 0 !== s.isAggressive && (d.isAggressive = s.isAggressive), void 0 !== s.wasAttacked && (d.wasAttacked = s.wasAttacked), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
                     break;
                 case "mob_despawn":
                 case "mob_kill":

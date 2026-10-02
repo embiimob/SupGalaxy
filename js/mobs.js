@@ -32,6 +32,57 @@ function nearestAquaticSpawnPosition(x, z, type) {
     return null;
 }
 
+function createAquaticFishSkinTexture(seed, type, baseColor) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 64;
+    const context = canvas.getContext("2d");
+    const base = new THREE.Color(baseColor);
+    const accent = new THREE.Color().setHSL((base.getHSL({}).h + 0.34) % 1, 0.88, 0.67);
+    const random = makeSeededRandom(seed + "_fish_pattern_" + type);
+    context.fillStyle = "#" + base.getHexString();
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#" + accent.getHexString();
+    const pattern = Math.floor(random() * 3);
+    if (pattern === 0) {
+        const stripeWidth = 5 + Math.floor(random() * 8);
+        const gap = 13 + Math.floor(random() * 13);
+        for (let x = 8; x < canvas.width; x += stripeWidth + gap) {
+            context.globalAlpha = 0.68;
+            context.fillRect(x, 0, stripeWidth, canvas.height);
+        }
+    } else if (pattern === 1) {
+        for (let i = 0; i < 16; i++) {
+            context.globalAlpha = 0.55 + random() * 0.35;
+            context.beginPath();
+            context.ellipse(random() * canvas.width, random() * canvas.height, 3 + random() * 5, 4 + random() * 8, random() * Math.PI, 0, Math.PI * 2);
+            context.fill();
+        }
+    } else {
+        for (let y = -8; y < canvas.height + 8; y += 12) {
+            for (let x = (y / 12 % 2) * 8; x < canvas.width; x += 16) {
+                context.globalAlpha = 0.55;
+                context.beginPath();
+                context.ellipse(x, y, 4, 6, 0, 0, Math.PI * 2);
+                context.fill();
+            }
+        }
+    }
+    context.globalAlpha = 1;
+    if (type === "fish_rare") {
+        context.fillStyle = "#fff3a3";
+        for (let i = 0; i < 5; i++) {
+            context.beginPath();
+            context.arc(14 + i * 23, 32 + Math.sin(i * 1.3) * 15, 2, 0, Math.PI * 2);
+            context.fill();
+        }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+}
+
 function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
     let yPos = i === "ufo_saucer" ? 220 : isAquaticMobType(i) && aquaticY !== null ? aquaticY : chunkManager.getSurfaceY(t, e) + 1;
@@ -62,55 +113,78 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             this.isAggressive = false;
             this.breachAt = Date.now() + 30000 + Math.random() * 60000;
             this.body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), bodyMaterial);
-            this.body.scale.set(4.2, 2.5, 15);
+            this.body.scale.set(4.2, 2.6, 6.4);
             this.mesh.add(this.body);
             const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), bellyMaterial);
-            belly.scale.set(3.7, 1.7, 13.5);
+            belly.scale.set(3.65, 1.75, 5.8);
             belly.position.y = -0.7;
             this.mesh.add(belly);
             this.tail = new THREE.Group();
-            const tailStem = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 2.2), bodyMaterial);
-            tailStem.position.z = -1;
+            const tailStem = new THREE.Mesh(new THREE.BoxGeometry(1, 0.75, 2.2), bodyMaterial);
+            tailStem.position.z = -0.65;
             this.tail.add(tailStem);
             for (const side of [-1, 1]) {
-                const fluke = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, 3.4), finMaterial);
-                fluke.position.set(side * 1.35, 0.15, -2.1);
-                fluke.rotation.y = side * 0.18;
+                const fluke = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 5.4), finMaterial);
+                fluke.position.set(side * 1.85, 0.2, -2.1);
+                fluke.rotation.y = side * 0.24;
+                fluke.rotation.x = -0.12;
                 this.tail.add(fluke);
             }
-            this.tail.position.z = -15;
+            this.tail.position.z = -6.4;
             this.mesh.add(this.tail);
             const whaleEyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
             for (const side of [-1, 1]) {
                 const eye = new THREE.Mesh(new THREE.SphereGeometry(0.52, 10, 8), whaleEyeWhite);
-                eye.position.set(side * 1.35, 0.55, 13.1);
+                eye.position.set(side * 2.25, 0.55, 5.05);
                 this.mesh.add(eye);
                 const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), eyeMaterial);
-                pupil.position.set(side * 1.35, 0.5, 13.52);
+                pupil.position.set(side * 2.25, 0.5, 5.5);
                 this.mesh.add(pupil);
                 const shine = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), shineMaterial);
-                shine.position.set(side * 1.35 - 0.07, 0.62, 13.76);
+                shine.position.set(side * 2.17, 0.62, 5.7);
                 this.mesh.add(shine);
                 const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.38, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffa6b8 }));
-                cheek.position.set(side * 2.05, -0.55, 12.7);
+                cheek.position.set(side * 2.55, -0.55, 4.45);
                 this.mesh.add(cheek);
             }
-            const smile = new THREE.Mesh(
-                new THREE.TorusGeometry(0.85, 0.12, 6, 14, Math.PI),
-                new THREE.MeshLambertMaterial({ color: 0x24324b })
-            );
-            smile.position.set(0, -0.48, 14.55);
-            smile.rotation.z = Math.PI;
-            this.mesh.add(smile);
+            const smileGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-1.45, -0.4, 5.65),
+                new THREE.Vector3(-0.8, -0.7, 6.15),
+                new THREE.Vector3(0, -0.78, 6.4),
+                new THREE.Vector3(0.8, -0.7, 6.15),
+                new THREE.Vector3(1.45, -0.4, 5.65)
+            ]);
+            this.smile = new THREE.Line(smileGeometry, new THREE.LineBasicMaterial({ color: 0x24324b, linewidth: 4 }));
+            this.mesh.add(this.smile);
+            const angryMouthGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-1.3, -0.55, 5.75),
+                new THREE.Vector3(-0.7, -0.38, 6.2),
+                new THREE.Vector3(0, -0.32, 6.4),
+                new THREE.Vector3(0.7, -0.38, 6.2),
+                new THREE.Vector3(1.3, -0.55, 5.75)
+            ]);
+            this.angryMouth = new THREE.Line(angryMouthGeometry, new THREE.LineBasicMaterial({ color: 0x24324b, linewidth: 5 }));
+            this.angryMouth.visible = false;
+            this.mesh.add(this.angryMouth);
+            this.angryBrows = [];
+            for (const side of [-1, 1]) {
+                const brow = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.18, 0.2), new THREE.MeshLambertMaterial({ color: 0x24324b }));
+                brow.position.set(side * 2.2, 1.12, 5.1);
+                brow.rotation.z = side * -0.32;
+                brow.visible = false;
+                this.mesh.add(brow);
+                this.angryBrows.push(brow);
+            }
             this.fins = [];
             for (const side of [-1, 1]) {
-                const fin = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 3), finMaterial);
-                fin.position.set(side * 3.7, -0.5, 1);
-                fin.rotation.y = side * 0.25;
-                fin.rotation.z = side * 0.2;
+                const fin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.42, 5.2), finMaterial);
+                fin.position.set(side * 3.15, -0.55, 0.8);
+                fin.rotation.y = side * 0.32;
+                fin.rotation.z = side * 0.32;
                 this.mesh.add(fin);
                 this.fins.push(fin);
             }
+            this.mesh.scale.setScalar(0.5);
             this.spout = new THREE.Group();
             const spray = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.5, 6), new THREE.MeshLambertMaterial({ color: 0xa9edff, transparent: true, opacity: 0.75 }));
             spray.position.y = 1.25;
@@ -158,7 +232,17 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
                 crest.position.set(0, 0.58, -0.05);
                 this.mesh.add(crest);
             }
-            this.isAggressive = false;
+            const fishTraits = makeSeededRandom(this.originSeed + "_fish_traits_" + this.type + "_" + this.id);
+            this.pattern = Math.floor(fishTraits() * 3);
+            this.isAggressive = fishTraits() < 0.04;
+            this.body.material.map = createAquaticFishSkinTexture(this.originSeed, this.type, this.aquaticColor);
+            this.body.material.color.set(0xffffff);
+            this.body.material.needsUpdate = true;
+            if (this.isAggressive) {
+                this.aquaticColor = new THREE.Color().setHSL(hue, 0.95, 0.48).getHex();
+                this.body.material.color.set(this.aquaticColor);
+                finMaterial.color.set(this.aquaticColor);
+            }
         }
     } else if ("ufo_saucer" === this.type) {
         this.isAggressive = !0;
@@ -732,11 +816,10 @@ function updateAquaticMob(t, delta) {
     t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
     if (!isLocalSpawner) {
         if (t.lastUpdateTime > 0) {
-            const blend = Math.min(1, (performance.now() - t.lastUpdateTime) / 300);
-            t.pos.copy(t.prevPos).lerp(t.targetPos, blend);
+            const blend = 1 - Math.exp(-delta * (t.type === "whale" ? 4 : 8));
+            t.pos.lerp(t.targetPos, blend);
             if (t.lastQuaternionUpdate > 0) {
-                const quaternionBlend = Math.min(1, (performance.now() - t.lastQuaternionUpdate) / 300);
-                t.mesh.quaternion.copy(t.prevQuaternion).slerp(t.targetQuaternion, quaternionBlend);
+                t.mesh.quaternion.slerp(t.targetQuaternion, blend);
             }
         } else {
             t.pos.copy(t.targetPos);
@@ -780,12 +863,59 @@ function updateAquaticMob(t, delta) {
                     }
                 }
             }
-        } else if (t.type === "fish_school") {
-            const schoolmates = mobs.filter(m => m !== t && m.type === "fish_school" && t.pos.distanceTo(m.pos) < 14);
-            if (schoolmates.length) {
-                target = new THREE.Vector3();
-                for (const mate of schoolmates) target.add(mate.pos);
-                target.multiplyScalar(1 / schoolmates.length);
+        } else {
+            const whales = mobs.filter(m => m.type === "whale");
+            whales.sort((a, b) => t.pos.distanceTo(a.pos) - t.pos.distanceTo(b.pos));
+            const nearbyWhale = whales[0];
+            if (nearbyWhale && t.pos.distanceTo(nearbyWhale.pos) < 30) {
+                const away = t.pos.clone().sub(nearbyWhale.pos);
+                away.y = 0;
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                target = t.pos.clone().add(away.normalize().multiplyScalar(14));
+            }
+
+            const nearbyPlayers = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+            for (const [name, pos] of Object.entries(userPositions)) {
+                if (pos.world === worldName && Number.isFinite(pos.targetX) && Number.isFinite(pos.targetY) && Number.isFinite(pos.targetZ)) {
+                    nearbyPlayers.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+                }
+            }
+            nearbyPlayers.sort((a, b) =>
+                Math.hypot(a.x - t.pos.x, a.y - t.pos.y, a.z - t.pos.z) -
+                Math.hypot(b.x - t.pos.x, b.y - t.pos.y, b.z - t.pos.z));
+            const nearestPlayer = nearbyPlayers[0];
+            const playerDistance = nearestPlayer ? Math.hypot(nearestPlayer.x - t.pos.x, nearestPlayer.y - t.pos.y, nearestPlayer.z - t.pos.z) : Infinity;
+            if (t.isAggressive && playerDistance < 10) {
+                target = nearestPlayer;
+                if (playerDistance < 1.6 && now - t.attackCooldown > 1600) {
+                    t.attackCooldown = now;
+                    const peer = peers.get(nearestPlayer.name);
+                    if (nearestPlayer.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 1, attacker: "fish" }));
+                    } else if (nearestPlayer.name === userName) {
+                        player.health = Math.max(0, player.health - 1);
+                        lastDamageTime = now;
+                        updateHealthBar();
+                        const healthElement = document.getElementById("health");
+                        if (healthElement) healthElement.innerText = player.health;
+                        addMessage("Bitten by an aggressive fish! HP: " + player.health, 1200);
+                        if (player.health <= 0) handlePlayerDeath();
+                    }
+                }
+            } else if (!target && playerDistance < 9) {
+                const away = t.pos.clone().sub(new THREE.Vector3(nearestPlayer.x, nearestPlayer.y, nearestPlayer.z));
+                away.y = 0;
+                if (away.lengthSq() < 0.01) away.set(Math.cos(t.animationTime), 0, Math.sin(t.animationTime));
+                target = t.pos.clone().add(away.normalize().multiplyScalar(12));
+            }
+
+            if (!target && t.type === "fish_school") {
+                const schoolmates = mobs.filter(m => m !== t && m.type === "fish_school" && t.pos.distanceTo(m.pos) < 14);
+                if (schoolmates.length) {
+                    target = new THREE.Vector3();
+                    for (const mate of schoolmates) target.add(mate.pos);
+                    target.multiplyScalar(1 / schoolmates.length);
+                }
             }
         }
 
@@ -798,19 +928,20 @@ function updateAquaticMob(t, delta) {
             target = t.pos.clone().add((t.wanderDirection || new THREE.Vector3(1, 0, 0)).clone().multiplyScalar(8));
         }
 
-        if (target && t.type === "whale" && !t.wasAttacked && (target.x === undefined || target.distanceTo)) {
-            if (target.distanceTo && target.distanceTo(t.pos) < 1.8) target = null;
-        }
         if (target && target.x !== undefined) {
             const dx = target.x - t.pos.x;
             const dz = target.z - t.pos.z;
             const distance = Math.hypot(dx, dz);
             if (distance > 0.1) {
-                const speed = t.speed * delta * 60;
-                const nx = modWrap(t.pos.x + dx / distance * speed, MAP_SIZE);
-                const nz = modWrap(t.pos.z + dz / distance * speed, MAP_SIZE);
-                const directionY = target.y === undefined ? Math.sin(t.animationTime * 0.35) * 0.25 : Math.sign(target.y - t.pos.y) * 0.35;
-                const desiredY = t.pos.y + directionY * delta * 60;
+                const maxSpeed = t.speed * 60 * (t.type === "whale" ? 0.7 : 1);
+                const desiredVelocity = new THREE.Vector3(dx / distance * maxSpeed, 0, dz / distance * maxSpeed);
+                t.swimVelocity = t.swimVelocity || new THREE.Vector3();
+                t.swimVelocity.lerp(desiredVelocity, 1 - Math.exp(-delta * (t.type === "whale" ? 1.8 : 3.5)));
+                const nx = modWrap(t.pos.x + t.swimVelocity.x * delta, MAP_SIZE);
+                const nz = modWrap(t.pos.z + t.swimVelocity.z * delta, MAP_SIZE);
+                const desiredY = target.y === undefined
+                    ? t.pos.y + Math.sin(t.animationTime * 0.35) * 0.08 * delta
+                    : t.pos.y + Math.max(-0.3, Math.min(0.3, target.y - t.pos.y)) * (1 - Math.exp(-delta * 0.8));
                 let nextY = desiredY;
                 let targetBlock = getBlockAt(nx, nextY, nz);
                 if (targetBlock !== 6 && targetBlock !== 136) {
@@ -833,7 +964,9 @@ function updateAquaticMob(t, delta) {
                 const horizontalBlock = getBlockAt(nx, nextY, nz);
                 if (horizontalBlock === 6 || horizontalBlock === 136) {
                     t.pos.set(nx, nextY, nz);
-                    t.mesh.rotation.y = Math.atan2(dx, dz);
+                    const targetYaw = Math.atan2(dx, dz);
+                    const yawDifference = Math.atan2(Math.sin(targetYaw - t.mesh.rotation.y), Math.cos(targetYaw - t.mesh.rotation.y));
+                    t.mesh.rotation.y += yawDifference * (1 - Math.exp(-delta * (t.type === "whale" ? 1.4 : 4)));
                     t.isMoving = true;
                 } else {
                     t.wanderDirection = new THREE.Vector3(-dz, (Math.random() - 0.5) * 0.5, dx).normalize();
@@ -868,13 +1001,17 @@ function updateAquaticMob(t, delta) {
     }
 
     if (t.type === "whale") {
+        const angry = !!t.wasAttacked;
+        t.smile.visible = !angry;
+        t.angryMouth.visible = angry;
+        t.angryBrows.forEach(brow => brow.visible = angry);
         if (!t.nextSpout || now > t.nextSpout) {
             t.spoutUntil = now + 1100;
             t.nextSpout = now + 45000 + Math.random() * 50000;
         }
         t.spout.visible = now < t.spoutUntil;
-        t.tail.rotation.y = Math.sin(t.animationTime * 2.5) * 0.45;
-        t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.18 + Math.sin(t.animationTime * 2) * 0.12));
+        t.tail.rotation.y = Math.sin(t.animationTime * 1.35) * 0.75;
+        t.fins.forEach((fin, index) => fin.rotation.z = (index ? -1 : 1) * (0.14 + Math.sin(t.animationTime * 1.2) * 0.08));
     } else {
         t.tail.rotation.y = Math.sin(t.animationTime * 2.4) * 0.65;
         t.fins[0].rotation.x = Math.sin(t.animationTime * 1.8) * 0.2;
@@ -1787,6 +1924,8 @@ Mob.prototype.update = function (t) {
             type: this.type,
             isMoving: this.isMoving,
             aiState: this.aiState,
+            isAggressive: this.isAggressive,
+            wasAttacked: this.wasAttacked,
             quaternion: this.mesh.quaternion.toArray()
         });
     }

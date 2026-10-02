@@ -359,8 +359,8 @@ Chunk.prototype.idx = function (e, t, o) {
             if (Number(w) === 136) {
                 for (const B of e.positions) {
                     const phase = Math.sin(B.x * 0.7 + B.z * 0.4) * 0.12;
-                    for (let blade = 0; blade < 3; blade++) {
-                        const angle = blade * Math.PI / 3 + phase;
+                    for (let blade = 0; blade < 5; blade++) {
+                        const angle = blade * Math.PI / 5 + phase;
                         const sideX = -Math.sin(angle);
                         const sideZ = Math.cos(angle);
                         for (let segment = 0; segment < 3; segment++) {
@@ -368,8 +368,8 @@ Chunk.prototype.idx = function (e, t, o) {
                             const y1 = (segment + 1) / 3;
                             const bend0 = Math.sin((y0 + phase) * Math.PI) * 0.22;
                             const bend1 = Math.sin((y1 + phase) * Math.PI) * 0.22;
-                            const width0 = 0.13 * (1 - y0 * 0.55);
-                            const width1 = 0.13 * (1 - y1 * 0.55);
+                            const width0 = 0.15 * (1 - y0 * 0.55);
+                            const width1 = 0.15 * (1 - y1 * 0.55);
                             const centerX0 = B.x + 0.5 + Math.cos(angle) * bend0;
                             const centerZ0 = B.z + 0.5 + Math.sin(angle) * bend0;
                             const centerX1 = B.x + 0.5 + Math.cos(angle) * bend1;
@@ -396,6 +396,9 @@ Chunk.prototype.idx = function (e, t, o) {
                 seaweedColor.setHSL((seaweedHsl.h + (seaweedRandom() - 0.5) * 0.18 + 1) % 1, seaweedHsl.s, seaweedHsl.l);
                 const seaweedMaterial = new THREE.MeshLambertMaterial({
                     color: seaweedColor,
+                    transparent: true,
+                    opacity: 0.68,
+                    depthWrite: false,
                     side: THREE.DoubleSide
                 });
                 const seaweedMesh = new THREE.Mesh(seaweedGeometry, seaweedMaterial);
