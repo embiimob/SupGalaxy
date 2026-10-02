@@ -14,54 +14,45 @@ def run():
         ''')
         page.wait_for_timeout(5000)
 
-        # Teleport and build a 3x3x3 pool of water, stand in it
+        # Take a screenshot underwater
         page.evaluate('''
             if (window.chunkManager && window.player) {
                 const px = 0; const pz = 0;
                 window.player.x = px;
-                window.player.y = 40; // Ground is usually lower here, let's hover
+                window.player.y = 40;
                 window.player.z = pz;
 
                 // Clear an area and put water
-                for (let dx = -2; dx <= 2; dx++) {
-                    for (let dy = -2; dy <= 2; dy++) {
-                        for (let dz = -2; dz <= 2; dz++) {
-                            let b = (dy < 0) ? 6 : 0; // Water below, air above
-                            // Add some solid walls at dx=2
-                            if (dx === 2) b = 1;
+                for (let dx = -4; dx <= 4; dx++) {
+                    for (let dy = -4; dy <= 4; dy++) {
+                        for (let dz = -4; dz <= 4; dz++) {
+                            let b = (dy < 0) ? 6 : 0;
                             window.chunkManager.setBlock(px+dx, Math.floor(window.player.y)+dy, pz+dz, b);
                         }
                     }
                 }
 
-                // Rebuild the chunk
                 window.chunkManager.buildChunkMesh(0, 0);
 
                 window.player.x = px;
-                window.player.y = 40;
+                window.player.y = 38; // Underwater
                 window.player.z = pz;
             }
         ''')
         page.wait_for_timeout(2000)
 
-        # We simulate pressing W to see if we can step up out of the water onto dx=2 wall
-        print("Pressing W in water...")
-        page.keyboard.down('w')
-        # We need to look towards dx=2
         page.evaluate('''
-            if(window.camera) window.camera.rotation.y = -Math.PI/2;
-            window.inWater = true; // force the flag in case it hasn't updated
-        ''')
-        page.wait_for_timeout(3000)
-        page.keyboard.up('w')
-
-        # Check player Y to see if we stepped up
-        page.evaluate('''
-            console.log("Player Y:", window.player ? window.player.y : "No player");
+            window.inWater = true;
+            if (window.camera) {
+                window.camera.rotation.x = 0;
+                window.camera.rotation.y = 0;
+                window.camera.rotation.z = 0;
+            }
         ''')
         page.wait_for_timeout(1000)
 
-        # We can also record a short video to verify visuals
+        page.screenshot(path="water_test_screenshot.png")
+        print("Screenshot saved to water_test_screenshot.png")
         browser.close()
 
 if __name__ == "__main__":
