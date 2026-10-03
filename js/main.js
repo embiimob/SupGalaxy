@@ -1666,7 +1666,10 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
-    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
+    const mediaPath = stoneData.url.split(/[?#]/, 1)[0].replace(/[\\/]+$/, '');
+    const fileName = mediaPath.split(/[\\/]/).pop();
+    const extensionIndex = fileName.lastIndexOf('.');
+    const fileExtension = extensionIndex > 0 ? fileName.slice(extensionIndex + 1).toLowerCase() : '';
 
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
