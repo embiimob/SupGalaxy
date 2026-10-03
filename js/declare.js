@@ -42,7 +42,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         1: {
             name: "Bedrock",
             color: "#0b0b0b",
-            strength: 5
+            strength: 5,
+            unbreakable: !0
         },
         2: {
             name: "Grass",
@@ -62,6 +63,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         5: {
             name: "Sand",
             color: "#e7d08d",
+            textureStyle: "sand",
             strength: 1
         },
         6: {
@@ -161,31 +163,37 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         105: {
             name: "Brick",
             color: "#a84f3c",
+            textureStyle: "brick",
             strength: 2
         },
         106: {
             name: "Smooth Stone",
             color: "#c1c1c1",
+            textureStyle: "polished_stone",
             strength: 2
         },
         107: {
             name: "Concrete",
             color: "#888888",
+            textureStyle: "concrete",
             strength: 3
         },
         108: {
             name: "Polished Wood",
             color: "#a87443",
+            textureStyle: "planks",
             strength: 2
         },
         109: {
             name: "Marble",
             color: "#f0f0f0",
+            textureStyle: "marble",
             strength: 2
         },
         110: {
             name: "Obsidian",
             color: "#2d004d",
+            textureStyle: "obsidian",
             strength: 5
         },
         111: {
@@ -215,6 +223,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         115: {
             name: "Glow Brick",
             color: "#f7cc5b",
+            textureStyle: "brick",
             strength: 1
         },
         116: {
@@ -232,11 +241,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         118: {
             name: "Sandstone",
             color: "#e3c27d",
+            textureStyle: "sandstone_bricks",
             strength: 1
         },
         119: {
             name: "Cobblestone",
             color: "#7d7d7d",
+            textureStyle: "cobble",
             strength: 2
         },
         120: {
@@ -327,6 +338,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         129: {
             name: "Wooden Planks",
             color: "#8b5a33",
+            textureStyle: "planks",
             strength: 2
         },
         130: {
@@ -339,6 +351,300 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#654321",
             strength: 2,
             transparent: !0
+        },
+        139: {
+            name: "Castle Stone Bricks",
+            color: "#72777d",
+            textureStyle: "stone_bricks",
+            strength: 30,
+            breakable: !0
+        },
+        140: {
+            name: "Mossy Castle Bricks",
+            color: "#63745d",
+            textureStyle: "mossy_bricks",
+            strength: 30,
+            breakable: !0
+        },
+        141: {
+            name: "Chiseled Limestone",
+            color: "#c4b99e",
+            textureStyle: "chiseled_stone",
+            strength: 2
+        },
+        142: {
+            name: "Polished Limestone",
+            color: "#aaa99e",
+            textureStyle: "limestone",
+            strength: 2
+        },
+        143: {
+            name: "Red Roof Tile",
+            color: "#9d4336",
+            textureStyle: "roof_tiles",
+            strength: 2
+        },
+        144: {
+            name: "Slate Roof Tile",
+            color: "#48515a",
+            textureStyle: "roof_tiles",
+            strength: 3
+        },
+        145: {
+            name: "Oak Support Beam",
+            color: "#704425",
+            textureStyle: "beam",
+            strength: 3
+        },
+        146: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 0,
+            openId: 147,
+            strength: 2
+        },
+        147: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 0,
+            closedId: 146,
+            doorOpen: !0,
+            strength: 2
+        },
+        154: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 1,
+            openId: 155,
+            strength: 2
+        },
+        155: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 1,
+            closedId: 154,
+            doorOpen: !0,
+            strength: 2
+        },
+        156: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 2,
+            openId: 157,
+            strength: 2
+        },
+        157: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 2,
+            closedId: 156,
+            doorOpen: !0,
+            strength: 2
+        },
+        158: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 3,
+            openId: 159,
+            strength: 2
+        },
+        159: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 3,
+            closedId: 158,
+            doorOpen: !0,
+            strength: 2
+        },
+        148: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 0,
+            strength: 2
+        },
+        149: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 0,
+            strength: 30,
+            breakable: !0
+        },
+        160: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 1,
+            strength: 2
+        },
+        161: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 2,
+            strength: 2
+        },
+        162: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 3,
+            strength: 2
+        },
+        163: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 1,
+            strength: 30,
+            breakable: !0
+        },
+        164: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 2,
+            strength: 30,
+            breakable: !0
+        },
+        165: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 3,
+            strength: 30,
+            breakable: !0
+        },
+        166: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 1,
+            dropId: 129,
+            strength: 2
+        },
+        167: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 2,
+            dropId: 129,
+            strength: 2
+        },
+        168: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 3,
+            dropId: 129,
+            strength: 2
+        },
+        169: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 1,
+            dropId: 151,
+            strength: 5
+        },
+        170: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 2,
+            dropId: 151,
+            strength: 5
+        },
+        171: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 3,
+            dropId: 151,
+            strength: 5
+        },
+        150: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 0,
+            dropId: 151,
+            strength: 5
+        },
+        151: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 0,
+            strength: 5
+        },
+        152: {
+            name: "Rose Stained Glass",
+            color: "#d88ea2",
+            transparent: !0,
+            strength: 1
+        },
+        153: {
+            name: "Battlement Stone",
+            color: "#8a8d8f",
+            textureStyle: "stone_bricks",
+            model: "battlement",
+            strength: 30,
+            breakable: !0
         }
     },
     BIOMES = [{
@@ -652,6 +958,134 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         requires: {
             129: 8
+        }
+    }, {
+        id: "castle_stone_bricks",
+        out: {
+            id: 139,
+            count: 4
+        },
+        requires: {
+            4: 3,
+            105: 1
+        }
+    }, {
+        id: "mossy_castle_bricks",
+        out: {
+            id: 140,
+            count: 4
+        },
+        requires: {
+            139: 3,
+            14: 1
+        }
+    }, {
+        id: "chiseled_limestone",
+        out: {
+            id: 141,
+            count: 2
+        },
+        requires: {
+            109: 2,
+            11: 1
+        }
+    }, {
+        id: "polished_limestone",
+        out: {
+            id: 142,
+            count: 4
+        },
+        requires: {
+            106: 3,
+            5: 1
+        }
+    }, {
+        id: "red_roof_tile",
+        out: {
+            id: 143,
+            count: 4
+        },
+        requires: {
+            105: 2,
+            13: 1
+        }
+    }, {
+        id: "slate_roof_tile",
+        out: {
+            id: 144,
+            count: 4
+        },
+        requires: {
+            119: 2,
+            11: 1
+        }
+    }, {
+        id: "oak_support_beam",
+        out: {
+            id: 145,
+            count: 4
+        },
+        requires: {
+            7: 2,
+            129: 2
+        }
+    }, {
+        id: "oak_door",
+        out: {
+            id: 146,
+            count: 1
+        },
+        requires: {
+            129: 5,
+            124: 1
+        }
+    }, {
+        id: "oak_stairs",
+        out: {
+            id: 148,
+            count: 4
+        },
+        requires: {
+            129: 6
+        }
+    }, {
+        id: "castle_stone_stairs",
+        out: {
+            id: 149,
+            count: 4
+        },
+        requires: {
+            139: 6
+        }
+    }, {
+        id: "portcullis",
+        out: {
+            id: 151,
+            count: 1
+        },
+        requires: {
+            124: 4,
+            11: 1
+        }
+    }, {
+        id: "rose_stained_glass",
+        out: {
+            id: 152,
+            count: 2
+        },
+        requires: {
+            100: 2,
+            12: 1
+        }
+    }, {
+        id: "battlement_stone",
+        out: {
+            id: 153,
+            count: 4
+        },
+        requires: {
+            139: 3,
+            106: 1
         }
     }],
     raycaster = new THREE.Raycaster,

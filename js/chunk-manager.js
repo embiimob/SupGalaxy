@@ -330,7 +330,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         E |= (1 << v);
                     }
                 }
-                if (!E) continue;
+                if (!E && !(BLOCKS[w] && BLOCKS[w].model)) continue;
                 const t = `${p},${u},${m}`,
                     a = getCurrentWorldState().foreignBlockOrigins.get(t) || worldSeed,
                     n = `${w}-${a}`;
@@ -421,6 +421,87 @@ Chunk.prototype.idx = function (e, t, o) {
                 seaweedMesh.castShadow = false;
                 seaweedMesh.receiveShadow = false;
                 I.add(seaweedMesh);
+                continue;
+            }
+            if (BLOCKS[w] && BLOCKS[w].model) {
+                const modelMaterial = new THREE.MeshStandardMaterial({
+                    map: createBlockTexture(b, w),
+                    side: THREE.DoubleSide,
+                    metalness: BLOCKS[w].textureStyle === "metal" ? .65 : 0,
+                    roughness: BLOCKS[w].textureStyle === "metal" ? .38 : .85
+                });
+                const trimMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x49301d,
+                    roughness: 0.85
+                });
+                for (const B of e.positions) {
+                    const model = new THREE.Group();
+                    model.position.set(B.x + .5, B.y, B.z + .5);
+                    model.userData.doorAnchor = BLOCKS[w].model.startsWith("door") ? {
+                        x: modWrap(B.x, MAP_SIZE),
+                        y: B.y,
+                        z: modWrap(B.z, MAP_SIZE)
+                    } : null;
+                    model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
+                    if (BLOCKS[w].model === "stairs") {
+                        const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
+                        lowerStep.position.y = .25;
+                        const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);
+                        upperStep.position.set(0, .75, .25);
+                        model.add(lowerStep, upperStep);
+                    } else if (BLOCKS[w].model === "portcullis") {
+                        const heavyGate = true;
+                        const rodWidth = .09;
+                        for (let x = -.4; x <= .401; x += .2) {
+                            const upright = new THREE.Mesh(new THREE.BoxGeometry(rodWidth, 1, .08), modelMaterial);
+                            upright.position.set(x, .5, 0);
+                            model.add(upright);
+                        }
+                        for (let y = heavyGate ? .1 : .25; y < 1; y += heavyGate ? .2 : .25) {
+                            const crossbar = new THREE.Mesh(new THREE.BoxGeometry(1, heavyGate ? .065 : .045, .09), modelMaterial);
+                            crossbar.position.set(0, y, 0);
+                            model.add(crossbar);
+                        }
+                        if (heavyGate) {
+                            for (let x = -.4; x <= .401; x += .2) {
+                                const spike = new THREE.Mesh(new THREE.ConeGeometry(.07, .18, 4), trimMaterial);
+                                spike.position.set(x, .09, 0);
+                                spike.rotation.x = Math.PI;
+                                model.add(spike);
+                            }
+                        }
+                    } else if (BLOCKS[w].model === "battlement") {
+                        const parapet = new THREE.Mesh(new THREE.BoxGeometry(1, .55, 1), modelMaterial);
+                        parapet.position.y = .275;
+                        model.add(parapet);
+                        for (const x of [-.34, 0, .34]) {
+                            const merlon = new THREE.Mesh(new THREE.BoxGeometry(.28, .45, .72), modelMaterial);
+                            merlon.position.set(x, .775, 0);
+                            model.add(merlon);
+                        }
+                    } else {
+                        const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(.05, 2, .14), trimMaterial);
+                        leftJamb.position.set(-.475, 1, 0);
+                        const rightJamb = new THREE.Mesh(new THREE.BoxGeometry(.05, 2, .14), trimMaterial);
+                        rightJamb.position.set(.475, 1, 0);
+                        const lintel = new THREE.Mesh(new THREE.BoxGeometry(.95, .1, .14), trimMaterial);
+                        lintel.position.y = 1.95;
+                        const hinge = new THREE.Group();
+                        hinge.position.x = -.45;
+                        const panel = new THREE.Mesh(new THREE.BoxGeometry(.88, 1.9, .07), modelMaterial);
+                        panel.position.set(.44, 1, 0);
+                        hinge.add(panel);
+                        if (BLOCKS[w].model === "door_open") hinge.rotation.y = -Math.PI / 2;
+                        model.add(leftJamb, rightJamb, lintel, hinge);
+                    }
+                    model.traverse(child => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    I.add(model);
+                }
                 continue;
             }
             for (var B of e.positions) {
