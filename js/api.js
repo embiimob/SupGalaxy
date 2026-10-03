@@ -4,6 +4,62 @@ var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var ipfsFailureCounts = new Map();
 var missingIpfsPaths = new Set();
+var p2fkRequestTimes = [];
+var p2fkRequestQueue = [];
+var p2fkThrottleTimer = null;
+var p2fkBurstCount = 0;
+var p2fkNextSlowRequestAt = 0;
+var p2fkLastRequestAt = null;
+var P2FK_RATE_WINDOW_MS = 10000;
+var P2FK_MAX_REQUESTS_PER_WINDOW = 99;
+var P2FK_BURST_REQUESTS = 50;
+
+function waitForP2fkApiSlot() {
+    return new Promise(function (resolve) {
+        p2fkRequestQueue.push(resolve);
+        processP2fkRequestQueue();
+    });
+}
+
+function processP2fkRequestQueue() {
+    if (p2fkThrottleTimer !== null) return;
+
+    while (p2fkRequestQueue.length > 0) {
+        var now = Date.now();
+        if (p2fkLastRequestAt !== null && now - p2fkLastRequestAt >= P2FK_RATE_WINDOW_MS) {
+            p2fkRequestTimes = [];
+            p2fkBurstCount = 0;
+            p2fkNextSlowRequestAt = 0;
+        }
+        p2fkRequestTimes = p2fkRequestTimes.filter(function (requestTime) {
+            return now - requestTime < P2FK_RATE_WINDOW_MS;
+        });
+
+        var nextAllowedAt = now;
+        if (p2fkBurstCount >= P2FK_BURST_REQUESTS) {
+            nextAllowedAt = Math.max(nextAllowedAt, p2fkNextSlowRequestAt);
+        }
+        if (p2fkRequestTimes.length >= P2FK_MAX_REQUESTS_PER_WINDOW) {
+            nextAllowedAt = Math.max(nextAllowedAt, p2fkRequestTimes[0] + P2FK_RATE_WINDOW_MS);
+        }
+        if (nextAllowedAt > now) {
+            p2fkThrottleTimer = setTimeout(function () {
+                p2fkThrottleTimer = null;
+                processP2fkRequestQueue();
+            }, nextAllowedAt - now);
+            return;
+        }
+
+        p2fkRequestQueue.shift()();
+        p2fkRequestTimes.push(now);
+        p2fkLastRequestAt = now;
+        if (p2fkBurstCount < P2FK_BURST_REQUESTS) {
+            p2fkBurstCount++;
+        } else {
+            p2fkNextSlowRequestAt = now + 1000 / API_CALLS_PER_SECOND;
+        }
+    }
+}
 
 function getIpfsCacheKey(hash, filename = null) {
     return filename ? hash + "/" + filename : hash;
@@ -60,7 +116,7 @@ async function fetchIPFSWithFallback(hash, filename = null) {
         }
     }
     
-    await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+    await waitForP2fkApiSlot();
     const gatewayUrls = buildIPFSGatewayUrls(hash, filename);
     let lastResponse = null;
     let lastError = null;
@@ -93,7 +149,7 @@ async function GetPublicAddressByKeyword(keyword) {
             cleanAddress = await window.deriveKeywordAddress(keyword);
         } else {
             // Fallback if wallet.js hasn't loaded or isn't available
-            await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+            await waitForP2fkApiSlot();
             var response = await fetch('https://p2fk.io/GetPublicAddressByKeyword/' + keyword + '?mainnet=false');
             if (!response.ok) {
                 addMessage('Failed to fetch address for keyword');
@@ -143,7 +199,7 @@ function normalizeRootRecord(root, address) {
 async function GetPublicMessagesByAddress(address) {
     try {
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        await waitForP2fkApiSlot();
         var response = await fetch('https://p2fk.io/GetPublicMessagesByAddress/' + cleanAddress + '?mainnet=false');
         if (!response.ok) {
             return [];
@@ -158,7 +214,7 @@ async function GetPublicMessagesByAddress(address) {
 async function GetRootsByAddress(address, skip, qty) {
     try {
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        await waitForP2fkApiSlot();
         var response = await fetch('https://p2fk.io/GetRootsByAddress/' + cleanAddress + '?skip=' + (skip || 0) + '&qty=' + (qty || 5000) + '&mainnet=false');
         if (!response.ok) {
             addMessage('Failed to fetch roots: Invalid address');
@@ -176,7 +232,7 @@ async function GetProfileByURN(urn) {
     try {
         if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
         var cleanUrn = encodeURIComponent(urn.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        await waitForP2fkApiSlot();
         var response = await fetch('https://p2fk.io/GetProfileByURN/' + cleanUrn + '?mainnet=false');
         if (!response.ok) return null;
         var profile = await response.json();
@@ -190,7 +246,7 @@ async function GetProfileByAddress(address) {
     try {
         if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
         var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ''));
-        await new Promise(function (r) { setTimeout(r, 1000 / API_CALLS_PER_SECOND); });
+        await waitForP2fkApiSlot();
         var response = await fetch('https://p2fk.io/GetProfileByAddress/' + cleanAddress + '?mainnet=false');
         if (!response.ok) return null;
         var profile = await response.json();
