@@ -1540,7 +1540,7 @@ Mob.prototype.update = function (t) {
                     const t = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion),
                         e = this.pos.clone().add(t.multiplyScalar(-7.5)),
                         s = chunkManager.getSurfaceY(e.x, e.z);
-                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 120, !0, worldSeed)
+                    chunkManager.setBlockGlobal(Math.floor(e.x), s, Math.floor(e.z), 125, !0, worldSeed)
                 }
                 const t = {
                     x: this.targetBlock.x,
