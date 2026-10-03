@@ -14,6 +14,14 @@ const IPFS_GATEWAYS = [
     'https://ipfs.filebase.io/ipfs/'
 ];
 
+function encodeIPFSPath(path) {
+    return String(path)
+        .split('/')
+        .filter(Boolean)
+        .map(part => encodeURIComponent(part))
+        .join('/');
+}
+
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function encB58(b) {
