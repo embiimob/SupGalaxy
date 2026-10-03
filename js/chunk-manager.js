@@ -1015,15 +1015,6 @@ function makeChunkKey(e, t, o) {
     return ("" + e).slice(0, 8) + ":" + t + ":" + o
 }
 
-function parseJsonChunkKey(e) {
-    var t = e.match(/^#?(.{1,8}):(\d{1,5}):(\d{1,5})$/);
-    return t ? {
-        world: t[1],
-        cx: parseInt(t[2]),
-        cz: parseInt(t[3])
-    } : null
-}
-
 function parseChunkKey(e) {
     var t = e.match(/^(.{1,8}):(\d{1,5}):(\d{1,5})$/);
     return t ? {
