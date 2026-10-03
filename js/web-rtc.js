@@ -1164,8 +1164,7 @@ function setupDataChannel(e, t) {
                 case "processed_transaction_id":
                     if (isHost) {
                         const transactionId = s.transactionId;
-                        if (!processedMessages.has(transactionId)) {
-                            processedMessages.add(transactionId);
+                        if (processedMessages.has(transactionId)) {
                             const syncMessage = JSON.stringify({
                                 type: "sync_processed_transaction",
                                 transactionId: transactionId
