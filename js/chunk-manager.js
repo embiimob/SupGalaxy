@@ -449,9 +449,9 @@ Chunk.prototype.idx = function (e, t, o) {
                         const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);
                         upperStep.position.set(0, .75, .25);
                         model.add(lowerStep, upperStep);
-                    } else if (BLOCKS[w].model === "iron_bars" || BLOCKS[w].model === "portcullis") {
-                        const heavyGate = BLOCKS[w].model === "portcullis";
-                        const rodWidth = heavyGate ? .09 : .055;
+                    } else if (BLOCKS[w].model === "portcullis") {
+                        const heavyGate = true;
+                        const rodWidth = .09;
                         for (let x = -.4; x <= .401; x += .2) {
                             const upright = new THREE.Mesh(new THREE.BoxGeometry(rodWidth, 1, .08), modelMaterial);
                             upright.position.set(x, .5, 0);

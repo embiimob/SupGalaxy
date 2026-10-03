@@ -3279,6 +3279,7 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 148) return [148, 160, 161, 162][facing];
     if (blockId === 149) return [149, 163, 164, 165][facing];
     if (blockId === 129) return [129, 166, 167, 168][facing];
+    if (blockId === 150 || blockId === 151) return [151, 169, 170, 171][facing];
     return blockId;
 }
 

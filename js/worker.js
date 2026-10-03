@@ -226,7 +226,7 @@ const BLOCKS = {
         147: { name: 'Oak Door (Open)', color: '#704425', transparent: true },
         148: { name: 'Oak Stairs', color: '#8b5a33', transparent: true },
         149: { name: 'Castle Stone Stairs', color: '#72777d', transparent: true },
-        150: { name: 'Iron Bars', color: '#555d65' },
+        150: { name: 'Portcullis', color: '#454c53', transparent: true },
         151: { name: 'Portcullis', color: '#454c53' },
         152: { name: 'Rose Stained Glass', color: '#d88ea2', transparent: true },
         153: { name: 'Battlement Stone', color: '#8a8d8f' },
@@ -245,6 +245,9 @@ const BLOCKS = {
         166: { name: 'Wooden Planks (East)', color: '#8b5a33' },
         167: { name: 'Wooden Planks (South)', color: '#8b5a33' },
         168: { name: 'Wooden Planks (West)', color: '#8b5a33' },
+        169: { name: 'Portcullis (East)', color: '#454c53', transparent: true },
+        170: { name: 'Portcullis (South)', color: '#454c53', transparent: true },
+        171: { name: 'Portcullis (West)', color: '#454c53', transparent: true },
 };
 
 const BIOMES = [

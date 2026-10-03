@@ -582,13 +582,45 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             dropId: 129,
             strength: 2
         },
-        150: {
-            name: "Iron Bars",
-            color: "#555d65",
+        169: {
+            name: "Portcullis",
+            color: "#454c53",
             transparent: !0,
-            model: "iron_bars",
+            model: "portcullis",
             textureStyle: "metal",
-            strength: 4
+            facing: 1,
+            dropId: 151,
+            strength: 5
+        },
+        170: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 2,
+            dropId: 151,
+            strength: 5
+        },
+        171: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 3,
+            dropId: 151,
+            strength: 5
+        },
+        150: {
+            name: "Portcullis",
+            color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
+            facing: 0,
+            dropId: 151,
+            strength: 5
         },
         151: {
             name: "Portcullis",
@@ -596,6 +628,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             transparent: !0,
             model: "portcullis",
             textureStyle: "metal",
+            facing: 0,
             strength: 5
         },
         152: {
@@ -1024,24 +1057,14 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             139: 6
         }
     }, {
-        id: "iron_bars",
-        out: {
-            id: 150,
-            count: 6
-        },
-        requires: {
-            124: 3,
-            11: 1
-        }
-    }, {
         id: "portcullis",
         out: {
             id: 151,
             count: 1
         },
         requires: {
-            150: 4,
-            124: 2
+            124: 4,
+            11: 1
         }
     }, {
         id: "rose_stained_glass",
