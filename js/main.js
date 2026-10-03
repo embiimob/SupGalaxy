@@ -1039,7 +1039,7 @@ function attemptCraft(e) {
             const t = INVENTORY[e];
             if (t && r[t.id] > 0 && t.originSeed && t.originSeed !== worldSeed) {
                 const o = Math.min(t.count, r[t.id]);
-                for (let e = 0; e < o; e++) s.push(t.originSeed);
+                for (let e = 0; e < o; e++) s.push(t.originSeed || worldSeed);
                 t.count -= o, r[t.id] -= o, n[t.id] -= o, 0 === t.count && (INVENTORY[e] = null)
             }
         }
@@ -1047,11 +1047,15 @@ function attemptCraft(e) {
         const t = INVENTORY[e];
         if (t && n[t.id] > 0) {
             const o = Math.min(t.count, n[t.id]);
+            for (let i = 0; i < o; i++) s.push(t.originSeed || worldSeed);
             t.count -= o, n[t.id] -= o, 0 === t.count && (INVENTORY[e] = null)
         }
     }
-    let i = null;
-    s.length > 0 && (i = s.join("")), addToInventory(e.out.id, e.out.count, i), addMessage("Crafted " + BLOCKS[e.out.id].name), updateHotbarUI(), "block" === document.getElementById("inventoryModal").style.display && updateInventoryUI()
+    addToInventory(e.out.id, e.out.count, getCraftOriginSeed(s)), addMessage("Crafted " + BLOCKS[e.out.id].name), updateHotbarUI(), "block" === document.getElementById("inventoryModal").style.display && updateInventoryUI()
+}
+
+function getCraftOriginSeed(seeds) {
+    return seeds.find(seed => seed && seed !== worldSeed) || null;
 }
 
 function completeCraft(e, t) {
@@ -1100,10 +1104,11 @@ function completeCraft(e, t) {
         const t = INVENTORY[e];
         if (t && i[t.id] > 0) {
             const o = Math.min(t.count, i[t.id]);
+            for (let count = 0; count < o; count++) a.push(t.originSeed || worldSeed);
             t.count -= o, i[t.id] -= o, 0 === t.count && (INVENTORY[e] = null)
         }
     }
-    const d = a.sort().join("");
+    const d = getCraftOriginSeed(a);
     addToInventory(e.out.id, e.out.count, d), addMessage("Crafted " + BLOCKS[e.out.id].name), craftingState = null, document.getElementById("craftModal").style.display = "none", isPromptOpen = !1, toggleInventory(), updateHotbarUI()
 }
 
@@ -2962,7 +2967,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
 
             if (!silent) {
                 if (breaker === userName) {
-                    addToInventory(a, 1, l);
+                    const dropId = n.dropId || a;
+                    addToInventory(dropId, 1, l);
                     addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
 
                     if (a === 8 && Math.random() < 0.1) { // 1/10 chance on leaves
@@ -2976,7 +2982,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
                     if (peer && peer.dc && peer.dc.readyState === 'open') {
                         peer.dc.send(JSON.stringify({
                             type: 'add_to_inventory',
-                            blockId: a,
+                            blockId: n.dropId || a,
                             count: 1,
                             originSeed: l
                         }));
@@ -3272,6 +3278,7 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 146) return [146, 154, 156, 158][facing];
     if (blockId === 148) return [148, 160, 161, 162][facing];
     if (blockId === 149) return [149, 163, 164, 165][facing];
+    if (blockId === 129) return [129, 166, 167, 168][facing];
     return blockId;
 }
 

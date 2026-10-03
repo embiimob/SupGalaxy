@@ -151,20 +151,36 @@ function createBlockTexture(e, t) {
     if (textureCache.has(o)) return textureCache.get(o);
     const blockDef = BLOCKS[t] || { color: "#ff00ff" },
         style = blockDef.textureStyle,
+        textureSeedId = blockDef.textureSeedId || t,
         a = style ? 32 : 16,
         n = document.createElement("canvas");
     n.width = a, n.height = a;
     const r = n.getContext("2d"),
-        s = makeSeededRandom(e + "_block_texture_" + t),
+        s = makeSeededRandom(e + "_block_texture_" + textureSeedId),
         baseColor = new THREE.Color(blockDef.color),
-        seededBase = baseColor.clone().multiplyScalar(.94 + s() * .12),
+        palette = makeSeededRandom(e + "_block_palette_" + textureSeedId),
+        baseHsl = baseColor.getHSL({}),
+        hueRange = style === "sand" ? .11 : style ? .045 : .13,
+        seededBase = baseColor.clone().setHSL(
+            (baseHsl.h + (palette() - .5) * hueRange + 1) % 1,
+            Math.max(0, Math.min(1, baseHsl.s + (palette() - .5) * (style ? .16 : .28))),
+            Math.max(.08, Math.min(.92, baseHsl.l + (palette() - .5) * (style ? .14 : .2)))
+        ),
         colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle();
 
     if (style === "sand") {
         r.fillStyle = colorAt(.98);
         r.fillRect(0, 0, a, a);
+        const sandNoise = makeNoise(e + "_sand_grain_" + textureSeedId);
+        for (let x = 0; x < a; x++) {
+            for (let y = 0; y < a; y++) {
+                const variation = (sandNoise(x / 7, y / 7) - .5) * .13 + (s() - .5) * .1;
+                r.fillStyle = colorAt(.98 + variation);
+                r.fillRect(x, y, 1, 1);
+            }
+        }
         for (let grain = 0; grain < 150; grain++) {
-            const shade = .88 + s() * .24,
+            const shade = .9 + s() * .2,
                 size = s() > .9 ? 2 : 1,
                 x = Math.floor(s() * a),
                 y = Math.floor(s() * a);
@@ -182,6 +198,10 @@ function createBlockTexture(e, t) {
         }
     } else if (style === "planks" || style === "wood" || style === "beam") {
         const plankHeight = style === "beam" ? 16 : 8;
+        r.save();
+        r.translate(a / 2, a / 2);
+        r.rotate((blockDef.facing || 0) * Math.PI / 2);
+        r.translate(-a / 2, -a / 2);
         r.fillStyle = colorAt(.48);
         r.fillRect(0, 0, a, a);
         for (let row = 0; row < a; row += plankHeight) {
@@ -216,6 +236,7 @@ function createBlockTexture(e, t) {
                 r.stroke();
             }
         }
+        r.restore();
     } else if (style === "brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "sandstone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
         const brickWidth = style === "cobble" ? 11 : 16,
             courseHeight = style === "brick" ? 8 : 10;
@@ -324,10 +345,18 @@ function createBlockTexture(e, t) {
             }
         }
     } else {
-        r.fillStyle = baseColor.getStyle(), r.fillRect(0, 0, a, a);
+        r.fillStyle = seededBase.getStyle(), r.fillRect(0, 0, a, a);
         let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     const d = Math.floor(5 * s()),
         c = makeNoise(e + "_pattern_noise_" + t);
+        for (let x = 0; x < a; x += 2)
+            for (let y = 0; y < a; y += 2) {
+                const grain = c(x / 5, y / 5) - .5;
+                if (Math.abs(grain) > .24) {
+                    r.fillStyle = colorAt(1 + grain * .22);
+                    r.fillRect(x, y, 1, 1);
+                }
+            }
         if (r.strokeStyle = l.getStyle(), r.lineWidth = 1 + Math.floor(2 * s()), 0 === d)
         for (let e = 2; e < a; e += 4) {
             r.beginPath();

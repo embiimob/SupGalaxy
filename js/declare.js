@@ -549,6 +549,33 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             facing: 3,
             strength: 3
         },
+        166: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 1,
+            dropId: 129,
+            strength: 2
+        },
+        167: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 2,
+            dropId: 129,
+            strength: 2
+        },
+        168: {
+            name: "Wooden Planks",
+            color: "#8b5a33",
+            textureStyle: "planks",
+            textureSeedId: 129,
+            facing: 3,
+            dropId: 129,
+            strength: 2
+        },
         150: {
             name: "Iron Bars",
             color: "#555d65",

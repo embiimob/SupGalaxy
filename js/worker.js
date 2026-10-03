@@ -242,6 +242,9 @@ const BLOCKS = {
         163: { name: 'Castle Stone Stairs (East)', color: '#72777d', transparent: true },
         164: { name: 'Castle Stone Stairs (South)', color: '#72777d', transparent: true },
         165: { name: 'Castle Stone Stairs (West)', color: '#72777d', transparent: true },
+        166: { name: 'Wooden Planks (East)', color: '#8b5a33' },
+        167: { name: 'Wooden Planks (South)', color: '#8b5a33' },
+        168: { name: 'Wooden Planks (West)', color: '#8b5a33' },
 };
 
 const BIOMES = [
