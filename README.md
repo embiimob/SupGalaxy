@@ -140,7 +140,7 @@ When your Testnet3 wallet is unlocked, WebRTC connection files are automatically
 
 ### Client
 1. Unlock your Testnet3 wallet.
-2. Open 🌐 **Online Players** → enter host name → click join.
+2. Open 🌐 **Switch world** → enter the host's handle under **Connect to Friend** → click **Connect to Friend**.
 3. The game automatically generates an **offer**, uploads it to IPFS, and broadcasts it on-chain to the host.
 4. The game monitors your personal derived keyword (`worldName@userName`) for the host's **answer**.
 5. Once the answer is received, the connection is established!
@@ -156,7 +156,7 @@ If you are playing without a wallet, you can manually exchange connection files.
 5. Send the answer back to the client.
 
 ### Client
-1. Open 🌐 **Online Players** → enter host name → click join.
+1. Open 🌐 **Switch world** → enter the host's handle under **Connect to Friend** → click **Connect to Friend**.
 2. Download **offer** file.  
 3. Send to host.  
 4. Receive **answer**.  
