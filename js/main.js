@@ -3510,12 +3510,19 @@ function updateMinimap() {
         var t = e.width / 40,
             o = e.width / 2,
             a = e.height / 2;
-        for (var n of (minimapCtx.fillStyle = "#ffffff", minimapCtx.fillRect(o - 2, a - 2, 4, 4), minimapCtx.fillStyle = "#9bff9b", mobs)) {
+        const lookDirection = camera.getWorldDirection(new THREE.Vector3());
+        lookDirection.y = 0;
+        if (lookDirection.lengthSq() > 0) lookDirection.normalize();
+        const heading = Math.atan2(-lookDirection.x, -lookDirection.z);
+        minimapCtx.save();
+        minimapCtx.translate(o, a);
+        minimapCtx.rotate(heading);
+        for (var n of (minimapCtx.fillStyle = "#9bff9b", mobs)) {
             var r = n.pos.x - player.x,
                 s = n.pos.z - player.z;
             if (Math.abs(r) <= 20 && Math.abs(s) <= 20) {
-                var i = o + r * t,
-                    l = a + s * t;
+                var i = r * t,
+                    l = s * t;
                 minimapCtx.fillRect(i - 2, l - 2, 4, 4)
             }
         }
@@ -3524,10 +3531,18 @@ function updateMinimap() {
             var c = d[1];
             r = c.position.x - player.x, s = c.position.z - player.z;
             if (Math.abs(r) <= 20 && Math.abs(s) <= 20) {
-                i = o + r * t, l = a + s * t;
+                i = r * t, l = s * t;
                 minimapCtx.fillRect(i - 2, l - 2, 4, 4)
             }
         }
+        minimapCtx.restore();
+        minimapCtx.fillStyle = "#ffffff";
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(o, a - 5);
+        minimapCtx.lineTo(o - 4, a + 4);
+        minimapCtx.lineTo(o + 4, a + 4);
+        minimapCtx.closePath();
+        minimapCtx.fill();
         if (isConnecting) {
             const t = e.width / 2,
                 n = performance.now() / 500 % (2 * Math.PI);
@@ -5263,7 +5278,18 @@ function initMinimap() {
     })), console.log("[MINIMAP] Events attached: double-click and drag-and-drop enabled")
 }
 
+var fpsSampleStart = 0, fpsFrameCount = 0;
+
 function gameLoop(e) {
+    if (!fpsSampleStart) fpsSampleStart = e;
+    fpsFrameCount++;
+    const fpsElapsed = e - fpsSampleStart;
+    if (fpsElapsed >= 1000) {
+        const fpsCounter = document.getElementById("fpsCounter");
+        if (fpsCounter) fpsCounter.textContent = `${Math.round(fpsFrameCount * 1000 / fpsElapsed)} FPS`;
+        fpsFrameCount = 0;
+        fpsSampleStart = e;
+    }
     if (isDying) {
         const t = 1500,
             o = 1e3,
