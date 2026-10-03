@@ -160,7 +160,27 @@ function createBlockTexture(e, t) {
         seededBase = baseColor.clone().multiplyScalar(.94 + s() * .12),
         colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle();
 
-    if (style === "planks" || style === "wood" || style === "beam") {
+    if (style === "sand") {
+        r.fillStyle = colorAt(.98);
+        r.fillRect(0, 0, a, a);
+        for (let grain = 0; grain < 150; grain++) {
+            const shade = .88 + s() * .24,
+                size = s() > .9 ? 2 : 1,
+                x = Math.floor(s() * a),
+                y = Math.floor(s() * a);
+            r.fillStyle = colorAt(shade);
+            r.fillRect(x, y, size, size);
+        }
+        for (let ripple = 0; ripple < 3; ripple++) {
+            const y = 4 + ripple * 11 + Math.floor(s() * 4);
+            r.beginPath();
+            r.moveTo(0, y);
+            r.quadraticCurveTo(a / 2, y - 2 + s() * 4, a, y + (s() - .5) * 2);
+            r.strokeStyle = colorAt(ripple % 2 ? 1.04 : .91);
+            r.lineWidth = .7;
+            r.stroke();
+        }
+    } else if (style === "planks" || style === "wood" || style === "beam") {
         const plankHeight = style === "beam" ? 16 : 8;
         r.fillStyle = colorAt(.48);
         r.fillRect(0, 0, a, a);

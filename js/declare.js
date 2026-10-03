@@ -62,6 +62,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         5: {
             name: "Sand",
             color: "#e7d08d",
+            textureStyle: "sand",
             strength: 1
         },
         6: {
@@ -398,6 +399,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             transparent: !0,
             model: "door_closed",
             textureStyle: "planks",
+            facing: 0,
+            openId: 147,
             strength: 2
         },
         147: {
@@ -406,6 +409,72 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             transparent: !0,
             model: "door_open",
             textureStyle: "planks",
+            facing: 0,
+            closedId: 146,
+            doorOpen: !0,
+            strength: 2
+        },
+        154: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 1,
+            openId: 155,
+            strength: 2
+        },
+        155: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 1,
+            closedId: 154,
+            doorOpen: !0,
+            strength: 2
+        },
+        156: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 2,
+            openId: 157,
+            strength: 2
+        },
+        157: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 2,
+            closedId: 156,
+            doorOpen: !0,
+            strength: 2
+        },
+        158: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            textureStyle: "planks",
+            facing: 3,
+            openId: 159,
+            strength: 2
+        },
+        159: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            textureStyle: "planks",
+            facing: 3,
+            closedId: 158,
+            doorOpen: !0,
             strength: 2
         },
         148: {
@@ -414,6 +483,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             transparent: !0,
             model: "stairs",
             textureStyle: "planks",
+            facing: 0,
             strength: 2
         },
         149: {
@@ -422,6 +492,61 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             transparent: !0,
             model: "stairs",
             textureStyle: "stone_bricks",
+            facing: 0,
+            strength: 3
+        },
+        160: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 1,
+            strength: 2
+        },
+        161: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 2,
+            strength: 2
+        },
+        162: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "planks",
+            facing: 3,
+            strength: 2
+        },
+        163: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 1,
+            strength: 3
+        },
+        164: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 2,
+            strength: 3
+        },
+        165: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            textureStyle: "stone_bricks",
+            facing: 3,
             strength: 3
         },
         150: {

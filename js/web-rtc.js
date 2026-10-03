@@ -1558,13 +1558,17 @@ function setupDataChannel(e, t) {
                 case 'request_block_place':
                     if (isHost) {
                         console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
+                        const blockDefinition = BLOCKS[s.blockId];
+                        const placementHasClearance = blockDefinition && blockDefinition.model === "door_closed"
+                            ? s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR
+                            : Boolean(blockDefinition);
 
                         // Validate ownership
                         const placeChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkKey = makeChunkKey(s.world, placeChunkX, placeChunkZ);
 
-                        if (isChunkMutationAllowed(placeChunkKey, s.username)) {
+                        if (placementHasClearance && isChunkMutationAllowed(placeChunkKey, s.username)) {
                             // Allowed: place block and broadcast
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed, 'network');
 
@@ -1619,7 +1623,7 @@ function setupDataChannel(e, t) {
                             if (requestingPeer && requestingPeer.dc && requestingPeer.dc.readyState === 'open') {
                                 requestingPeer.dc.send(JSON.stringify({
                                     type: 'remove_from_inventory',
-                                    blockId: s.blockId,
+                                    blockId: s.inventoryBlockId || s.blockId,
                                     count: 1,
                                     originSeed: s.originSeed
                                 }));
@@ -1667,11 +1671,12 @@ function setupDataChannel(e, t) {
                 case 'request_block_toggle':
                     if (isHost && s.world === worldName) {
                         const currentBlockId = getBlockAt(s.x, s.y, s.z);
-                        const isDoorToggle = (currentBlockId === 146 && s.blockId === 147) || (currentBlockId === 147 && s.blockId === 146);
+                        const currentDoor = BLOCKS[currentBlockId];
+                        const isDoorToggle = currentDoor && (currentDoor.openId === s.blockId || currentDoor.closedId === s.blockId);
                         const chunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const chunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const chunkKey = makeChunkKey(s.world, chunkX, chunkZ);
-                        const doorHasClearance = s.blockId !== 146 || (s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR);
+                        const doorHasClearance = !BLOCKS[s.blockId] || BLOCKS[s.blockId].model !== "door_closed" || (s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR);
                         if (isDoorToggle && doorHasClearance && isChunkMutationAllowed(chunkKey, s.username)) {
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, null, 'network');
                         }

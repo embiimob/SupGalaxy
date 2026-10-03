@@ -438,10 +438,11 @@ Chunk.prototype.idx = function (e, t, o) {
                     const model = new THREE.Group();
                     model.position.set(B.x + .5, B.y, B.z + .5);
                     model.userData.doorAnchor = BLOCKS[w].model.startsWith("door") ? {
-                        x: p,
-                        y: u,
-                        z: m
+                        x: modWrap(B.x, MAP_SIZE),
+                        y: B.y,
+                        z: modWrap(B.z, MAP_SIZE)
                     } : null;
+                    model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
                     if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
                         lowerStep.position.y = .25;

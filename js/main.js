@@ -2598,10 +2598,12 @@ function onPointerDown(e) {
     }
 }
 
-function toggleCastleDoor(x, y, z) {
+function toggleCastleDoor(anchor) {
+    const { x, y, z } = anchor;
     const blockId = getBlockAt(x, y, z);
-    if (blockId !== 146 && blockId !== 147) return;
-    const nextBlockId = blockId === 146 ? 147 : 146;
+    const door = BLOCKS[blockId];
+    if (!door || (!door.openId && !door.closedId)) return;
+    const nextBlockId = door.openId || door.closedId;
     const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
     const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
     const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
@@ -2609,13 +2611,13 @@ function toggleCastleDoor(x, y, z) {
         addMessage("You cannot change this door in another player's chunk.", 2000);
         return;
     }
-    if (nextBlockId === 146 && (checkCollisionWithPlayer(x, y, z) || checkCollisionWithPlayer(x, y + 1, z))) {
+    if (BLOCKS[nextBlockId].model === "door_closed" && (checkCollisionWithPlayer(x, y, z) || checkCollisionWithPlayer(x, y + 1, z))) {
         addMessage("Move clear of the doorway before closing it.", 2000);
         return;
     }
     if (isHost || peers.size === 0) {
         chunkManager.setBlockGlobal(x, y, z, nextBlockId, true, null, "local");
-        addMessage(nextBlockId === 147 ? "Door opened" : "Door closed", 1200);
+        addMessage(BLOCKS[nextBlockId].doorOpen ? "Door opened" : "Door closed", 1200);
     } else {
         for (const [, peer] of peers.entries()) {
             if (peer.dc && peer.dc.readyState === "open") {
@@ -2631,7 +2633,7 @@ function toggleCastleDoor(x, y, z) {
                 break;
             }
         }
-        addMessage(nextBlockId === 147 ? "Opening door..." : "Closing door...", 1200);
+        addMessage(BLOCKS[nextBlockId].doorOpen ? "Opening door..." : "Closing door...", 1200);
     }
 }
 
@@ -3094,6 +3096,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
 function placeBlockAt(e, t, o, a) {
     if (a) {
         var n = INVENTORY[selectedHotIndex];
+        const facing = getBuildFacing();
+        const placedBlockId = getOrientedBuildBlockId(a, facing);
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
         else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(`${BLOCKS[a].name} can only be released into water.`, 2000);
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
@@ -3184,12 +3188,12 @@ function placeBlockAt(e, t, o, a) {
 
                     // Host-authoritative: only host mutates directly, clients send requests
                     if (isHost || peers.size === 0) {
-                        if (chunkManager.setBlockGlobal(e, t, o, a, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
+                        if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
-                            addMessage(`Placed ${BLOCKS[a] ? BLOCKS[a].name : a} from ${n.originSeed}`);
+                            addMessage(`Placed ${BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId} from ${n.originSeed}`);
                         } else {
-                            addMessage("Placed " + (BLOCKS[a] ? BLOCKS[a].name : a));
+                            addMessage("Placed " + (BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId));
                         }
                         if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
                             const key = `${e},${t},${o}`;
@@ -3218,7 +3222,7 @@ function placeBlockAt(e, t, o, a) {
                                 x: e,
                                 y: t,
                                 z: o,
-                                blockId: a,
+                                blockId: placedBlockId,
                                 username: userName,
                                 world: worldName,
                                 originSeed: n.originSeed
@@ -3236,7 +3240,8 @@ function placeBlockAt(e, t, o, a) {
                             x: e,
                             y: t,
                             z: o,
-                            blockId: a,
+                            blockId: placedBlockId,
+                            inventoryBlockId: a,
                             username: userName,
                             world: worldName,
                             originSeed: n.originSeed
@@ -3253,6 +3258,21 @@ function placeBlockAt(e, t, o, a) {
             else addMessage("Cannot place here")
         }
     } else addMessage("No item selected")
+}
+
+function getBuildFacing() {
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    direction.y = 0;
+    if (direction.lengthSq() === 0) return 0;
+    direction.normalize();
+    return ((Math.round(Math.atan2(direction.x, direction.z) / (Math.PI / 2)) % 4) + 4) % 4;
+}
+
+function getOrientedBuildBlockId(blockId, facing) {
+    if (blockId === 146) return [146, 154, 156, 158][facing];
+    if (blockId === 148) return [148, 160, 161, 162][facing];
+    if (blockId === 149) return [149, 163, 164, 165][facing];
+    return blockId;
 }
 
 function checkCollisionWithPlayer(e, t, o) {
@@ -3364,7 +3384,7 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e && 147 !== e
+    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e && !(BLOCKS[e] && BLOCKS[e].doorOpen)
 }
 
 function checkCollisionWithBlock(e, t, o) {
@@ -3382,11 +3402,73 @@ function checkBlockCollision(e, t, o) {
         s = Math.floor(t + player.height),
         i = Math.floor(o),
         l = Math.floor(o + player.depth);
-    for (let e = a; e <= n; e++)
-        for (let t = r; t <= s; t++)
-            for (let o = i; o <= l; o++)
-                if (isSolid(getBlockAt(e, t, o))) return !0;
+    const overlaps = (x0, y0, z0, x1, y1, z1) =>
+        e < x1 && e + player.width > x0 &&
+        t < y1 && t + player.height > y0 &&
+        o < z1 && o + player.depth > z0;
+    for (let x = a; x <= n; x++)
+        for (let y = r; y <= s; y++)
+            for (let z = i; z <= l; z++) {
+                const blockId = getBlockAt(x, y, z);
+                if (!isSolid(blockId)) continue;
+                const block = BLOCKS[blockId];
+                if (block && block.model === "stairs") {
+                    const facing = block.facing || 0;
+                    if (overlaps(x, y, z, x + 1, y + .5, z + 1)) return true;
+                    if (facing === 0 && overlaps(x, y + .5, z + .5, x + 1, y + 1, z + 1)) return true;
+                    if (facing === 1 && overlaps(x + .5, y + .5, z, x + 1, y + 1, z + 1)) return true;
+                    if (facing === 2 && overlaps(x, y + .5, z, x + 1, y + 1, z + .5)) return true;
+                    if (facing === 3 && overlaps(x, y + .5, z, x + .5, y + 1, z + 1)) return true;
+                } else if (overlaps(x, y, z, x + 1, y + 1, z + 1)) {
+                    return true;
+                }
+            }
     return !1
+}
+
+function getStairLandingHeight(x, currentY, z, fallingY) {
+    let landingY = null;
+    const centerX = x + player.width / 2,
+        centerZ = z + player.depth / 2;
+    for (let blockX = Math.floor(x); blockX <= Math.floor(x + player.width); blockX++) {
+        for (let blockZ = Math.floor(z); blockZ <= Math.floor(z + player.depth); blockZ++) {
+            for (let blockY = Math.floor(fallingY) - 1; blockY <= Math.floor(currentY); blockY++) {
+                const block = BLOCKS[getBlockAt(blockX, blockY, blockZ)];
+                if (!block || block.model !== "stairs") continue;
+                let progress;
+                switch (block.facing || 0) {
+                    case 1: progress = centerX - blockX; break;
+                    case 2: progress = blockZ + 1 - centerZ; break;
+                    case 3: progress = blockX + 1 - centerX; break;
+                    default: progress = centerZ - blockZ;
+                }
+                const top = blockY + (progress < .5 ? .5 : 1);
+                if (top <= currentY + .001 && top > fallingY - .001 &&
+                    (landingY === null || top > landingY) && !checkBlockCollision(x, top, z)) {
+                    landingY = top;
+                }
+            }
+        }
+    }
+    return landingY;
+}
+
+function tryStepUpStairs(x, y, z) {
+    let touchesStairs = false;
+    for (let blockX = Math.floor(x); blockX <= Math.floor(x + player.width); blockX++) {
+        for (let blockZ = Math.floor(z); blockZ <= Math.floor(z + player.depth); blockZ++) {
+            for (let blockY = Math.floor(y) - 1; blockY <= Math.floor(y + player.height); blockY++) {
+                const block = BLOCKS[getBlockAt(blockX, blockY, blockZ)];
+                if (block && block.model === "stairs") touchesStairs = true;
+            }
+        }
+    }
+    if (!touchesStairs) return null;
+    for (const step of [.5, 1]) {
+        const steppedY = y + step;
+        if (!checkCollision(x, steppedY, z)) return steppedY;
+    }
+    return null;
 }
 
 function checkCollision(e, t, o) {
@@ -5398,7 +5480,12 @@ function gameLoop(e) {
         d += player.vx * t, c += player.vz * t, player.vx *= 1 - 2 * t, player.vz *= 1 - 2 * t;
         let M = player.x + d;
         if (checkCollision(M, player.y, player.z)) {
-            if (inWater && !checkCollision(M, player.y + 1, player.z)) {
+            const stairY = tryStepUpStairs(M, player.y, player.z);
+            if (stairY !== null) {
+                player.y = stairY;
+                player.vy = Math.max(0, player.vy);
+                player.x = M;
+            } else if (inWater && !checkCollision(M, player.y + 1, player.z)) {
                 player.y += 1;
                 player.x = M;
             } else if (inWater && !checkCollision(M, player.y + 2, player.z)) {
@@ -5413,7 +5500,12 @@ function gameLoop(e) {
 
         let S = player.z + c;
         if (checkCollision(player.x, player.y, S)) {
-            if (inWater && !checkCollision(player.x, player.y + 1, S)) {
+            const stairY = tryStepUpStairs(player.x, player.y, S);
+            if (stairY !== null) {
+                player.y = stairY;
+                player.vy = Math.max(0, player.vy);
+                player.z = S;
+            } else if (inWater && !checkCollision(player.x, player.y + 1, S)) {
                 player.y += 1;
                 player.z = S;
             } else if (inWater && !checkCollision(player.x, player.y + 2, S)) {
@@ -5437,7 +5529,8 @@ function gameLoop(e) {
         if (checkCollision(player.x, p, player.z)) {
             if (u < 0) {
                 if (checkBlockCollision(player.x, p, player.z)) {
-                    player.y = Math.ceil(p - .001);
+                    const stairLandingY = getStairLandingHeight(player.x, player.y, player.z, p);
+                    player.y = stairLandingY === null ? Math.ceil(p - .001) : stairLandingY;
                 } else {
                     const meshY = getMeshSurfaceY(player.x, player.y, player.z);
                     if (meshY !== null) {
