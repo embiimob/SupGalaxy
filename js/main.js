@@ -5094,7 +5094,7 @@ function updateProximityVideo() {
 
 function switchWorld(newWorldName, targetSpawn) {
     worldArchetype = null;
-    const e = newWorldName || prompt("Enter the name of the world to switch to:");
+    const e = newWorldName;
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
 
     // Store the old world name before updating
@@ -6357,8 +6357,6 @@ document.addEventListener("DOMContentLoaded", (async function () {
             }), (function (e) {
                 addMessage("Failed to copy URL.", 3e3)
             })), this.blur()
-        })), document.getElementById("switchWorldBtn").addEventListener("click", (function () {
-            switchWorld(), this.blur()
         })), document.getElementById("saveChangesBtn").addEventListener("click", (function () {
             downloadSession(), this.blur()
         })), document.getElementById("joinScriptBtn").addEventListener("click", (async function () {
