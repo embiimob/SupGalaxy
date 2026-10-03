@@ -317,15 +317,12 @@
         }
 
         #fpsCounter {
-            position: fixed;
-            right: 12px;
-            bottom: 10px;
-            z-index: 40;
             color: #9bff9b;
             font-size: 11px;
             font-weight: 700;
             text-shadow: 0 1px 3px #000;
             pointer-events: none;
+            margin-left: 8px;
         }
 
         #musicPlayer button {
