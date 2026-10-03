@@ -156,6 +156,8 @@ function initMusicPlayer() {
 async function fetchAndPlayMusic() {
     const musicStatus = document.getElementById('currentTrack');
     if (!musicStatus) return;
+    musicPlaylist = [];
+    currentTrackIndex = 0;
     musicStatus.innerText = 'Finding music...';
 
     try {
@@ -193,12 +195,12 @@ async function fetchAndPlayMusic() {
         });
 
         for (const msg of filteredMessages) {
-            if (musicPlaylist.length >= 10) break;
+            if (musicPlaylist.length >= 100) break;
 
             const messageText = msg.Message || '';
 
             for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
-                if (musicPlaylist.length >= 10) break;
+                if (musicPlaylist.length >= 100) break;
 
                 const hash = ipfsMatch[1];
                 const path = ipfsMatch[2] || '';
@@ -220,11 +222,19 @@ async function fetchAndPlayMusic() {
         if (musicPlaylist.length === 0) {
             musicStatus.innerText = 'No valid music found';
         } else {
+            shuffleMusicPlaylist();
             playTrack(currentTrackIndex);
         }
     } catch (error) {
         console.error("Failed to fetch music:", error);
         musicStatus.innerText = 'Error loading music';
+    }
+}
+
+function shuffleMusicPlaylist() {
+    for (let i = musicPlaylist.length - 1; i > 0; i--) {
+        const randomIndex = Math.floor(Math.random() * (i + 1));
+        [musicPlaylist[i], musicPlaylist[randomIndex]] = [musicPlaylist[randomIndex], musicPlaylist[i]];
     }
 }
 
