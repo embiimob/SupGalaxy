@@ -42,7 +42,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         1: {
             name: "Bedrock",
             color: "#0b0b0b",
-            strength: 5
+            strength: 5,
+            unbreakable: !0
         },
         2: {
             name: "Grass",

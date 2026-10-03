@@ -2858,16 +2858,13 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
 
 function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const a = getBlockAt(e, t, o);
-    if (!a || a === BLOCK_AIR || a === 1 || a === 6) return;
+    if (!a || a === BLOCK_AIR || a === 6) return;
 
-    const n = BLOCKS[a];
+    const n = BLOCKS[a] || { strength: 1 };
+    const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
-    if (!n || (n.strength > 5 && n.breakable !== true)) {
-        if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
-            // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
-        } else {
-            return void addMessage("Cannot break that block");
-        }
+    if (n.unbreakable && !isUfo) {
+        return void addMessage("Cannot break that block");
     }
 
     // Check ownership BEFORE showing any visual feedback
@@ -2898,7 +2895,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     s.hits += damageAmount;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 100000 if hit repeatedly (reduced damage)
-    const effectiveStrength = (n.strength > 5 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? 100000 : (n.strength > 0 && breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) ? n.strength * 3000 : n.strength;
+    const strength = Number.isFinite(n.strength) && n.strength > 0 ? n.strength : 1;
+    const effectiveStrength = n.unbreakable && isUfo ? 100000 : isUfo ? strength * 3000 : strength;
     if (s.hits < effectiveStrength) {
         damagedBlocks.set(r, s);
 
