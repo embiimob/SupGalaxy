@@ -167,7 +167,7 @@ async function fetchAndPlayMusic() {
             return;
         }
 
-        const messages = await GetRootsByAddress(gameAddress, 0, 50);
+        const messages = await GetRootsByAddress(gameAddress, 0, 100);
         if (!messages || messages.length === 0) {
             musicStatus.innerText = 'No music tracks found';
             return;
@@ -195,12 +195,12 @@ async function fetchAndPlayMusic() {
         });
 
         for (const msg of filteredMessages) {
-            if (musicPlaylist.length >= 50) break;
+            if (musicPlaylist.length >= 100) break;
 
             const messageText = msg.Message || '';
 
             for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
-                if (musicPlaylist.length >= 50) break;
+                if (musicPlaylist.length >= 100) break;
 
                 const hash = ipfsMatch[1];
                 const path = ipfsMatch[2] || '';
