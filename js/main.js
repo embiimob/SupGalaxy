@@ -741,9 +741,8 @@ function initThree() {
 
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
-    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
-    var e = new THREE.DirectionalLight(16777215, 1);
-    e.position.set(100, 200, 100), scene.add(e), scene.add(new THREE.AmbientLight(16777215, .2));
+    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
 
@@ -883,7 +882,7 @@ function createAndSetupAvatar(e, t, o = 0) {
     n.add(S, I, k, w, b, x);
 
     // Add a point light to represent the torch light
-    const torchLight = new THREE.PointLight(0xffddaa, 0, 18);
+    const torchLight = new THREE.PointLight(0xffddaa, 0, 22);
     torchLight.position.set(0, 1.5, 0); // Position it relative to the avatar
     torchLight.decay = 2;
     n.add(torchLight); // Attach to the avatar group
@@ -5179,7 +5178,13 @@ function switchWorld(newWorldName, targetSpawn) {
     torchParticles.forEach(p => scene.remove(p));
     torchParticles.clear();
 
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], skyProps && (skyProps.suns.forEach((e => scene.remove(e.mesh))), skyProps.moons.forEach((e => scene.remove(e.mesh)))), stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    if (skyProps) {
+        for (const body of [...skyProps.suns, ...skyProps.moons]) {
+            scene.remove(body.mesh, body.light, body.light.target);
+            if (body.light.shadow.map) body.light.shadow.map.dispose();
+        }
+    }
+    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
         claimed: !1

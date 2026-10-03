@@ -484,10 +484,23 @@ function initSky() {
             a = new THREE.Mesh(new THREE.SphereGeometry(t, 32, 32), new THREE.MeshBasicMaterial({
                 color: o
             }));
+        const light = new THREE.DirectionalLight(o, 0);
+        light.castShadow = true;
+        light.shadow.mapSize.set(512, 512);
+        light.shadow.camera.left = -80;
+        light.shadow.camera.right = 80;
+        light.shadow.camera.top = 80;
+        light.shadow.camera.bottom = -80;
+        light.shadow.camera.near = 0.5;
+        light.shadow.camera.far = 5000;
+        light.shadow.camera.updateProjectionMatrix();
+        light.shadow.bias = -0.0005;
+        light.shadow.normalBias = 0.02;
         skyProps.suns.push({
             mesh: a,
+            light,
             angleOffset: e() * Math.PI * 2
-        }), scene.add(a)
+        }), scene.add(a), scene.add(light), scene.add(light.target)
     }
     const s = Math.floor(4 * e());
     for (let t = 0; t < s; t++) {
@@ -508,10 +521,23 @@ function initSky() {
         const l = new THREE.Mesh(n, new THREE.MeshBasicMaterial({
             color: a
         }));
+        const light = new THREE.DirectionalLight(a, 0);
+        light.castShadow = true;
+        light.shadow.mapSize.set(512, 512);
+        light.shadow.camera.left = -80;
+        light.shadow.camera.right = 80;
+        light.shadow.camera.top = 80;
+        light.shadow.camera.bottom = -80;
+        light.shadow.camera.near = 0.5;
+        light.shadow.camera.far = 5000;
+        light.shadow.camera.updateProjectionMatrix();
+        light.shadow.bias = -0.0005;
+        light.shadow.normalBias = 0.02;
         skyProps.moons.push({
             mesh: l,
+            light,
             angleOffset: e() * Math.PI * 2
-        }), scene.add(l)
+        }), scene.add(l), scene.add(light), scene.add(light.target)
     }
     stars = new THREE.Group;
     const i = new THREE.BufferGeometry,
@@ -555,50 +581,34 @@ function updateSky(e) {
     isNight = n < -.1, skyProps.suns.forEach((e => {
         const t = o + e.angleOffset;
         e.mesh.position.set(camera.position.x + 4e3 * Math.cos(t), camera.position.y + 4e3 * Math.sin(t), camera.position.z + 1500 * Math.sin(t)), e.mesh.visible = Math.sin(t) > -.1
+        const altitude = Math.sin(t);
+        e.light.position.copy(e.mesh.position);
+        e.light.target.position.copy(camera.position);
+        e.light.target.updateMatrixWorld();
+        e.baseIntensity = 0.95 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.suns.length);
     })), skyProps.moons.forEach((e => {
         const t = o + e.angleOffset + Math.PI;
         e.mesh.position.set(camera.position.x + 3800 * Math.cos(t), camera.position.y + 3800 * Math.sin(t), camera.position.z + 1200 * Math.sin(t)), e.mesh.visible = Math.sin(t) > -.1
+        const altitude = Math.sin(t);
+        e.light.position.copy(e.mesh.position);
+        e.light.target.position.copy(camera.position);
+        e.light.target.updateMatrixWorld();
+        e.baseIntensity = 0.12 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.moons.length);
     })), stars.visible = isNight, stars.rotation.y += .005 * e, clouds.children.forEach((t => {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
     const r = Math.max(0, n);
 
-    let isUnderground = false;
     let targetTransition = 0;
     if (typeof chunkManager !== 'undefined' && chunkManager && camera) {
-        let playerY = Math.floor(camera.position.y);
-        let surfaceY = chunkManager.getSurfaceYForBoulders ? chunkManager.getSurfaceYForBoulders(camera.position.x, camera.position.z) : chunkManager.getSurfaceY(camera.position.x, camera.position.z);
-        // Only consider it underground if we are somewhat below the top surface level.
-        if (playerY < surfaceY + 2) {
-            let cx = Math.floor(camera.position.x / CHUNK_SIZE);
-            let cz = Math.floor(camera.position.z / CHUNK_SIZE);
-            let chunk = chunkManager.getChunk(cx, cz);
-            if (chunk && chunk.generated) {
-                let lx = Math.floor(camera.position.x) % CHUNK_SIZE;
-                if (lx < 0) lx += CHUNK_SIZE;
-                let lz = Math.floor(camera.position.z) % CHUNK_SIZE;
-                if (lz < 0) lz += CHUNK_SIZE;
-
-                let shadowSurfaceY = playerY;
-                for (let y = MAX_HEIGHT - 1; y >= playerY; y--) {
-                    let blockId = chunk.get(lx, y, lz);
-                    if (blockId !== 0 && (!BLOCKS[blockId] || (!BLOCKS[blockId].transparent && !BLOCKS[blockId].noShadow))) {
-                        shadowSurfaceY = y;
-                        isUnderground = true;
-                        break;
-                    }
-                }
-
-                if (isUnderground) {
-                    let depth = shadowSurfaceY - playerY;
-                    if (depth <= 2) {
-                        targetTransition = 0.5;
-                    } else if (depth >= 4) {
-                        targetTransition = 1.0;
-                    } else {
-                        targetTransition = 0.5 + ((depth - 2) / 2.0) * 0.5;
-                    }
-                }
+        const context = lightManager.getUndergroundContext(camera.position.x, camera.position.y, camera.position.z);
+        if (context.isUnderground) {
+            if (!context.centerCovered || context.depth <= 2) {
+                targetTransition = 0.25;
+            } else if (context.depth >= 4) {
+                targetTransition = 1.0;
+            } else {
+                targetTransition = 0.25 + ((context.depth - 2) / 2.0) * 0.75;
             }
         }
     }
@@ -606,15 +616,18 @@ function updateSky(e) {
     window.undergroundTransition = window.undergroundTransition || 0;
     window.undergroundTransition += (targetTransition - window.undergroundTransition) * e * 5.0;
     let ug = window.undergroundTransition;
+    for (const body of [...skyProps.suns, ...skyProps.moons]) {
+        body.light.intensity = body.baseIntensity * (1 - ug);
+        body.light.castShadow = body.light.intensity > 0.02;
+    }
 
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
     scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     const i = scene.getObjectByProperty("type", "AmbientLight"),
-        l = scene.getObjectByProperty("type", "DirectionalLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
-    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), l && (l.intensity = (0 + .95 * s) * (1 - ug)), d) {
+    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), d) {
         const e = .6,
             t = .02;
         d.intensity = (t + (e - t) * s) * (1 - ug);

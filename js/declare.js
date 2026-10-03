@@ -1218,6 +1218,41 @@ const lightManager = {
     lights: [],
     poolSize: 8,
     playerLight: null,
+    getOpaqueSurfaceY: function (x, z) {
+        const worldX = modWrap(Math.floor(x), MAP_SIZE);
+        const worldZ = modWrap(Math.floor(z), MAP_SIZE);
+        const chunk = chunkManager.getChunk(Math.floor(worldX / CHUNK_SIZE), Math.floor(worldZ / CHUNK_SIZE));
+        if (!chunk.generated) chunkManager.generateChunk(chunk);
+        const localX = worldX % CHUNK_SIZE;
+        const localZ = worldZ % CHUNK_SIZE;
+        for (let y = MAX_HEIGHT - 1; y >= 0; y--) {
+            const blockId = chunk.get(localX, y, localZ);
+            const block = BLOCKS[blockId];
+            if (blockId !== BLOCK_AIR && blockId !== 6 && !(block && (block.transparent || block.noShadow))) return y + 1;
+        }
+        return SEA_LEVEL;
+    },
+    getUndergroundContext: function (x, y, z) {
+        const playerY = Math.floor(y);
+        let coveredColumns = 0;
+        let nearestCeilingDepth = Infinity;
+        let centerCovered = false;
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            for (let offsetZ = -1; offsetZ <= 1; offsetZ++) {
+                const surfaceY = this.getOpaqueSurfaceY(x + offsetX, z + offsetZ);
+                if (surfaceY > playerY + 1) {
+                    coveredColumns++;
+                    nearestCeilingDepth = Math.min(nearestCeilingDepth, surfaceY - 1 - playerY);
+                    if (offsetX === 0 && offsetZ === 0) centerCovered = true;
+                }
+            }
+        }
+        return {
+            isUnderground: coveredColumns >= 5,
+            centerCovered,
+            depth: nearestCeilingDepth
+        };
+    },
     init: function () {
         for (let e = 0; e < this.poolSize; e++) {
             const e = new THREE.PointLight(16755251, 0, 0);
@@ -1229,8 +1264,10 @@ const lightManager = {
     },
     update: function (e) {
         if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120) {
-            this.playerLight.intensity = 0.9;
+            const underground = this.getUndergroundContext(e.x, e.y, e.z).isUnderground;
+            this.playerLight.intensity = underground ? 1.15 : 0.9;
             this.playerLight.position.set(e.x, e.y + 2, e.z);
+            this.playerLight.distance = underground ? 22 : 18;
         } else {
             this.playerLight.intensity = 0;
         }
@@ -1248,7 +1285,7 @@ const lightManager = {
             if (t.length > this.poolSize) t.pop();
         }
         // e is the player position Vector3
-        const playerIsOnSurface = e.y >= chunkManager.getSurfaceY(e.x, e.z);
+        const playerIsOnSurface = !this.getUndergroundContext(e.x, e.y, e.z).isUnderground;
 
         for (let idx = 0; idx < this.poolSize; idx++)
             if (idx < t.length) {
@@ -1257,20 +1294,20 @@ const lightManager = {
                 a.position.set(o.x + .5, o.y + .5, o.z + .5);
 
                 // Prevent underground lights bleeding through surface
-                const lightIsDeep = o.y < chunkManager.getSurfaceY(o.x, o.z) - 5;
+                const lightIsDeep = o.y < this.getOpaqueSurfaceY(o.x, o.z) - 5;
                 if (playerIsOnSurface && lightIsDeep) {
                     a.intensity = 0;
                     continue;
                 }
 
                 if (o.type === 134) {
-                    a.intensity = 0.45;
+                    a.intensity = playerIsOnSurface ? 0.45 : 0.55;
                     a.color.setHex(0x4da6ff);
                     a.distance = 36;
                 } else {
-                    a.intensity = 0.9;
+                    a.intensity = playerIsOnSurface ? 0.9 : 1.15;
                     a.color.setHex(16755251);
-                    a.distance = 18;
+                    a.distance = playerIsOnSurface ? 18 : 22;
                 }
             } else this.lights[idx].intensity = 0
     }
