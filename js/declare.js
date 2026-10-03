@@ -161,31 +161,37 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         105: {
             name: "Brick",
             color: "#a84f3c",
+            textureStyle: "brick",
             strength: 2
         },
         106: {
             name: "Smooth Stone",
             color: "#c1c1c1",
+            textureStyle: "polished_stone",
             strength: 2
         },
         107: {
             name: "Concrete",
             color: "#888888",
+            textureStyle: "concrete",
             strength: 3
         },
         108: {
             name: "Polished Wood",
             color: "#a87443",
+            textureStyle: "planks",
             strength: 2
         },
         109: {
             name: "Marble",
             color: "#f0f0f0",
+            textureStyle: "marble",
             strength: 2
         },
         110: {
             name: "Obsidian",
             color: "#2d004d",
+            textureStyle: "obsidian",
             strength: 5
         },
         111: {
@@ -215,6 +221,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         115: {
             name: "Glow Brick",
             color: "#f7cc5b",
+            textureStyle: "brick",
             strength: 1
         },
         116: {
@@ -232,11 +239,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         118: {
             name: "Sandstone",
             color: "#e3c27d",
+            textureStyle: "sandstone_bricks",
             strength: 1
         },
         119: {
             name: "Cobblestone",
             color: "#7d7d7d",
+            textureStyle: "cobble",
             strength: 2
         },
         120: {
@@ -327,6 +336,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         129: {
             name: "Wooden Planks",
             color: "#8b5a33",
+            textureStyle: "planks",
             strength: 2
         },
         130: {
@@ -343,36 +353,43 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         139: {
             name: "Castle Stone Bricks",
             color: "#72777d",
+            textureStyle: "stone_bricks",
             strength: 3
         },
         140: {
             name: "Mossy Castle Bricks",
             color: "#63745d",
+            textureStyle: "mossy_bricks",
             strength: 3
         },
         141: {
             name: "Chiseled Limestone",
             color: "#c4b99e",
+            textureStyle: "chiseled_stone",
             strength: 2
         },
         142: {
             name: "Polished Limestone",
             color: "#aaa99e",
+            textureStyle: "limestone",
             strength: 2
         },
         143: {
             name: "Red Roof Tile",
             color: "#9d4336",
+            textureStyle: "roof_tiles",
             strength: 2
         },
         144: {
             name: "Slate Roof Tile",
             color: "#48515a",
+            textureStyle: "roof_tiles",
             strength: 3
         },
         145: {
             name: "Oak Support Beam",
             color: "#704425",
+            textureStyle: "beam",
             strength: 3
         },
         146: {
@@ -380,6 +397,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#704425",
             transparent: !0,
             model: "door_closed",
+            textureStyle: "planks",
             strength: 2
         },
         147: {
@@ -387,6 +405,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#704425",
             transparent: !0,
             model: "door_open",
+            textureStyle: "planks",
             strength: 2
         },
         148: {
@@ -394,6 +413,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#8b5a33",
             transparent: !0,
             model: "stairs",
+            textureStyle: "planks",
             strength: 2
         },
         149: {
@@ -401,16 +421,23 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#72777d",
             transparent: !0,
             model: "stairs",
+            textureStyle: "stone_bricks",
             strength: 3
         },
         150: {
             name: "Iron Bars",
             color: "#555d65",
+            transparent: !0,
+            model: "iron_bars",
+            textureStyle: "metal",
             strength: 4
         },
         151: {
             name: "Portcullis",
             color: "#454c53",
+            transparent: !0,
+            model: "portcullis",
+            textureStyle: "metal",
             strength: 5
         },
         152: {
@@ -422,6 +449,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         153: {
             name: "Battlement Stone",
             color: "#8a8d8f",
+            textureStyle: "stone_bricks",
+            model: "battlement",
             strength: 3
         }
     },

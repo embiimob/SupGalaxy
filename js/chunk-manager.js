@@ -426,7 +426,9 @@ Chunk.prototype.idx = function (e, t, o) {
             if (BLOCKS[w] && BLOCKS[w].model) {
                 const modelMaterial = new THREE.MeshStandardMaterial({
                     map: createBlockTexture(b, w),
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide,
+                    metalness: BLOCKS[w].textureStyle === "metal" ? .65 : 0,
+                    roughness: BLOCKS[w].textureStyle === "metal" ? .38 : .85
                 });
                 const trimMaterial = new THREE.MeshStandardMaterial({
                     color: 0x49301d,
@@ -446,6 +448,36 @@ Chunk.prototype.idx = function (e, t, o) {
                         const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);
                         upperStep.position.set(0, .75, .25);
                         model.add(lowerStep, upperStep);
+                    } else if (BLOCKS[w].model === "iron_bars" || BLOCKS[w].model === "portcullis") {
+                        const heavyGate = BLOCKS[w].model === "portcullis";
+                        const rodWidth = heavyGate ? .09 : .055;
+                        for (let x = -.4; x <= .401; x += .2) {
+                            const upright = new THREE.Mesh(new THREE.BoxGeometry(rodWidth, 1, .08), modelMaterial);
+                            upright.position.set(x, .5, 0);
+                            model.add(upright);
+                        }
+                        for (let y = heavyGate ? .1 : .25; y < 1; y += heavyGate ? .2 : .25) {
+                            const crossbar = new THREE.Mesh(new THREE.BoxGeometry(1, heavyGate ? .065 : .045, .09), modelMaterial);
+                            crossbar.position.set(0, y, 0);
+                            model.add(crossbar);
+                        }
+                        if (heavyGate) {
+                            for (let x = -.4; x <= .401; x += .2) {
+                                const spike = new THREE.Mesh(new THREE.ConeGeometry(.07, .18, 4), trimMaterial);
+                                spike.position.set(x, .09, 0);
+                                spike.rotation.x = Math.PI;
+                                model.add(spike);
+                            }
+                        }
+                    } else if (BLOCKS[w].model === "battlement") {
+                        const parapet = new THREE.Mesh(new THREE.BoxGeometry(1, .55, 1), modelMaterial);
+                        parapet.position.y = .275;
+                        model.add(parapet);
+                        for (const x of [-.34, 0, .34]) {
+                            const merlon = new THREE.Mesh(new THREE.BoxGeometry(.28, .45, .72), modelMaterial);
+                            merlon.position.set(x, .775, 0);
+                            model.add(merlon);
+                        }
                     } else {
                         const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(.05, 2, .14), trimMaterial);
                         leftJamb.position.set(-.475, 1, 0);

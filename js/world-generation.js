@@ -149,18 +149,166 @@ function createMobTexture(e, t, o = !1) {
 function createBlockTexture(e, t) {
     const o = `${e}:${t}`;
     if (textureCache.has(o)) return textureCache.get(o);
-    const a = 16,
+    const blockDef = BLOCKS[t] || { color: "#ff00ff" },
+        style = blockDef.textureStyle,
+        a = style ? 32 : 16,
         n = document.createElement("canvas");
     n.width = a, n.height = a;
     const r = n.getContext("2d"),
         s = makeSeededRandom(e + "_block_texture_" + t),
-        blockDef = BLOCKS[t] || { color: "#ff00ff" },
-        i = new THREE.Color(blockDef.color);
-    let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
-    r.fillStyle = i.getStyle(), r.fillRect(0, 0, a, a);
+        baseColor = new THREE.Color(blockDef.color),
+        seededBase = baseColor.clone().multiplyScalar(.94 + s() * .12),
+        colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle();
+
+    if (style === "planks" || style === "wood" || style === "beam") {
+        const plankHeight = style === "beam" ? 16 : 8;
+        r.fillStyle = colorAt(.48);
+        r.fillRect(0, 0, a, a);
+        for (let row = 0; row < a; row += plankHeight) {
+            const woodShade = .88 + s() * .3;
+            r.fillStyle = colorAt(woodShade);
+            r.fillRect(1, row + 1, a - 2, plankHeight - 2);
+            r.fillStyle = colorAt(.64);
+            r.fillRect(1, row + plankHeight - 1, a - 2, 1);
+            r.fillStyle = colorAt(1.12);
+            r.fillRect(1, row + 1, a - 2, 1);
+            for (let grain = 0; grain < 4; grain++) {
+                const y = row + 2 + s() * Math.max(1, plankHeight - 4);
+                const drift = (s() - .5) * 2;
+                r.beginPath();
+                r.moveTo(2, y);
+                r.bezierCurveTo(a * .3, y + drift, a * .65, y - drift, a - 2, y + (s() - .5) * 2);
+                r.strokeStyle = colorAt(grain % 2 ? .72 : 1.16);
+                r.lineWidth = grain % 2 ? 1 : .7;
+                r.stroke();
+            }
+            if (s() > .35) {
+                const knotX = 5 + s() * (a - 10);
+                const knotY = row + plankHeight / 2;
+                r.beginPath();
+                r.ellipse(knotX, knotY, 2 + s() * 2, 1, 0, 0, Math.PI * 2);
+                r.strokeStyle = colorAt(.7);
+                r.lineWidth = .8;
+                r.stroke();
+                r.beginPath();
+                r.ellipse(knotX, knotY, 1, .5, 0, 0, Math.PI * 2);
+                r.strokeStyle = colorAt(1.2);
+                r.stroke();
+            }
+        }
+    } else if (style === "brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "sandstone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
+        const brickWidth = style === "cobble" ? 11 : 16,
+            courseHeight = style === "brick" ? 8 : 10;
+        r.fillStyle = colorAt(.48);
+        r.fillRect(0, 0, a, a);
+        for (let row = 0, course = 0; row < a; row += courseHeight, course++) {
+            const offset = course % 2 ? -brickWidth / 2 : 0;
+            for (let x = offset; x < a; x += brickWidth) {
+                const left = Math.max(1, x + 1),
+                    right = Math.min(a - 1, x + brickWidth - 1),
+                    top = row + 1,
+                    bottom = Math.min(a - 1, row + courseHeight - 1);
+                if (right <= left || bottom <= top) continue;
+                const variation = .88 + s() * .28;
+                r.fillStyle = colorAt(variation);
+                r.fillRect(left, top, right - left, bottom - top);
+                if (style === "cobble") {
+                    r.strokeStyle = colorAt(.58);
+                    r.lineWidth = 1;
+                    r.strokeRect(left + 1, top + 1, Math.max(1, right - left - 2), Math.max(1, bottom - top - 2));
+                    r.fillStyle = colorAt(variation * 1.08);
+                    r.fillRect(left + 2 + Math.floor(s() * 3), top + 2, Math.max(1, right - left - 5), 1);
+                    continue;
+                }
+                r.fillStyle = colorAt(variation * 1.12);
+                r.fillRect(left, top, right - left, 1);
+                r.fillStyle = colorAt(variation * .72);
+                r.fillRect(left, bottom - 1, right - left, 1);
+                if (style === "chiseled_stone") {
+                    r.strokeStyle = colorAt(.68);
+                    r.lineWidth = 1;
+                    r.strokeRect(left + 3, top + 2, Math.max(1, right - left - 6), Math.max(1, bottom - top - 4));
+                }
+                if (style === "mossy_bricks" && s() > .42) {
+                    r.fillStyle = `rgba(67, 103, 58, ${.18 + s() * .24})`;
+                    r.fillRect(left + s() * Math.max(1, right - left - 4), top + s() * Math.max(1, bottom - top - 3), 2 + s() * 3, 1 + s() * 2);
+                }
+            }
+        }
+    } else if (style === "roof_tiles") {
+        r.fillStyle = colorAt(.48);
+        r.fillRect(0, 0, a, a);
+        for (let row = -10, course = 0; row < a; row += 10, course++) {
+            const offset = course % 2 ? -8 : 0;
+            for (let x = offset; x < a; x += 8) {
+                const left = x + 1,
+                    top = row + 1;
+                r.beginPath();
+                r.moveTo(left, top + 4);
+                r.quadraticCurveTo(left + 3, top - 1, left + 6, top + 4);
+                r.lineTo(left + 6, top + 10);
+                r.lineTo(left, top + 10);
+                r.closePath();
+                r.fillStyle = colorAt(.86 + s() * .3);
+                r.fill();
+                r.strokeStyle = colorAt(.62);
+                r.lineWidth = .8;
+                r.stroke();
+                r.beginPath();
+                r.moveTo(left + 1, top + 5);
+                r.quadraticCurveTo(left + 3, top + 1, left + 5, top + 5);
+                r.strokeStyle = colorAt(1.12);
+                r.stroke();
+            }
+        }
+    } else if (style === "marble" || style === "obsidian") {
+        r.fillStyle = colorAt(.92);
+        r.fillRect(0, 0, a, a);
+        const veinCount = style === "marble" ? 5 : 3;
+        for (let vein = 0; vein < veinCount; vein++) {
+            const startY = s() * a,
+                drift = (s() - .5) * 12;
+            r.beginPath();
+            r.moveTo(0, startY);
+            r.bezierCurveTo(a * .25, startY + drift, a * .7, startY - drift, a, startY + (s() - .5) * 8);
+            r.strokeStyle = colorAt(vein % 2 ? .72 : 1.12);
+            r.globalAlpha = .3 + s() * .35;
+            r.lineWidth = vein % 2 ? 1 : 2;
+            r.stroke();
+        }
+        r.globalAlpha = 1;
+    } else if (style === "concrete" || style === "polished_stone" || style === "limestone") {
+        r.fillStyle = colorAt(.94);
+        r.fillRect(0, 0, a, a);
+        for (let speckle = 0; speckle < (style === "concrete" ? 70 : 24); speckle++) {
+            r.fillStyle = colorAt(.72 + s() * .58);
+            r.fillRect(Math.floor(s() * a), Math.floor(s() * a), 1 + Math.floor(s() * 2), 1);
+        }
+        if (style !== "concrete") {
+            r.strokeStyle = colorAt(.78);
+            r.lineWidth = 1;
+            r.strokeRect(1, 1, a - 2, a - 2);
+        }
+    } else if (style === "metal") {
+        r.fillStyle = colorAt(.54);
+        r.fillRect(0, 0, a, a);
+        for (let panel = 0; panel < 4; panel++) {
+            const y = panel * 8;
+            r.fillStyle = colorAt(.88 + s() * .18);
+            r.fillRect(1, y + 1, a - 2, 6);
+            r.fillStyle = colorAt(.55);
+            r.fillRect(1, y + 6, a - 2, 1);
+            for (let grain = 0; grain < 5; grain++) {
+                r.fillStyle = colorAt(grain % 2 ? .78 : 1.1);
+                r.fillRect(2 + Math.floor(s() * (a - 4)), y + 1 + Math.floor(s() * 5), 1, 1);
+            }
+        }
+    } else {
+        r.fillStyle = baseColor.getStyle(), r.fillRect(0, 0, a, a);
+        let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
     const d = Math.floor(5 * s()),
         c = makeNoise(e + "_pattern_noise_" + t);
-    if (r.strokeStyle = l.getStyle(), r.lineWidth = 1 + Math.floor(2 * s()), 0 === d)
+        if (r.strokeStyle = l.getStyle(), r.lineWidth = 1 + Math.floor(2 * s()), 0 === d)
         for (let e = 2; e < a; e += 4) {
             r.beginPath();
             for (let t = 0; t < a; t++) c(t / 8, e / 8) > .4 && (r.moveTo(t, e), r.lineTo(t + 1, e));
@@ -185,8 +333,9 @@ function createBlockTexture(e, t) {
             r.stroke()
         }
     if (s() > .8) {
-        const e = i.clone().multiplyScalar(.7);
+        const e = baseColor.clone().multiplyScalar(.7);
         r.strokeStyle = e.getStyle(), r.lineWidth = 1, r.strokeRect(.5, .5, 15, 15)
+    }
     }
     const u = new THREE.CanvasTexture(n);
     return u.magFilter = THREE.NearestFilter, u.minFilter = THREE.NearestFilter, textureCache.set(o, u), u
