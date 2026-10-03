@@ -599,42 +599,16 @@ function updateSky(e) {
     }));
     const r = Math.max(0, n);
 
-    let isUnderground = false;
     let targetTransition = 0;
     if (typeof chunkManager !== 'undefined' && chunkManager && camera) {
-        let playerY = Math.floor(camera.position.y);
-        let surfaceY = chunkManager.getSurfaceYForBoulders ? chunkManager.getSurfaceYForBoulders(camera.position.x, camera.position.z) : chunkManager.getSurfaceY(camera.position.x, camera.position.z);
-        // Only consider it underground if we are somewhat below the top surface level.
-        if (playerY < surfaceY + 2) {
-            let cx = Math.floor(camera.position.x / CHUNK_SIZE);
-            let cz = Math.floor(camera.position.z / CHUNK_SIZE);
-            let chunk = chunkManager.getChunk(cx, cz);
-            if (chunk && chunk.generated) {
-                let lx = Math.floor(camera.position.x) % CHUNK_SIZE;
-                if (lx < 0) lx += CHUNK_SIZE;
-                let lz = Math.floor(camera.position.z) % CHUNK_SIZE;
-                if (lz < 0) lz += CHUNK_SIZE;
-
-                let shadowSurfaceY = playerY;
-                for (let y = MAX_HEIGHT - 1; y >= playerY; y--) {
-                    let blockId = chunk.get(lx, y, lz);
-                    if (blockId !== 0 && (!BLOCKS[blockId] || (!BLOCKS[blockId].transparent && !BLOCKS[blockId].noShadow))) {
-                        shadowSurfaceY = y;
-                        isUnderground = true;
-                        break;
-                    }
-                }
-
-                if (isUnderground) {
-                    let depth = shadowSurfaceY - playerY;
-                    if (depth <= 2) {
-                        targetTransition = 0.25;
-                    } else if (depth >= 4) {
-                        targetTransition = 1.0;
-                    } else {
-                        targetTransition = 0.25 + ((depth - 2) / 2.0) * 0.75;
-                    }
-                }
+        const context = lightManager.getUndergroundContext(camera.position.x, camera.position.y, camera.position.z);
+        if (context.isUnderground) {
+            if (!context.centerCovered || context.depth <= 2) {
+                targetTransition = 0.25;
+            } else if (context.depth >= 4) {
+                targetTransition = 1.0;
+            } else {
+                targetTransition = 0.25 + ((context.depth - 2) / 2.0) * 0.75;
             }
         }
     }

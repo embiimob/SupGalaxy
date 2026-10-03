@@ -1232,6 +1232,27 @@ const lightManager = {
         }
         return SEA_LEVEL;
     },
+    getUndergroundContext: function (x, y, z) {
+        const playerY = Math.floor(y);
+        let coveredColumns = 0;
+        let nearestCeilingDepth = Infinity;
+        let centerCovered = false;
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            for (let offsetZ = -1; offsetZ <= 1; offsetZ++) {
+                const surfaceY = this.getOpaqueSurfaceY(x + offsetX, z + offsetZ);
+                if (surfaceY > playerY + 1) {
+                    coveredColumns++;
+                    nearestCeilingDepth = Math.min(nearestCeilingDepth, surfaceY - 1 - playerY);
+                    if (offsetX === 0 && offsetZ === 0) centerCovered = true;
+                }
+            }
+        }
+        return {
+            isUnderground: coveredColumns >= 5,
+            centerCovered,
+            depth: nearestCeilingDepth
+        };
+    },
     init: function () {
         for (let e = 0; e < this.poolSize; e++) {
             const e = new THREE.PointLight(16755251, 0, 0);
@@ -1243,7 +1264,7 @@ const lightManager = {
     },
     update: function (e) {
         if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120) {
-            const underground = e.y < this.getOpaqueSurfaceY(e.x, e.z);
+            const underground = this.getUndergroundContext(e.x, e.y, e.z).isUnderground;
             this.playerLight.intensity = underground ? 1.15 : 0.9;
             this.playerLight.position.set(e.x, e.y + 2, e.z);
             this.playerLight.distance = underground ? 22 : 18;
@@ -1264,7 +1285,7 @@ const lightManager = {
             if (t.length > this.poolSize) t.pop();
         }
         // e is the player position Vector3
-        const playerIsOnSurface = e.y >= this.getOpaqueSurfaceY(e.x, e.z);
+        const playerIsOnSurface = !this.getUndergroundContext(e.x, e.y, e.z).isUnderground;
 
         for (let idx = 0; idx < this.poolSize; idx++)
             if (idx < t.length) {
