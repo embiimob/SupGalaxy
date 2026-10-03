@@ -1079,14 +1079,15 @@ Mob.prototype.update = function (t) {
         updateAquaticMob(this, t);
         return;
     }
+    if ("bee" === this.type) {
+        this.animationTime += 40 * t;
+        this.mesh.leftWing.rotation.z = .5 * Math.sin(this.animationTime);
+        this.mesh.rightWing.rotation.z = -.5 * Math.sin(this.animationTime);
+    }
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
 
     if (!isLocalSpawner) {
-    if ("bee" === this.type) {
-        this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now());
-        this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now());
-    }
     if ("crawley" === this.type && this.mesh.eyeLight) this.mesh.eyeLight.visible = isNight;
     if ("grub" === this.type && this.glowLight) {
         this.glowLight.intensity = isNight ? (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : 0;
