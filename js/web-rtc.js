@@ -806,7 +806,11 @@ function setupDataChannel(e, t) {
                             }
                             if (t.originSeed) o.originSeed = t.originSeed;
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
-                            o.prevPos.copy(o.targetPos);
+                            const updateTime = performance.now();
+                            if (o.lastUpdateTime > 0) {
+                                o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
+                            }
+                            o.prevPos.copy(o.pos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
@@ -815,11 +819,11 @@ function setupDataChannel(e, t) {
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
                             if (t.quaternion) {
-                                o.prevQuaternion.copy(o.targetQuaternion);
+                                o.prevQuaternion.copy(o.mesh.quaternion);
                                 o.targetQuaternion.fromArray(t.quaternion);
-                                o.lastQuaternionUpdate = performance.now();
+                                o.lastQuaternionUpdate = updateTime;
                             }
-                            o.lastUpdateTime = performance.now();
+                            o.lastUpdateTime = updateTime;
                         }
                         // Only despawn if we are NOT the host (host manages despawns naturally)
                         if (!isHost) {
@@ -858,7 +862,11 @@ function setupDataChannel(e, t) {
                             }
                             if (t.originSeed) o.originSeed = t.originSeed;
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
-                            o.prevPos.copy(o.targetPos);
+                            const updateTime = performance.now();
+                            if (o.lastUpdateTime > 0) {
+                                o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
+                            }
+                            o.prevPos.copy(o.pos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
@@ -867,11 +875,11 @@ function setupDataChannel(e, t) {
                             if (t.aiState) o.aiState = t.aiState;
                             if (t.flash) o.flashEnd = Date.now() + 200;
                             if (t.quaternion) {
-                                o.prevQuaternion.copy(o.targetQuaternion);
+                                o.prevQuaternion.copy(o.mesh.quaternion);
                                 o.targetQuaternion.fromArray(t.quaternion);
-                                o.lastQuaternionUpdate = performance.now();
+                                o.lastQuaternionUpdate = updateTime;
                             }
-                            o.lastUpdateTime = performance.now();
+                            o.lastUpdateTime = updateTime;
                         }
                     }
                     // Relay to other clients in the same world if host
@@ -887,7 +895,31 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
-                    d || (d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed), mobs.push(d), d.pos.set(s.x, s.y, s.z)), d.prevPos.copy(d.targetPos), d.targetPos.set(s.x, s.y, s.z), d.hp = s.hp, d.lastUpdateTime = performance.now(), s.originSeed && (d.originSeed = s.originSeed), s.spawnCommandKey && (d.spawnCommandKey = s.spawnCommandKey), s.aiState && (d.aiState = s.aiState), void 0 !== s.isMoving && (d.isMoving = s.isMoving), void 0 !== s.isAggressive && (d.isAggressive = s.isAggressive), void 0 !== s.wasAttacked && (d.wasAttacked = s.wasAttacked), s.flash && (d.flashEnd = Date.now() + 200), s.quaternion && (d.prevQuaternion.copy(d.targetQuaternion), d.targetQuaternion.fromArray(s.quaternion), d.lastQuaternionUpdate = performance.now());
+                    if (!d) {
+                        d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
+                        mobs.push(d);
+                        d.pos.set(s.x, s.y, s.z);
+                    }
+                    const updateTime = performance.now();
+                    if (d.lastUpdateTime > 0) {
+                        d.interpolationDuration = Math.max(50, Math.min(250, updateTime - d.lastUpdateTime));
+                    }
+                    d.prevPos.copy(d.pos);
+                    d.targetPos.set(s.x, s.y, s.z);
+                    d.hp = s.hp;
+                    d.lastUpdateTime = updateTime;
+                    if (s.originSeed) d.originSeed = s.originSeed;
+                    if (s.spawnCommandKey) d.spawnCommandKey = s.spawnCommandKey;
+                    if (s.aiState) d.aiState = s.aiState;
+                    if (s.isMoving !== undefined) d.isMoving = s.isMoving;
+                    if (s.isAggressive !== undefined) d.isAggressive = s.isAggressive;
+                    if (s.wasAttacked !== undefined) d.wasAttacked = s.wasAttacked;
+                    if (s.flash) d.flashEnd = Date.now() + 200;
+                    if (s.quaternion) {
+                        d.prevQuaternion.copy(d.mesh.quaternion);
+                        d.targetQuaternion.fromArray(s.quaternion);
+                        d.lastQuaternionUpdate = updateTime;
+                    }
                     break;
                 case "mob_despawn":
                 case "mob_kill":
