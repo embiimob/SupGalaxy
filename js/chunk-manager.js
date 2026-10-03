@@ -271,8 +271,8 @@ Chunk.prototype.idx = function (e, t, o) {
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
     const t = volcanoes.find((t => t.chunkKey === e.key));
-    if (t && Math.random() < .3) {
-        const o = Math.floor(t.lavaCount / 4),
+    if (t && !smokeParticles.some(particle => particle.userData.chunkKey === e.key && !particle.createdAt) && Math.random() < .3) {
+        const o = Math.min(128, Math.floor(t.lavaCount / 4)),
             a = createSmokeParticle(t.x, t.y, t.z, o);
         a.userData.chunkKey = e.key, smokeParticles.push(a), scene.add(a)
     }

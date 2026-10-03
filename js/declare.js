@@ -1235,13 +1235,24 @@ const lightManager = {
             this.playerLight.intensity = 0;
         }
 
-        const t = Array.from(torchRegistry.values()).sort(((t, o) => e.distanceTo(new THREE.Vector3(t.x, t.y, t.z)) - e.distanceTo(new THREE.Vector3(o.x, o.y, o.z))));
+        const t = [];
+        for (const torch of torchRegistry.values()) {
+            const dx = torch.x - e.x;
+            const dy = torch.y - e.y;
+            const dz = torch.z - e.z;
+            const distance = dx * dx + dy * dy + dz * dz;
+            let index = 0;
+            while (index < t.length && t[index].distance <= distance) index++;
+            if (index >= this.poolSize && t.length >= this.poolSize) continue;
+            t.splice(index, 0, { torch, distance });
+            if (t.length > this.poolSize) t.pop();
+        }
         // e is the player position Vector3
         const playerIsOnSurface = e.y >= chunkManager.getSurfaceY(e.x, e.z);
 
         for (let idx = 0; idx < this.poolSize; idx++)
             if (idx < t.length) {
-                const o = t[idx],
+                const o = t[idx].torch,
                     a = this.lights[idx];
                 a.position.set(o.x + .5, o.y + .5, o.z + .5);
 
