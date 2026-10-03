@@ -5653,6 +5653,12 @@ function gameLoop(e) {
             o.geometry.attributes.position.needsUpdate = !0
         }
         for (const e of smokeParticles) {
+            if (e.userData.ambientSmoke) {
+                const dx = e.position.x - player.x;
+                const dz = e.position.z - player.z;
+                e.visible = dx * dx + dz * dz <= 128 * 128;
+                if (!e.visible) continue;
+            }
             const o = e.geometry.attributes.alpha,
                 a = e.geometry.attributes.position,
                 n = e.geometry.attributes.color;

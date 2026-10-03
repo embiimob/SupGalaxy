@@ -271,10 +271,14 @@ Chunk.prototype.idx = function (e, t, o) {
     }
     updateTorchRegistry(e), e.mesh && (meshGroup.remove(e.mesh), disposeObject(e.mesh), e.mesh = null);
     const t = volcanoes.find((t => t.chunkKey === e.key));
-    if (t && !smokeParticles.some(particle => particle.userData.chunkKey === e.key && !particle.createdAt) && Math.random() < .3) {
-        const o = Math.min(128, Math.floor(t.lavaCount / 4)),
+    const ambientSmokeSystems = smokeParticles.filter(particle => particle.userData.ambientSmoke).length;
+    if (t && Math.hypot(t.x - player.x, t.z - player.z) <= 128 &&
+        ambientSmokeSystems < 4 &&
+        !smokeParticles.some(particle => particle.userData.chunkKey === e.key && particle.userData.ambientSmoke) &&
+        Math.random() < .3) {
+        const o = Math.min(32, Math.floor(t.lavaCount / 4)),
             a = createSmokeParticle(t.x, t.y, t.z, o);
-        a.userData.chunkKey = e.key, smokeParticles.push(a), scene.add(a)
+        a.userData.chunkKey = e.key, a.userData.ambientSmoke = true, smokeParticles.push(a), scene.add(a)
     }
     if (useGreedyMesher) {
         const t = buildGreedyMesh(e, getCurrentWorldState().foreignBlockOrigins, worldSeed),
