@@ -1621,15 +1621,27 @@ async function createMagicianStoneScreen(stoneData) {
     // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Clean up if this stone is already loaded to support replacement
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        if (typeof cleanupMagicianStone === 'function') {
-            cleanupMagicianStone(magicianStones[key], key);
-        }
-        delete magicianStones[key];
-    }
     if (magicianStonesLoading.has(key)) {
         return;
+    }
+
+    const existingStone = magicianStones[key];
+    const configKeys = [
+        'url', 'width', 'height', 'offsetX', 'offsetY', 'offsetZ', 'loop',
+        'autoplay', 'autoplayAnimation', 'distance', 'collision', 'damage', 'direction'
+    ];
+    const isDuplicate = existingStone && existingStone.mesh && configKeys.every(
+        configKey => JSON.stringify(existingStone[configKey]) === JSON.stringify(stoneData[configKey])
+    );
+    if (isDuplicate) {
+        return;
+    }
+
+    if (existingStone && existingStone.mesh) {
+        if (typeof cleanupMagicianStone === 'function') {
+            cleanupMagicianStone(existingStone, key);
+        }
+        delete magicianStones[key];
     }
 
     // Mark as loading to prevent duplicate loads during async operations.

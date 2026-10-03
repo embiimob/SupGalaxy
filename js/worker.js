@@ -1084,8 +1084,6 @@ self.onmessage = async function(e) {
         if (type === "poll") {
             var updatesByTransaction = new Map();
             var ownershipByChunk = new Map();
-            var magicianStonesUpdates = [];
-            var calligraphyStonesUpdates = [];
             var chestsUpdates = [];
             if (runChunkPolling) for (var chunkKey of chunkKeys) {
                 try {
@@ -1135,7 +1133,6 @@ self.onmessage = async function(e) {
                                 });
 
                                 if (processData.magicianStones) {
-                                     magicianStonesUpdates.push({ stones: processData.magicianStones, transactionId: msg.TransactionId });
                                      for (const key in processData.magicianStones) {
                                         if (Object.hasOwnProperty.call(processData.magicianStones, key)) {
                                             const stone = processData.magicianStones[key];
@@ -1158,7 +1155,6 @@ self.onmessage = async function(e) {
                                 }
 
                                 if (processData.calligraphyStones) {
-                                     calligraphyStonesUpdates.push({ stones: processData.calligraphyStones, transactionId: msg.TransactionId });
                                      for (const key in processData.calligraphyStones) {
                                         if (Object.hasOwnProperty.call(processData.calligraphyStones, key)) {
                                             const stone = processData.calligraphyStones[key];
@@ -1243,17 +1239,6 @@ self.onmessage = async function(e) {
                     var transactionId = entry[0];
                     var update = entry[1];
                     self.postMessage({ type: "chunk_updates", updates: [{ changes: update.changes, address: update.address, timestamp: update.timestamp, transactionId: update.transactionId, magicianStones: update.magicianStones, calligraphyStones: update.calligraphyStones, chests: update.chests, foreignBlockOrigins: update.foreignBlockOrigins }] });
-                }
-            }
-            if (magicianStonesUpdates.length > 0) {
-                for (var update of magicianStonesUpdates) {
-                    self.postMessage({ type: 'magician_stones_update', stones: update.stones, transactionId: update.transactionId });
-                }
-            }
-
-            if (calligraphyStonesUpdates.length > 0) {
-                for (var update of calligraphyStonesUpdates) {
-                    self.postMessage({ type: 'calligraphy_stones_update', stones: update.stones, transactionId: update.transactionId });
                 }
             }
             if (chestsUpdates.length > 0) {
@@ -2062,45 +2047,6 @@ self.onmessage = async function(e) {
                 }
             } else if (data.type === "chunk_ownership") {
                updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
-            } else if (data.type === 'magician_stones_update') {
-                if (data.stones) {
-                    for (const key in data.stones) {
-                        if (Object.hasOwnProperty.call(data.stones, key)) {
-                            createMagicianStoneScreen(data.stones[key]);
-                        }
-                    }
-                    if (isHost) {
-                        const message = JSON.stringify({
-                            type: 'magician_stones_sync',
-                            stones: data.stones
-                        });
-                        for (const [, peer] of peers.entries()) {
-                            if (peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(message);
-                            }
-                        }
-                    }
-                }
-
-            } else if (data.type === 'calligraphy_stones_update') {
-                if (data.stones) {
-                    for (const key in data.stones) {
-                        if (Object.hasOwnProperty.call(data.stones, key)) {
-                            createCalligraphyStoneScreen(data.stones[key]);
-                        }
-                    }
-                    if (isHost) {
-                        const message = JSON.stringify({
-                            type: 'calligraphy_stones_sync',
-                            stones: data.stones
-                        });
-                        for (const [, peer] of peers.entries()) {
-                            if (peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(message);
-                            }
-                        }
-                    }
-                }
             } else if (data.type === "user_update") {
                 console.log('[Worker] Received user_update:', data.transactionId);
                 if (data.data.profile) {
