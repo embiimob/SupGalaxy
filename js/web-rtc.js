@@ -1887,6 +1887,7 @@ function setupDataChannel(e, t) {
 
                         // Play audio only for the initiating client
                         if (s.username === userName) {
+                            addMessage("Picked up " + (BLOCKS[blockId] ? BLOCKS[blockId].name : blockId));
                             safePlayAudio(soundBreak);
                         }
 
@@ -1909,6 +1910,11 @@ function setupDataChannel(e, t) {
                         // Client receives denial from host
                         addMessage(`Cannot edit: ${s.reason}`, 3000);
                         console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
+                    }
+                    break;
+                case 'alert':
+                    if (!isHost && s.message) {
+                        addMessage(s.message, 3000);
                     }
                     break;
             }

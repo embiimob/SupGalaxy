@@ -2869,7 +2869,16 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (n.unbreakable && !isUfo) {
-        return void addMessage("Cannot break that block");
+        const message = "Cannot break that block";
+        if (isHost && breaker && breaker !== userName) {
+            const peer = peers.get(breaker);
+            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(JSON.stringify({ type: 'alert', message }));
+            }
+        } else {
+            addMessage(message);
+        }
+        return;
     }
 
     // Check ownership BEFORE showing any visual feedback
