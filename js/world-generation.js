@@ -237,7 +237,35 @@ function createBlockTexture(e, t) {
             }
         }
         r.restore();
-    } else if (style === "brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "sandstone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
+    } else if (style === "sandstone_bricks") {
+        r.fillStyle = colorAt(.96);
+        r.fillRect(0, 0, a, a);
+        const strataNoise = makeNoise(e + "_sandstone_strata_" + textureSeedId);
+        for (let x = 0; x < a; x++) {
+            for (let y = 0; y < a; y++) {
+                const strata = Math.sin((y + strataNoise(x / 9, y / 13) * 5) * Math.PI / 8) * .045;
+                const grain = (strataNoise(x / 3, y / 3) - .5) * .11;
+                r.fillStyle = colorAt(.96 + strata + grain);
+                r.fillRect(x, y, 1, 1);
+            }
+        }
+        for (let band = 0; band < 4; band++) {
+            const y = 3 + band * 8 + Math.floor(s() * 3);
+            r.beginPath();
+            r.moveTo(0, y);
+            r.bezierCurveTo(a * .3, y + (s() - .5) * 4, a * .7, y + (s() - .5) * 4, a, y + (s() - .5) * 3);
+            r.strokeStyle = colorAt(band % 2 ? .84 : 1.08);
+            r.globalAlpha = .45;
+            r.lineWidth = band % 2 ? 1 : 2;
+            r.stroke();
+        }
+        r.globalAlpha = 1;
+        for (let grain = 0; grain < 45; grain++) {
+            const shade = .76 + s() * .44;
+            r.fillStyle = colorAt(shade);
+            r.fillRect(Math.floor(s() * a), Math.floor(s() * a), s() > .88 ? 2 : 1, 1);
+        }
+    } else if (style === "brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
         const brickWidth = style === "cobble" ? 11 : 16,
             courseHeight = style === "brick" ? 8 : 10;
         r.fillStyle = colorAt(.48);
