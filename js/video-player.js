@@ -114,6 +114,8 @@ function initVideoPlayer() {
 async function fetchAndPlayVideos(searchTerm = 'game') {
     const videoStatus = document.getElementById('videoInfo');
     if (!videoStatus) return;
+    videoPlaylist = [];
+    currentVideoIndex = 0;
     videoStatus.innerText = 'Finding videos...';
 
     try {
@@ -134,12 +136,12 @@ async function fetchAndPlayVideos(searchTerm = 'game') {
         const ipfsExtractRegex = /IPFS:([a-zA-Z0-9]{46}|[a-zA-Z0-9]{59})(?:[\\/]+([^<>]+?))?(?=>|\s*$)/gi;
 
         for (const msg of messages) {
-            if (videoPlaylist.length >= 10) break;
+            if (videoPlaylist.length >= 100) break;
 
             const messageText = msg.Message || '';
 
             for (const ipfsMatch of messageText.matchAll(ipfsExtractRegex)) {
-                if (videoPlaylist.length >= 10) break;
+                if (videoPlaylist.length >= 100) break;
 
                 const hash = ipfsMatch[1];
                 const path = ipfsMatch[2] || '';
@@ -161,11 +163,19 @@ async function fetchAndPlayVideos(searchTerm = 'game') {
         if (videoPlaylist.length === 0) {
             videoStatus.innerText = 'No valid videos found';
         } else {
+            shuffleVideoPlaylist();
             playVideo(currentVideoIndex);
         }
     } catch (error) {
         console.error("Failed to fetch videos:", error);
         videoStatus.innerText = 'Error loading videos';
+    }
+}
+
+function shuffleVideoPlaylist() {
+    for (let i = videoPlaylist.length - 1; i > 0; i--) {
+        const randomIndex = Math.floor(Math.random() * (i + 1));
+        [videoPlaylist[i], videoPlaylist[randomIndex]] = [videoPlaylist[randomIndex], videoPlaylist[i]];
     }
 }
 
