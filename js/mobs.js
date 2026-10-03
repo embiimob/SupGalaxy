@@ -1493,24 +1493,142 @@ Mob.prototype.update = function (t) {
                 if (this.pos.y > ceilingY) this.pos.y = ceilingY;
             }
         } else if ("crawley" === this.type) {
-            const i = 8;
-            let o = 1 / 0;
-            for (const t of torchRegistry.values()) {
-                const h = this.pos.distanceTo(t);
-                h < i && h < o && (o = h, e.subVectors(this.pos, t).normalize(), s = !0)
-            }
-            if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120 && typeof player !== 'undefined') {
-                const playerPos = new THREE.Vector3(player.x, player.y, player.z);
-                const h = this.pos.distanceTo(playerPos);
-                if (h < i && h < o) {
-                    o = h;
-                    e.subVectors(this.pos, playerPos).normalize();
-                    s = !0;
+            const now = Date.now();
+            const lightRange = this.crawleyLightThreat ? 10 : 8;
+            let closestLight = null;
+            let closestDistance = lightRange;
+            for (const [key, light] of torchRegistry.entries()) {
+                const distance = this.pos.distanceTo(light);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestLight = { key, position: light };
                 }
             }
-            if (s) {
-                const s = 2.5 * this.speed;
-                return this.pos.x += e.x * s * t * 60, this.pos.z += e.z * s * t * 60, void this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z)
+            if (typeof selectedBlockId !== 'undefined' &&
+                (selectedBlockId === 120 || selectedBlockId === 134) &&
+                typeof player !== 'undefined' && player !== null) {
+                const heldLight = new THREE.Vector3(player.x, player.y, player.z);
+                const distance = this.pos.distanceTo(heldLight);
+                if (distance < closestDistance) {
+                    closestLight = { key: "held", position: heldLight };
+                    closestDistance = distance;
+                }
+            }
+
+            if (closestLight) {
+                if (!this.crawleyLightThreat || this.crawleyLightThreat !== closestLight.key) {
+                    this.crawleyLightThreat = closestLight.key;
+                    this.crawleyLightSeenAt = now;
+                    this.crawleyLightReactionDelay = 400 + Math.random() * 350;
+                    this.crawleyLightRetreatUntil = this.crawleyLightSeenAt + this.crawleyLightReactionDelay + 650;
+                    this.crawleyLightFlankSide = Math.random() < 0.5 ? -1 : 1;
+                }
+
+                if (now >= this.crawleyLightSeenAt + this.crawleyLightReactionDelay) {
+                    const away = new THREE.Vector3(this.pos.x - closestLight.position.x, 0, this.pos.z - closestLight.position.z);
+                    if (away.lengthSq() < 0.001) away.set(Math.cos(this.animationTime), 0, Math.sin(this.animationTime));
+                    away.normalize();
+                    const goal = typeof player !== 'undefined' && player !== null
+                        ? new THREE.Vector3(player.x - this.pos.x, 0, player.z - this.pos.z).normalize()
+                        : away.clone().multiplyScalar(-1);
+                    const retreating = now < this.crawleyLightRetreatUntil;
+                    const probeRadii = [1.25, 0.65];
+                    const angles = retreating
+                        ? [0, -0.45, 0.45, -0.9, 0.9, -1.35, 1.35, -1.8, 1.8, Math.PI]
+                        : [0, this.crawleyLightFlankSide * 0.65, -this.crawleyLightFlankSide * 0.65,
+                            this.crawleyLightFlankSide * 1.3, -this.crawleyLightFlankSide * 1.3,
+                            this.crawleyLightFlankSide * 1.95, -this.crawleyLightFlankSide * 1.95, Math.PI];
+                    let bestDirection = null;
+                    let bestScore = -Infinity;
+                    for (const angle of angles) {
+                        const direction = away.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+                        for (const probeRadius of probeRadii) {
+                            const nextX = modWrap(this.pos.x + direction.x * probeRadius, MAP_SIZE);
+                            const nextZ = modWrap(this.pos.z + direction.z * probeRadius, MAP_SIZE);
+                            let nextY = this.pos.y;
+                            if (checkCollisionWithBlock(nextX, nextY, nextZ)) {
+                                if (!checkCollisionWithBlock(nextX, nextY + 1, nextZ)) nextY += 1;
+                                else if (!checkCollisionWithBlock(nextX, nextY + 2, nextZ)) nextY += 2;
+                                else if (!checkCollisionWithBlock(nextX, nextY + 3, nextZ)) nextY += 3;
+                                else continue;
+                            }
+                            const nextDistance = Math.hypot(
+                                nextX - closestLight.position.x,
+                                nextY - closestLight.position.y,
+                                nextZ - closestLight.position.z
+                            );
+                            const clearance = Math.min(nextDistance, 6);
+                            const score = retreating
+                                ? clearance * 2 + away.dot(direction)
+                                : clearance * 2 + goal.dot(direction) * 2 + away.dot(direction) * 0.5;
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestDirection = direction;
+                            }
+                        }
+                    }
+
+                    this.isMoving = false;
+                    if (bestDirection) {
+                        const speedScale = retreating ? 0.55 : 0.8;
+                        const step = this.speed * speedScale * t * 60;
+                        const nextX = modWrap(this.pos.x + bestDirection.x * step, MAP_SIZE);
+                        const nextZ = modWrap(this.pos.z + bestDirection.z * step, MAP_SIZE);
+                        let moveY = this.pos.y;
+                        if (checkCollisionWithBlock(nextX, moveY, nextZ)) {
+                            if (!checkCollisionWithBlock(nextX, moveY + 1, nextZ)) moveY += 1;
+                            else if (!checkCollisionWithBlock(nextX, moveY + 2, nextZ)) moveY += 2;
+                            else if (!checkCollisionWithBlock(nextX, moveY + 3, nextZ)) moveY += 3;
+                        }
+                        if (!checkCollisionWithBlock(nextX, moveY, nextZ)) {
+                            this.pos.x = nextX;
+                            this.pos.z = nextZ;
+                            this.pos.y = moveY;
+                            this.isMoving = true;
+                        }
+                        const yaw = Math.atan2(bestDirection.x, bestDirection.z);
+                        this.mesh.quaternion.slerp(
+                            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw),
+                            0.05
+                        );
+                    } else {
+                        this.isMoving = false;
+                    }
+                    this.mesh.position.set(this.pos.x, this.pos.y + 0.45, this.pos.z);
+                    if (this.isMoving && this.mesh.legs) {
+                        this.animationTime += 15 * t;
+                        this.mesh.position.y += 0.05 * Math.sin(2 * this.animationTime);
+                        this.mesh.legs.forEach((leg, index) => {
+                            const side = index % 2 === 0 ? 1 : -1;
+                            leg.rotation.x = Math.sin(this.animationTime + Math.floor(index / 2) * Math.PI / 3) * side * 0.8;
+                        });
+                    }
+                    const moved = this.pos.distanceTo(this.lastSentPos) > 0.1;
+                    const rotated = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > 0.01;
+                    if (moved || rotated) {
+                        if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+                        window.mobUpdateQueue.push({
+                            id: this.id,
+                            x: this.pos.x,
+                            y: this.pos.y,
+                            z: this.pos.z,
+                            quaternion: this.mesh.quaternion.toArray(),
+                            isMoving: this.isMoving,
+                            aiState: this.aiState,
+                            type: this.type,
+                            hp: this.hp,
+                            isAggressive: this.isAggressive,
+                            wasAttacked: this.wasAttacked,
+                            originSeed: this.originSeed,
+                            spawnCommandKey: this.spawnCommandKey
+                        });
+                        this.lastSentPos.copy(this.pos);
+                        this.lastSentQuaternion.copy(this.mesh.quaternion);
+                    }
+                    return;
+                }
+            } else {
+                this.crawleyLightThreat = null;
             }
         }
         let i = null,
