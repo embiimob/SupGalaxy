@@ -1289,6 +1289,7 @@ function getProjectileLight(colorHex) {
             projectileLightPool[i].inUse = true;
             projectileLightPool[i].color.setHex(colorHex);
             projectileLightPool[i].intensity = 1;
+            scene.add(projectileLightPool[i]);
             return projectileLightPool[i];
         }
     }
@@ -1303,6 +1304,7 @@ function releaseProjectileLight(light) {
     if (light) {
         light.inUse = false;
         light.intensity = 0;
+        scene.remove(light);
     }
 }
 
@@ -1342,7 +1344,7 @@ function createProjectile(e, t, o, a, n = "red") {
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
     if (b) { c.scale.set(3, 3, 6); } else { c.scale.set(1, 1, 1); }
-    const p = getProjectileLight(i);
+    const p = b ? null : getProjectileLight(i);
     p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
         user: t,
@@ -1831,6 +1833,9 @@ async function createMagicianStoneScreen(stoneData) {
         canvas.height = 256;
         const ctx = canvas.getContext('2d');
         texture = new THREE.CanvasTexture(canvas);
+        texture.generateMipmaps = false;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
 
         try {
             const response = await fetch(url);
@@ -5914,7 +5919,7 @@ function gameLoop(e) {
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
-            o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light.position.copy(o.mesh.position);
+            o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light && o.light.position.copy(o.mesh.position);
             const newPos = o.mesh.position.clone();
             const oldPos = newPos.clone().sub(o.velocity.clone().multiplyScalar(t));
 
