@@ -1522,53 +1522,60 @@ Mob.prototype.update = function (t) {
                     this.crawleyLightReactionDelay = 400 + Math.random() * 350;
                     this.crawleyLightRetreatUntil = this.crawleyLightSeenAt + this.crawleyLightReactionDelay + 650;
                     this.crawleyLightFlankSide = Math.random() < 0.5 ? -1 : 1;
+                    this.crawleyLightPathDirection = null;
+                    this.crawleyLightNextPathTime = 0;
                 }
 
                 if (now >= this.crawleyLightSeenAt + this.crawleyLightReactionDelay) {
-                    const away = new THREE.Vector3(this.pos.x - closestLight.position.x, 0, this.pos.z - closestLight.position.z);
-                    if (away.lengthSq() < 0.001) away.set(Math.cos(this.animationTime), 0, Math.sin(this.animationTime));
-                    away.normalize();
-                    const goal = typeof player !== 'undefined' && player !== null
-                        ? new THREE.Vector3(player.x - this.pos.x, 0, player.z - this.pos.z).normalize()
-                        : away.clone().multiplyScalar(-1);
                     const retreating = now < this.crawleyLightRetreatUntil;
-                    const probeRadii = [1.25, 0.65];
-                    const angles = retreating
-                        ? [0, -0.45, 0.45, -0.9, 0.9, -1.35, 1.35, -1.8, 1.8, Math.PI]
-                        : [0, this.crawleyLightFlankSide * 0.65, -this.crawleyLightFlankSide * 0.65,
-                            this.crawleyLightFlankSide * 1.3, -this.crawleyLightFlankSide * 1.3,
-                            this.crawleyLightFlankSide * 1.95, -this.crawleyLightFlankSide * 1.95, Math.PI];
-                    let bestDirection = null;
-                    let bestScore = -Infinity;
-                    for (const angle of angles) {
-                        const direction = away.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-                        for (const probeRadius of probeRadii) {
-                            const nextX = modWrap(this.pos.x + direction.x * probeRadius, MAP_SIZE);
-                            const nextZ = modWrap(this.pos.z + direction.z * probeRadius, MAP_SIZE);
-                            let nextY = this.pos.y;
-                            if (checkCollisionWithBlock(nextX, nextY, nextZ)) {
-                                if (!checkCollisionWithBlock(nextX, nextY + 1, nextZ)) nextY += 1;
-                                else if (!checkCollisionWithBlock(nextX, nextY + 2, nextZ)) nextY += 2;
-                                else if (!checkCollisionWithBlock(nextX, nextY + 3, nextZ)) nextY += 3;
-                                else continue;
-                            }
-                            const nextDistance = Math.hypot(
-                                nextX - closestLight.position.x,
-                                nextY - closestLight.position.y,
-                                nextZ - closestLight.position.z
-                            );
-                            const clearance = Math.min(nextDistance, 6);
-                            const score = retreating
-                                ? clearance * 2 + away.dot(direction)
-                                : clearance * 2 + goal.dot(direction) * 2 + away.dot(direction) * 0.5;
-                            if (score > bestScore) {
-                                bestScore = score;
-                                bestDirection = direction;
+                    if (now >= (this.crawleyLightNextPathTime || 0)) {
+                        this.crawleyLightNextPathTime = now + 150;
+                        const away = new THREE.Vector3(this.pos.x - closestLight.position.x, 0, this.pos.z - closestLight.position.z);
+                        if (away.lengthSq() < 0.001) away.set(Math.cos(this.animationTime), 0, Math.sin(this.animationTime));
+                        away.normalize();
+                        const goal = typeof player !== 'undefined' && player !== null
+                            ? new THREE.Vector3(player.x - this.pos.x, 0, player.z - this.pos.z).normalize()
+                            : away.clone().multiplyScalar(-1);
+                        const probeRadii = [1.25, 0.65];
+                        const angles = retreating
+                            ? [0, -0.45, 0.45, -0.9, 0.9, -1.35, 1.35, -1.8, 1.8, Math.PI]
+                            : [0, this.crawleyLightFlankSide * 0.65, -this.crawleyLightFlankSide * 0.65,
+                                this.crawleyLightFlankSide * 1.3, -this.crawleyLightFlankSide * 1.3,
+                                this.crawleyLightFlankSide * 1.95, -this.crawleyLightFlankSide * 1.95, Math.PI];
+                        let bestDirection = null;
+                        let bestScore = -Infinity;
+                        for (const angle of angles) {
+                            const direction = away.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+                            for (const probeRadius of probeRadii) {
+                                const nextX = modWrap(this.pos.x + direction.x * probeRadius, MAP_SIZE);
+                                const nextZ = modWrap(this.pos.z + direction.z * probeRadius, MAP_SIZE);
+                                let nextY = this.pos.y;
+                                if (checkCollisionWithBlock(nextX, nextY, nextZ)) {
+                                    if (!checkCollisionWithBlock(nextX, nextY + 1, nextZ)) nextY += 1;
+                                    else if (!checkCollisionWithBlock(nextX, nextY + 2, nextZ)) nextY += 2;
+                                    else if (!checkCollisionWithBlock(nextX, nextY + 3, nextZ)) nextY += 3;
+                                    else continue;
+                                }
+                                const nextDistance = Math.hypot(
+                                    nextX - closestLight.position.x,
+                                    nextY - closestLight.position.y,
+                                    nextZ - closestLight.position.z
+                                );
+                                const clearance = Math.min(nextDistance, 6);
+                                const score = retreating
+                                    ? clearance * 2 + away.dot(direction)
+                                    : clearance * 2 + goal.dot(direction) * 2 + away.dot(direction) * 0.5;
+                                if (score > bestScore) {
+                                    bestScore = score;
+                                    bestDirection = direction;
+                                }
                             }
                         }
+                        this.crawleyLightPathDirection = bestDirection;
                     }
 
                     this.isMoving = false;
+                    const bestDirection = this.crawleyLightPathDirection;
                     if (bestDirection) {
                         const speedScale = retreating ? 0.55 : 0.8;
                         const step = this.speed * speedScale * t * 60;
@@ -1585,6 +1592,8 @@ Mob.prototype.update = function (t) {
                             this.pos.z = nextZ;
                             this.pos.y = moveY;
                             this.isMoving = true;
+                        } else {
+                            this.crawleyLightNextPathTime = now;
                         }
                         const yaw = Math.atan2(bestDirection.x, bestDirection.z);
                         this.mesh.quaternion.slerp(
@@ -1596,8 +1605,8 @@ Mob.prototype.update = function (t) {
                     }
                     this.mesh.position.set(this.pos.x, this.pos.y + 0.45, this.pos.z);
                     if (this.isMoving && this.mesh.legs) {
-                        this.animationTime += 15 * t;
-                        this.mesh.position.y += 0.05 * Math.sin(2 * this.animationTime);
+                        this.animationTime += 6 * t;
+                        this.mesh.position.y += 0.025 * Math.sin(2 * this.animationTime);
                         this.mesh.legs.forEach((leg, index) => {
                             const side = index % 2 === 0 ? 1 : -1;
                             leg.rotation.x = Math.sin(this.animationTime + Math.floor(index / 2) * Math.PI / 3) * side * 0.8;
@@ -1629,6 +1638,8 @@ Mob.prototype.update = function (t) {
                 }
             } else {
                 this.crawleyLightThreat = null;
+                this.crawleyLightPathDirection = null;
+                this.crawleyLightNextPathTime = 0;
             }
         }
         let i = null,
@@ -1716,9 +1727,12 @@ Mob.prototype.update = function (t) {
         }
         if ("crawley" === this.type) {
             const now = Date.now();
-            if (!this.crawleyResourceScanTime || now >= this.crawleyResourceScanTime ||
+            if (this.crawleyResourceScanTime === undefined) {
+                this.crawleyResourceScanTime = now + Math.random() * 2500;
+            }
+            if (now >= this.crawleyResourceScanTime ||
                 (this.crawleyResourceTarget && getBlockAt(this.crawleyResourceTarget.x, this.crawleyResourceTarget.y, this.crawleyResourceTarget.z) !== this.crawleyResourceTarget.id)) {
-                this.crawleyResourceScanTime = now + 1000;
+                this.crawleyResourceScanTime = now + 2500 + Math.random() * 500;
                 this.crawleyResourceTarget = null;
                 const scanRadius = 16;
                 let nearestHive = null;
@@ -2061,7 +2075,7 @@ Mob.prototype.update = function (t) {
                 i = Math.floor(e / 2);
             t.rotation.x = Math.sin(this.animationTime - .5 * i) * s * .8
         })) : this.legs.forEach((t => t.rotation.x = 0))
-    } else "crawley" === this.type && this.mesh.legs && (this.isMoving ? (this.animationTime += 15 * t, this.mesh.position.y += .05 * Math.sin(2 * this.animationTime), this.mesh.legs.forEach(((t, e) => {
+    } else "crawley" === this.type && this.mesh.legs && (this.isMoving ? (this.animationTime += 6 * t, this.mesh.position.y += .025 * Math.sin(2 * this.animationTime), this.mesh.legs.forEach(((t, e) => {
         const s = e % 2 == 0 ? 1 : -1;
         t.rotation.x = Math.sin(this.animationTime + Math.floor(e / 2) * Math.PI / 3) * s * .8
     }))) : this.mesh.legs.forEach((t => {
