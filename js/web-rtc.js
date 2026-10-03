@@ -1664,6 +1664,18 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case 'request_block_toggle':
+                    if (isHost && s.world === worldName) {
+                        const currentBlockId = getBlockAt(s.x, s.y, s.z);
+                        const isDoorToggle = (currentBlockId === 146 && s.blockId === 147) || (currentBlockId === 147 && s.blockId === 146);
+                        const chunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
+                        const chunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
+                        const chunkKey = makeChunkKey(s.world, chunkX, chunkZ);
+                        if (isDoorToggle && isChunkMutationAllowed(chunkKey, s.username)) {
+                            chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, null, 'network');
+                        }
+                    }
+                    break;
                 case 'request_block_break':
                     if (isHost) {
                         console.log(`[WebRTC] Host received block break request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);

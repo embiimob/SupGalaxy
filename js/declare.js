@@ -339,6 +339,90 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#654321",
             strength: 2,
             transparent: !0
+        },
+        139: {
+            name: "Castle Stone Bricks",
+            color: "#72777d",
+            strength: 3
+        },
+        140: {
+            name: "Mossy Castle Bricks",
+            color: "#63745d",
+            strength: 3
+        },
+        141: {
+            name: "Chiseled Limestone",
+            color: "#c4b99e",
+            strength: 2
+        },
+        142: {
+            name: "Polished Limestone",
+            color: "#aaa99e",
+            strength: 2
+        },
+        143: {
+            name: "Red Roof Tile",
+            color: "#9d4336",
+            strength: 2
+        },
+        144: {
+            name: "Slate Roof Tile",
+            color: "#48515a",
+            strength: 3
+        },
+        145: {
+            name: "Oak Support Beam",
+            color: "#704425",
+            strength: 3
+        },
+        146: {
+            name: "Oak Door",
+            color: "#704425",
+            transparent: !0,
+            model: "door_closed",
+            strength: 2
+        },
+        147: {
+            name: "Oak Door (Open)",
+            color: "#704425",
+            transparent: !0,
+            model: "door_open",
+            strength: 2
+        },
+        148: {
+            name: "Oak Stairs",
+            color: "#8b5a33",
+            transparent: !0,
+            model: "stairs",
+            strength: 2
+        },
+        149: {
+            name: "Castle Stone Stairs",
+            color: "#72777d",
+            transparent: !0,
+            model: "stairs",
+            strength: 3
+        },
+        150: {
+            name: "Iron Bars",
+            color: "#555d65",
+            strength: 4
+        },
+        151: {
+            name: "Portcullis",
+            color: "#454c53",
+            strength: 5
+        },
+        152: {
+            name: "Rose Stained Glass",
+            color: "#d88ea2",
+            transparent: !0,
+            strength: 1
+        },
+        153: {
+            name: "Battlement Stone",
+            color: "#8a8d8f",
+            strength: 3
         }
     },
     BIOMES = [{
@@ -652,6 +736,144 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         requires: {
             129: 8
+        }
+    }, {
+        id: "castle_stone_bricks",
+        out: {
+            id: 139,
+            count: 4
+        },
+        requires: {
+            4: 3,
+            105: 1
+        }
+    }, {
+        id: "mossy_castle_bricks",
+        out: {
+            id: 140,
+            count: 4
+        },
+        requires: {
+            139: 3,
+            14: 1
+        }
+    }, {
+        id: "chiseled_limestone",
+        out: {
+            id: 141,
+            count: 2
+        },
+        requires: {
+            109: 2,
+            11: 1
+        }
+    }, {
+        id: "polished_limestone",
+        out: {
+            id: 142,
+            count: 4
+        },
+        requires: {
+            106: 3,
+            5: 1
+        }
+    }, {
+        id: "red_roof_tile",
+        out: {
+            id: 143,
+            count: 4
+        },
+        requires: {
+            105: 2,
+            13: 1
+        }
+    }, {
+        id: "slate_roof_tile",
+        out: {
+            id: 144,
+            count: 4
+        },
+        requires: {
+            119: 2,
+            11: 1
+        }
+    }, {
+        id: "oak_support_beam",
+        out: {
+            id: 145,
+            count: 4
+        },
+        requires: {
+            7: 2,
+            129: 2
+        }
+    }, {
+        id: "oak_door",
+        out: {
+            id: 146,
+            count: 1
+        },
+        requires: {
+            129: 5,
+            124: 1
+        }
+    }, {
+        id: "oak_stairs",
+        out: {
+            id: 148,
+            count: 4
+        },
+        requires: {
+            129: 6
+        }
+    }, {
+        id: "castle_stone_stairs",
+        out: {
+            id: 149,
+            count: 4
+        },
+        requires: {
+            139: 6
+        }
+    }, {
+        id: "iron_bars",
+        out: {
+            id: 150,
+            count: 6
+        },
+        requires: {
+            124: 3,
+            11: 1
+        }
+    }, {
+        id: "portcullis",
+        out: {
+            id: 151,
+            count: 1
+        },
+        requires: {
+            150: 4,
+            124: 2
+        }
+    }, {
+        id: "rose_stained_glass",
+        out: {
+            id: 152,
+            count: 2
+        },
+        requires: {
+            100: 2,
+            12: 1
+        }
+    }, {
+        id: "battlement_stone",
+        out: {
+            id: 153,
+            count: 4
+        },
+        requires: {
+            139: 3,
+            106: 1
         }
     }],
     raycaster = new THREE.Raycaster,

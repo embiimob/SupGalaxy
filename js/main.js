@@ -2578,6 +2578,36 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
         const blockId = getBlockAt(x, y, z);
 
+        if (blockId === 146 || blockId === 147) {
+            const nextBlockId = blockId === 146 ? 147 : 146;
+            const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+            const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+            const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+            if (!checkChunkOwnership(chunkKey, userName)) {
+                addMessage("You cannot change this door in another player's chunk.", 2000);
+            } else if (isHost || peers.size === 0) {
+                chunkManager.setBlockGlobal(x, y, z, nextBlockId, true, null, "local");
+                addMessage(nextBlockId === 147 ? "Door opened" : "Door closed", 1200);
+            } else {
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === "open") {
+                        peer.dc.send(JSON.stringify({
+                            type: "request_block_toggle",
+                            x,
+                            y,
+                            z,
+                            blockId: nextBlockId,
+                            username: userName,
+                            world: worldName
+                        }));
+                        break;
+                    }
+                }
+                addMessage(nextBlockId === 147 ? "Opening door..." : "Closing door...", 1200);
+            }
+            return;
+        }
+
         if (blockId === 130) { // Crafting Table
             openCrafting();
             return;
@@ -3316,7 +3346,7 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e
+    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e && 147 !== e
 }
 
 function checkCollisionWithBlock(e, t, o) {

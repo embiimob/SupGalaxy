@@ -215,6 +215,21 @@ const BLOCKS = {
         127: { name: "Magician's Stone", color: "#8A2BE2" },
         133: { name: 'Blue Laser Gun', color: '#0000ff', hand_attachable: true },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
+        139: { name: 'Castle Stone Bricks', color: '#72777d' },
+        140: { name: 'Mossy Castle Bricks', color: '#63745d' },
+        141: { name: 'Chiseled Limestone', color: '#c4b99e' },
+        142: { name: 'Polished Limestone', color: '#aaa99e' },
+        143: { name: 'Red Roof Tile', color: '#9d4336' },
+        144: { name: 'Slate Roof Tile', color: '#48515a' },
+        145: { name: 'Oak Support Beam', color: '#704425' },
+        146: { name: 'Oak Door', color: '#704425', transparent: true },
+        147: { name: 'Oak Door (Open)', color: '#704425', transparent: true },
+        148: { name: 'Oak Stairs', color: '#8b5a33', transparent: true },
+        149: { name: 'Castle Stone Stairs', color: '#72777d', transparent: true },
+        150: { name: 'Iron Bars', color: '#555d65' },
+        151: { name: 'Portcullis', color: '#454c53' },
+        152: { name: 'Rose Stained Glass', color: '#d88ea2', transparent: true },
+        153: { name: 'Battlement Stone', color: '#8a8d8f' },
 };
 
 const BIOMES = [
