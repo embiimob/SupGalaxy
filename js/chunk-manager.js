@@ -632,6 +632,8 @@ Chunk.prototype.idx = function (e, t, o) {
                 })
             }
             var G = new THREE.Mesh(U, D);
+            G.castShadow = !K.transparent && !K.noShadow && !K.light;
+            G.receiveShadow = !K.light;
             I.add(G)
         }
     }
