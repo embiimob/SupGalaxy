@@ -2544,6 +2544,14 @@ function onPointerDown(e) {
     const s = r[0],
         i = s.point,
         l = s.face.normal;
+    if (e.button === 2) {
+        let hitObject = s.object;
+        while (hitObject && !hitObject.userData.doorAnchor) hitObject = hitObject.parent;
+        if (hitObject && hitObject.userData.doorAnchor) {
+            toggleCastleDoor(hitObject.userData.doorAnchor);
+            return;
+        }
+    }
     if (0 === e.button) {
         animateAttack();
         const x = Math.floor(i.x - .5 * l.x);
@@ -2578,36 +2586,6 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
         const blockId = getBlockAt(x, y, z);
 
-        if (blockId === 146 || blockId === 147) {
-            const nextBlockId = blockId === 146 ? 147 : 146;
-            const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
-            const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
-            const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-            if (!checkChunkOwnership(chunkKey, userName)) {
-                addMessage("You cannot change this door in another player's chunk.", 2000);
-            } else if (isHost || peers.size === 0) {
-                chunkManager.setBlockGlobal(x, y, z, nextBlockId, true, null, "local");
-                addMessage(nextBlockId === 147 ? "Door opened" : "Door closed", 1200);
-            } else {
-                for (const [, peer] of peers.entries()) {
-                    if (peer.dc && peer.dc.readyState === "open") {
-                        peer.dc.send(JSON.stringify({
-                            type: "request_block_toggle",
-                            x,
-                            y,
-                            z,
-                            blockId: nextBlockId,
-                            username: userName,
-                            world: worldName
-                        }));
-                        break;
-                    }
-                }
-                addMessage(nextBlockId === 147 ? "Opening door..." : "Closing door...", 1200);
-            }
-            return;
-        }
-
         if (blockId === 130) { // Crafting Table
             openCrafting();
             return;
@@ -2617,6 +2595,43 @@ function onPointerDown(e) {
         }
 
         placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
+    }
+}
+
+function toggleCastleDoor(x, y, z) {
+    const blockId = getBlockAt(x, y, z);
+    if (blockId !== 146 && blockId !== 147) return;
+    const nextBlockId = blockId === 146 ? 147 : 146;
+    const chunkX = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+    const chunkZ = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+    const chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
+    if (!checkChunkOwnership(chunkKey, userName)) {
+        addMessage("You cannot change this door in another player's chunk.", 2000);
+        return;
+    }
+    if (nextBlockId === 146 && (checkCollisionWithPlayer(x, y, z) || checkCollisionWithPlayer(x, y + 1, z))) {
+        addMessage("Move clear of the doorway before closing it.", 2000);
+        return;
+    }
+    if (isHost || peers.size === 0) {
+        chunkManager.setBlockGlobal(x, y, z, nextBlockId, true, null, "local");
+        addMessage(nextBlockId === 147 ? "Door opened" : "Door closed", 1200);
+    } else {
+        for (const [, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === "open") {
+                peer.dc.send(JSON.stringify({
+                    type: "request_block_toggle",
+                    x,
+                    y,
+                    z,
+                    blockId: nextBlockId,
+                    username: userName,
+                    world: worldName
+                }));
+                break;
+            }
+        }
+        addMessage(nextBlockId === 147 ? "Opening door..." : "Closing door...", 1200);
     }
 }
 
@@ -3087,6 +3102,9 @@ function placeBlockAt(e, t, o, a) {
             if (a === 136 && r === 6) {
                 const below = getBlockAt(e, t - 1, o);
                 if (below === 6 || below === BLOCK_AIR) return void addMessage("Seaweed must be planted on the ocean floor or another seaweed.", 2000);
+            }
+            if (a === 146 && (t + 1 >= MAX_HEIGHT || getBlockAt(e, t + 1, o) !== BLOCK_AIR)) {
+                return void addMessage("Oak doors need two clear blocks of height.", 2000);
             }
             if (r === BLOCK_AIR || 6 === r)
                 if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");

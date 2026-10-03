@@ -1671,7 +1671,8 @@ function setupDataChannel(e, t) {
                         const chunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const chunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const chunkKey = makeChunkKey(s.world, chunkX, chunkZ);
-                        if (isDoorToggle && isChunkMutationAllowed(chunkKey, s.username)) {
+                        const doorHasClearance = s.blockId !== 146 || (s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR);
+                        if (isDoorToggle && doorHasClearance && isChunkMutationAllowed(chunkKey, s.username)) {
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, null, 'network');
                         }
                     }

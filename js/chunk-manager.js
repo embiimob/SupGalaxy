@@ -432,14 +432,14 @@ Chunk.prototype.idx = function (e, t, o) {
                     color: 0x49301d,
                     roughness: 0.85
                 });
-                const knobMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xc99b45,
-                    metalness: 0.55,
-                    roughness: 0.35
-                });
                 for (const B of e.positions) {
                     const model = new THREE.Group();
                     model.position.set(B.x + .5, B.y, B.z + .5);
+                    model.userData.doorAnchor = BLOCKS[w].model.startsWith("door") ? {
+                        x: p,
+                        y: u,
+                        z: m
+                    } : null;
                     if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
                         lowerStep.position.y = .25;
@@ -447,21 +447,19 @@ Chunk.prototype.idx = function (e, t, o) {
                         upperStep.position.set(0, .75, .25);
                         model.add(lowerStep, upperStep);
                     } else {
-                        const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(.09, 1, .14), trimMaterial);
-                        leftJamb.position.set(-.455, .5, 0);
-                        const rightJamb = new THREE.Mesh(new THREE.BoxGeometry(.09, 1, .14), trimMaterial);
-                        rightJamb.position.set(.455, .5, 0);
-                        const lintel = new THREE.Mesh(new THREE.BoxGeometry(.91, .09, .14), trimMaterial);
-                        lintel.position.y = .955;
+                        const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(.05, 2, .14), trimMaterial);
+                        leftJamb.position.set(-.475, 1, 0);
+                        const rightJamb = new THREE.Mesh(new THREE.BoxGeometry(.05, 2, .14), trimMaterial);
+                        rightJamb.position.set(.475, 1, 0);
+                        const lintel = new THREE.Mesh(new THREE.BoxGeometry(.95, .1, .14), trimMaterial);
+                        lintel.position.y = 1.95;
                         const hinge = new THREE.Group();
-                        hinge.position.x = -.41;
-                        const panel = new THREE.Mesh(new THREE.BoxGeometry(.78, .9, .07), modelMaterial);
-                        panel.position.set(.39, .5, 0);
+                        hinge.position.x = -.45;
+                        const panel = new THREE.Mesh(new THREE.BoxGeometry(.88, 1.9, .07), modelMaterial);
+                        panel.position.set(.44, 1, 0);
                         hinge.add(panel);
                         if (BLOCKS[w].model === "door_open") hinge.rotation.y = -Math.PI / 2;
-                        const knob = new THREE.Mesh(new THREE.SphereGeometry(.035, 8, 6), knobMaterial);
-                        knob.position.set(.68, .5, .055);
-                        model.add(leftJamb, rightJamb, lintel, hinge, knob);
+                        model.add(leftJamb, rightJamb, lintel, hinge);
                     }
                     model.traverse(child => {
                         if (child.isMesh) {
