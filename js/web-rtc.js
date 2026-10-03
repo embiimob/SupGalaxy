@@ -1740,13 +1740,14 @@ function setupDataChannel(e, t) {
                         const breakChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkKey = makeChunkKey(s.world, breakChunkX, breakChunkZ);
+                        const blockId = getBlockAt(s.x, s.y, s.z);
+                        const blockCannotBreak = BLOCKS[blockId] && BLOCKS[blockId].unbreakable;
 
-                        if (isChunkMutationAllowed(breakChunkKey, s.username)) {
+                        if (!blockCannotBreak && isChunkMutationAllowed(breakChunkKey, s.username)) {
                             // Allowed: break block and broadcast
                             const blockKey = `${s.x},${s.y},${s.z}`;
                             const worldState = getCurrentWorldState();
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
-                            const blockId = getBlockAt(s.x, s.y, s.z);
 
                             const replacementBlockId = blockId === 136 ? 6 : BLOCK_AIR;
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
@@ -1824,7 +1825,9 @@ function setupDataChannel(e, t) {
                         } else {
                             // Denied: send denial message
                             const ownerName = getChunkOwnerName(breakChunkKey);
-                            const reason = ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
+                            const reason = blockCannotBreak
+                                ? 'Cannot break that block'
+                                : ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
 
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1908,7 +1911,7 @@ function setupDataChannel(e, t) {
                 case 'block_action_denied':
                     if (!isHost) {
                         // Client receives denial from host
-                        addMessage(`Cannot edit: ${s.reason}`, 3000);
+                        addMessage(s.reason === 'Cannot break that block' ? s.reason : `Cannot edit: ${s.reason}`, 3000);
                         console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
                     }
                     break;
