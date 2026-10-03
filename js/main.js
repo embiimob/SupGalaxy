@@ -3379,18 +3379,6 @@ function respawnPlayer(e, t, o) {
         d = Math.floor(n / CHUNK_SIZE);
     currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
     
-    // Use circular distance check for chunk iteration
-    var radiusSq = currentLoadRadius * currentLoadRadius;
-    for (var c = -currentLoadRadius; c <= currentLoadRadius; c++)
-        for (var u = -currentLoadRadius; u <= currentLoadRadius; u++) {
-            // Circular filter: only process chunks within circular radius
-            if (c * c + u * u <= radiusSq) {
-                var p = modWrap(l + c, CHUNKS_PER_SIDE),
-                    m = modWrap(d + u, CHUNKS_PER_SIDE),
-                    y = chunkManager.getChunk(p, m);
-                y.generated || chunkManager.generateChunk(y), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y);
-            }
-        }
     if (chunkManager.update(player.x, player.z), "first" === cameraMode) {
         camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2), camera.rotation.set(0, 0, 0, "YXZ");
         try {
@@ -3399,7 +3387,7 @@ function respawnPlayer(e, t, o) {
             addMessage("Pointer lock failed. Serve over HTTPS or check iframe permissions.", 3e3)
         }
     } else camera.position.set(player.x, player.y + 5, player.z + 10), controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2), controls.update();
-    document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
+    document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, isDying = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
 
     // Force immediate chunk scanning upon teleport/spawn to avoid 1-minute delay
     if (typeof triggerPoll === 'function') {
