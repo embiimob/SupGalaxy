@@ -55,6 +55,9 @@ function processP2fkRequestQueue() {
         p2fkLastRequestAt = now;
         if (p2fkBurstCount < P2FK_BURST_REQUESTS) {
             p2fkBurstCount++;
+            if (p2fkBurstCount === P2FK_BURST_REQUESTS) {
+                p2fkNextSlowRequestAt = now + 1000 / API_CALLS_PER_SECOND;
+            }
         } else {
             p2fkNextSlowRequestAt = now + 1000 / API_CALLS_PER_SECOND;
         }
