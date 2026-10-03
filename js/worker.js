@@ -715,6 +715,15 @@ var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
 var API_CALLS_PER_SECOND = 10;
 var apiDelay = 100;
+var p2fkThrottleRequestId = 0;
+var pendingP2fkThrottleRequests = new Map();
+function waitForP2fkApiSlot() {
+        return new Promise(resolve => {
+            var requestId = ++p2fkThrottleRequestId;
+            pendingP2fkThrottleRequests.set(requestId, resolve);
+            self.postMessage({ type: 'p2fk_api_throttle', requestId: requestId });
+        });
+}
 async function fetchData(url) {
         try {
             await new Promise(resolve => setTimeout(resolve, apiDelay));
@@ -761,7 +770,7 @@ async function getRootsByAddress(address, skip, qty) {
         try {
             // Address should be alphanumeric, but we use strict quote stripping just in case
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            await waitForP2fkApiSlot();
             var response = await fetch("https://p2fk.io/GetRootsByAddress/" + cleanAddress + "?skip=" + (skip || 0) + "&qty=" + (qty || 5000) + "&mainnet=false");
             if (!response.ok) {
                 console.error('[Worker] Failed to fetch roots for address:', cleanAddress, 'status:', response.status);
@@ -903,7 +912,7 @@ async function getProfileByURN(urn) {
             if (profileByURNCache.has(urn)) return profileByURNCache.get(urn);
             // Relaxed sanitization for URNs to support emojis
             var cleanUrn = encodeURIComponent(urn.trim().replace(/^"|"$/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            await waitForP2fkApiSlot();
             var response = await fetch("https://p2fk.io/GetProfileByURN/" + cleanUrn + "?mainnet=false");
             if (!response.ok) {
                 console.error('[Worker] Failed to fetch profile for URN:', cleanUrn, 'status:', response.status);
@@ -921,7 +930,7 @@ async function getProfileByAddress(address) {
         try {
             if (profileByAddressCache.has(address)) return profileByAddressCache.get(address);
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
+            await waitForP2fkApiSlot();
             var response = await fetch("https://p2fk.io/GetProfileByAddress/" + cleanAddress + "?mainnet=false");
             if (!response.ok) {
                 console.error('[Worker] Failed to fetch profile for address:', cleanAddress, 'status:', response.status);
@@ -1046,6 +1055,15 @@ self.onmessage = async function(e) {
             return;
         }
 
+        if (data.type === 'p2fk_api_throttle_granted') {
+            var resolveThrottleRequest = pendingP2fkThrottleRequests.get(data.requestId);
+            if (resolveThrottleRequest) {
+                pendingP2fkThrottleRequests.delete(data.requestId);
+                resolveThrottleRequest();
+            }
+            return;
+        }
+
         if (type === 'generate_chunk') {
             const chunkData = generateChunkData(data.key);
             self.postMessage({ type: 'chunk_generated', key: data.key, data: chunkData }, [chunkData.buffer]);
@@ -1102,7 +1120,7 @@ self.onmessage = async function(e) {
                                 continue;
                             }
                             // Add delay before IPFS fetch to respect rate limiting
-                            await new Promise(resolve => setTimeout(resolve, apiDelay));
+                            await waitForP2fkApiSlot();
                             var data = await fetchIPFS(hash);
                             var processData = data;
                             if (data && data.playerData) {
@@ -1381,7 +1399,7 @@ self.onmessage = async function(e) {
                                     continue;
                                 }
                                 // Add delay before IPFS fetch to respect rate limiting
-                                await new Promise(resolve => setTimeout(resolve, apiDelay));
+                                await waitForP2fkApiSlot();
                                 var data = await fetchIPFS(hash);
                                 if (data) {
                                     self.postMessage({ type: "user_update", data: data, address: msg.FromAddress, timestamp: new Date(msg.BlockDate).getTime(), transactionId: msg.TransactionId });
@@ -1768,6 +1786,12 @@ self.onmessage = async function(e) {
         `], { type: 'application/javascript' })));
         worker.onmessage = function (e) {
             var data = e.data;
+            if (data.type === 'p2fk_api_throttle') {
+                waitForP2fkApiSlot().then(function () {
+                    worker.postMessage({ type: 'p2fk_api_throttle_granted', requestId: data.requestId });
+                });
+                return;
+            }
             if (data.type === "worlds_users") {
                 console.log('[Users] Received worlds_users: worlds=', Object.keys(data.worlds || {}).length, 'users=', Object.keys(data.users || {}).length);
                 if (data.worlds && typeof data.worlds === 'object' && Object.keys(data.worlds).length > 0) {
