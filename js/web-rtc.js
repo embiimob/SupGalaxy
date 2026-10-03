@@ -2347,7 +2347,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Online Players</h3>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -2651,9 +2651,32 @@ function openUsersModal() {
     }
     t.querySelector("#closeUsers").onclick = function () {
         console.log("[MODAL] Closing users modal"), t.remove(), isPromptOpen = !1
-    }, t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
+    };
+    const switchWorldInput = t.querySelector("#switchWorldInput");
+    const submitWorldSwitch = () => {
+        const targetWorld = switchWorldInput.value.trim();
+        if (!targetWorld) {
+            addMessage("World name cannot be empty.", 3e3);
+            switchWorldInput.focus();
+            return;
+        }
+        t.remove();
+        isPromptOpen = !1;
+        switchWorld(targetWorld);
+    };
+    switchWorldInput.addEventListener("keydown", event => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+            event.preventDefault();
+            submitWorldSwitch();
+        }
+    });
+    t.querySelector("#switchWorldAction").onclick = submitWorldSwitch;
+    switchWorldInput.focus();
+    t.querySelector("#friendHandle").addEventListener("keydown", (function (e) {
         e.stopPropagation()
-    })), t.querySelector("#connectFriend").onclick = function () {
+    }));
+    t.querySelector("#connectFriend").onclick = function () {
         isConnecting = !0;
         var e = document.getElementById("friendHandle").value.trim().slice(0, 20);
         if (e)
