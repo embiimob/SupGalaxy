@@ -14,14 +14,6 @@ const IPFS_GATEWAYS = [
     'https://ipfs.filebase.io/ipfs/'
 ];
 
-function encodeIPFSPath(path) {
-    return String(path)
-        .split('/')
-        .filter(Boolean)
-        .map(part => encodeURIComponent(part))
-        .join('/');
-}
-
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function encB58(b) {
@@ -708,33 +700,11 @@ function generateChunkData(chunkKey) {
 
 var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
-var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
 var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
-var API_CALLS_PER_SECOND = 10;
 var apiDelay = 100;
-async function fetchData(url) {
-        try {
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch(url);
-            return response.ok ? await response.json() : null;
-        } catch (e) {
-            console.error('[Worker] Fetch error:', url, e);
-            return null;
-        }
-}
-async function fetchText(url) {
-        try {
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var response = await fetch(url);
-            return response.ok ? await response.text() : null;
-        } catch (e) {
-            console.error('[Worker] Fetch text error:', url, e);
-            return null;
-        }
-}
 async function getPublicAddressByKeyword(keyword) {
         try {
             if (addressByKeywordCache.has(keyword)) return addressByKeywordCache.get(keyword);
@@ -932,23 +902,6 @@ async function getProfileByAddress(address) {
             return profile;
         } catch (e) {
             console.error('[Worker] Error fetching profile for address:', address, e);
-            return null;
-        }
-}
-async function getKeywordByPublicAddress(address) {
-        try {
-            if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-            var cleanAddress = address.trim().replace(/^"|"$/g, "");
-            var payload = await decB58C(cleanAddress);
-            if (!payload || payload.length <= 1) {
-                console.error('[Worker] Failed to decode keyword for address:', cleanAddress);
-                return null;
-            }
-            var cleanKeyword = new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "");
-            if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
-            return cleanKeyword;
-        } catch (e) {
-            console.error('[Worker] Error decoding keyword for address:', address, e);
             return null;
         }
 }

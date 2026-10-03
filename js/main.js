@@ -2738,25 +2738,6 @@ function handlePlayerHit(e) {
     }
 }
 
-function attackAtPoint(e) {
-    for (var t of mobs) {
-        let hitMob = false;
-        if (t.type === "ufo_saucer") {
-            const dx = Math.abs(e.x - t.mesh.position.x);
-            const dy = Math.abs(e.y - t.mesh.position.y);
-            const dz = Math.abs(e.z - t.mesh.position.z);
-            if (dx < 30 && dy < 15 && dz < 50) {
-                hitMob = true;
-            }
-        } else if (t.mesh.position.distanceTo(e) < 1.5) {
-            hitMob = true;
-        }
-
-        if (hitMob) return handleMobHit(t), !0;
-    }
-    return !1
-}
-
 function checkAndDeactivateHive(e, t, o) {
     let a = null,
         n = 1 / 0;
@@ -3817,32 +3798,6 @@ function toggleCameraMode() {
     }
 }
 
-function performAttack() {
-    animateAttack();
-    var e = new THREE.Vector3;
-    camera.getWorldDirection(e);
-    var t = "first" === cameraMode ? new THREE.Vector3(player.x, player.y + 1.62, player.z) : camera.position.clone();
-    raycaster.setFromCamera(pointer, camera), raycaster.far = 5;
-    var o = mobs.map((function (e) {
-        return {
-            mob: e,
-            intersect: raycaster.intersectObject(e.mesh)[0]
-        }
-    })).filter((function (e) {
-        return e.intersect
-    })).sort((function (e, t) {
-        return e.intersect.distance - t.intersect.distance
-    }));
-    if (o.length > 0) return o[0].mob.hurt(4), safePlayAudio(soundHit), void addMessage("Hit mob!", 800);
-    for (var a = .6; a < 3; a += .6) {
-        var n = t.clone().addScaledVector(e, a),
-            r = Math.round(n.x),
-            s = Math.round(n.y),
-            i = Math.round(n.z),
-            l = getBlockAt(r, s, i);
-        if (l && l !== BLOCK_AIR && 6 !== l) return void removeBlockAt(r, s, i)
-    }
-}
 async function downloadSession() {
     // Show the save options modal for all players (host and peer)
     isPromptOpen = true;

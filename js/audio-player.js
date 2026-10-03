@@ -9,17 +9,6 @@ var previewAudio = new Audio();
 var currentPreviewUrl = null;
 var showingPlaylist = false;
 
-// Sup!? local mode IPFS URL helper
-function buildIPFSUrl(hash, filename = null) {
-    if (checkSupLocalMode() && filename) {
-        // Return local file:// URL using effective local IPFS root (respects ipfs-path query parameter)
-        const localIpfsRoot = getLocalIpfsRoot();
-        return `file:///${localIpfsRoot}/${hash}/${filename}`;
-    }
-    // Fetch from public gateway without filename to avoid failures.
-    return buildIPFSGatewayUrl(hash);
-}
-
 // Helper function to detect if an error is caused by autoplay restrictions
 function isAutoplayError(error) {
     if (!error) return false;

@@ -1304,14 +1304,6 @@ function getLocalIpfsRoot() {
     return effectiveLocalIpfsRoot;
 }
 
-function encodeIPFSPath(path) {
-    return String(path)
-        .split('/')
-        .filter(Boolean)
-        .map(part => encodeURIComponent(part))
-        .join('/');
-}
-
 function buildIPFSGatewayUrls(hash, filename = null) {
     return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}`);
 }
@@ -1319,6 +1311,14 @@ function buildIPFSGatewayUrls(hash, filename = null) {
 function buildIPFSGatewayUrl(hash, filename = null, gatewayIndex = 0) {
     const gatewayUrls = buildIPFSGatewayUrls(hash, filename);
     return gatewayUrls[gatewayIndex] || gatewayUrls[0];
+}
+
+function buildIPFSUrl(hash, filename = null) {
+    if (checkSupLocalMode() && filename) {
+        const localIpfsRoot = getLocalIpfsRoot();
+        return `file:///${localIpfsRoot}/${hash}/${filename}`;
+    }
+    return buildIPFSGatewayUrl(hash);
 }
 
 /**

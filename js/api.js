@@ -1,6 +1,5 @@
 var profileByURNCache = new Map();
 var profileByAddressCache = new Map();
-var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var ipfsFailureCounts = new Map();
 var missingIpfsPaths = new Set();
@@ -197,23 +196,6 @@ async function GetProfileByAddress(address) {
         if (profile) profileByAddressCache.set(address, profile);
         return profile;
     } catch (e) {
-        return null;
-    }
-}
-async function GetKeywordByPublicAddress(address) {
-    try {
-        if (keywordByAddressCache.has(address)) return keywordByAddressCache.get(address);
-        var cleanAddress = address.trim().replace(/^"|"$/g, '');
-        var cleanKeyword = null;
-        if ("function" == typeof window.deriveKeywordFromAddress) cleanKeyword = await window.deriveKeywordFromAddress(cleanAddress);
-        else if ("function" == typeof decB58C) try {
-            var payload = await decB58C(cleanAddress);
-            cleanKeyword = payload && payload.length > 1 ? new TextDecoder().decode(payload.slice(1)).replace(/#+$/g, "") : null
-        } catch (e) {}
-        if (cleanKeyword) keywordByAddressCache.set(address, cleanKeyword);
-        return cleanKeyword;
-    } catch (e) {
-        addMessage('Failed to fetch keyword for address');
         return null;
     }
 }

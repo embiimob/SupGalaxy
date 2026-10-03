@@ -7,17 +7,6 @@ var isVideoMuted = true;
 var videoCurrentPage = 1;
 var showingVideoPlaylist = false;
 
-// Sup!? local mode IPFS URL helper
-function buildIPFSUrl(hash, filename = null) {
-    if (checkSupLocalMode() && filename) {
-        // Return local file:// URL using effective local IPFS root (respects ipfs-path query parameter)
-        const localIpfsRoot = getLocalIpfsRoot();
-        return `file:///${localIpfsRoot}/${hash}/${filename}`;
-    }
-    // Fetch from public gateway without filename to avoid failures.
-    return buildIPFSGatewayUrl(hash);
-}
-
 // Video Player Logic
 function initVideoPlayer() {
     const playPauseBtn = document.getElementById('videoPlayPauseBtn');

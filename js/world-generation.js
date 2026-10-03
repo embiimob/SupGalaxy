@@ -46,11 +46,6 @@ function modWrap(e, t) {
     return (e % t + t) % t
 }
 
-function hashSeed(e) {
-    for (var t = 2166136261, o = 0; o < e.length; o++) t = Math.imul(t ^ e.charCodeAt(o), 16777619) >>> 0;
-    return t % MAP_SIZE
-}
-
 function calculateSpawnPoint(e) {
     var t = makeSeededRandom(e),
         o = Math.floor(t() * MAP_SIZE),

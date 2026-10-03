@@ -116,8 +116,6 @@ function jAdd(X1,Y1,Z1,X2,Y2,Z2){if(Z1===0n)return[X2,Y2,Z2];if(Z2===0n)return[X
 function jAff(X,Y,Z){const zi=sInv(Z,P),zi2=sP(zi*zi);return[sP(X*zi2),sP(Y*sP(zi2*zi))];}
 function sMul(k){let[rx,ry,rz]=[0n,1n,0n],[ax,ay,az]=[Gx,Gy,1n],sc=((k%N)+N)%N;while(sc>0n){if(sc&1n)[rx,ry,rz]=jAdd(rx,ry,rz,ax,ay,az);[ax,ay,az]=jDbl(ax,ay,az);sc>>=1n;}return[rx,ry,rz];}
 function priv2pub(pb){const[jx,jy,jz]=sMul(b2bi(pb));const[x,y]=jAff(jx,jy,jz);return new Uint8Array([(y&1n)?0x03:0x02,...bi2b32(x)]);}
-function priv2pt(pb){const[jx,jy,jz]=sMul(b2bi(pb));const[x,y]=jAff(jx,jy,jz);return{x,y};}
-
 async function rfc6979k(priv,mh) {
   const hmac=async(key,...parts)=>{const k=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-256'},false,['sign']);const sz=parts.reduce((s,p)=>s+p.length,0),m=new Uint8Array(sz);let o=0;for(const p of parts){m.set(p,o);o+=p.length;}return new Uint8Array(await crypto.subtle.sign('HMAC',k,m));};
   let V=new Uint8Array(32).fill(1),K=new Uint8Array(32).fill(0);
