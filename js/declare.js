@@ -355,13 +355,15 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Castle Stone Bricks",
             color: "#72777d",
             textureStyle: "stone_bricks",
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         140: {
             name: "Mossy Castle Bricks",
             color: "#63745d",
             textureStyle: "mossy_bricks",
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         141: {
             name: "Chiseled Limestone",
@@ -493,7 +495,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             model: "stairs",
             textureStyle: "stone_bricks",
             facing: 0,
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         160: {
             name: "Oak Stairs",
@@ -529,7 +532,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             model: "stairs",
             textureStyle: "stone_bricks",
             facing: 1,
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         164: {
             name: "Castle Stone Stairs",
@@ -538,7 +542,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             model: "stairs",
             textureStyle: "stone_bricks",
             facing: 2,
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         165: {
             name: "Castle Stone Stairs",
@@ -547,7 +552,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             model: "stairs",
             textureStyle: "stone_bricks",
             facing: 3,
-            strength: 3
+            strength: 30,
+            breakable: !0
         },
         166: {
             name: "Wooden Planks",
@@ -603,7 +609,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#8a8d8f",
             textureStyle: "stone_bricks",
             model: "battlement",
-            strength: 3
+            strength: 30,
+            breakable: !0
         }
     },
     BIOMES = [{

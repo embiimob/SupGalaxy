@@ -2862,7 +2862,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
 
     const n = BLOCKS[a];
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
-    if (!n || n.strength > 5) {
+    if (!n || (n.strength > 5 && n.breakable !== true)) {
         if (breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer")) {
             // Allow UFO to break tough blocks like obsidian, but let it take multiple hits
         } else {
