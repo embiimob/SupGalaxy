@@ -181,12 +181,24 @@ async function resolveIPFS(url) {
     // Ignore filename when fetching from IPFS as gateways only use CID
     const filename = null;
     
-    const response = await fetchIPFSWithFallback(hash, filename);
-    if (!response.ok) {
-        throw new Error('Failed to fetch from IPFS.');
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            if (attempt > 0) {
+                clearIpfsFetchFailure(hash, filename);
+                await new Promise(resolve => setTimeout(resolve, attempt * 500));
+            }
+            const response = await fetchIPFSWithFallback(hash, filename);
+            if (!response.ok) {
+                throw new Error('Failed to fetch from IPFS.');
+            }
+            const blob = await response.blob();
+            return URL.createObjectURL(blob);
+        } catch (error) {
+            lastError = error;
+        }
     }
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    throw lastError;
 }
 
 function normalizeRootRecord(root, address) {

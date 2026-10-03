@@ -1621,15 +1621,27 @@ async function createMagicianStoneScreen(stoneData) {
     // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
-    // Deduplication: Clean up if this stone is already loaded to support replacement
-    if (magicianStones[key] && magicianStones[key].mesh) {
-        if (typeof cleanupMagicianStone === 'function') {
-            cleanupMagicianStone(magicianStones[key], key);
-        }
-        delete magicianStones[key];
-    }
     if (magicianStonesLoading.has(key)) {
         return;
+    }
+
+    const existingStone = magicianStones[key];
+    const configKeys = [
+        'url', 'width', 'height', 'offsetX', 'offsetY', 'offsetZ', 'loop',
+        'autoplay', 'autoplayAnimation', 'distance', 'collision', 'damage', 'direction'
+    ];
+    const isDuplicate = existingStone && existingStone.mesh && configKeys.every(
+        configKey => JSON.stringify(existingStone[configKey]) === JSON.stringify(stoneData[configKey])
+    );
+    if (isDuplicate) {
+        return;
+    }
+
+    if (existingStone && existingStone.mesh) {
+        if (typeof cleanupMagicianStone === 'function') {
+            cleanupMagicianStone(existingStone, key);
+        }
+        delete magicianStones[key];
     }
 
     // Mark as loading to prevent duplicate loads during async operations.
@@ -1666,7 +1678,10 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
-    const fileExtension = stoneData.url.split('.').pop().toLowerCase();
+    const mediaPath = stoneData.url.split(/[?#]/, 1)[0].replace(/[\\/]+$/, '');
+    const fileName = mediaPath.split(/[\\/]/).pop();
+    const extensionIndex = fileName.lastIndexOf('.');
+    const fileExtension = extensionIndex > 0 ? fileName.slice(extensionIndex + 1).toLowerCase() : '';
 
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
@@ -2869,7 +2884,16 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
     const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     if (n.unbreakable && !isUfo) {
-        return void addMessage("Cannot break that block");
+        const message = "Cannot break that block";
+        if (isHost && breaker && breaker !== userName) {
+            const peer = peers.get(breaker);
+            if (peer && peer.dc && peer.dc.readyState === 'open') {
+                peer.dc.send(JSON.stringify({ type: 'alert', message }));
+            }
+        } else {
+            addMessage(message);
+        }
+        return;
     }
 
     // Check ownership BEFORE showing any visual feedback
@@ -3355,18 +3379,6 @@ function respawnPlayer(e, t, o) {
         d = Math.floor(n / CHUNK_SIZE);
     currentLoadRadius = INITIAL_LOAD_RADIUS, chunkManager.preloadChunks(l, d, currentLoadRadius);
     
-    // Use circular distance check for chunk iteration
-    var radiusSq = currentLoadRadius * currentLoadRadius;
-    for (var c = -currentLoadRadius; c <= currentLoadRadius; c++)
-        for (var u = -currentLoadRadius; u <= currentLoadRadius; u++) {
-            // Circular filter: only process chunks within circular radius
-            if (c * c + u * u <= radiusSq) {
-                var p = modWrap(l + c, CHUNKS_PER_SIDE),
-                    m = modWrap(d + u, CHUNKS_PER_SIDE),
-                    y = chunkManager.getChunk(p, m);
-                y.generated || chunkManager.generateChunk(y), !y.needsRebuild && y.mesh || chunkManager.buildChunkMesh(y);
-            }
-        }
     if (chunkManager.update(player.x, player.z), "first" === cameraMode) {
         camera.position.set(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2), camera.rotation.set(0, 0, 0, "YXZ");
         try {
@@ -3375,7 +3387,7 @@ function respawnPlayer(e, t, o) {
             addMessage("Pointer lock failed. Serve over HTTPS or check iframe permissions.", 3e3)
         }
     } else camera.position.set(player.x, player.y + 5, player.z + 10), controls.target.set(player.x + player.width / 2, player.y + .6, player.z + player.depth / 2), controls.update();
-    document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
+    document.getElementById("deathScreen").style.display = "none", deathScreenShown = !1, isDying = !1, createAndSetupAvatar(userName, !0), avatarGroup.visible = "third" === cameraMode, addMessage("Respawned at " + Math.floor(a) + ", " + Math.floor(player.y) + ", " + Math.floor(n), 3e3);
 
     // Force immediate chunk scanning upon teleport/spawn to avoid 1-minute delay
     if (typeof triggerPoll === 'function') {

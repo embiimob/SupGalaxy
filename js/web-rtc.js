@@ -152,16 +152,40 @@ async function connectToServer(e, t, o) {
         clearInterval(answerPollingIntervals.get(userKeyword)), answerPollingIntervals.delete(userKeyword)
     }
 }
-async function sendWorldStateAsync(peer, worldState, username) {
+async function sendWorldStateAsync(peer, worldState, username, targetWorld = worldName) {
     if (!peer || !peer.dc || peer.dc.readyState !== 'open') {
         console.log(`[WebRTC] Cannot send world state to ${username}, data channel not open.`);
         return;
     }
 
+    const worldStones = targetWorld === worldName
+        ? {
+            magicianStones: Object.fromEntries(Object.entries(magicianStones).map(([key, stone]) => [key, {
+                x: stone.x, y: stone.y, z: stone.z, url: stone.url,
+                width: stone.width, height: stone.height,
+                offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                loop: stone.loop, autoplay: stone.autoplay, autoplayAnimation: stone.autoplayAnimation,
+                distance: stone.distance, collision: stone.collision ?? true,
+                damage: stone.damage ?? 0, direction: stone.direction
+            }])),
+            calligraphyStones: Object.fromEntries(Object.entries(calligraphyStones).map(([key, stone]) => [key, {
+                x: stone.x, y: stone.y, z: stone.z, width: stone.width, height: stone.height,
+                offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
+                bgColor: stone.bgColor, transparent: stone.transparent, fontFamily: stone.fontFamily,
+                fontSize: stone.fontSize, fontWeight: stone.fontWeight, fontColor: stone.fontColor,
+                text: stone.text, link: stone.link, direction: stone.direction
+            }])),
+            chests: Object.fromEntries(Object.entries(chests).filter(([, chest]) => chest).map(([key, chest]) => [key, {
+                x: chest.x, y: chest.y, z: chest.z, rotation: chest.rotation, items: chest.items
+            }]))
+        }
+        : WORLD_STONE_DATA.get(targetWorld) || {};
+
     const dataToSend = {
         chunkDeltas: Array.from(worldState.chunkDeltas.entries()),
         foreignBlockOrigins: Array.from(worldState.foreignBlockOrigins.entries()),
-        processedIds: Array.from(processedMessages)
+        processedIds: Array.from(processedMessages),
+        ...worldStones
     };
 
     const dataString = JSON.stringify(dataToSend);
@@ -212,6 +236,40 @@ async function sendWorldStateAsync(peer, worldState, username) {
 
     sendChunk();
 }
+
+function applyWorldStructureSync(data) {
+    if (data.magicianStones) {
+        for (const key in data.magicianStones) {
+            if (Object.hasOwnProperty.call(data.magicianStones, key)) {
+                createMagicianStoneScreen({ ...data.magicianStones[key], source: 'network' });
+            }
+        }
+    }
+    if (data.calligraphyStones) {
+        for (const key in data.calligraphyStones) {
+            if (Object.hasOwnProperty.call(data.calligraphyStones, key)) {
+                createCalligraphyStoneScreen({ ...data.calligraphyStones[key], source: 'network' });
+            }
+        }
+    }
+    if (data.chests) {
+        for (const key in data.chests) {
+            if (!Object.hasOwnProperty.call(data.chests, key) || !data.chests[key]) continue;
+            if (chests[key] && typeof cleanupChest === 'function') {
+                cleanupChest(chests[key], key);
+            }
+            const chestData = data.chests[key];
+            const meshData = createChestMesh(chestData.x, chestData.y, chestData.z, chestData.rotation);
+            chests[key] = {
+                ...chestData,
+                mesh: meshData.mesh,
+                lid: meshData.lid,
+                isOpen: false
+            };
+        }
+    }
+}
+
 async function handleMinimapFile(e) {
     try {
         const t = await e.text(),
@@ -329,47 +387,6 @@ function setupDataChannel(e, t) {
                     username: userName
                 }));
                 syncedWorlds.add(worldName);
-            }
-
-            // Sync magician stones to new player
-            if (Object.keys(magicianStones).length > 0) {
-                const magicianStonesSync = {
-                    type: "magician_stones_sync",
-                    stones: {}
-                };
-                for (const key in magicianStones) {
-                    const stone = magicianStones[key];
-                    magicianStonesSync.stones[key] = {
-                         x: stone.x, y: stone.y, z: stone.z, url: stone.url,
-                        width: stone.width, height: stone.height, offsetX: stone.offsetX,
-                        offsetY: stone.offsetY, offsetZ: stone.offsetZ, loop: stone.loop,
-                            autoplay: stone.autoplay, distance: stone.distance,
-                            direction: stone.direction
-                    };
-                }
-                e.send(JSON.stringify(magicianStonesSync));
-            }
-
-            // Sync calligraphy stones to new player
-            if (Object.keys(calligraphyStones).length > 0) {
-                const calligraphyStonesSync = {
-                    type: "calligraphy_stones_sync",
-                    stones: {}
-                };
-                for (const key in calligraphyStones) {
-                    const stone = calligraphyStones[key];
-                    calligraphyStonesSync.stones[key] = {
-                        x: stone.x, y: stone.y, z: stone.z,
-                        width: stone.width, height: stone.height,
-                        offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
-                        bgColor: stone.bgColor, transparent: stone.transparent,
-                        fontFamily: stone.fontFamily, fontSize: stone.fontSize,
-                        fontWeight: stone.fontWeight, fontColor: stone.fontColor,
-                        text: stone.text, link: stone.link,
-                        direction: stone.direction
-                    };
-                }
-                e.send(JSON.stringify(calligraphyStonesSync));
             }
 
             // When a new peer connects, recalculate spawn chunks for ALL existing peers in current world
@@ -507,6 +524,7 @@ function setupDataChannel(e, t) {
                         if (s.foreignBlockOrigins) {
                             worldState.foreignBlockOrigins = new Map(s.foreignBlockOrigins);
                         }
+                        applyWorldStructureSync(s);
                     }
                     break;
                 case 'world_sync_start':
@@ -544,6 +562,7 @@ function setupDataChannel(e, t) {
                                 if (fullData.foreignBlockOrigins) {
                                     worldState.foreignBlockOrigins = new Map(fullData.foreignBlockOrigins);
                                 }
+                                applyWorldStructureSync(fullData);
                                 if (fullData.processedIds) {
                                     for (const id of fullData.processedIds) {
                                         processedMessages.add(id);
@@ -1128,7 +1147,7 @@ function setupDataChannel(e, t) {
                             const progress = Math.round(update.received / update.total * 100);
                             showLoadingIndicator(progress, `Receiving ${progress}%`);
 
-                            if (update.received === s.total) {
+                            if (update.received === update.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
                                 // Hide indicator logic is handled in applyChunkUpdates or separately if synchronous
                                 // Since applyChunkUpdates might take time, we can keep the indicator up or switch to "Processing"
@@ -1145,8 +1164,7 @@ function setupDataChannel(e, t) {
                 case "processed_transaction_id":
                     if (isHost) {
                         const transactionId = s.transactionId;
-                        if (!processedMessages.has(transactionId)) {
-                            processedMessages.add(transactionId);
+                        if (processedMessages.has(transactionId)) {
                             const syncMessage = JSON.stringify({
                                 type: "sync_processed_transaction",
                                 transactionId: transactionId
@@ -1231,7 +1249,7 @@ function setupDataChannel(e, t) {
                                 }
                             }
 
-                            if (update.received === s.total) {
+                            if (update.received === update.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
                                 applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
                                 partialIPFSUpdates.delete(s.transactionId);
@@ -1403,7 +1421,7 @@ function setupDataChannel(e, t) {
                         if (worldState) {
                             const peer = peers.get(s.username);
                             if (peer) {
-                                sendWorldStateAsync(peer, worldState, s.username);
+                                sendWorldStateAsync(peer, worldState, s.username, s.world);
                             }
                         }
 
@@ -1459,7 +1477,7 @@ function setupDataChannel(e, t) {
                             if (!peer.syncedWorlds.has(clientWorld)) {
                                 const worldState = WORLD_STATES.get(clientWorld);
                                 if (worldState) {
-                                    sendWorldStateAsync(peer, worldState, s.username);
+                                    sendWorldStateAsync(peer, worldState, s.username, clientWorld);
                                 }
                                 peer.syncedWorlds.add(clientWorld);
                             }
@@ -1722,13 +1740,14 @@ function setupDataChannel(e, t) {
                         const breakChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const breakChunkKey = makeChunkKey(s.world, breakChunkX, breakChunkZ);
+                        const blockId = getBlockAt(s.x, s.y, s.z);
+                        const blockCannotBreak = BLOCKS[blockId] && BLOCKS[blockId].unbreakable;
 
-                        if (isChunkMutationAllowed(breakChunkKey, s.username)) {
+                        if (!blockCannotBreak && isChunkMutationAllowed(breakChunkKey, s.username)) {
                             // Allowed: break block and broadcast
                             const blockKey = `${s.x},${s.y},${s.z}`;
                             const worldState = getCurrentWorldState();
                             const originSeed = worldState.foreignBlockOrigins.get(blockKey);
-                            const blockId = getBlockAt(s.x, s.y, s.z);
 
                             const replacementBlockId = blockId === 136 ? 6 : BLOCK_AIR;
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
@@ -1806,7 +1825,9 @@ function setupDataChannel(e, t) {
                         } else {
                             // Denied: send denial message
                             const ownerName = getChunkOwnerName(breakChunkKey);
-                            const reason = ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
+                            const reason = blockCannotBreak
+                                ? 'Cannot break that block'
+                                : ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
 
                             const peer = peers.get(s.username);
                             if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -1869,6 +1890,7 @@ function setupDataChannel(e, t) {
 
                         // Play audio only for the initiating client
                         if (s.username === userName) {
+                            addMessage("Picked up " + (BLOCKS[blockId] ? BLOCKS[blockId].name : blockId));
                             safePlayAudio(soundBreak);
                         }
 
@@ -1889,8 +1911,13 @@ function setupDataChannel(e, t) {
                 case 'block_action_denied':
                     if (!isHost) {
                         // Client receives denial from host
-                        addMessage(`Cannot edit: ${s.reason}`, 3000);
+                        addMessage(s.reason === 'Cannot break that block' ? s.reason : `Cannot edit: ${s.reason}`, 3000);
                         console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
+                    }
+                    break;
+                case 'alert':
+                    if (!isHost && s.message) {
+                        addMessage(s.message, 3000);
                     }
                     break;
             }
