@@ -96,7 +96,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
              this.invalidSpawn = true; // Flag for instant death
         }
     }
-    if (this.id = s || Date.now(), this.type = i, this.originSeed = originSeed || worldSeed, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
+    if (this.id = s || Date.now(), this.type = i, this.originSeed = originSeed || worldSeed, this.pos = new THREE.Vector3(t, yPos, e), this.prevPos = new THREE.Vector3().copy(this.pos), this.targetPos = (new THREE.Vector3).copy(this.pos), this.prevQuaternion = new THREE.Quaternion(), this.targetQuaternion = new THREE.Quaternion, this.lastQuaternionUpdate = 0, this.lastUpdateTime = 0, this.interpolationDuration = 100, this.vx = 0, this.vz = 0, this.hp = 10, this.speed = "bee" === this.type ? .04 + .02 * Math.random() : .02 + .03 * Math.random(), this.attackCooldown = 0, this.flashEnd = 0, this.aiState = "bee" === this.type ? "SEARCHING_FOR_FLOWER" : "IDLE", this.hasPollen = !1, this.lingerTime = 0, this.animationTime = Math.random() * Math.PI * 2, this.isMoving = !1, "bee" === this.type) {
         const t = makeSeededRandom(worldSeed + "_bee_aggro")();
         this.isAggressive = t > .5
     } else if (isAquaticMobType(this.type)) {
@@ -1082,18 +1082,25 @@ Mob.prototype.update = function (t) {
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
 
-    if (!isLocalSpawner && this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z), "bee" === this.type && (this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now()), this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now())), "crawley" === this.type && this.mesh.eyeLight && (this.mesh.eyeLight.visible = isNight), "grub" === this.type && this.glowLight && (isNight ? this.glowLight.intensity = (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : this.glowLight.intensity = 0), !isLocalSpawner) {
-        if (this.lastUpdateTime > 0) {
-            const t = performance.now(),
-                e = t - this.lastUpdateTime;
-            let s = Math.min(1, e / 300);
-            s = isNaN(s) ? 1 : s;
-            if (this.pos.copy(this.prevPos).lerp(this.targetPos, s), this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z), this.lastQuaternionUpdate > 0) {
-                const e = t - this.lastQuaternionUpdate;
-                let s = Math.min(1, e / 300);
-                s = isNaN(s) ? 1 : s, this.mesh.quaternion.copy(this.prevQuaternion).slerp(this.targetQuaternion, s)
-            }
-        } else this.pos.copy(this.targetPos), this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z);
+    if (!isLocalSpawner) {
+    if ("bee" === this.type) {
+        this.mesh.leftWing.rotation.z = .5 * Math.sin(.05 * Date.now());
+        this.mesh.rightWing.rotation.z = .5 * -Math.sin(.05 * Date.now());
+    }
+    if ("crawley" === this.type && this.mesh.eyeLight) this.mesh.eyeLight.visible = isNight;
+    if ("grub" === this.type && this.glowLight) {
+        this.glowLight.intensity = isNight ? (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : 0;
+    }
+    if (this.lastUpdateTime > 0) {
+        const now = performance.now();
+        const blend = Math.min(1, (now - this.lastUpdateTime) / this.interpolationDuration);
+        this.pos.copy(this.prevPos).lerp(this.targetPos, blend);
+        this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z);
+        if (this.lastQuaternionUpdate > 0) {
+            const quaternionBlend = Math.min(1, (now - this.lastQuaternionUpdate) / this.interpolationDuration);
+            this.mesh.quaternion.copy(this.prevQuaternion).slerp(this.targetQuaternion, quaternionBlend);
+        }
+    } else this.pos.copy(this.targetPos), this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z);
         Date.now() < this.flashEnd ? "grub" === this.type ? this.segments.forEach((t => {
             t.material = this.redMaterials
         })) : this.mesh.material ? this.mesh.material.color.set(16711680) : this.mesh.children[0].material.color.set(16711680) : "grub" === this.type ? this.segments.forEach((t => {
@@ -1390,13 +1397,19 @@ Mob.prototype.update = function (t) {
                 this.spiderTargetBlock = null;
                 let closestDist = Infinity;
                 let r = Math.ceil(i);
+                const scannedChunks = new Map();
                 for (let x = Math.floor(this.pos.x) - r; x <= Math.floor(this.pos.x) + r; x++) {
                     for (let y = Math.floor(this.pos.y) - r; y <= Math.floor(this.pos.y) + r; y++) {
                         if (y < 0 || y >= MAX_HEIGHT) continue;
                         for (let z = Math.floor(this.pos.z) - r; z <= Math.floor(this.pos.z) + r; z++) {
                             let cx = Math.floor(x / CHUNK_SIZE);
                             let cz = Math.floor(z / CHUNK_SIZE);
-                            let chunk = chunkManager.getChunk(cx, cz);
+                            const chunkKey = `${cx},${cz}`;
+                            let chunk = scannedChunks.get(chunkKey);
+                            if (!scannedChunks.has(chunkKey)) {
+                                chunk = chunkManager.getChunk(cx, cz);
+                                scannedChunks.set(chunkKey, chunk);
+                            }
                             if (!chunk) continue;
                             let lx = modWrap(x, CHUNK_SIZE);
                             let lz = modWrap(z, CHUNK_SIZE);
@@ -1503,8 +1516,9 @@ Mob.prototype.update = function (t) {
         let i = null,
             o = 1 / 0;
         if ("grub" === this.type) {
-            if ("IDLE" === this.aiState || "SEARCHING_FOR_CACTUS" === this.aiState) {
+            if (("IDLE" === this.aiState || "SEARCHING_FOR_CACTUS" === this.aiState) && Date.now() >= (this.nextCactusSearchTime || 0)) {
                 this.aiState = "SEARCHING_FOR_CACTUS";
+                this.nextCactusSearchTime = Date.now() + 1000;
                 const t = 16;
                 let e = null,
                     s = 1 / 0;
@@ -1583,40 +1597,48 @@ Mob.prototype.update = function (t) {
             }
         }
         if ("crawley" === this.type) {
-            const t = 16;
-            let e = null,
-                s = null,
-                h = 1 / 0,
-                a = 1 / 0;
-            for (let i = -t; i <= t; i++)
-                for (let o = -t; o <= t; o++)
-                    for (let t = -4; t <= 4; t++) {
-                        const n = Math.floor(this.pos.x + i),
-                            r = Math.floor(this.pos.y + t),
-                            l = Math.floor(this.pos.z + o),
-                            p = getBlockAt(n, r, l);
-                        if (123 === p) {
-                            const t = this.pos.distanceTo(new THREE.Vector3(n + .5, r + .5, l + .5));
-                            t < h && (h = t, e = {
-                                x: n,
-                                y: r,
-                                z: l,
-                                id: p
-                            })
-                        } else if (122 === p) {
-                            const t = this.pos.distanceTo(new THREE.Vector3(n + .5, r + .5, l + .5));
-                            t < a && (a = t, s = {
-                                x: n,
-                                y: r,
-                                z: l,
-                                id: p
-                            })
+            const now = Date.now();
+            if (!this.crawleyResourceScanTime || now >= this.crawleyResourceScanTime ||
+                (this.crawleyResourceTarget && getBlockAt(this.crawleyResourceTarget.x, this.crawleyResourceTarget.y, this.crawleyResourceTarget.z) !== this.crawleyResourceTarget.id)) {
+                this.crawleyResourceScanTime = now + 1000;
+                this.crawleyResourceTarget = null;
+                const scanRadius = 16;
+                let nearestHive = null;
+                let nearestHiveDistance = Infinity;
+                let nearestHoney = null;
+                let nearestHoneyDistance = Infinity;
+                for (let xOffset = -scanRadius; xOffset <= scanRadius; xOffset++)
+                    for (let zOffset = -scanRadius; zOffset <= scanRadius; zOffset++)
+                        for (let yOffset = -4; yOffset <= 4; yOffset++) {
+                            const x = Math.floor(this.pos.x + xOffset);
+                            const y = Math.floor(this.pos.y + yOffset);
+                            const z = Math.floor(this.pos.z + zOffset);
+                            const blockId = getBlockAt(x, y, z);
+                            if (blockId === 123 || blockId === 122) {
+                                const dx = this.pos.x - (x + 0.5);
+                                const dy = this.pos.y - (y + 0.5);
+                                const dz = this.pos.z - (z + 0.5);
+                                const distanceSq = dx * dx + dy * dy + dz * dz;
+                                if (blockId === 123 && distanceSq < nearestHiveDistance) {
+                                    nearestHiveDistance = distanceSq;
+                                    nearestHive = { x, y, z, id: blockId };
+                                } else if (blockId === 122 && distanceSq < nearestHoneyDistance) {
+                                    nearestHoneyDistance = distanceSq;
+                                    nearestHoney = { x, y, z, id: blockId };
+                                }
+                            }
                         }
-                    }
-            if (e ? (i = e, o = h) : s && (i = s, o = a), i && o < 1.5) {
+                this.crawleyResourceTarget = nearestHive || nearestHoney;
+            }
+            if (this.crawleyResourceTarget) {
+                i = this.crawleyResourceTarget;
+                o = this.pos.distanceTo(new THREE.Vector3(i.x + 0.5, i.y + 0.5, i.z + 0.5));
+            }
+            if (i && o < 1.5) {
                 if (0 === this.lingerTime) this.lingerTime = Date.now();
                 else if (Date.now() - this.lingerTime > 2e3) {
                     Math.hypot(player.x - i.x, player.y - i.y, player.z - i.z) < maxAudioDistance && safePlayAudio(soundBreak), chunkManager.setBlockGlobal(i.x, i.y, i.z, 0), setTimeout((() => checkAndDeactivateHive(i.x, i.y, i.z)), 100), i = null, this.lingerTime = 0
+                    this.crawleyResourceTarget = null;
                 }
             } else this.lingerTime = 0
         }
