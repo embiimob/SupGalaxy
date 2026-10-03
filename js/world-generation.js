@@ -493,6 +493,7 @@ function initSky() {
         light.shadow.camera.bottom = -80;
         light.shadow.camera.near = 0.5;
         light.shadow.camera.far = 5000;
+        light.shadow.camera.updateProjectionMatrix();
         light.shadow.bias = -0.0005;
         light.shadow.normalBias = 0.02;
         skyProps.suns.push({
@@ -529,6 +530,7 @@ function initSky() {
         light.shadow.camera.bottom = -80;
         light.shadow.camera.near = 0.5;
         light.shadow.camera.far = 5000;
+        light.shadow.camera.updateProjectionMatrix();
         light.shadow.bias = -0.0005;
         light.shadow.normalBias = 0.02;
         skyProps.moons.push({
