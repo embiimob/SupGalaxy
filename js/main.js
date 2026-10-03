@@ -5654,8 +5654,9 @@ function gameLoop(e) {
         }
         for (const e of smokeParticles) {
             if (e.userData.ambientSmoke) {
-                const dx = e.position.x - player.x;
-                const dz = e.position.z - player.z;
+                const smokePosition = e.userData.ambientSmokePosition || e.position;
+                const dx = smokePosition.x - player.x;
+                const dz = smokePosition.z - player.z;
                 e.visible = dx * dx + dz * dz <= 128 * 128;
                 if (!e.visible) continue;
             }

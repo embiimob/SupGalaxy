@@ -278,7 +278,9 @@ Chunk.prototype.idx = function (e, t, o) {
         Math.random() < .3) {
         const o = Math.min(32, Math.floor(t.lavaCount / 4)),
             a = createSmokeParticle(t.x, t.y, t.z, o);
-        a.userData.chunkKey = e.key, a.userData.ambientSmoke = true, smokeParticles.push(a), scene.add(a)
+        a.userData.chunkKey = e.key, a.userData.ambientSmoke = true,
+            a.userData.ambientSmokePosition = { x: t.x, z: t.z },
+            smokeParticles.push(a), scene.add(a)
     }
     if (useGreedyMesher) {
         const t = buildGreedyMesh(e, getCurrentWorldState().foreignBlockOrigins, worldSeed),
