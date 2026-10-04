@@ -325,7 +325,7 @@ function fitAvatarModel(model) {
         if (!o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
         const geometry = o.geometry;
         const positions = geometry.attributes.position;
-        const morphs = geometry.morphAttributes.position || [];
+        const morphs = (geometry.morphAttributes && geometry.morphAttributes.position) || [];
         if (!o.isSkinnedMesh && !morphs.length) {
             if (!geometry.boundingBox) geometry.computeBoundingBox();
             box.union(geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
