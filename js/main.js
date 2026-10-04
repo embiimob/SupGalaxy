@@ -1817,7 +1817,7 @@ async function createMagicianStoneScreen(stoneData) {
 
                 const model = gltf.scene;
                 try {
-                    await prepareStoneVisualQuality(model, stoneData.textureMaxSize);
+                    await prepareStoneVisualQuality(model, incomingConfig.textureMaxSize);
                 } catch (error) {
                     console.warn('[MagicianStone] Keeping original visual quality:', error);
                 }
@@ -2703,7 +2703,7 @@ function onPointerDown(e) {
         }
     }
 
-    const magicianStoneMeshes = Object.values(magicianStones).map(s => s.mesh);
+    const magicianStoneMeshes = Object.values(magicianStones).map(s => s.mesh).filter(Boolean);
     const magicianStoneIntersects = raycaster.intersectObjects(magicianStoneMeshes, true);
 
     if (magicianStoneIntersects.length > 0) {

@@ -193,11 +193,12 @@
             } catch (error) { fail(error); }
         }).then(() => stone.collisionStatus === 'ready' ? stone.collisionIndex : null);
     }
-    function walk(index, testBounds, testTriangle) {
+    function walk(index, testBounds, testTriangle, stats) {
         if (!index || !index.order.length) return false;
         const stack = [0];
         while (stack.length) {
             const node = stack.pop(), offset = node * 4;
+            if (stats) stats.nodesVisited = (stats.nodesVisited || 0) + 1;
             if (!testBounds(index.bounds, node * 6)) continue;
             if (index.nodes[offset] >= 0) {
                 stack.push(index.nodes[offset], index.nodes[offset + 1]);
@@ -205,6 +206,7 @@
                 const end = index.nodes[offset + 2] + index.nodes[offset + 3];
                 for (let i = index.nodes[offset + 2]; i < end; i++) {
                     const id = index.order[i], t = id * 9;
+                    if (stats) stats.trianglesVisited = (stats.trianglesVisited || 0) + 1;
                     a.fromArray(index.triangles, t); b.fromArray(index.triangles, t + 3); c.fromArray(index.triangles, t + 6);
                     if (testTriangle(id)) return true;
                 }
@@ -212,14 +214,14 @@
         }
         return false;
     }
-    function intersectsBox(index, box) {
+    function intersectsBox(index, box, stats) {
         return walk(index, (bounds, offset) =>
             bounds[offset] <= box.max.x && bounds[offset + 3] >= box.min.x &&
             bounds[offset + 1] <= box.max.y && bounds[offset + 4] >= box.min.y &&
             bounds[offset + 2] <= box.max.z && bounds[offset + 5] >= box.min.z,
-        () => box.intersectsTriangle(triangle.set(a, b, c)));
+        () => box.intersectsTriangle(triangle.set(a, b, c)), stats);
     }
-    function groundY(index, x, z, topY, minY) {
+    function groundY(index, x, z, topY, minY, stats) {
         let highest = null;
         ray.origin.set(x, topY, z); ray.direction.set(0, -1, 0);
         walk(index, (bounds, offset) =>
@@ -232,11 +234,11 @@
                 ray.intersectTriangle(a, b, c, side !== THREE.DoubleSide, hit);
             if (result && hit.y >= minY && hit.y <= topY && (highest === null || hit.y > highest)) highest = hit.y;
             return false;
-        });
+        }, stats);
         return highest;
     }
     global.StoneCollision = { prepare, dispose, intersectsBox, groundY, beginLoad, isLoadCurrent, endLoad };
-    global.runStoneCollisionTests = async function() {
+    global.runStoneCollisionTests = async function(options = {}) {
         const results = [], stones = [];
         const assert = (condition, name) => {
             if (!condition) throw new Error('Stone collision test failed: ' + name);
@@ -358,7 +360,9 @@
             await prepare(disabled);
             assert(disabled.collisionStatus === 'disabled' && !disabled.collisionIndex, 'none collision mode');
             console.info('[StoneCollision] ' + results.length + ' checks passed', results);
-            return { passed: results.length, results };
+            const result = { passed: results.length, results };
+            if (options.benchmark) result.benchmark = await global.runStoneCollisionBenchmark();
+            return result;
         } finally {
             for (const stone of stones) {
                 dispose(stone);
@@ -369,6 +373,126 @@
                     }
                 });
             }
+        }
+    };
+    global.runStoneCollisionBenchmark = async function() {
+        const geometry = new THREE.PlaneGeometry(100, 100, 300, 300);
+        const position = geometry.attributes.position;
+        for (let i = 0; i < position.count; i++) {
+            const x = position.getX(i), z = -position.getY(i);
+            position.setXYZ(i, x, Math.sin(x * 0.2) * 1.5 + Math.cos(z * 0.2) * 1.5, z);
+        }
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+        const stone = { mesh }, count = geometry.index.count / 3;
+        const box = new THREE.Box3();
+        const probes = [[0.3, 0.3], [0.1, 0.1], [0.5, 0.1], [0.1, 0.5], [0.5, 0.5]];
+        const samples = Array.from({ length: 30 }, (_, i) => ({ x: Math.sin(i * 1.71) * 35, z: Math.cos(i * 2.13) * 35 }));
+        const referenceRay = new THREE.Raycaster(), referenceOrigin = new THREE.Vector3();
+        const down = new THREE.Vector3(0, -1, 0), referenceNormal = new THREE.Vector3();
+        function setBodyBox(sample) {
+            box.min.set(sample.x, 0.55, sample.z);
+            box.max.set(sample.x + 0.6, 1.8, sample.z + 0.6);
+        }
+        function originalBody(sample, stats) {
+            setBodyBox(sample);
+            const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+            const face = new THREE.Triangle();
+            // The original r134 collision loop: transform every triangle, then AABB and SAT.
+            for (let i = 0; i < geometry.index.count; i += 3) {
+                if (stats) stats.trianglesVisited = (stats.trianglesVisited || 0) + 1;
+                vA.fromBufferAttribute(position, geometry.index.getX(i)).applyMatrix4(mesh.matrixWorld);
+                vB.fromBufferAttribute(position, geometry.index.getX(i + 1)).applyMatrix4(mesh.matrixWorld);
+                vC.fromBufferAttribute(position, geometry.index.getX(i + 2)).applyMatrix4(mesh.matrixWorld);
+                if (Math.max(vA.x, vB.x, vC.x) < box.min.x || Math.min(vA.x, vB.x, vC.x) > box.max.x) continue;
+                if (Math.max(vA.y, vB.y, vC.y) < box.min.y || Math.min(vA.y, vB.y, vC.y) > box.max.y) continue;
+                if (Math.max(vA.z, vB.z, vC.z) < box.min.z || Math.min(vA.z, vB.z, vC.z) > box.max.z) continue;
+                if (box.intersectsTriangle(face.set(vA, vB, vC))) return true;
+            }
+            return false;
+        }
+        function indexedBody(sample, stats) {
+            setBodyBox(sample);
+            return intersectsBox(stone.collisionIndex, box, stats);
+        }
+        function originalGround(sample) {
+            let highest = null;
+            for (const [px, pz] of probes) {
+                referenceOrigin.set(sample.x + px, 10, sample.z + pz);
+                referenceRay.set(referenceOrigin, down);
+                referenceRay.far = 20;
+                const result = referenceRay.intersectObject(mesh, false).find(item =>
+                    referenceNormal.copy(item.face.normal).transformDirection(mesh.matrixWorld).y > 0);
+                if (result && (highest === null || result.point.y > highest)) highest = result.point.y;
+            }
+            return highest;
+        }
+        function indexedGround(sample, stats) {
+            let highest = null;
+            for (const [px, pz] of probes) {
+                const result = groundY(stone.collisionIndex, sample.x + px, sample.z + pz, 10, -10, stats);
+                if (result !== null && (highest === null || result > highest)) highest = result;
+            }
+            return highest;
+        }
+        function meanQueryTime(query, rounds) {
+            const start = performance.now();
+            for (let round = 0; round < rounds; round++) for (const sample of samples) query(sample);
+            return (performance.now() - start) / (rounds * samples.length);
+        }
+        const bodyReference = {}, bodyIndexed = {}, groundIndexed = {};
+        let originalGroundTriangles = 0, mismatches = 0;
+        try {
+            const start = performance.now();
+            await prepare(stone);
+            if (stone.collisionStatus !== 'ready') throw new Error(stone.collisionError || 'Benchmark collider unavailable');
+            const preparationMs = performance.now() - start;
+            for (const sample of samples) {
+                if (originalBody(sample, bodyReference) !== indexedBody(sample, bodyIndexed)) mismatches++;
+                const expected = originalGround(sample), actual = indexedGround(sample, groundIndexed);
+                if ((expected === null) !== (actual === null) || Math.abs(expected - actual) > 1e-5) mismatches++;
+            }
+            // Count actual r134 index reads separately; no instrumentation enters timed queries.
+            const originalGetX = geometry.index.getX;
+            geometry.index.getX = function(i) {
+                originalGroundTriangles++;
+                return originalGetX.call(this, i);
+            };
+            try {
+                for (const sample of samples) originalGround(sample);
+            } finally {
+                geometry.index.getX = originalGetX;
+            }
+            originalGroundTriangles /= 3;
+            for (const sample of samples.slice(0, 5)) {
+                originalBody(sample); indexedBody(sample); originalGround(sample); indexedGround(sample);
+            }
+            const result = {
+                fixture: 'Synthetic indexed sinusoidal terrain; NOT the reported user model',
+                triangleCount: count, sampleCount: samples.length, preparationMs, mismatches,
+                body: {
+                    originalMeanMs: meanQueryTime(originalBody, 1),
+                    indexedMeanMs: meanQueryTime(indexedBody, 100),
+                    originalMeanTriangleCandidates: bodyReference.trianglesVisited / samples.length,
+                    indexedMeanTriangleCandidates: bodyIndexed.trianglesVisited / samples.length,
+                    indexedMeanNodesVisited: bodyIndexed.nodesVisited / samples.length
+                },
+                fiveProbeGround: {
+                    originalMeanMs: meanQueryTime(originalGround, 1),
+                    indexedMeanMs: meanQueryTime(indexedGround, 100),
+                    originalMeanTriangleCandidates: originalGroundTriangles / samples.length,
+                    indexedMeanTriangleCandidates: groundIndexed.trianglesVisited / samples.length,
+                    indexedMeanNodesVisited: groundIndexed.nodesVisited / samples.length
+                },
+                timing: 'Kernel-only means; original: 30 queries, indexed: 3000 queries; counts measured separately'
+            };
+            if (mismatches) throw new Error('Collision benchmark disagreed with original loops: ' + mismatches);
+            console.info('[StoneCollision] Synthetic benchmark', result);
+            return result;
+        } finally {
+            dispose(stone);
+            geometry.dispose();
+            mesh.material.dispose();
         }
     };
 })(window);

@@ -283,7 +283,8 @@ const onTop = await compareModelPerformance({ label: 'on-top', seconds: 5 });
 Each comparison collects eight local-only combinations of collision on/off, imported/default
 local avatar and stone animation on/off. Player pose is held between physics updates so
 collision-off samples do not fall through the model. Existing animation settings still
-apply; enable stone animation first for a meaningful animation comparison. Remote avatars
+apply; enable stone animation first for a meaningful animation comparison. Enable stone
+collision first as well: profiling does not override a saved no-collision setting. Remote avatars
 are unchanged. No diagnostic switches are persisted or sent to peers.
 
 Reports include mean/p95 frame time, FPS, body/ground query timings and counts, draw calls,
@@ -298,6 +299,10 @@ collision: false, avatar: 'default', animation: false })`.
 player death abort the sample. Captures are capped at 60 seconds/3,600 sampled frames.
 The documented `runStoneCollisionTests()` console command checks the indexed collision
 implementation without requiring an external model.
+`await runStoneCollisionTests({ benchmark: true })` also compares the old scans against
+the BVH on a synthetic 180,000-triangle terrain fixture, reporting separately measured
+triangle/node candidate counts and query timings. It deliberately runs expensive reference
+scans on the main thread; run it separately from gameplay FPS captures.
 
 ---
 
