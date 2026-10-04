@@ -244,7 +244,11 @@ Model dimensions and download size are not triangle counts. A 64 × 128 placemen
 subdivide the artwork, but standing on a dense mesh previously triggered repeated full
 triangle scans and five ground raycasts every frame.
 
-- GLB/glTF stone collision is prepared as a triangle BVH in a dedicated worker. Geometry
+- GLB/glTF stone collision is prepared as a triangle BVH in a dedicated Blob worker,
+  compatible with both opening `index.html` directly (`file://`) and HTTP(S) hosting.
+  Its self-contained builder loads before the collider script; no worker script fetch
+  from a file origin is required. Worker Blob URLs are released on success, failure
+  or cancellation. Geometry
   extraction yields between batches; original rendering buffers are not transferred or
   detached. Collision becomes active only when preparation is ready. Failed preparation
   leaves collision disabled with a warning, never an expensive unindexed fallback.
@@ -298,7 +302,9 @@ collision: false, avatar: 'default', animation: false })`.
 `stopModelPerformanceCapture()` stops early and restores overrides; world changes or
 player death abort the sample. Captures are capped at 60 seconds/3,600 sampled frames.
 The documented `runStoneCollisionTests()` console command checks the indexed collision
-implementation without requiring an external model.
+implementation without requiring an external model, including multistory tower floors,
+walls, stairwell openings and step-up surfaces. Run it both from a directly opened
+`index.html` and from HTTP hosting to check worker-startup compatibility.
 `await runStoneCollisionTests({ benchmark: true })` also compares the old scans against
 the BVH on a synthetic 180,000-triangle terrain fixture, reporting separately measured
 triangle/node candidate counts and query timings. It deliberately runs expensive reference

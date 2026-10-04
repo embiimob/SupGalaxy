@@ -1,8 +1,6 @@
 /* Frozen import-pose colliders: staging never falls back to render-mesh raycasting. */
 (function(global) {
     'use strict';
-    const scriptUrl = document.currentScript && document.currentScript.src;
-    const workerUrl = new URL('stone-collision-worker.js', scriptUrl || new URL('js/stone-collision.js', document.baseURI)).href;
     const loads = new Map();
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     const triangle = new THREE.Triangle(), ray = new THREE.Ray();
@@ -103,7 +101,7 @@
         stone.collisionStatus = 'preparing';
         stone.collisionError = null;
         return new Promise(resolve => {
-            let worker = null, timer = null, finished = false, records = null;
+            let worker = null, workerObjectUrl = null, timer = null, finished = false, records = null;
             let triangles = null, sides = null, normalY = null, used = 0, meshIndex = 0;
             const job = {
                 cancel() {
@@ -111,6 +109,10 @@
                     finished = true;
                     clearTimeout(timer);
                     if (worker) worker.terminate();
+                    if (workerObjectUrl) {
+                        URL.revokeObjectURL(workerObjectUrl);
+                        workerObjectUrl = null;
+                    }
                     records = triangles = sides = normalY = null;
                     resolve(null);
                 }
@@ -126,7 +128,11 @@
             }
             try {
                 if (typeof Worker !== 'function') throw new Error('Web Workers are unavailable; static collision disabled');
-                worker = new Worker(workerUrl);
+                // File-origin pages cannot start workers from neighboring .js URLs.
+                workerObjectUrl = URL.createObjectURL(new Blob([
+                    'self.onmessage = ' + buildStoneCollisionIndex.toString() + ';'
+                ], { type: 'application/javascript' }));
+                worker = new Worker(workerObjectUrl);
                 worker.onerror = event => fail(new Error(event.message || 'Collision worker failed'));
                 worker.onmessage = event => {
                     if (finished) return;
@@ -280,6 +286,45 @@
             const right = mesh(floor); right.scale.x = 0.25; right.position.x = 1.5; holed.add(right);
             const holeIndex = await build(holed);
             assert(groundY(holeIndex, 0, 0, 3, -1) === null && near(groundY(holeIndex, 1.5, 0, 3, -1), 0), 'holes remain empty');
+            const tower = new THREE.Group();
+            tower.position.set(1000, 20, 1000);
+            tower.rotation.y = 0.35;
+            for (const y of [0, 64, 128]) {
+                for (const x of [-24, 24]) {
+                    const slab = mesh(floor, true, THREE.FrontSide);
+                    slab.scale.set(4, 1, 16);
+                    slab.position.set(x, y, 0);
+                    tower.add(slab);
+                }
+            }
+            const wall = new THREE.Mesh(new THREE.PlaneGeometry(64, 128), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+            wall.rotation.y = Math.PI / 2;
+            wall.position.set(32, 64, 0);
+            tower.add(wall);
+            const step = mesh(floor, false, THREE.FrontSide);
+            step.scale.set(0.5, 1, 0.5);
+            step.position.set(24, 64.5, 8);
+            tower.add(step);
+            const towerIndex = await build(tower);
+            for (const y of [0, 64, 128]) {
+                const point = tower.localToWorld(new THREE.Vector3(24, y, 0));
+                assert(near(groundY(towerIndex, point.x, point.z, point.y + 0.55, point.y - 0.3), point.y),
+                    'tower floor supports standing at level ' + y);
+                assert(near(groundY(towerIndex, point.x, point.z, point.y + 8, point.y - 1), point.y),
+                    'tower floor catches falling player at level ' + y);
+                const body = new THREE.Box3(new THREE.Vector3(point.x - 0.3, point.y + 0.55, point.z - 0.3),
+                    new THREE.Vector3(point.x + 0.3, point.y + 1.8, point.z + 0.3));
+                assert(!intersectsBox(towerIndex, body), 'tower interior stays traversable at level ' + y);
+            }
+            const opening = tower.localToWorld(new THREE.Vector3(0, 64, 0));
+            assert(groundY(towerIndex, opening.x, opening.z, opening.y + 0.55, opening.y - 0.3) === null,
+                'tower stairwell openings remain empty');
+            const wallPoint = tower.localToWorld(new THREE.Vector3(32, 64, 0));
+            assert(intersectsBox(towerIndex, new THREE.Box3(wallPoint.clone().addScalar(-0.3), wallPoint.clone().addScalar(0.3))),
+                'tower walls block movement');
+            const stepPoint = tower.localToWorld(new THREE.Vector3(24, 64.5, 8));
+            assert(near(groundY(towerIndex, stepPoint.x, stepPoint.z, stepPoint.y + 0.05, stepPoint.y - 0.55), stepPoint.y),
+                'tower step-up finds raised surface rather than floor below');
             const transformed = mesh(floor, true, THREE.FrontSide);
             transformed.position.set(5, 3, 7); transformed.scale.set(-2, 0.5, 3); transformed.rotation.y = 0.4;
             const transformedIndex = await build(transformed);

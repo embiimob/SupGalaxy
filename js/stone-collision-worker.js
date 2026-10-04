@@ -1,6 +1,6 @@
 /* A static world-space median BVH. Only copied collision data enters this worker. */
 'use strict';
-self.onmessage = function(event) {
+function buildStoneCollisionIndex(event) {
     try {
         const { triangles, sides, normalY } = event.data;
         const count = sides.length;
@@ -70,4 +70,6 @@ self.onmessage = function(event) {
     } catch (error) {
         self.postMessage({ error: error.message || String(error) });
     }
-};
+}
+
+if (typeof window === 'undefined') self.onmessage = buildStoneCollisionIndex;
