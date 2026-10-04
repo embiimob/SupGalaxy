@@ -480,6 +480,10 @@ function createGltfAvatarRig(gltf) {
     if (ambientClip) {
         const clip = ambientClip.clone();
         stripAvatarRootMotion(clip, rig.rootBone && rig.rootBone.name);
+        stripAvatarRootMotion(clip, model.name);
+        model.children.forEach(child => {
+            if (!child.isMesh || !bones.length) stripAvatarRootMotion(clip, child.name);
+        });
         rig.mixer = new THREE.AnimationMixer(model);
         rig.ambientAction = rig.mixer.clipAction(clip);
         rig.ambientAction.setLoop(THREE.LoopOnce, 1);
