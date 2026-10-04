@@ -170,7 +170,7 @@ async function GetPublicAddressByKeyword(keyword) {
     }
 }
 
-async function resolveIPFS(url) {
+async function fetchIPFSBlob(url) {
     const match = url.match(/IPFS:(?:Qm[1-9A-HJ-NP-Za-km-z]{44,}|b[A-Za-z2-7]{58,}|B[A-Z2-7]{58,}|z[1-9A-HJ-NP-Za-km-z]{48,}|F[0-9A-F]{50,}|[a-zA-Z0-9]{20,})[\\\/]?(.*)/);
     if (!match) {
         throw new Error('Invalid IPFS URL format.');
@@ -183,24 +183,34 @@ async function resolveIPFS(url) {
     
     let lastError;
     for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+            for (const path of paths) clearIpfsFetchFailure(hash, path);
+            await new Promise(resolve => setTimeout(resolve, attempt * 500));
+        }
         for (const path of paths) {
             if (pathNotFound && path) continue;
             try {
-                if (attempt > 0) clearIpfsFetchFailure(hash, path);
-                if (attempt > 0 && path === paths[0]) await new Promise(resolve => setTimeout(resolve, attempt * 500));
                 const response = await fetchIPFSWithFallback(hash, path);
                 if (!response.ok) {
                     if (path && (response.status === 404 || response.status === 410)) pathNotFound = true;
                     throw new Error('Failed to fetch from IPFS.');
                 }
-                const blob = await response.blob();
-                return URL.createObjectURL(blob);
+                return response.blob();
             } catch (error) {
                 lastError = error;
             }
         }
     }
     throw lastError;
+}
+
+async function resolveIPFSAsset(url) {
+    const blob = await fetchIPFSBlob(url);
+    return { url: URL.createObjectURL(blob), mimeType: blob.type || '', blob: blob };
+}
+
+async function resolveIPFS(url) {
+    return (await resolveIPFSAsset(url)).url;
 }
 
 function normalizeRootRecord(root, address) {

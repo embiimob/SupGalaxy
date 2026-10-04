@@ -150,7 +150,7 @@ async function resolveObjktToken(contract, tokenId) {
     }
     const url = picked ? toAvatarUrl(picked.uri) : null;
     if (!url) throw new Error('Could not find a model file in that objkt token');
-    return { url: url, format: detectAvatarFormat(picked.uri, picked.mime), name: name, mime: picked.mime || '', artifactUri: picked.uri };
+    return { url: url, format: detectAvatarFormat(picked.uri, picked.mime), name: name, mime: picked.mime || '', artifactUri: picked.uri, isObjkt: true };
 }
 
 function resolveAvatarSource(input) {
@@ -165,7 +165,7 @@ function resolveAvatarSource(input) {
         promise = /^KT1[1-9A-HJ-NP-Za-km-z]{33}$/.test(contract) ? withAvatarTimeout(resolveObjktToken(contract, objkt[2]), 'Token lookup') : Promise.reject(new Error('Unsupported objkt contract'));
     } else {
         const url = toAvatarUrl(raw);
-        promise = url ? Promise.resolve({ url: url, format: detectAvatarFormat(raw), name: '' }) : Promise.reject(new Error('Use an objkt.com token URL, IPFS:CID, ipfs:// or https:// link'));
+        promise = url ? Promise.resolve({ url: url, format: detectAvatarFormat(raw), name: '', isObjkt: false }) : Promise.reject(new Error('Use an objkt.com token URL, IPFS:CID, ipfs:// or https:// link'));
     }
     avatarSourceCache.set(raw, promise);
     promise.catch(() => avatarSourceCache.delete(raw));
@@ -194,10 +194,25 @@ function detectMagicianStoneExtension(path, mime) {
     return extension ? extension.toLowerCase() : null;
 }
 
+function detectMagicianStoneExtensionFromBuffer(buffer) {
+    const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 12));
+    const header = String.fromCharCode.apply(null, bytes);
+    if (header.startsWith('GIF87a') || header.startsWith('GIF89a')) return 'gif';
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+    if (bytes[0] === 0x89 && header.slice(1, 4) === 'PNG') return 'png';
+    if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WEBP') return 'webp';
+    if (header.slice(4, 8) === 'ftyp') return 'mp4';
+    if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return 'webm';
+    if (header.slice(0, 4) === 'OggS') return 'oga';
+    if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WAVE') return 'wav';
+    if (header.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return 'mp3';
+    return sniffAvatarFormat(buffer);
+}
+
 async function resolveMagicianStoneSource(input) {
     const raw = String(input || '').trim();
     const resolved = await resolveAvatarSource(raw);
-    const isObjkt = /objkt\.com\/(?:tokens|asset)\/([A-Za-z0-9_-]+)\/(\d+)/i.test(raw);
+    const isObjkt = resolved.isObjkt === true;
     let url = resolved.url;
     let extension = detectMagicianStoneExtension(resolved.artifactUri || raw, resolved.mime);
     let storedUrl = raw;
@@ -218,7 +233,13 @@ async function resolveMagicianStoneSource(input) {
         if (ipfs && ipfs.path && (!/^[A-Za-z0-9._~%/-]+$/.test(ipfs.path) || ipfs.path.split('/').some(segment => segment === '.' || segment === '..'))) {
             throw new Error('Invalid IPFS asset path');
         }
-        if (!extension && ipfs) throw new Error('Add the asset file extension, such as /artifact.glb or /artifact.jpg');
+        if (!extension && ipfs) {
+            const asset = await resolveIPFSAsset('IPFS:' + ipfs.hash + (ipfs.path ? '/' + ipfs.path : ''));
+            extension = detectMagicianStoneExtension(raw, asset.mimeType);
+            if (!extension) extension = detectMagicianStoneExtensionFromBuffer(await asset.blob.arrayBuffer());
+            URL.revokeObjectURL(asset.url);
+            if (!extension) throw new Error('Could not determine the IPFS asset type; include its file extension');
+        }
         if (ipfs) {
             const path = !ipfs.path || !/\.[a-z0-9]+$/i.test(ipfs.path) ? 'artifact.' + extension : ipfs.path;
             url = 'IPFS:' + ipfs.hash + '/' + path;

@@ -1740,7 +1740,24 @@ async function createMagicianStoneScreen(stoneData) {
     const mediaPath = stoneData.url.split(/[?#]/, 1)[0].replace(/[\\/]+$/, '');
     const fileName = mediaPath.split(/[\\/]/).pop();
     const extensionIndex = fileName.lastIndexOf('.');
-    const fileExtension = extensionIndex > 0 ? fileName.slice(extensionIndex + 1).toLowerCase() : '';
+    let fileExtension = extensionIndex > 0 ? fileName.slice(extensionIndex + 1).toLowerCase() : '';
+    if (!fileExtension && stoneData.url.startsWith('IPFS:')) {
+        try {
+            const asset = await resolveIPFSAsset(stoneData.url);
+            fileExtension = detectMagicianStoneExtension(stoneData.url, asset.mimeType) || detectMagicianStoneExtensionFromBuffer(await asset.blob.arrayBuffer());
+            if (['glb', 'gltf'].includes(fileExtension)) {
+                URL.revokeObjectURL(asset.url);
+            } else if (fileExtension) {
+                url = asset.url;
+            } else {
+                URL.revokeObjectURL(asset.url);
+            }
+        } catch (error) {
+            console.error('Could not identify extensionless IPFS stone media:', error);
+            magicianStonesLoading.delete(key);
+            return;
+        }
+    }
 
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
@@ -1985,7 +2002,7 @@ async function createMagicianStoneScreen(stoneData) {
         }
 
     } else if (['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension)) {
-        texture = new THREE.TextureLoader().load(url);
+        texture = new THREE.TextureLoader().load(getMagicianStoneMediaUrl(url));
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
         video.src = getMagicianStoneMediaUrl(url);
@@ -6814,15 +6831,18 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
     }, 350);
 });
 
-document.getElementById('magicianStoneSave').addEventListener('click', async function() {
-    const saveButton = this;
-    if (saveButton.disabled) return;
+async function saveMagicianStoneFromDialog() {
     const placement = magicianStonePlacement;
     if (!placement) {
         addMessage('Select a Magician’s Stone placement first.', 3000);
         return;
     }
-    saveButton.disabled = true;
+    const selectedSlot = selectedHotIndex;
+    const inventoryItem = INVENTORY[selectedSlot];
+    if (!inventoryItem || inventoryItem.id !== 127) {
+        addMessage('Magician’s Stone is no longer in the selected inventory slot.', 3000);
+        return;
+    }
     const rawUrl = document.getElementById('magicianStoneUrl').value.trim();
     let url;
     try {
@@ -6830,18 +6850,15 @@ document.getElementById('magicianStoneSave').addEventListener('click', async fun
         url = resolved.storedUrl;
     } catch (error) {
         addMessage(error.message || 'Invalid asset URL.', 3000);
-        saveButton.disabled = false;
         return;
     }
     if (!url) {
         addMessage("URL is required.", 3000);
-        saveButton.disabled = false;
         return;
     }
 
-    if (magicianStonePlacement !== placement) {
+    if (magicianStonePlacement !== placement || INVENTORY[selectedSlot] !== inventoryItem) {
         addMessage('Placement was cancelled before the asset finished loading.', 3000);
-        saveButton.disabled = false;
         return;
     }
     document.getElementById('magicianStoneUrl').value = url;
@@ -6865,28 +6882,25 @@ document.getElementById('magicianStoneSave').addEventListener('click', async fun
     , source: 'local'
     };
 
-    const n = INVENTORY[selectedHotIndex];
-    if (n && n.id === 127) {
-        chunkManager.setBlockGlobal(placement.x, placement.y, placement.z, 127, true, n.originSeed);
+    chunkManager.setBlockGlobal(placement.x, placement.y, placement.z, 127, true, inventoryItem.originSeed);
 
-        n.count -= 1;
-        if (n.count <= 0) {
-            INVENTORY[selectedHotIndex] = null;
-        }
-        updateHotbarUI();
-        safePlayAudioAt(soundPlace, { x: placement.x, y: placement.y, z: placement.z });
+    inventoryItem.count -= 1;
+    if (inventoryItem.count <= 0) {
+        INVENTORY[selectedSlot] = null;
+    }
+    updateHotbarUI();
+    safePlayAudioAt(soundPlace, { x: placement.x, y: placement.y, z: placement.z });
 
-        createMagicianStoneScreen(stoneData);
+    createMagicianStoneScreen(stoneData);
 
-        // Send magician stone data to other peers
-        const message = JSON.stringify({
-            type: 'magician_stone_placed',
-            stoneData: stoneData
-        });
-        for (const [username, peer] of peers.entries()) {
-            if (peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(message);
-            }
+    // Send magician stone data to other peers
+    const message = JSON.stringify({
+        type: 'magician_stone_placed',
+        stoneData: stoneData
+    });
+    for (const [username, peer] of peers.entries()) {
+        if (peer.dc && peer.dc.readyState === 'open') {
+            peer.dc.send(message);
         }
     }
 
@@ -6894,7 +6908,16 @@ document.getElementById('magicianStoneSave').addEventListener('click', async fun
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
-    saveButton.disabled = false;
+}
+
+document.getElementById('magicianStoneSave').addEventListener('click', async function() {
+    if (this.disabled) return;
+    this.disabled = true;
+    try {
+        await saveMagicianStoneFromDialog();
+    } finally {
+        this.disabled = false;
+    }
 });
 
 // Calligraphy Stone event handlers
