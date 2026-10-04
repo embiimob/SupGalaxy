@@ -161,6 +161,7 @@ async function sendWorldStateAsync(peer, worldState, username, targetWorld = wor
     const worldStones = targetWorld === worldName
         ? {
             magicianStones: Object.fromEntries(Object.entries(magicianStones).map(([key, stone]) => [key, {
+                ...getStonePerformanceSettings(stone),
                 x: stone.x, y: stone.y, z: stone.z, url: stone.url,
                 width: stone.width, height: stone.height,
                 offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,

@@ -1704,19 +1704,23 @@ async function createMagicianStoneScreen(stoneData) {
     // regardless of which asset format is used or how many times data is received from various sources.
     const key = `${x},${y},${z}`;
 
-    if (magicianStonesLoading.has(key)) {
-        return;
-    }
-
     const existingStone = magicianStones[key];
     const configKeys = [
         'url', 'width', 'height', 'offsetX', 'offsetY', 'offsetZ', 'loop',
-        'autoplay', 'autoplayAnimation', 'distance', 'collision', 'damage', 'direction'
+        'autoplay', 'autoplayAnimation', 'distance', 'collision', 'damage', 'direction',
+        'colliderUrl', 'collisionMode', 'textureMaxSize', 'animationPolicy', 'renderDistance'
     ];
-    const isDuplicate = existingStone && existingStone.mesh && configKeys.every(
-        configKey => JSON.stringify(existingStone[configKey]) === JSON.stringify(stoneData[configKey])
+    const incomingConfig = { ...stoneData, ...getStonePerformanceSettings(stoneData) };
+    const existingConfig = existingStone && { ...existingStone, ...getStonePerformanceSettings(existingStone) };
+    const hasSameConfig = existingConfig && configKeys.every(
+        configKey => JSON.stringify(existingConfig[configKey]) === JSON.stringify(incomingConfig[configKey])
     );
-    if (isDuplicate) {
+    if (magicianStonesLoading.has(key)) {
+        if (!existingStone || !existingStone.pendingModel || hasSameConfig) return;
+        cleanupMagicianStone(existingStone, key);
+        delete magicianStones[key];
+    }
+    if (existingStone && existingStone.mesh && hasSameConfig) {
         return;
     }
 
@@ -1783,25 +1787,47 @@ async function createMagicianStoneScreen(stoneData) {
 
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
+        if (getCurrentWorldState() !== worldState || !magicianStonesLoading.has(key) || magicianStones[key]) return;
         const loader = new THREE.GLTFLoader();
-        const onModelLoaded = function(gltf) {
+        const loadToken = StoneCollision.beginLoad(key, worldState, magicianStonesLoading);
+        const pendingStone = { ...stoneData, pendingModel: true, collisionStatus: 'loading' };
+        magicianStones[key] = pendingStone;
+        const finishLoad = () => {
+            if (magicianStones[key] === pendingStone) delete magicianStones[key];
+            StoneCollision.endLoad(loadToken);
+        };
+        const loadIsCurrent = () => StoneCollision.isLoadCurrent(loadToken, getCurrentWorldState(), magicianStonesLoading) &&
+            isBlockStillValid(x, y, z, 127);
+        const onModelLoaded = async function(gltf) {
                 // Post-async-load deduplication check: another load may have completed while this one was in progress.
                 // This check is entity-based (using position key) and independent of file extension.
-                if (!isBlockStillValid(x, y, z, 127)) {
+                if (!loadIsCurrent()) {
                     console.log(`[MagicianStone] Post-load abort for GLB ${key}: block is no longer 127`);
                     disposeObject(gltf.scene);
-                    magicianStonesLoading.delete(key);
+                    finishLoad();
                     return;
                 }
                 if (magicianStones[key] && magicianStones[key].mesh) {
                     console.log(`[MagicianStone] Duplicate GLB/GLTF load completed for key ${key} - discarding and disposing`);
-                    magicianStonesLoading.delete(key);
+                    finishLoad();
                     // Properly dispose the loaded model to prevent memory leaks
                     disposeObject(gltf.scene);
                     return;
                 }
 
                 const model = gltf.scene;
+                try {
+                    await prepareStoneVisualQuality(model, stoneData.textureMaxSize);
+                } catch (error) {
+                    console.warn('[MagicianStone] Keeping original visual quality:', error);
+                }
+                if (!loadIsCurrent()) {
+                    disposeObject(model);
+                    finishLoad();
+                    return;
+                }
+                model.updateMatrix();
+                const originalRootInverse = model.matrix.clone().invert();
 
                 // Calculate bounding box and scale to fit within width x height
                 const box = new THREE.Box3().setFromObject(model);
@@ -1809,29 +1835,18 @@ async function createMagicianStoneScreen(stoneData) {
                 const center = box.getCenter(new THREE.Vector3());
 
                 // Scale to fit the bounding box defined by width and height
-                const scaleX = width / size.x;
-                const scaleY = height / size.y;
-                const scaleZ = width / size.z; // Use width for depth as well
-                const scale = Math.min(scaleX, scaleY, scaleZ);
+                const scaleX = size.x > 0 ? width / size.x : Infinity;
+                const scaleY = size.y > 0 ? height / size.y : Infinity;
+                const scaleZ = size.z > 0 ? width / size.z : Infinity; // Use width for depth as well
+                const fittedScale = Math.min(scaleX, scaleY, scaleZ);
+                const scale = Number.isFinite(fittedScale) && fittedScale > 0 ? fittedScale : 1;
 
                 model.scale.multiplyScalar(scale);
 
                 // Center the model at origin after scaling
                 model.position.sub(center.multiplyScalar(scale));
-
-                // Setup animations if they exist
-                let mixer = null;
-                if (gltf.animations && gltf.animations.length > 0) {
-                    mixer = new THREE.AnimationMixer(model);
-                    // Play all animations if autoplayAnimation is enabled
-                    if (autoplayAnimation !== false) { // Default to true if not specified
-                        gltf.animations.forEach(clip => {
-                            const action = mixer.clipAction(clip);
-                            action.loop = loop ? THREE.LoopRepeat : THREE.LoopOnce;
-                            action.play();
-                        });
-                    }
-                }
+                model.updateMatrix();
+                const normalization = model.matrix.clone().multiply(originalRootInverse);
 
                 // Create a container group for positioning
                 const screenMesh = new THREE.Group();
@@ -1864,17 +1879,72 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
-                if (!isBlockStillValid(x, y, z, 127)) {
+                if (!loadIsCurrent()) {
                     console.log(`[MagicianStone] Post-load abort for ${key}: block is no longer 127`);
                     disposeObject(screenMesh);
-                    magicianStonesLoading.delete(key);
+                    finishLoad();
                     return;
                 }
-                magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false, lastDamageTime: 0 };
-                magicianStonesLoading.delete(key);
+                screenMesh.updateMatrixWorld(true);
+                const visualBounds = new THREE.Box3().setFromObject(screenMesh);
+
+                // Setup animations only after caching the import-pose visual bounds.
+                let mixer = null;
+                if (gltf.animations && gltf.animations.length > 0) {
+                    mixer = new THREE.AnimationMixer(model);
+                    if (autoplayAnimation !== false) {
+                        gltf.animations.forEach(clip => {
+                            const action = mixer.clipAction(clip);
+                            action.loop = loop ? THREE.LoopRepeat : THREE.LoopOnce;
+                            action.play();
+                        });
+                    }
+                }
+                const stone = { ...stoneData, mesh: screenMesh, mixer: mixer, visualBounds, isMuted: false, lastDamageTime: 0,
+                    collisionMode: stoneData.collisionMode === 'none' ? 'none' : 'static' };
+                magicianStones[key] = stone;
+                finishLoad();
                 scene.add(screenMesh);
+                if (stone.collision === false || stone.collisionMode === 'none' || !stone.colliderUrl) {
+                    StoneCollision.prepare(stone);
+                } else {
+                    stone.collisionStatus = 'loading';
+                    const stoneIsCurrent = () => magicianStones[key] === stone && getCurrentWorldState() === worldState &&
+                        stone.collisionStatus !== 'disposed';
+                    resolveAvatarSource(stone.colliderUrl).then(async source => {
+                        if (!stoneIsCurrent()) return;
+                        const buffer = await fetchAvatarBuffer(source.url);
+                        if (!stoneIsCurrent()) return;
+                        loader.parse(buffer, getMagicianStoneResourcePath(source.url), collider => {
+                            if (!stoneIsCurrent()) { disposeObject(collider.scene); return; }
+                            // A separate collider uses the visual normalization, never an independent fit.
+                            const colliderRoot = new THREE.Group();
+                            colliderRoot.matrixAutoUpdate = false;
+                            colliderRoot.matrix.copy(screenMesh.matrixWorld);
+                            const normalized = new THREE.Group();
+                            normalized.matrixAutoUpdate = false;
+                            normalized.matrix.copy(normalization);
+                            normalized.add(collider.scene);
+                            colliderRoot.add(normalized);
+                            stone.colliderMesh = colliderRoot;
+                            StoneCollision.prepare(stone, colliderRoot).then(() => {
+                                if (stone.colliderMesh === colliderRoot) {
+                                    disposeObject(colliderRoot);
+                                    stone.colliderMesh = null;
+                                }
+                            });
+                        }, colliderError);
+                    }).catch(colliderError);
+                    function colliderError(error) {
+                        if (!stoneIsCurrent()) return;
+                        stone.collisionStatus = 'unavailable';
+                        stone.collisionError = error.message || String(error);
+                        console.warn('[StoneCollision] Separate collider failed; collision disabled:', error);
+                    }
+                }
             };
         const onModelError = function(error) {
+                if (!loadIsCurrent()) { finishLoad(); return; }
                 console.error('Error loading GLB/GLTF for in-world display:', error);
                 // Create an error placeholder
                 const canvas = document.createElement('canvas');
@@ -1917,18 +1987,23 @@ async function createMagicianStoneScreen(stoneData) {
                 const lookAtTarget = new THREE.Vector3().copy(screenMesh.position).add(playerDirection);
                 screenMesh.lookAt(lookAtTarget);
 
-                if (!isBlockStillValid(x, y, z, 127)) {
+                if (!loadIsCurrent()) {
                     console.log(`[MagicianStone] Post-load error fallback abort for ${key}: block is no longer 127`);
                     disposeObject(screenMesh);
-                    magicianStonesLoading.delete(key);
+                    finishLoad();
                     return;
                 }
-                magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
-                magicianStonesLoading.delete(key);
+                magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0,
+                    collisionStatus: 'unavailable', collisionError: 'Visual model failed to load' };
+                finishLoad();
                 scene.add(screenMesh);
             };
-        (ipfsModelBuffer ? Promise.resolve(ipfsModelBuffer) : fetchAvatarBuffer(stoneData.url))
-            .then(buffer => loader.parse(buffer, getMagicianStoneResourcePath(stoneData.url), onModelLoaded, onModelError))
+        (ipfsModelBuffer ? Promise.resolve({ buffer: ipfsModelBuffer, url: stoneData.url }) :
+            resolveAvatarSource(stoneData.url).then(async source => ({ buffer: await fetchAvatarBuffer(source.url), url: source.url })))
+            .then(source => {
+                if (!loadIsCurrent()) { finishLoad(); return; }
+                loader.parse(source.buffer, getMagicianStoneResourcePath(source.url), onModelLoaded, onModelError);
+            })
             .catch(onModelError);
         return;
     }
@@ -3648,20 +3723,17 @@ function getCeilingLimitedY(x, y, z, targetY) {
 const MESH_STEP_HEIGHT = 0.55;
 const MESH_SNAP_DOWN = 0.3;
 const _meshPlayerBox = new THREE.Box3();
-const _meshStoneBox = new THREE.Box3();
-const _meshChildBox = new THREE.Box3();
-const _meshRaycaster = new THREE.Raycaster();
-const _meshRayOrigin = new THREE.Vector3();
-const _meshRayDown = new THREE.Vector3(0, -1, 0);
-const _meshHitNormal = new THREE.Vector3();
 
 function getCollidableStoneMeshes(box) {
     if (!magicianStones) return [];
+    if (typeof shouldSkipStoneCollision === 'function' && shouldSkipStoneCollision()) return [];
     const meshes = [];
     for (const stone of Object.values(magicianStones)) {
-        if (!stone.mesh || stone.collision === false) continue;
-        _meshStoneBox.setFromObject(stone.mesh);
-        if (_meshStoneBox.intersectsBox(box)) meshes.push(stone.mesh);
+        // Small legacy media planes also get a one-time index, never a per-frame traversal.
+        if (stone.mesh && stone.collision !== false && stone.collisionStatus === undefined) StoneCollision.prepare(stone);
+        if (!stone.mesh || stone.collision === false || stone.collisionMode === 'none' ||
+            stone.collisionStatus !== 'ready' || !stone.collisionIndex) continue;
+        if (stone.collisionIndex.worldBounds.intersectsBox(box)) meshes.push(stone.collisionIndex);
     }
     return meshes;
 }
@@ -3674,16 +3746,8 @@ function checkMeshCollision(x, y, z) {
     _meshPlayerBox.min.set(x, y + MESH_STEP_HEIGHT, z);
     _meshPlayerBox.max.set(x + player.width, y + player.height, z + player.depth);
 
-    for (const mesh of getCollidableStoneMeshes(_meshPlayerBox)) {
-        let collision = false;
-        mesh.traverse((child) => {
-            if (collision || !child.isMesh || !child.geometry) return;
-            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-            _meshChildBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
-            if (!_meshChildBox.intersectsBox(_meshPlayerBox)) return;
-            if (checkGeometryCollision(child, _meshPlayerBox)) collision = true;
-        });
-        if (collision) return true;
+    for (const index of getCollidableStoneMeshes(_meshPlayerBox)) {
+        if (checkGeometryCollision(index, _meshPlayerBox)) return true;
     }
     return false;
 }
@@ -3706,83 +3770,16 @@ function getMeshGroundY(x, z, topY, minY) {
     ];
     let groundY = null;
     for (const [px, pz] of probes) {
-        _meshRayOrigin.set(x + px, topY, z + pz);
-        _meshRaycaster.set(_meshRayOrigin, _meshRayDown);
-        _meshRaycaster.far = topY - minY;
-        // Only upward-facing surfaces count as ground (skip undersides of overhangs).
-        const hit = _meshRaycaster.intersectObjects(meshes, true).find(h => h.object.isMesh && (!h.face ||
-            _meshHitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0));
-        if (hit && (groundY === null || hit.point.y > groundY)) groundY = hit.point.y;
+        for (const index of meshes) {
+            const hitY = StoneCollision.groundY(index, x + px, z + pz, topY, minY);
+            if (hitY !== null && (groundY === null || hitY > groundY)) groundY = hitY;
+        }
     }
     return groundY;
 }
 
-function checkGeometryCollision(mesh, box) {
-    const geometry = mesh.geometry;
-    if (!geometry.boundingBox) geometry.computeBoundingBox();
-
-    // Quick local bbox check (transformed to world)
-    // Actually setFromObject handles the hierarchy world transform.
-    // So we are good to proceed to triangle check.
-
-    const pos = geometry.attributes.position;
-    const index = geometry.index;
-    const matrix = mesh.matrixWorld;
-
-    const vA = new THREE.Vector3();
-    const vB = new THREE.Vector3();
-    const vC = new THREE.Vector3();
-    const triangle = new THREE.Triangle();
-
-    // Optimization: Don't check every triangle if mesh is huge.
-    // But we don't have spatial index for geometry here.
-    // Check all for now.
-
-    if (index) {
-        for (let i = 0; i < index.count; i += 3) {
-            vA.fromBufferAttribute(pos, index.getX(i)).applyMatrix4(matrix);
-            vB.fromBufferAttribute(pos, index.getX(i+1)).applyMatrix4(matrix);
-            vC.fromBufferAttribute(pos, index.getX(i+2)).applyMatrix4(matrix);
-
-            // Optimization: check if triangle bbox intersects player box
-            const triMinX = Math.min(vA.x, vB.x, vC.x);
-            const triMaxX = Math.max(vA.x, vB.x, vC.x);
-            if (triMaxX < box.min.x || triMinX > box.max.x) continue;
-
-            const triMinY = Math.min(vA.y, vB.y, vC.y);
-            const triMaxY = Math.max(vA.y, vB.y, vC.y);
-            if (triMaxY < box.min.y || triMinY > box.max.y) continue;
-
-            const triMinZ = Math.min(vA.z, vB.z, vC.z);
-            const triMaxZ = Math.max(vA.z, vB.z, vC.z);
-            if (triMaxZ < box.min.z || triMinZ > box.max.z) continue;
-
-            triangle.set(vA, vB, vC);
-            if (box.intersectsTriangle(triangle)) return true;
-        }
-    } else {
-        for (let i = 0; i < pos.count; i += 3) {
-            vA.fromBufferAttribute(pos, i).applyMatrix4(matrix);
-            vB.fromBufferAttribute(pos, i+1).applyMatrix4(matrix);
-            vC.fromBufferAttribute(pos, i+2).applyMatrix4(matrix);
-
-            const triMinX = Math.min(vA.x, vB.x, vC.x);
-            const triMaxX = Math.max(vA.x, vB.x, vC.x);
-            if (triMaxX < box.min.x || triMinX > box.max.x) continue;
-
-            const triMinY = Math.min(vA.y, vB.y, vC.y);
-            const triMaxY = Math.max(vA.y, vB.y, vC.y);
-            if (triMaxY < box.min.y || triMinY > box.max.y) continue;
-
-            const triMinZ = Math.min(vA.z, vB.z, vC.z);
-            const triMaxZ = Math.max(vA.z, vB.z, vC.z);
-            if (triMaxZ < box.min.z || triMinZ > box.max.z) continue;
-
-            triangle.set(vA, vB, vC);
-            if (box.intersectsTriangle(triangle)) return true;
-        }
-    }
-    return false;
+function checkGeometryCollision(index, box) {
+    return StoneCollision.intersectsBox(index, box);
 }
 
 const PUSH_OUT_MESSAGE_COOLDOWN_MS = 2000;
@@ -4086,6 +4083,7 @@ async function downloadHostSession() {
             const stone = magicianStones[key];
             // Host session saves ALL stones regardless of source
             serializableMagicianStones[key] = {
+                ...getStonePerformanceSettings(stone),
                 x: stone.x,
                 y: stone.y,
                 z: stone.z,
@@ -4210,6 +4208,7 @@ async function publishToTestnet() {
             const stone = magicianStones[key];
             if (stone.source !== 'local') continue;
             serializableMagicianStones[key] = {
+                ...getStonePerformanceSettings(stone),
                 x: stone.x, y: stone.y, z: stone.z, url: stone.url,
                 width: stone.width, height: stone.height,
                 offsetX: stone.offsetX, offsetY: stone.offsetY, offsetZ: stone.offsetZ,
@@ -4368,6 +4367,7 @@ async function downloadSinglePlayerSession() {
             const stone = magicianStones[key];
             if (stone.source !== 'local') continue;
             serializableMagicianStones[key] = {
+                ...getStonePerformanceSettings(stone),
                 x: stone.x,
                 y: stone.y,
                 z: stone.z,
@@ -5481,6 +5481,7 @@ function saveCurrentWorldStoneData(currentWorldName) {
         if (Object.hasOwnProperty.call(magicianStones, key)) {
             const stone = magicianStones[key];
             savedMagicianStones[key] = {
+                ...getStonePerformanceSettings(stone),
                 x: stone.x,
                 y: stone.y,
                 z: stone.z,
@@ -5620,6 +5621,7 @@ function initMinimap() {
 var fpsSampleStart = 0, fpsFrameCount = 0;
 
 function gameLoop(e) {
+    restoreModelPerformancePlayer();
     if (!fpsSampleStart) fpsSampleStart = e;
     fpsFrameCount++;
     const fpsElapsed = e - fpsSampleStart;
@@ -5768,6 +5770,7 @@ function gameLoop(e) {
             }
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
+        restoreModelPerformancePlayer();
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
                 const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
@@ -6330,6 +6333,7 @@ function gameLoop(e) {
 
         // Magician stone media playback and animation logic
         const playerPosition = new THREE.Vector3(player.x, player.y, player.z);
+        updateStoneView();
         for (const key in magicianStones) {
             if (Object.hasOwnProperty.call(magicianStones, key)) {
                 const stone = magicianStones[key];
@@ -6338,7 +6342,8 @@ function gameLoop(e) {
                 const mediaElement = stone.videoElement || stone.audioElement;
 
                 // Update animation mixer if exists
-                if (stone.mixer) {
+                const modelView = stone.mixer || stone.mesh instanceof THREE.Group ? getStoneView(stone) : null;
+                if (stone.mixer && shouldAnimateStone(stone, modelView.distance, modelView.visible)) {
                     stone.mixer.update(t);
                 }
 
@@ -6765,6 +6770,11 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneAutoplayAnimation').checked = true;
     document.getElementById('magicianStoneDistance').value = '10';
     document.getElementById('magicianStoneCollision').checked = true;
+    document.getElementById('magicianStoneColliderUrl').value = '';
+    document.getElementById('magicianStoneCollisionMode').value = 'static';
+    document.getElementById('magicianStoneAnimationPolicy').value = 'always';
+    document.getElementById('magicianStoneTextureMaxSize').value = '0';
+    document.getElementById('magicianStoneRenderDistance').value = '0';
     document.getElementById('magicianStoneDamage').value = '0';
     const preview = document.getElementById('magicianStonePreview');
     releaseMagicianStonePreviewMedia();
@@ -6936,9 +6946,16 @@ async function saveMagicianStoneFromDialog() {
     }
     const rawUrl = document.getElementById('magicianStoneUrl').value.trim();
     let url;
+    let colliderUrl = '';
     try {
         const resolved = await resolveMagicianStoneSource(rawUrl);
         url = resolved.storedUrl;
+        const colliderSource = document.getElementById('magicianStoneColliderUrl').value.trim();
+        if (colliderSource) {
+            const collider = await resolveMagicianStoneSource(colliderSource);
+            if (!['glb', 'gltf'].includes(collider.extension)) throw new Error('Collider must be a GLB or glTF model.');
+            colliderUrl = collider.storedUrl;
+        }
     } catch (error) {
         addMessage(error.message || 'Invalid asset URL.', 3000);
         return;
@@ -6968,10 +6985,23 @@ async function saveMagicianStoneFromDialog() {
         autoplayAnimation: document.getElementById('magicianStoneAutoplayAnimation').checked,
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
         collision: document.getElementById('magicianStoneCollision').checked,
+        ...getStonePerformanceSettings({
+            colliderUrl,
+            collisionMode: document.getElementById('magicianStoneCollisionMode').value,
+            textureMaxSize: document.getElementById('magicianStoneTextureMaxSize').value,
+            animationPolicy: document.getElementById('magicianStoneAnimationPolicy').value,
+            renderDistance: document.getElementById('magicianStoneRenderDistance').value
+        }),
         damage: parseFloat(document.getElementById('magicianStoneDamage').value) || 0,
         direction: placement.direction // Use the direction saved on placement
     , source: 'local'
     };
+
+    if (![stoneData.width, stoneData.height].every(value => Number.isFinite(value) && value >= 1 && value <= 4096) ||
+        ![stoneData.offsetX, stoneData.offsetY, stoneData.offsetZ, stoneData.distance].every(Number.isFinite)) {
+        addMessage('Enter valid model dimensions, offsets and playback distance.', 3000);
+        return;
+    }
 
     chunkManager.setBlockGlobal(placement.x, placement.y, placement.z, 127, true, inventoryItem.originSeed);
 

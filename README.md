@@ -238,6 +238,67 @@ if (shouldApplyIpfsUpdate(existingTruncated, incomingTruncated)) {
 
 Run tests in the browser console: `runIpfsVersioningTests()`
 
+### Large Magician’s Stone models
+
+Model dimensions and download size are not triangle counts. A 64 × 128 placement does not
+subdivide the artwork, but standing on a dense mesh previously triggered repeated full
+triangle scans and five ground raycasts every frame.
+
+- GLB/glTF stone collision is prepared as a triangle BVH in a dedicated worker. Geometry
+  extraction yields between batches; original rendering buffers are not transferred or
+  detached. Collision becomes active only when preparation is ready. Failed preparation
+  leaves collision disabled with a warning, never an expensive unindexed fallback.
+  GLTF parsing, image decoding and first GPU uploads still have browser/main-thread costs;
+  worker-built collision does not guarantee a stall-free import of arbitrary assets.
+- In **3D model performance**, an optional simplified collider URL accepts the same
+  IPFS/objkt/HTTPS sources as the visual model. Export it in the visual model’s original
+  coordinate system; the visual model’s scale, centering, offsets and orientation apply
+  to both. The collider is not rendered. Use real surface geometry for slopes, holes,
+  stairs and overhangs, not one bounding box.
+- **Frozen import-pose surface** explicitly snapshots collision geometry, including
+  skinned/morph geometry, at import. Animations do not move the collider. Use a separate
+  static collider or **No collision** where animated surfaces would be misleading.
+- Optional texture limits (512/1024/2048 pixels) reduce eligible image textures while
+  preserving aspect ratio. Data, compressed, cube and video textures remain unchanged.
+  **Original**, unlimited render distance and **Always** animation preserve existing
+  visual behavior. Nearby/view-only animation pauses rather than catching up offscreen.
+  View/distance policies use the visual model’s import-pose bounds.
+- For fewer rendered triangles, supply a lower-detail GLB in the main URL field. This
+  does not automatically simplify artwork or add LOD assets. Draco/Meshopt/KTX2 decoder
+  integration is not included; compression alone does not reduce rendered triangles.
+- Collider and quality settings survive world/session saves and multiplayer sync.
+
+#### Compare CPU collision and rendering cost
+
+In a safe, quiet world, use third-person view to include the imported avatar’s render
+cost. Keep the camera and player still, wait for collision preparation and texture uploads,
+then record Chrome DevTools **Performance** while running:
+
+```js
+const nearby = await compareModelPerformance({ label: 'nearby', seconds: 5 });
+// Stand on the model and repeat:
+const onTop = await compareModelPerformance({ label: 'on-top', seconds: 5 });
+```
+
+Each comparison collects eight local-only combinations of collision on/off, imported/default
+local avatar and stone animation on/off. Player pose is held between physics updates so
+collision-off samples do not fall through the model. Existing animation settings still
+apply; enable stone animation first for a meaningful animation comparison. Remote avatars
+are unchanged. No diagnostic switches are persisted or sent to peers.
+
+Reports include mean/p95 frame time, FPS, body/ground query timings and counts, draw calls,
+triangles and renderer geometry/texture counts. The browser trace contains a named capture
+range. `renderCpuMs` measures CPU render submission, **not GPU time**; renderer memory counts
+are **not bytes**. Keep reports with the device/browser and model used; headless/synthetic
+measurements cannot establish FPS on the linked NFT and avatar.
+
+For one sample, use `await startModelPerformanceCapture({ label: 'on-top', seconds: 5,
+collision: false, avatar: 'default', animation: false })`.
+`stopModelPerformanceCapture()` stops early and restores overrides; world changes or
+player death abort the sample. Captures are capped at 60 seconds/3,600 sampled frames.
+The documented `runStoneCollisionTests()` console command checks the indexed collision
+implementation without requiring an external model.
+
 ---
 
 # 👛 Testnet3 Wallet Integration
