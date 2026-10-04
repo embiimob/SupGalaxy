@@ -3536,6 +3536,28 @@ function checkCollision(e, t, o) {
     return checkMeshCollision(e, t, o);
 }
 
+function getCeilingLimitedY(x, y, z, targetY) {
+    let safeY = y;
+    // Sprint jumps can cross an entire ceiling block in one frame.
+    while (safeY < targetY) {
+        const nextY = Math.min(safeY + .25, targetY);
+        if (checkCollision(x, nextY, z)) {
+            let blockedY = nextY;
+            while (blockedY - safeY > .001) {
+                const middleY = (safeY + blockedY) / 2;
+                if (checkCollision(x, middleY, z)) {
+                    blockedY = middleY;
+                } else {
+                    safeY = middleY;
+                }
+            }
+            return safeY;
+        }
+        safeY = nextY;
+    }
+    return safeY;
+}
+
 function checkMeshCollision(x, y, z) {
     // Only check if magicianStones exist
     if (!magicianStones || Object.keys(magicianStones).length === 0) return false;
@@ -5592,7 +5614,12 @@ function gameLoop(e) {
         }
         var u = player.vy * t,
             p = player.y + u;
-        if (checkCollision(player.x, p, player.z)) {
+        if (u > 0) {
+            const safeY = getCeilingLimitedY(player.x, player.y, player.z, p);
+            if (safeY < p) player.vy = 0;
+            player.y = safeY;
+            player.onGround = !1;
+        } else if (checkCollision(player.x, p, player.z)) {
             if (u < 0) {
                 if (checkBlockCollision(player.x, p, player.z)) {
                     const stairLandingY = getStairLandingHeight(player.x, player.y, player.z, p);
@@ -5605,11 +5632,6 @@ function gameLoop(e) {
                 }
                 player.vy = 0;
                 player.onGround = !0;
-            } else if (u > 0) {
-                if (checkBlockCollision(player.x, p, player.z)) {
-                    player.y = Math.floor(p + player.height) - player.height - 0.001;
-                }
-                player.vy = 0;
             }
         } else {
             player.y = p;
