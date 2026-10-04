@@ -1053,7 +1053,8 @@ function setupDataChannel(e, t) {
                     // Hosts only accept avatar changes for the directly connected sender.
                     const avatarUser = isHost ? t : n;
                     if (isHost) {
-                        const relay = JSON.stringify({ type: "avatar_update", username: avatarUser, avatar: sanitizeAvatarConfig(s.avatar) });
+                        const relayAvatar = sanitizeAvatarConfig(s.avatar);
+                        const relay = JSON.stringify({ type: "avatar_update", username: avatarUser, avatar: isShareableAvatarConfig(relayAvatar) ? relayAvatar : null });
                         for (const [peerUsername, peer] of peers.entries()) {
                             if (peerUsername !== avatarUser && peerUsername !== userName && peer.dc && peer.dc.readyState === 'open') {
                                 peer.dc.send(relay);

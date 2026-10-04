@@ -644,7 +644,7 @@ function getAvatarSaveData() {
 }
 
 function hasUnsavedAvatarChange() {
-    return localAvatarDirty && !!localAvatarConfig;
+    return localAvatarDirty;
 }
 
 function markAvatarSaved() {
@@ -662,7 +662,7 @@ function storeAvatarLocally() {
 
 function broadcastLocalAvatar(dataChannel) {
     if (typeof peers === 'undefined' || !userName) return;
-    const message = JSON.stringify({ type: 'avatar_update', username: userName, avatar: localAvatarConfig });
+    const message = JSON.stringify({ type: 'avatar_update', username: userName, avatar: isShareableAvatarConfig(localAvatarConfig) ? localAvatarConfig : null });
     if (dataChannel) {
         if (dataChannel.readyState === 'open') dataChannel.send(message);
         return;
@@ -675,16 +675,22 @@ function broadcastLocalAvatar(dataChannel) {
 // Sends this player's avatar (and, for hosts, every known remote avatar) to a newly opened data channel.
 function sendAvatarsToPeer(dataChannel, peerName) {
     if (!dataChannel || dataChannel.readyState !== 'open') return;
-    if (localAvatarConfig) broadcastLocalAvatar(dataChannel);
+    if (isShareableAvatarConfig(localAvatarConfig)) broadcastLocalAvatar(dataChannel);
     if (typeof isHost === 'undefined' || !isHost) return;
     for (const [name, config] of remoteAvatarConfigs.entries()) {
         if (name !== peerName && name !== userName) dataChannel.send(JSON.stringify({ type: 'avatar_update', username: name, avatar: config }));
     }
 }
 
+function isShareableAvatarConfig(config) {
+    return !!config && /^IPFS:/.test(config.url);
+}
+
 function handleRemoteAvatarUpdate(username, avatar) {
     if (!username || username === userName) return;
-    const config = sanitizeAvatarConfig(avatar);
+    // Peers may only point at IPFS content so they cannot make other players contact arbitrary hosts.
+    let config = sanitizeAvatarConfig(avatar);
+    if (config && !isShareableAvatarConfig(config)) config = null;
     if (sameAvatarConfig(remoteAvatarConfigs.get(username) || null, config)) return;
     if (config) remoteAvatarConfigs.set(username, config);
     else remoteAvatarConfigs.delete(username);
@@ -868,7 +874,7 @@ async function loadAvatarDialogPreview() {
         config.format = rig.format;
         avatarDialogConfig = config;
         setPreviewRig(rig);
-        setAvatarStatus((config.name ? config.name + ' · ' : '') + config.format.toUpperCase() + (rig.mixer ? ' · animated' : rig.controllers ? ' · rigged' : ''));
+        setAvatarStatus((config.name ? config.name + ' · ' : '') + config.format.toUpperCase() + (rig.mixer ? ' · animated' : rig.controllers ? ' · rigged' : '') + (isShareableAvatarConfig(config) ? '' : ' · https models are only visible to you; use IPFS/objkt to share'));
         return config;
     } catch (error) {
         if (request === avatarDialogRequest) {
