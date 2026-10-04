@@ -178,22 +178,23 @@ async function resolveIPFS(url) {
     const parts = match[0].slice('IPFS:'.length).split(/[\\\/]/);
     const hash = parts.shift();
     const filename = parts.filter(Boolean).join('/').split(/[?#]/, 1)[0] || null;
+    const paths = filename ? [filename, null] : [null];
     
     let lastError;
     for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-            if (attempt > 0) {
-                clearIpfsFetchFailure(hash, filename);
-                await new Promise(resolve => setTimeout(resolve, attempt * 500));
+        for (const path of paths) {
+            try {
+                if (attempt > 0) clearIpfsFetchFailure(hash, path);
+                if (attempt > 0 && path === paths[0]) await new Promise(resolve => setTimeout(resolve, attempt * 500));
+                const response = await fetchIPFSWithFallback(hash, path);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch from IPFS.');
+                }
+                const blob = await response.blob();
+                return URL.createObjectURL(blob);
+            } catch (error) {
+                lastError = error;
             }
-            const response = await fetchIPFSWithFallback(hash, filename);
-            if (!response.ok) {
-                throw new Error('Failed to fetch from IPFS.');
-            }
-            const blob = await response.blob();
-            return URL.createObjectURL(blob);
-        } catch (error) {
-            lastError = error;
         }
     }
     throw lastError;
