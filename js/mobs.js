@@ -1776,26 +1776,6 @@ Mob.prototype.update = function (t) {
             } else this.lingerTime = 0
         }
         if ("bee" === this.type) {
-            const avoidanceVector = new THREE.Vector3();
-            const avoidanceRadius = 2;
-            for (let x = -avoidanceRadius; x <= avoidanceRadius; x++) {
-                for (let y = -avoidanceRadius; y <= avoidanceRadius; y++) {
-                    for (let z = -avoidanceRadius; z <= avoidanceRadius; z++) {
-                        const blockId = getBlockAt(Math.floor(this.pos.x + x), Math.floor(this.pos.y + y), Math.floor(this.pos.z + z));
-                        if (blockId === 3 || blockId === 4) { // Dirt or Stone
-                            const vec = new THREE.Vector3(x, y, z);
-                            const dist = vec.length();
-                            if (dist > 0) {
-                                avoidanceVector.add(vec.normalize().multiplyScalar(-1 / dist));
-                            }
-                        }
-                    }
-                }
-            }
-            if (avoidanceVector.length() > 0) {
-                avoidanceVector.normalize();
-                this.pos.add(avoidanceVector.multiplyScalar(this.speed * t * 60 * 0.5));
-            }
             if ("SEARCHING_FOR_FLOWER" === this.aiState) {
                 if (flowerLocations.length > 0) {
                     let closestFlower = null;
@@ -1855,7 +1835,30 @@ Mob.prototype.update = function (t) {
                     o = minDistance;
 
                     if (i) {
-                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8 - this.pos.y);
+                        const now = Date.now();
+                        if (!this.beeFlightScanTime || now >= this.beeFlightScanTime) {
+                            const dx = i.x - this.pos.x;
+                            const dz = i.z - this.pos.z;
+                            const distance = Math.hypot(dx, dz);
+                            const flightY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8;
+                            let clearanceY = flightY;
+                            const sampleOffsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+                            for (let step = 2; step <= Math.min(10, distance); step += 2) {
+                                const sampleX = modWrap(this.pos.x + dx / distance * step, MAP_SIZE);
+                                const sampleZ = modWrap(this.pos.z + dz / distance * step, MAP_SIZE);
+                                const sampleSurface = chunkManager.getSurfaceY(sampleX, sampleZ);
+                                clearanceY = Math.max(clearanceY, sampleSurface + 8);
+                                for (const [offsetX, offsetZ] of sampleOffsets) {
+                                    for (let y = sampleSurface + 1; y <= Math.min(MAX_HEIGHT - 1, sampleSurface + 16); y++) {
+                                        const blockId = getBlockAt(Math.floor(sampleX + offsetX), y, Math.floor(sampleZ + offsetZ));
+                                        if (blockId === 7 || blockId === 8) clearanceY = Math.max(clearanceY, y + 2);
+                                    }
+                                }
+                            }
+                            this.beeFlightHeight = clearanceY;
+                            this.beeFlightScanTime = now + 300;
+                        }
+                        this.pos.y += (this.beeFlightHeight - this.pos.y) * (1 - Math.exp(-6 * t));
                     }
                     if (o < 2) {
                         this.aiState = "DEPOSITING_HONEY";
