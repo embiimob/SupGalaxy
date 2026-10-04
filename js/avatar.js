@@ -316,7 +316,35 @@ function fitAvatarModel(model) {
     const fit = new THREE.Group();
     fit.add(model);
     fit.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(fit);
+    // Three.js r134 Box3 uses unskinned geometry bounds, which can be 100x larger than the rendered GLB.
+    const box = new THREE.Box3();
+    const vertex = new THREE.Vector3();
+    const baseVertex = new THREE.Vector3();
+    const morphVertex = new THREE.Vector3();
+    model.traverseVisible(o => {
+        if (!o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
+        const geometry = o.geometry;
+        const positions = geometry.attributes.position;
+        const morphs = geometry.morphAttributes.position || [];
+        if (!o.isSkinnedMesh && !morphs.length) {
+            if (!geometry.boundingBox) geometry.computeBoundingBox();
+            box.union(geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+            return;
+        }
+        for (let i = 0; i < positions.count; i++) {
+            vertex.fromBufferAttribute(positions, i);
+            baseVertex.copy(vertex);
+            morphs.forEach((morph, j) => {
+                const weight = o.morphTargetInfluences && o.morphTargetInfluences[j];
+                if (!weight) return;
+                morphVertex.fromBufferAttribute(morph, i);
+                if (!geometry.morphTargetsRelative) morphVertex.sub(baseVertex);
+                vertex.addScaledVector(morphVertex, weight);
+            });
+            if (o.isSkinnedMesh) o.boneTransform(i, vertex);
+            box.expandByPoint(vertex.applyMatrix4(o.matrixWorld));
+        }
+    });
     const size = box.getSize(new THREE.Vector3());
     if (!isFinite(size.y) || size.y <= 0) throw new Error('Model has no visible geometry');
     const scale = Math.min(AVATAR_HEIGHT / size.y, AVATAR_MAX_WIDTH / Math.max(size.x, size.z, 1e-6));
@@ -427,25 +455,10 @@ function createGltfAvatarRig(gltf) {
     const model = gltf.scene || (gltf.scenes && gltf.scenes[0]);
     if (!model) throw new Error('Model has no scene');
     const bones = [];
-    const skeletons = new Set();
     model.traverse(o => {
         if (o.isBone) bones.push(o);
-        if (o.isSkinnedMesh) {
-            o.frustumCulled = false;
-            skeletons.add(o.skeleton);
-        }
+        if (o.isSkinnedMesh) o.frustumCulled = false;
     });
-    model.updateMatrixWorld(true);
-    skeletons.forEach(skeleton => {
-        skeleton.pose();
-        // Three.js pose() treats root bones as world-space; GLB armature transforms must stay on their parents.
-        skeleton.bones.forEach(bone => {
-            if (!bone || !bone.parent || bone.parent.isBone) return;
-            bone.matrix.copy(bone.parent.matrixWorld).invert().multiply(bone.matrixWorld);
-            bone.matrix.decompose(bone.position, bone.quaternion, bone.scale);
-        });
-    });
-    model.updateMatrixWorld(true);
     const root = fitAvatarModel(model);
     const rig = {
         root: root,
