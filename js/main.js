@@ -425,6 +425,7 @@ async function applySaveFile(e, t, o) {
         player.health = t.profile.health;
         player.score = t.profile.score;
         INVENTORY = t.profile.inventory;
+        restoreAvatarFromSave(t.profile.avatar);
         musicPlaylist = t.musicPlaylist || [];
         videoPlaylist = t.videoPlaylist || [];
         selectedHotIndex = 0;
@@ -823,7 +824,7 @@ function initThree() {
 
 function createAndSetupAvatar(e, t, o = 0) {
     const a = t ? avatarGroup : playerAvatars.get(e);
-    a && (scene.remove(a), disposeObject(a), t || playerAvatars.delete(e));
+    a && (typeof detachCustomAvatar === "function" && detachCustomAvatar(a), scene.remove(a), disposeObject(a), t || playerAvatars.delete(e));
     const n = new THREE.Group;
     o && (n.rotation.y = o);
     const r = makeSeededRandom(e),
@@ -889,8 +890,12 @@ function createAndSetupAvatar(e, t, o = 0) {
 
     // Store reference to the light on the avatar object for easy access
     n.torchLight = torchLight;
+    n.userData.avatarUser = e;
+    n.userData.boxParts = [S, I, k, w, b, x];
 
-    return t ? avatarGroup = n : playerAvatars.set(e, n), scene.add(n), n
+    t ? avatarGroup = n : playerAvatars.set(e, n), scene.add(n);
+    if (typeof applyCustomAvatarToGroup === "function") applyCustomAvatarToGroup(n, getAvatarConfigForUser(e, t));
+    return n
 }
 
 function initHotbar() {
@@ -3785,12 +3790,14 @@ function isModalInputActive() {
     // Check if the active element is within either modal
     const magicianModal = document.getElementById('magicianStoneModal');
     const calligraphyModal = document.getElementById('calligraphyStoneModal');
+    const avatarModal = document.getElementById('avatarModal');
     
     const isInMagicianModal = magicianModal && magicianModal.contains(activeElement);
     const isInCalligraphyModal = calligraphyModal && calligraphyModal.contains(activeElement);
+    const isInAvatarModal = avatarModal && avatarModal.contains(activeElement);
     
-    // Return true if active element is an input/textarea/select within either modal
-    if (isInMagicianModal || isInCalligraphyModal) {
+    // Return true if active element is an input/textarea/select within any of these modals
+    if (isInMagicianModal || isInCalligraphyModal || isInAvatarModal) {
         const tagName = activeElement.tagName.toLowerCase();
         return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
     }
@@ -3825,7 +3832,7 @@ function registerKeyEvents() {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
         }
-        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && (getCurrentWorldState().chunkDeltas.size > 0 || getCurrentWorldState().spawnCommands.size > 0 || getCurrentWorldState().fishInventoryDirty || INVENTORY.some(item => item && (item.id === 137 || item.id === 138))) && downloadSession(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
+        keys[t] = !0, keys[e.key] = !0, "Escape" === e.key && mouseLocked && (document.exitPointerLock(), mouseLocked = !1), "t" === e.key.toLowerCase() && toggleCameraMode(), "c" === e.key.toLowerCase() && openCrafting(), "i" === e.key.toLowerCase() && toggleInventory(), "p" === e.key.toLowerCase() && (isPromptOpen = !0, document.getElementById("teleportModal").style.display = "block", document.getElementById("teleportX").value = Math.floor(player.x), document.getElementById("teleportY").value = Math.floor(player.y), document.getElementById("teleportZ").value = Math.floor(player.z)), "x" === e.key.toLowerCase() && (getCurrentWorldState().chunkDeltas.size > 0 || getCurrentWorldState().spawnCommands.size > 0 || getCurrentWorldState().fishInventoryDirty || INVENTORY.some(item => item && (item.id === 137 || item.id === 138)) || hasUnsavedAvatarChange()) && downloadSession(), "v" === e.key.toLowerCase() && openAvatarModal(), "u" === e.key.toLowerCase() && openUsersModal(), " " === e.key.toLowerCase() && playerJump(), "q" === e.key.toLowerCase() && onPointerDown({
             button: 0,
             preventDefault: () => { }
         }), "e" === e.key.toLowerCase() && onPointerDown({
@@ -4046,7 +4053,8 @@ async function downloadHostSession() {
                 z: player.z,
                 health: player.health,
                 score: player.score,
-                inventory: INVENTORY
+                inventory: INVENTORY,
+                avatar: getAvatarSaveData()
             },
             magicianStones: serializableMagicianStones,
             calligraphyStones: serializableCalligraphyStones,
@@ -4068,6 +4076,7 @@ async function downloadHostSession() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    markAvatarSaved();
     addMessage("Host session downloaded");
 }
 
@@ -4139,7 +4148,8 @@ async function publishToTestnet() {
         chests: serializableChests,
         profile: {
             x: player.x, y: player.y, z: player.z,
-            health: player.health, score: player.score, inventory: INVENTORY
+            health: player.health, score: player.score, inventory: INVENTORY,
+            avatar: getAvatarSaveData()
         },
         musicPlaylist: musicPlaylist,
         videoPlaylist: videoPlaylist
@@ -4326,7 +4336,8 @@ async function downloadSinglePlayerSession() {
             z: player.z,
             health: player.health,
             score: player.score,
-            inventory: INVENTORY
+            inventory: INVENTORY,
+            avatar: getAvatarSaveData()
         },
         musicPlaylist: musicPlaylist,
         videoPlaylist: videoPlaylist
@@ -4352,7 +4363,7 @@ async function downloadSinglePlayerSession() {
         }),
         s = URL.createObjectURL(r),
         i = document.createElement("a");
-    i.href = s, i.download = worldName + "_session_" + Date.now() + ".json", document.body.appendChild(i), i.click(), i.remove(), URL.revokeObjectURL(s), addMessage("Session downloaded");
+    i.href = s, i.download = worldName + "_session_" + Date.now() + ".json", document.body.appendChild(i), i.click(), i.remove(), URL.revokeObjectURL(s), markAvatarSaved(), addMessage("Session downloaded");
     var l = Array.from(worldState.chunkDeltas.keys()).filter(chunkKey => {
         const changes = worldState.chunkDeltas.get(chunkKey);
         return changes && changes.some(change => change.source === 'local');
@@ -4384,7 +4395,7 @@ function updateHealthBar() {
 function updateSaveChangesButton() {
     const worldState = getCurrentWorldState();
     const hasFishInventory = INVENTORY.some(item => item && (item.id === 137 || item.id === 138) && item.count > 0);
-    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 || worldState.spawnCommands.size > 0 || worldState.fishInventoryDirty || hasFishInventory ? "inline-block" : "none"
+    document.getElementById("saveChangesBtn").style.display = worldState.chunkDeltas.size > 0 || worldState.spawnCommands.size > 0 || worldState.fishInventoryDirty || hasFishInventory || hasUnsavedAvatarChange() ? "inline-block" : "none"
 }
 
 function updateHudButtons() {
@@ -4921,7 +4932,7 @@ async function startGame() {
     } catch (e) {
         console.error("Failed to initialize audio:", e), addMessage("Could not initialize audio, continuing without it.", 3e3)
     }
-    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
+    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
         id: 120,
         count: 8
     }, INVENTORY[1] = {
@@ -5552,7 +5563,7 @@ function gameLoop(e) {
         var l = new THREE.Vector3;
         l.addScaledVector(a, i), l.addScaledVector(n, s);
         const o = l.length() > .001;
-        o && (l.normalize(), "third" === cameraMode && (player.yaw = Math.atan2(l.x, l.z)));
+        o && (l.normalize(), "third" === cameraMode && (player.yaw = Math.atan2(-l.x, -l.z)));
 
         if (inWater && (keys[" "] || (document.getElementById("mobileJumpBtn") && document.getElementById("mobileJumpBtn").dataset.active === "true"))) {
             var swimDir = new THREE.Vector3();
@@ -5711,7 +5722,7 @@ function gameLoop(e) {
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
-        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
+        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
             e.update(t)
         })), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
 

@@ -41,6 +41,9 @@ A special block capable of adding **images, video, audio and animated 3d models*
 ### 🪧 The Calligraphy Stone
 A special block capable of adding **colored or transparent signs with clickable web links** into the game world.
 
+### 🧍 Custom Avatars
+After login, press `V` (or the **Avatar** HUD button) to wear a custom model: paste an **objkt.com token URL** (the model is read from the token's artifact URI), `IPFS:CID`, `ipfs://` or `https://` link to a **Mixamo-rigged `.glb`/`.gltf`** or a **MagicaVoxel `.vox`**. The dialog previews the model walking on a turntable (optional wireframe look). Models are scaled to the 2-block player height; walk/idle clips play when present, otherwise legs/arms/head are driven procedurally. Your avatar is shown to every multiplayer peer and saved in session files (`profile.avatar`).
+
 ### 🎙 Proximity Video & Voice
 See and hear players based on distance—natural spatial communication.
 
@@ -112,6 +115,7 @@ Spawn, explore, build, fight, survive.
 | Place Block | Right-click | Hold |
 | Select Item | Scroll | Hotbar tap |
 | Toggle View | `T` | `T` |
+| Avatar | `V` | HUD button |
 | Craft | `R` | — |
 | Teleport | `P` | — |
 | Save | `X` | — |

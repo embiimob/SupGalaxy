@@ -366,7 +366,7 @@ function setupDataChannel(e, t) {
             isMoving: !1,
             isAttacking: !1,
             timestamp: Date.now()
-        })), isHost) {
+        })), typeof sendAvatarsToPeer === "function" && sendAvatarsToPeer(e, t), isHost) {
             for (const [e, o] of peers.entries()) e !== t && e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                 type: "new_player",
                 username: t
@@ -1049,6 +1049,20 @@ function setupDataChannel(e, t) {
                         e && (e.visible = !0)
                     }
                     break;
+                case "avatar_update": {
+                    // Hosts only accept avatar changes for the directly connected sender.
+                    const avatarUser = isHost ? t : n;
+                    if (isHost) {
+                        const relay = JSON.stringify({ type: "avatar_update", username: avatarUser, avatar: sanitizeAvatarConfig(s.avatar) });
+                        for (const [peerUsername, peer] of peers.entries()) {
+                            if (peerUsername !== avatarUser && peerUsername !== userName && peer.dc && peer.dc.readyState === 'open') {
+                                peer.dc.send(relay);
+                            }
+                        }
+                    }
+                    handleRemoteAvatarUpdate(avatarUser, s.avatar);
+                    break;
+                }
                 case "health_update":
                     isHost && userPositions[s.username] && (userPositions[s.username].health = s.health);
                     break;
