@@ -163,20 +163,22 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         105: {
             name: "Brick",
             color: "#a84f3c",
-            textureStyle: "brick",
+            textureStyle: "weathered_brick",
             strength: 2
         },
         172: {
             name: "Polished Brick",
             color: "#a84f3c",
-            textureStyle: "brick",
+            textureStyle: "polished_brick",
             strength: 4
         },
         173: {
-            name: "Weathered Brick",
+            name: "Brick",
             color: "#a84f3c",
             textureStyle: "weathered_brick",
-            strength: 2
+            textureSeedId: 105,
+            strength: 2,
+            dropId: 105
         },
         106: {
             name: "Smooth Stone",
@@ -764,16 +766,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         requires: {
             105: 4
-        }
-    }, {
-        id: "weathered_brick",
-        out: {
-            id: 173,
-            count: 4
-        },
-        requires: {
-            105: 2,
-            14: 1
         }
     }, {
         id: "smooth_stone",
