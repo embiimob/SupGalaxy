@@ -118,7 +118,8 @@ async function resolveObjktToken(contract, tokenId) {
         const response = await fetch('https://api.tzkt.io/v1/tokens?contract=' + encodeURIComponent(contract) + '&tokenId=' + encodeURIComponent(tokenId) + '&select=metadata');
         if (response.ok) {
             const rows = await response.json();
-            const metadata = Array.isArray(rows) ? rows[0] : null;
+            const token = Array.isArray(rows) ? rows[0] : null;
+            const metadata = token && (token.metadata || token);
             picked = pickTokenModelUri(metadata);
             name = metadata && metadata.name ? String(metadata.name) : '';
         }
