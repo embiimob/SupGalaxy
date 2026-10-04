@@ -427,13 +427,25 @@ function createGltfAvatarRig(gltf) {
     const model = gltf.scene || (gltf.scenes && gltf.scenes[0]);
     if (!model) throw new Error('Model has no scene');
     const bones = [];
+    const skeletons = new Set();
     model.traverse(o => {
         if (o.isBone) bones.push(o);
         if (o.isSkinnedMesh) {
             o.frustumCulled = false;
-            o.skeleton.pose();
+            skeletons.add(o.skeleton);
         }
     });
+    model.updateMatrixWorld(true);
+    skeletons.forEach(skeleton => {
+        skeleton.pose();
+        // Three.js pose() treats root bones as world-space; GLB armature transforms must stay on their parents.
+        skeleton.bones.forEach(bone => {
+            if (!bone || !bone.parent || bone.parent.isBone) return;
+            bone.matrix.copy(bone.parent.matrixWorld).invert().multiply(bone.matrixWorld);
+            bone.matrix.decompose(bone.position, bone.quaternion, bone.scale);
+        });
+    });
+    model.updateMatrixWorld(true);
     const root = fitAvatarModel(model);
     const rig = {
         root: root,
