@@ -948,12 +948,15 @@ function startAvatarPreview() {
     renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
     const previewScene = new THREE.Scene();
     const previewCamera = new THREE.PerspectiveCamera(35, (canvas.clientWidth || 300) / (canvas.clientHeight || 300), 0.1, 50);
-    previewCamera.position.set(0, 1.3, 4.6);
-    previewCamera.lookAt(0, 0.9, 0);
+    previewCamera.position.set(0, 1.4, 4);
+    previewCamera.lookAt(0, 0.95, 0);
     previewScene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.0));
     const sun = new THREE.DirectionalLight(0xffffff, 0.8);
     sun.position.set(3, 5, 4);
     previewScene.add(sun);
+    const fill = new THREE.DirectionalLight(0x8db9ff, 0.45);
+    fill.position.set(-4, 2, -3);
+    previewScene.add(fill);
     const grid = new THREE.GridHelper(4, 4, 0x557799, 0x334455);
     previewScene.add(grid);
     const turntable = new THREE.Group();
@@ -967,9 +970,30 @@ function startAvatarPreview() {
         rig: null,
         frame: 0,
         time: 0,
-        last: performance.now()
+        last: performance.now(),
+        resizeObserver: null,
+        resizeHandler: null
     };
     avatarPreview = preview;
+    const resize = () => {
+        if (avatarPreview !== preview) return;
+        const width = canvas.clientWidth || 300;
+        const height = canvas.clientHeight || 300;
+        const aspect = width / height;
+        renderer.setSize(width, height, false);
+        previewCamera.aspect = aspect;
+        previewCamera.position.z = Math.max(3.5, Math.max(2.55, 2.4 / aspect) / (2 * Math.tan(THREE.MathUtils.degToRad(previewCamera.fov / 2))) * 1.08);
+        previewCamera.lookAt(0, 0.95, 0);
+        previewCamera.updateProjectionMatrix();
+    };
+    if (typeof ResizeObserver === 'function') {
+        preview.resizeObserver = new ResizeObserver(resize);
+        preview.resizeObserver.observe(canvas);
+    } else {
+        preview.resizeHandler = resize;
+        window.addEventListener('resize', resize);
+    }
+    resize();
     const loop = now => {
         if (avatarPreview !== preview) return;
         preview.frame = requestAnimationFrame(loop);
@@ -995,6 +1019,8 @@ function startAvatarPreview() {
 function stopAvatarPreview() {
     if (!avatarPreview) return;
     cancelAnimationFrame(avatarPreview.frame);
+    if (avatarPreview.resizeObserver) avatarPreview.resizeObserver.disconnect();
+    if (avatarPreview.resizeHandler) window.removeEventListener('resize', avatarPreview.resizeHandler);
     setPreviewRig(null);
     avatarPreview.grid.geometry.dispose();
     avatarPreview.grid.material.dispose();

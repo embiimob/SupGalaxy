@@ -1324,6 +1324,59 @@ body.is-mobile-mode #messages {
 .wallet-addr-val { font-family: monospace; word-break: break-all; color: #fff; }
 .wallet-balances { margin-top: 8px; }
 
+.stone-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 240;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.stone-modal-panel {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(460px, 94vw);
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: var(--panel);
+    color: #fff;
+    font-size: 13px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.stone-modal-panel h3 {
+    margin: 0;
+}
+
+.stone-modal-panel input:not([type="checkbox"]):not([type="color"]),
+.stone-modal-panel textarea,
+.stone-modal-panel select {
+    box-sizing: border-box;
+    border-radius: 6px !important;
+    border-color: #46515d !important;
+    background-color: #111b26 !important;
+    color: #fff !important;
+}
+
+.stone-modal-panel input:focus,
+.stone-modal-panel textarea:focus,
+.stone-modal-panel select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.stone-modal-panel button {
+    padding: 7px 12px;
+    font-size: 13px;
+}
+
 #avatarModal {
     position: fixed;
     inset: 0;
@@ -1338,7 +1391,12 @@ body.is-mobile-mode #messages {
         color: #fff;
         padding: 16px;
         border-radius: 10px;
-        width: min(360px, 92vw);
+        box-sizing: border-box;
+        width: min(460px, 92vw);
+        max-height: 94vh;
+        overflow-y: auto;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -1399,8 +1457,8 @@ body.is-mobile-mode #messages {
 
 #avatarPreviewCanvas {
     width: 100%;
-    height: 300px;
-    max-height: 45vh;
+    height: 340px;
+    max-height: 48vh;
     background: radial-gradient(circle at 50% 40%, #1c2a3a, #080c12);
     border-radius: 8px;
     display: block;
