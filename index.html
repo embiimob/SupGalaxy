@@ -100,6 +100,7 @@
         </div>
         <div style="margin-top:8px;">
             <button id="camToggle">Toggle (T)</button>
+            <button id="avatarBtn">Avatar (V)</button>
             <button id="openCraft">Craft (C)</button>
             <button id="teleportBtn">Teleport (P)</button>
             <button id="saveChangesBtn" style="display:none;">Save (X)</button>
@@ -380,6 +381,27 @@
             </div>
         </div>
     </div>
+    <!-- Avatar Modal -->
+    <div id="avatarModal" role="dialog" aria-modal="true" aria-labelledby="avatarModalTitle" style="display: none;">
+        <div class="avatar-panel">
+            <h3 id="avatarModalTitle">Avatar</h3>
+            <label for="avatarSourceInput">Model source</label>
+            <input type="text" id="avatarSourceInput" placeholder="objkt.com token URL, IPFS:CID, ipfs://CID or https://.../model.glb">
+            <div class="avatar-hint">Mixamo-rigged .glb/.gltf (e.g. objkt.com NFTs) or MagicaVoxel .vox. Leave empty for the default avatar. <a href="#" id="avatarSampleLink">Try sample</a></div>
+            <div class="avatar-row">
+                <label><input type="checkbox" id="avatarWireframe"> Wireframe</label>
+                <input type="color" id="avatarWireColor" value="#39ff6a" title="Wireframe color">
+                <button id="avatarLoadBtn" class="uniform-action-btn">Load Preview</button>
+            </div>
+            <canvas id="avatarPreviewCanvas" aria-label="Animated avatar preview"></canvas>
+            <div id="avatarStatus"></div>
+            <div class="avatar-actions">
+                <button id="avatarResetBtn" class="uniform-action-btn">Use Default</button>
+                <button id="avatarCancelBtn" class="uniform-action-btn">Cancel</button>
+                <button id="avatarApplyBtn" class="uniform-action-btn">Apply</button>
+            </div>
+        </div>
+    </div>
     <!-- Calligraphy Stone Configuration Modal -->
     <div id="calligraphyStoneModal" style="display: none; position: fixed; inset: 0; align-items: center; justify-content: center; z-index: 240; background: rgba(0,0,0,0.7);">
         <div class="modal-panel" style="display: flex; flex-direction: column; gap: 10px;">
@@ -480,6 +502,7 @@
     <script src="js/chunk-manager.js"></script>
     <script src="js/world-generation.js"></script>
     <script src="js/wallet.js"></script>
+    <script src="js/avatar.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
