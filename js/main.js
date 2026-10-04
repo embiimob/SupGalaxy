@@ -3653,6 +3653,7 @@ const _meshChildBox = new THREE.Box3();
 const _meshRaycaster = new THREE.Raycaster();
 const _meshRayOrigin = new THREE.Vector3();
 const _meshRayDown = new THREE.Vector3(0, -1, 0);
+const _meshHitNormal = new THREE.Vector3();
 
 function getCollidableStoneMeshes(box) {
     if (!magicianStones) return [];
@@ -3708,7 +3709,9 @@ function getMeshGroundY(x, z, topY, minY) {
         _meshRayOrigin.set(x + px, topY, z + pz);
         _meshRaycaster.set(_meshRayOrigin, _meshRayDown);
         _meshRaycaster.far = topY - minY;
-        const hit = _meshRaycaster.intersectObjects(meshes, true).find(h => h.object.isMesh);
+        // Only upward-facing surfaces count as ground (skip undersides of overhangs).
+        const hit = _meshRaycaster.intersectObjects(meshes, true).find(h => h.object.isMesh && (!h.face ||
+            _meshHitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0));
         if (hit && (groundY === null || hit.point.y > groundY)) groundY = hit.point.y;
     }
     return groundY;
@@ -3782,7 +3785,15 @@ function checkGeometryCollision(mesh, box) {
     return false;
 }
 
+const PUSH_OUT_MESSAGE_COOLDOWN_MS = 2000;
 let lastPushOutMessageTime = 0;
+
+function notifyPushedOut() {
+    const now = Date.now();
+    if (now - lastPushOutMessageTime < PUSH_OUT_MESSAGE_COOLDOWN_MS) return;
+    lastPushOutMessageTime = now;
+    addMessage("Pushed out of block");
+}
 
 function pushPlayerOut() {
     for (var e = [{
@@ -3814,7 +3825,7 @@ function pushPlayerOut() {
             var a = modWrap(player.x + o.dx, MAP_SIZE),
                 n = modWrap(player.z + o.dz, MAP_SIZE),
                 r = player.y + t;
-            if (!checkCollision(a, r, n)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, Date.now() - lastPushOutMessageTime > 2e3 && (lastPushOutMessageTime = Date.now(), addMessage("Pushed out of block")), !0
+            if (!checkCollision(a, r, n)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, notifyPushedOut(), !0
         }
     return !1
 }
