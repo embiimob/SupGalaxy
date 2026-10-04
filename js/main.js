@@ -1654,6 +1654,19 @@ function isBlockStillValid(x, y, z, expectedBlockId) {
     return true;
 }
 
+function getMagicianStoneMediaUrl(source) {
+    let parsed;
+    try {
+        parsed = new URL(source, window.location.href);
+    } catch (error) {
+        throw new Error('Invalid media URL');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'blob:') {
+        throw new Error('Media URLs must use HTTPS or a resolved IPFS blob');
+    }
+    return parsed.href;
+}
+
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision = true, damage = 0 } = stoneData;
     
@@ -1965,7 +1978,7 @@ async function createMagicianStoneScreen(stoneData) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
-        video.src = url;
+        video.src = getMagicianStoneMediaUrl(url);
         video.loop = loop;
         video.muted = true; // Muted by default, will be unmuted based on proximity
         video.playsInline = true;
@@ -1976,7 +1989,7 @@ async function createMagicianStoneScreen(stoneData) {
         stoneData.videoElement = video;
     } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
         const audio = document.createElement('audio');
-        audio.src = url;
+        audio.src = getMagicianStoneMediaUrl(url);
         audio.loop = loop;
         stoneData.audioElement = audio;
 
@@ -6757,6 +6770,7 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
             let mediaUrl = resolved.url;
             if (mediaUrl.startsWith('IPFS:')) mediaUrl = await resolveIPFS(mediaUrl);
             if (request !== magicianStonePreviewRequest) return;
+            mediaUrl = getMagicianStoneMediaUrl(mediaUrl);
             previewContainer.innerHTML = '';
             if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
                 const img = document.createElement('img');
