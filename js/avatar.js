@@ -412,25 +412,6 @@ function stripAvatarRootMotion(clip, rootName) {
     }
 }
 
-// True when a clip is a walk/run cycle: by name, or by how far it swings the thighs.
-function isLocomotionClip(clip, legBones) {
-    if (/walk|run|jog|stride|locomot|sprint/i.test(clip.name)) return true;
-    if (/idle|stand|breath|rest|dance|wave|pose|emote|taunt/i.test(clip.name)) return false;
-    const q0 = new THREE.Quaternion(),
-        q = new THREE.Quaternion();
-    for (const bone of legBones) {
-        if (!bone) continue;
-        const track = clip.tracks.find(t => t.name === bone.name + '.quaternion' && t.getValueSize() === 4);
-        if (!track) continue;
-        const v = track.values;
-        q0.fromArray(v, 0);
-        let range = 0;
-        for (let i = 4; i < v.length; i += 4) range = Math.max(range, q0.angleTo(q.fromArray(v, i)));
-        if (range > 0.35) return true;
-    }
-    return false;
-}
-
 function updateAvatarMotionState(rig, dt, state) {
     rig.amplitude += ((state.moving ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
     rig.air += ((state.airborne ? 1 : 0) - rig.air) * Math.min(1, dt * 10);
@@ -448,17 +429,19 @@ function createGltfAvatarRig(gltf) {
     const bones = [];
     model.traverse(o => {
         if (o.isBone) bones.push(o);
-        if (o.isSkinnedMesh) o.frustumCulled = false;
+        if (o.isSkinnedMesh) {
+            o.frustumCulled = false;
+            o.skeleton.pose();
+        }
     });
     const root = fitAvatarModel(model);
     const rig = {
         root: root,
         pivot: root,
         mixer: null,
-        locoAction: null,
         ambientAction: null,
-        walkWeight: 0,
-        timeScale: 0,
+        idleTime: 0,
+        ambientPlaying: false,
         phase: 0,
         amplitude: 0,
         air: 0,
@@ -490,51 +473,69 @@ function createGltfAvatarRig(gltf) {
         ctrl.rightForeArm = createForearmController(ctrl.rightArm, c.rightForeArm);
         if (ctrl.leftLeg || ctrl.rightLeg || ctrl.leftArm || ctrl.rightArm || ctrl.head) rig.controllers = ctrl;
         const rootBone = c.hips || bones.find(b => !b.parent || !b.parent.isBone);
-        const clips = gltf.animations || [];
-        if (clips.length) {
-            clips.forEach(clip => stripAvatarRootMotion(clip, rootBone && rootBone.name));
-            const locoClip = clips.find(clip => isLocomotionClip(clip, [c.leftLeg, c.rightLeg])) || null;
-            const ambientClip = clips.find(clip => clip !== locoClip && /idle|stand|breath|rest/i.test(clip.name)) ||
-                clips.find(clip => clip !== locoClip) || null;
-            rig.mixer = new THREE.AnimationMixer(model);
-            if (locoClip) {
-                rig.locoAction = rig.mixer.clipAction(locoClip);
-                rig.locoAction.play();
-                rig.locoAction.setEffectiveTimeScale(0);
-            }
-            if (ambientClip) {
-                rig.ambientAction = rig.mixer.clipAction(ambientClip);
-                rig.ambientAction.play();
-                if (rig.locoAction) rig.locoAction.setEffectiveWeight(0);
-            }
-            rig.mixer.update(0);
-        }
+        rig.rootBone = rootBone;
     }
+    const clips = gltf.animations || [];
+    const ambientClip = clips.find(clip => /idle|stand|breath|rest/i.test(clip.name)) || clips[0];
+    if (ambientClip) {
+        const clip = ambientClip.clone();
+        stripAvatarRootMotion(clip, rig.rootBone && rig.rootBone.name);
+        rig.mixer = new THREE.AnimationMixer(model);
+        rig.ambientAction = rig.mixer.clipAction(clip);
+        rig.ambientAction.setLoop(THREE.LoopOnce, 1);
+    }
+    // Restore every animated transform, not just named limbs: clips can also move hips, spine and meshes.
+    const restPose = [];
+    model.traverse(o => {
+        restPose.push({
+            object: o,
+            position: o.position.clone(),
+            quaternion: o.quaternion.clone(),
+            scale: o.scale.clone(),
+            morphs: o.morphTargetInfluences ? o.morphTargetInfluences.slice() : null
+        });
+    });
     const ctrlList = rig.controllers ? Object.values(rig.controllers).filter(Boolean) : [];
+    ctrlList.forEach(c => c.bone.quaternion.copy(c.baseQ));
+    model.updateMatrixWorld(true);
     rig.update = function (dt, state) {
         const swing = updateAvatarMotionState(rig, dt, state);
         const air = rig.air;
         const attack = avatarAttackSwing(state);
         const ctrl = rig.controllers;
-        if (rig.mixer) {
-            const speed = state.sprint ? 1.6 : 1;
-            if (rig.locoAction && rig.ambientAction) {
-                rig.walkWeight += ((state.moving ? 1 : 0) - rig.walkWeight) * Math.min(1, dt * 6);
-                rig.locoAction.setEffectiveWeight(rig.walkWeight);
-                rig.ambientAction.setEffectiveWeight(1 - rig.walkWeight);
-                rig.locoAction.setEffectiveTimeScale(speed);
-            } else if (rig.locoAction) {
-                rig.timeScale += ((state.moving ? speed : 0) - rig.timeScale) * Math.min(1, dt * 6);
-                rig.locoAction.setEffectiveTimeScale(rig.timeScale < 0.02 ? 0 : rig.timeScale);
+        const active = state.moving || state.airborne || state.attack >= 0;
+        if (active) {
+            rig.idleTime = 0;
+            if (rig.ambientPlaying) {
+                rig.ambientAction.stop();
+                rig.ambientPlaying = false;
             }
-            // Reset driven bones so bones the clip doesn't animate never accumulate procedural layers.
-            ctrlList.forEach(c => c.bone.quaternion.copy(c.baseQ));
-            rig.mixer.update(dt);
+        } else if (!rig.ambientPlaying) {
+            rig.idleTime += dt;
+            if (rig.ambientAction && rig.idleTime >= 10) {
+                rig.ambientAction.reset().play();
+                rig.ambientPlaying = true;
+            }
         }
-        if (ctrl) {
-            // Without a walk clip, the standard walk cycle drives the limbs; a jump pose always blends in while airborne.
-            const walk = rig.locoAction ? 0 : swing;
-            const weight = rig.mixer ? Math.max(rig.locoAction ? 0 : rig.amplitude, air) : 1;
+        restPose.forEach(pose => {
+            pose.object.position.copy(pose.position);
+            pose.object.quaternion.copy(pose.quaternion);
+            pose.object.scale.copy(pose.scale);
+            if (pose.morphs) pose.morphs.forEach((value, i) => { pose.object.morphTargetInfluences[i] = value; });
+        });
+        if (rig.ambientPlaying) {
+            rig.mixer.update(dt);
+            if (!rig.ambientAction.isRunning()) {
+                rig.ambientAction.stop();
+                rig.ambientPlaying = false;
+                rig.idleTime = 0;
+            }
+        }
+        if (!rig.ambientPlaying) ctrlList.forEach(c => c.bone.quaternion.copy(c.baseQ));
+        if (ctrl && !rig.ambientPlaying) {
+            // Gameplay always uses the standard skeletal cycle, regardless of the embedded clip's name or pose.
+            const walk = swing;
+            const weight = 1;
             blendAvatarBone(ctrl.leftLeg, 0.6 * walk + 0.7 * air, weight);
             blendAvatarBone(ctrl.rightLeg, -0.6 * walk + 0.35 * air, weight);
             blendAvatarBone(ctrl.leftKnee, -0.9 * Math.max(0, -walk) - 1.1 * air, weight);
@@ -543,7 +544,7 @@ function createGltfAvatarRig(gltf) {
             blendAvatarBone(ctrl.rightArm, 0.5 * walk + 0.6 * air, weight);
             blendAvatarBone(ctrl.leftForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
             blendAvatarBone(ctrl.rightForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
-            if (!rig.mixer) blendAvatarBone(ctrl.head, 0, 1);
+            blendAvatarBone(ctrl.head, 0, 1);
             // Mining / attack swing layered on top, mirroring the default avatar's arm chop.
             if (attack) {
                 rotateAvatarBone(ctrl.rightArm, 'axisX', 1.8 * attack, false);
@@ -552,10 +553,12 @@ function createGltfAvatarRig(gltf) {
             }
             rotateAvatarBone(ctrl.head, 'axisX', clampAvatarPitch(state.pitch), false);
             rig.pivot.position.y = Math.abs(swing) * 0.04;
-        } else {
+        } else if (!ctrl) {
             rig.pivot.position.y = Math.abs(swing) * 0.06;
             rig.pivot.rotation.z = swing * 0.06;
             rig.pivot.rotation.x = -0.3 * attack + 0.12 * air;
+        } else {
+            rig.pivot.position.y = 0;
         }
     };
     return rig;
