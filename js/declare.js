@@ -1257,6 +1257,54 @@ const lightManager = {
         }
         return SEA_LEVEL;
     },
+    getLightTransmission: function (sourceX, sourceY, sourceZ, targetX, targetY, targetZ) {
+        const startX = sourceX + .5,
+            startY = sourceY + .5,
+            startZ = sourceZ + .5,
+            endX = targetX + .5,
+            endY = targetY + 1,
+            endZ = targetZ + .5,
+            dx = endX - startX,
+            dy = endY - startY,
+            dz = endZ - startZ;
+        let x = Math.floor(startX),
+            y = Math.floor(startY),
+            z = Math.floor(startZ),
+            blockedCells = 0;
+        const stepX = Math.sign(dx),
+            stepY = Math.sign(dy),
+            stepZ = Math.sign(dz),
+            deltaX = dx ? Math.abs(1 / dx) : Infinity,
+            deltaY = dy ? Math.abs(1 / dy) : Infinity,
+            deltaZ = dz ? Math.abs(1 / dz) : Infinity;
+        let maxX = dx ? ((stepX > 0 ? x + 1 : x) - startX) / dx : Infinity,
+            maxY = dy ? ((stepY > 0 ? y + 1 : y) - startY) / dy : Infinity,
+            maxZ = dz ? ((stepZ > 0 ? z + 1 : z) - startZ) / dz : Infinity;
+
+        for (let cell = 0; cell < 128; cell++) {
+            if (maxX <= maxY && maxX <= maxZ) {
+                x += stepX;
+                if (maxX >= 1) break;
+                maxX += deltaX;
+            } else if (maxY <= maxZ) {
+                y += stepY;
+                if (maxY >= 1) break;
+                maxY += deltaY;
+            } else {
+                z += stepZ;
+                if (maxZ >= 1) break;
+                maxZ += deltaZ;
+            }
+
+            const blockId = getBlockAt(x, y, z),
+                block = BLOCKS[blockId];
+            if (blockId !== BLOCK_AIR && !(block && block.transparent)) {
+                blockedCells++;
+                if (blockedCells >= 3) return .001;
+            }
+        }
+        return Math.pow(.12, blockedCells);
+    },
     getUndergroundContext: function (x, y, z) {
         const playerY = Math.floor(y);
         let coveredColumns = 0;
@@ -1334,6 +1382,7 @@ const lightManager = {
                     a.color.setHex(16755251);
                     a.distance = playerIsOnSurface ? 18 : 22;
                 }
+                a.intensity *= this.getLightTransmission(o.x, o.y, o.z, e.x, e.y, e.z);
             } else this.lights[idx].intensity = 0
     }
 };
