@@ -1792,8 +1792,6 @@ Mob.prototype.update = function (t) {
                     o = minDistance; // o is the distance to target
 
                     if (i) {
-                        this.pos.y += 0.1 * (chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 2 - this.pos.y);
-
                         if (o < 1.5) {
                             this.hasPollen = true;
                             this.aiState = "FLYING_TO_HIVE";
@@ -1834,32 +1832,6 @@ Mob.prototype.update = function (t) {
                     i = closestHive;
                     o = minDistance;
 
-                    if (i) {
-                        const now = Date.now();
-                        if (!this.beeFlightScanTime || now >= this.beeFlightScanTime) {
-                            const dx = i.x - this.pos.x;
-                            const dz = i.z - this.pos.z;
-                            const distance = Math.hypot(dx, dz);
-                            const flightY = chunkManager.getSurfaceY(this.pos.x, this.pos.z) + 8;
-                            let clearanceY = flightY;
-                            const sampleOffsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
-                            for (let step = 2; step <= Math.min(10, distance); step += 2) {
-                                const sampleX = modWrap(this.pos.x + dx / distance * step, MAP_SIZE);
-                                const sampleZ = modWrap(this.pos.z + dz / distance * step, MAP_SIZE);
-                                const sampleSurface = chunkManager.getSurfaceY(sampleX, sampleZ);
-                                clearanceY = Math.max(clearanceY, sampleSurface + 8);
-                                for (const [offsetX, offsetZ] of sampleOffsets) {
-                                    for (let y = sampleSurface + 1; y <= Math.min(MAX_HEIGHT - 1, sampleSurface + 16); y++) {
-                                        const blockId = getBlockAt(Math.floor(sampleX + offsetX), y, Math.floor(sampleZ + offsetZ));
-                                        if (blockId === 7 || blockId === 8) clearanceY = Math.max(clearanceY, y + 2);
-                                    }
-                                }
-                            }
-                            this.beeFlightHeight = clearanceY;
-                            this.beeFlightScanTime = now + 300;
-                        }
-                        this.pos.y += (this.beeFlightHeight - this.pos.y) * (1 - Math.exp(-6 * t));
-                    }
                     if (o < 2) {
                         this.aiState = "DEPOSITING_HONEY";
                     }
@@ -1932,6 +1904,39 @@ Mob.prototype.update = function (t) {
                 this.hasPollen = false;
                 this.aiState = "SEARCHING_FOR_FLOWER";
             }
+        }
+        if (this.type === "bee" && i) {
+            const clearance = this.aiState === "FLYING_TO_HIVE" ? 8 : 4;
+            const now = Date.now();
+            if (this.beeFlightTargetX !== i.x || this.beeFlightTargetZ !== i.z ||
+                this.beeFlightClearance !== clearance || !this.beeFlightScanTime || now >= this.beeFlightScanTime) {
+                const dx = i.x - this.pos.x;
+                const dz = i.z - this.pos.z;
+                const distance = Math.hypot(dx, dz);
+                const baseHeight = chunkManager.getSurfaceY(this.pos.x, this.pos.z);
+                let flightHeight = baseHeight + clearance;
+                if (distance > 0.01) {
+                    const perpendicularX = -dz / distance;
+                    const perpendicularZ = dx / distance;
+                    for (let step = 2; step <= Math.min(12, distance); step += 2) {
+                        const sampleX = modWrap(this.pos.x + dx / distance * step, MAP_SIZE);
+                        const sampleZ = modWrap(this.pos.z + dz / distance * step, MAP_SIZE);
+                        for (const sideOffset of [-2, 0, 2]) {
+                            const surfaceY = chunkManager.getSurfaceY(
+                                sampleX + perpendicularX * sideOffset,
+                                sampleZ + perpendicularZ * sideOffset
+                            );
+                            flightHeight = Math.max(flightHeight, surfaceY + clearance);
+                        }
+                    }
+                }
+                this.beeFlightHeight = flightHeight;
+                this.beeFlightTargetX = i.x;
+                this.beeFlightTargetZ = i.z;
+                this.beeFlightClearance = clearance;
+                this.beeFlightScanTime = now + 250;
+            }
+            this.pos.y += (this.beeFlightHeight - this.pos.y) * (1 - Math.exp(-6 * t));
         }
         if (this.isAggressive || !i) {
             let t = null,
