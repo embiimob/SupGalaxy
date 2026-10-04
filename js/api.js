@@ -175,11 +175,9 @@ async function resolveIPFS(url) {
     if (!match) {
         throw new Error('Invalid IPFS URL format.');
     }
-    const fullMatch = match[0].split('IPFS:')[1];
-    const parts = fullMatch.split(/[\\\/]/);
-    const hash = parts[0];
-    // Ignore filename when fetching from IPFS as gateways only use CID
-    const filename = null;
+    const parts = match[0].slice('IPFS:'.length).split(/[\\\/]/);
+    const hash = parts.shift();
+    const filename = parts.filter(Boolean).join('/').split(/[?#]/, 1)[0] || null;
     
     let lastError;
     for (let attempt = 0; attempt < 3; attempt++) {

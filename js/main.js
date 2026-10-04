@@ -1961,7 +1961,7 @@ async function createMagicianStoneScreen(stoneData) {
             texture = new THREE.TextureLoader().load(url);
         }
 
-    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+    } else if (['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
@@ -6610,7 +6610,23 @@ document.addEventListener("DOMContentLoaded", (async function () {
     }
 })), console.log("[SYSTEM] Script loaded");
 
+let magicianStonePreviewRequest = 0;
+let magicianStonePreviewTimer = null;
+
+function setMagicianStonePreviewStatus(message, isError) {
+    const preview = document.getElementById('magicianStonePreview');
+    preview.innerHTML = '';
+    const status = document.createElement('span');
+    status.textContent = message;
+    status.style.color = isError ? '#ff6666' : '#aebdca';
+    status.style.fontSize = '12px';
+    preview.appendChild(status);
+}
+
 function resetMagicianStoneDialog() {
+    magicianStonePreviewRequest++;
+    clearTimeout(magicianStonePreviewTimer);
+    stopAvatarPreview('stone');
     document.getElementById('magicianStoneUrl').value = '';
     document.getElementById('magicianStoneWidth').value = '2';
     document.getElementById('magicianStoneHeight').value = '1.5';
@@ -6704,91 +6720,93 @@ window.addEventListener('resize', handleResizeAndOrientation);
 window.addEventListener('orientationchange', handleResizeAndOrientation);
 
 document.getElementById('magicianStoneUrl').addEventListener('input', async function() {
-    let url = this.value;
+    const input = this;
     const previewContainer = document.getElementById('magicianStonePreview');
-    previewContainer.innerHTML = ''; // Clear previous preview
-
-    if (url.startsWith('IPFS:')) {
-        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Resolving IPFS link...</span>';
+    const request = ++magicianStonePreviewRequest;
+    clearTimeout(magicianStonePreviewTimer);
+    stopAvatarPreview('stone');
+    const source = input.value.trim();
+    if (!source) {
+        setMagicianStonePreviewStatus('URL Preview');
+        return;
+    }
+    setMagicianStonePreviewStatus('Resolving asset…');
+    magicianStonePreviewTimer = setTimeout(async () => {
         try {
-            url = await resolveIPFS(url);
-        } catch (error) {
-            console.error('Error resolving IPFS URL:', error);
-            previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Failed to resolve IPFS URL.</span>';
-            return;
-        }
-    }
-
-    const fileExtension = this.value.split('.').pop().toLowerCase();
-
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
-        const img = document.createElement('img');
-        img.src = url;
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '80px';
-        img.style.objectFit = 'contain';
-        previewContainer.appendChild(img);
-    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
-        const video = document.createElement('video');
-        video.src = url;
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '80px';
-        video.controls = true;
-        video.muted = true;
-        previewContainer.appendChild(video);
-    } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
-        const audio = document.createElement('audio');
-        audio.src = url;
-        audio.controls = true;
-        audio.style.width = '100%';
-        audio.style.height = '30px';
-        previewContainer.appendChild(audio);
-    } else if (['glb', 'gltf'].includes(fileExtension)) {
-        // Show loading indicator while checking GLB/GLTF file
-        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">Loading 3D model...</span>';
-
-        // Validate the GLB/GLTF file by attempting to load it
-        const loader = new THREE.GLTFLoader();
-        loader.load(
-            url,
-            function(gltf) {
-                // Success - show model info
-                const animationCount = gltf.animations.length;
-                const modelName = url.split('/').pop();
-
-                let infoHTML = '<div style="text-align: center; width: 100%;">';
-                infoHTML += '<div style="color: #4CAF50; font-size: 14px; margin-bottom: 4px;">✓ 3D Model</div>';
-                infoHTML += '<div style="color: #999; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + modelName + '</div>';
-
-                if (animationCount > 0) {
-                    infoHTML += '<div style="color: #64B5F6; font-size: 11px; margin-top: 2px;">🎬 ' + animationCount + ' anim(s)</div>';
-                } else {
-                    infoHTML += '<div style="color: #666; font-size: 11px; margin-top: 2px;">Static</div>';
+            const resolved = await resolveMagicianStoneSource(source);
+            if (request !== magicianStonePreviewRequest) return;
+            if (resolved.storedUrl !== source) input.value = resolved.storedUrl;
+            const extension = resolved.extension;
+            if (['glb', 'gltf'].includes(extension)) {
+                setMagicianStonePreviewStatus('Loading 3D model…');
+                const canvas = document.createElement('canvas');
+                canvas.className = 'magician-stone-model-canvas';
+                canvas.setAttribute('aria-label', 'Animated Magician’s Stone model preview');
+                previewContainer.innerHTML = '';
+                previewContainer.appendChild(canvas);
+                startAvatarPreview(canvas, 'stone');
+                if (!magicianStoneAvatarPreview) throw new Error('3D preview is unavailable (WebGL)');
+                const rig = await buildAvatarRig({ url: resolved.url, format: extension });
+                if (request !== magicianStonePreviewRequest) {
+                    rig.dispose();
+                    return;
                 }
-
-                infoHTML += '</div>';
-                previewContainer.innerHTML = infoHTML;
-            },
-            function(progress) {
-                // Loading progress - could show percentage if needed
-            },
-            function(error) {
-                console.error('Error loading GLB/GLTF:', error);
-                previewContainer.innerHTML = '<span style="color: #ff6666; font-size: 12px;">Failed to load 3D model</span>';
+                setPreviewRig(rig, 'stone');
+                return;
             }
-        );
-    } else {
-        previewContainer.innerHTML = '<span style="color: #888; font-size: 12px;">URL Preview</span>';
-    }
+            let mediaUrl = resolved.url;
+            if (mediaUrl.startsWith('IPFS:')) mediaUrl = await resolveIPFS(mediaUrl);
+            if (request !== magicianStonePreviewRequest) return;
+            previewContainer.innerHTML = '';
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+                const img = document.createElement('img');
+                img.className = 'magician-stone-preview-media';
+                img.alt = 'Magician’s Stone media preview';
+                img.src = mediaUrl;
+                img.onerror = () => setMagicianStonePreviewStatus('Failed to load image', true);
+                previewContainer.appendChild(img);
+            } else if (['mp4', 'webm', 'ogg'].includes(extension)) {
+                const video = document.createElement('video');
+                video.className = 'magician-stone-preview-media';
+                video.src = mediaUrl;
+                video.controls = true;
+                video.muted = true;
+                previewContainer.appendChild(video);
+            } else if (['mp3', 'wav', 'oga'].includes(extension)) {
+                const audio = document.createElement('audio');
+                audio.src = mediaUrl;
+                audio.controls = true;
+                audio.style.width = '100%';
+                previewContainer.appendChild(audio);
+            } else {
+                setMagicianStonePreviewStatus('Unsupported asset type', true);
+            }
+        } catch (error) {
+            if (request !== magicianStonePreviewRequest) return;
+            console.error('[MagicianStone] Preview failed:', error);
+            stopAvatarPreview('stone');
+            setMagicianStonePreviewStatus(error.message || 'Failed to load preview', true);
+        }
+    }, 350);
 });
 
-document.getElementById('magicianStoneSave').addEventListener('click', function() {
-    const url = document.getElementById('magicianStoneUrl').value;
+document.getElementById('magicianStoneSave').addEventListener('click', async function() {
+    const rawUrl = document.getElementById('magicianStoneUrl').value.trim();
+    let url;
+    try {
+        const resolved = await resolveMagicianStoneSource(rawUrl);
+        url = resolved.storedUrl;
+        document.getElementById('magicianStoneUrl').value = url;
+    } catch (error) {
+        addMessage(error.message || 'Invalid asset URL.', 3000);
+        return;
+    }
     if (!url) {
         addMessage("URL is required.", 3000);
         return;
     }
 
+    if (!magicianStonePlacement) return;
     const stoneData = {
         x: magicianStonePlacement.x,
         y: magicianStonePlacement.y,

@@ -1435,7 +1435,8 @@ function encodeIPFSPath(path) {
 }
 
 function buildIPFSGatewayUrls(hash, filename = null) {
-    return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}`);
+    const path = filename ? '/' + encodeIPFSPath(filename) : '';
+    return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}${path}`);
 }
 
 function buildIPFSGatewayUrl(hash, filename = null, gatewayIndex = 0) {
