@@ -839,7 +839,7 @@ function updateCustomAvatars(dt, now, localMoving) {
             detachCustomAvatar(group);
             continue;
         }
-        if (!group.visible) continue;
+        if (!group.visible || group.userData.profileDefaultAvatar) continue;
         let state;
         if (group === avatarGroup) {
             state = {

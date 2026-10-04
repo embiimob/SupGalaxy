@@ -1505,7 +1505,12 @@ function shouldApplyIpfsUpdate(existingTruncated, incomingTruncated) {
  * @param {string} key - The key of the stone (for logging purposes)
  */
 function cleanupMagicianStone(stone, key) {
+    if (typeof StoneCollision !== 'undefined') StoneCollision.dispose(stone, key);
     if (!stone) return;
+    if (stone.colliderMesh) {
+        disposeObject(stone.colliderMesh);
+        stone.colliderMesh = null;
+    }
 
     // Remove and dispose the 3D mesh
     if (stone.mesh) {
