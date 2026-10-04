@@ -182,8 +182,10 @@ function detectMagicianStoneExtension(path, mime) {
         'image/png': 'png',
         'image/gif': 'gif',
         'image/webp': 'webp',
+        'image/avif': 'avif',
         'video/mp4': 'mp4',
         'video/webm': 'webm',
+        'video/ogg': 'ogg',
         'audio/mpeg': 'mp3',
         'audio/wav': 'wav',
         'audio/ogg': 'oga'
@@ -201,9 +203,13 @@ function detectMagicianStoneExtensionFromBuffer(buffer) {
     if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
     if (bytes[0] === 0x89 && header.slice(1, 4) === 'PNG') return 'png';
     if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WEBP') return 'webp';
-    if (header.slice(4, 8) === 'ftyp') return 'mp4';
+    if (header.slice(4, 8) === 'ftyp') {
+        const brand = header.slice(8, 12).toLowerCase();
+        if (['avif', 'avis'].includes(brand)) return 'avif';
+        if (['m4a ', 'm4b ', 'm4p '].includes(brand)) return 'm4a';
+        if (['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'm4v ', 'dash', '3gp4', '3gp5', 'qt  '].includes(brand)) return 'mp4';
+    }
     if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return 'webm';
-    if (header.slice(0, 4) === 'OggS') return 'oga';
     if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WAVE') return 'wav';
     if (header.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return 'mp3';
     return sniffAvatarFormat(buffer);
@@ -235,8 +241,9 @@ async function resolveMagicianStoneSource(input) {
         }
         if (!extension && ipfs) {
             const asset = await resolveIPFSAsset('IPFS:' + ipfs.hash + (ipfs.path ? '/' + ipfs.path : ''));
+            const buffer = await asset.blob.arrayBuffer();
             extension = detectMagicianStoneExtension(raw, asset.mimeType);
-            if (!extension) extension = detectMagicianStoneExtensionFromBuffer(await asset.blob.arrayBuffer());
+            if (!extension) extension = detectMagicianStoneExtensionFromBuffer(buffer);
             URL.revokeObjectURL(asset.url);
             if (!extension) throw new Error('Could not determine the IPFS asset type; include its file extension');
         }

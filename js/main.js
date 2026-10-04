@@ -1741,11 +1741,14 @@ async function createMagicianStoneScreen(stoneData) {
     const fileName = mediaPath.split(/[\\/]/).pop();
     const extensionIndex = fileName.lastIndexOf('.');
     let fileExtension = extensionIndex > 0 ? fileName.slice(extensionIndex + 1).toLowerCase() : '';
+    let ipfsModelBuffer = null;
     if (!fileExtension && stoneData.url.startsWith('IPFS:')) {
         try {
             const asset = await resolveIPFSAsset(stoneData.url);
-            fileExtension = detectMagicianStoneExtension(stoneData.url, asset.mimeType) || detectMagicianStoneExtensionFromBuffer(await asset.blob.arrayBuffer());
+            const buffer = await asset.blob.arrayBuffer();
+            fileExtension = detectMagicianStoneExtension(stoneData.url, asset.mimeType) || detectMagicianStoneExtensionFromBuffer(buffer);
             if (['glb', 'gltf'].includes(fileExtension)) {
+                ipfsModelBuffer = buffer;
                 URL.revokeObjectURL(asset.url);
             } else if (fileExtension) {
                 url = asset.url;
@@ -1905,7 +1908,7 @@ async function createMagicianStoneScreen(stoneData) {
                 magicianStonesLoading.delete(key);
                 scene.add(screenMesh);
             };
-        fetchAvatarBuffer(stoneData.url)
+        (ipfsModelBuffer ? Promise.resolve(ipfsModelBuffer) : fetchAvatarBuffer(stoneData.url))
             .then(buffer => loader.parse(buffer, getMagicianStoneResourcePath(stoneData.url), onModelLoaded, onModelError))
             .catch(onModelError);
         return;
@@ -1917,6 +1920,15 @@ async function createMagicianStoneScreen(stoneData) {
             url = await resolveIPFS(url);
         } catch (error) {
             console.error('Error resolving IPFS URL for in-world screen:', error);
+            magicianStonesLoading.delete(key);
+            return;
+        }
+    }
+    if (['gif', 'jpg', 'jpeg', 'png', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'mp3', 'wav', 'oga'].includes(fileExtension)) {
+        try {
+            url = getMagicianStoneMediaUrl(url);
+        } catch (error) {
+            console.error('Invalid media URL for in-world stone:', error);
             magicianStonesLoading.delete(key);
             return;
         }
@@ -2001,11 +2013,11 @@ async function createMagicianStoneScreen(stoneData) {
             texture = new THREE.TextureLoader().load(url);
         }
 
-    } else if (['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension)) {
-        texture = new THREE.TextureLoader().load(getMagicianStoneMediaUrl(url));
+    } else if (['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'].includes(fileExtension)) {
+        texture = new THREE.TextureLoader().load(url);
     } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
         const video = document.createElement('video');
-        video.src = getMagicianStoneMediaUrl(url);
+        video.src = url;
         video.loop = loop;
         video.muted = true; // Muted by default, will be unmuted based on proximity
         video.playsInline = true;
@@ -2016,7 +2028,7 @@ async function createMagicianStoneScreen(stoneData) {
         stoneData.videoElement = video;
     } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
         const audio = document.createElement('audio');
-        audio.src = getMagicianStoneMediaUrl(url);
+        audio.src = url;
         audio.loop = loop;
         stoneData.audioElement = audio;
 
@@ -6799,7 +6811,7 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
             if (request !== magicianStonePreviewRequest) return;
             mediaUrl = getMagicianStoneMediaUrl(mediaUrl);
             previewContainer.innerHTML = '';
-            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'].includes(extension)) {
                 const img = document.createElement('img');
                 img.className = 'magician-stone-preview-media';
                 img.alt = 'Magician’s Stone media preview';
