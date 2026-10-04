@@ -10,6 +10,9 @@ var AVATAR_HEIGHT = 1.8,
     AVATAR_FETCH_TIMEOUT_MS = 120000,
     AVATAR_BUFFER_CACHE_LIMIT = 4,
     AVATAR_FORMATS = ['glb', 'gltf', 'vox'],
+    MAGICIAN_STONE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'],
+    MAGICIAN_STONE_VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg'],
+    MAGICIAN_STONE_AUDIO_EXTENSIONS = ['mp3', 'wav', 'oga', 'm4a'],
     AVATAR_STORAGE_PREFIX = 'supgalaxy_avatar_',
     AVATAR_SAMPLE_SOURCE = 'https://objkt.com/tokens/KT1K1SVcUwH9LQgwMLmGSae6kNu7FP6a1mNW/0',
     OBJKT_CONTRACT_ALIASES = {
@@ -22,6 +25,7 @@ var AVATAR_HEIGHT = 1.8,
     avatarSourceCache = new Map(),
     activeCustomAvatars = new Set(),
     avatarPreview = null,
+    magicianStoneAvatarPreview = null,
     avatarPreviewRenderer = null;
 
 // Rejects if a lookup/download hangs so a stalled gateway can't leave the dialog stuck on "Loading…".
@@ -117,7 +121,8 @@ async function resolveObjktToken(contract, tokenId) {
         const response = await fetch('https://api.tzkt.io/v1/tokens?contract=' + encodeURIComponent(contract) + '&tokenId=' + encodeURIComponent(tokenId) + '&select=metadata');
         if (response.ok) {
             const rows = await response.json();
-            const metadata = Array.isArray(rows) ? rows[0] : null;
+            const token = Array.isArray(rows) ? rows[0] : null;
+            const metadata = token && (token.metadata || token);
             picked = pickTokenModelUri(metadata);
             name = metadata && metadata.name ? String(metadata.name) : '';
         }
@@ -148,7 +153,7 @@ async function resolveObjktToken(contract, tokenId) {
     }
     const url = picked ? toAvatarUrl(picked.uri) : null;
     if (!url) throw new Error('Could not find a model file in that objkt token');
-    return { url: url, format: detectAvatarFormat(picked.uri, picked.mime), name: name };
+    return { url: url, format: detectAvatarFormat(picked.uri, picked.mime), name: name, mime: picked.mime || '', artifactUri: picked.uri, isObjkt: true };
 }
 
 function resolveAvatarSource(input) {
@@ -163,11 +168,104 @@ function resolveAvatarSource(input) {
         promise = /^KT1[1-9A-HJ-NP-Za-km-z]{33}$/.test(contract) ? withAvatarTimeout(resolveObjktToken(contract, objkt[2]), 'Token lookup') : Promise.reject(new Error('Unsupported objkt contract'));
     } else {
         const url = toAvatarUrl(raw);
-        promise = url ? Promise.resolve({ url: url, format: detectAvatarFormat(raw), name: '' }) : Promise.reject(new Error('Use an objkt.com token URL, IPFS:CID, ipfs:// or https:// link'));
+        promise = url ? Promise.resolve({ url: url, format: detectAvatarFormat(raw), name: '', isObjkt: false }) : Promise.reject(new Error('Use an objkt.com token URL, IPFS:CID, ipfs:// or https:// link'));
     }
     avatarSourceCache.set(raw, promise);
     promise.catch(() => avatarSourceCache.delete(raw));
     return promise;
+}
+
+function detectMagicianStoneExtension(path, mime) {
+    const mimeType = String(mime || '').toLowerCase().split(';')[0].trim();
+    const mimeExtensions = {
+        'model/gltf-binary': 'glb',
+        'model/gltf+json': 'gltf',
+        'application/vox': 'vox',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/avif': 'avif',
+        'video/mp4': 'mp4',
+        'video/webm': 'webm',
+        'video/ogg': 'ogg',
+        'audio/mpeg': 'mp3',
+        'audio/wav': 'wav',
+        'audio/ogg': 'oga',
+        'audio/mp4': 'm4a'
+    };
+    if (mimeExtensions[mimeType]) return mimeExtensions[mimeType];
+    const cleanPath = String(path || '').split(/[?#]/, 1)[0];
+    const extension = (cleanPath.match(/\.([a-z0-9]+)$/i) || [])[1];
+    return extension ? extension.toLowerCase() : null;
+}
+
+function detectMagicianStoneExtensionFromBuffer(buffer) {
+    const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 12));
+    const header = String.fromCharCode.apply(null, bytes);
+    if (header.startsWith('GIF87a') || header.startsWith('GIF89a')) return 'gif';
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+    if (bytes[0] === 0x89 && header.slice(1, 4) === 'PNG') return 'png';
+    if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WEBP') return 'webp';
+    if (header.slice(4, 8) === 'ftyp') {
+        const brand = header.slice(8, 12).toLowerCase();
+        if (['avif', 'avis'].includes(brand)) return 'avif';
+        if (['m4a ', 'm4b ', 'm4p '].includes(brand)) return 'm4a';
+        if (['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'm4v ', 'dash', '3gp4', '3gp5', 'qt  '].includes(brand)) return 'mp4';
+    }
+    if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return 'webm';
+    if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WAVE') return 'wav';
+    if (header.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) !== 0)) return 'mp3';
+    return sniffAvatarFormat(buffer);
+}
+
+async function resolveMagicianStoneSource(input) {
+    const raw = String(input || '').trim();
+    const resolved = await resolveAvatarSource(raw);
+    const isObjkt = resolved.isObjkt === true;
+    let url = resolved.url;
+    let extension = detectMagicianStoneExtension(resolved.artifactUri || raw, resolved.mime);
+    let storedUrl = raw;
+    if (isObjkt) {
+        const artifact = resolved.artifactUri || resolved.url;
+        let ipfs = parseAvatarIpfsReference(artifact);
+        if (!ipfs && /^https:\/\//i.test(artifact || '')) {
+            const match = artifact.match(/\/ipfs\/([A-Za-z0-9]{20,})(?:\/|$)/i);
+            if (match) ipfs = { hash: match[1] };
+        }
+        if (!ipfs) throw new Error('This objkt artifact does not expose an IPFS CID');
+        if (!extension) throw new Error('Could not determine the objkt artifact format');
+        url = 'IPFS:' + ipfs.hash + '/artifact.' + extension;
+        storedUrl = url;
+    } else {
+        extension = detectMagicianStoneExtension(raw);
+        const ipfs = parseAvatarIpfsReference(raw);
+        if (ipfs && ipfs.path && (!/^[A-Za-z0-9._~%/-]+$/.test(ipfs.path) || ipfs.path.split('/').some(segment => segment === '.' || segment === '..'))) {
+            throw new Error('Invalid IPFS asset path');
+        }
+        if (!extension && ipfs) {
+            const asset = await resolveIPFSAsset('IPFS:' + ipfs.hash + (ipfs.path ? '/' + ipfs.path : ''));
+            const buffer = await asset.blob.arrayBuffer();
+            extension = detectMagicianStoneExtension(raw, asset.mimeType);
+            if (!extension) extension = detectMagicianStoneExtensionFromBuffer(buffer);
+            URL.revokeObjectURL(asset.url);
+            if (!extension) throw new Error('Could not determine the IPFS asset type; include its file extension');
+        }
+        if (ipfs) {
+            const path = !ipfs.path || !/\.[a-z0-9]+$/i.test(ipfs.path) ? 'artifact.' + extension : ipfs.path;
+            url = 'IPFS:' + ipfs.hash + '/' + path;
+            storedUrl = url;
+        }
+    }
+    if (!extension) throw new Error('Use a model, image, video, or audio file URL');
+    if (extension === 'vox') throw new Error('Magician’s Stone supports GLB and GLTF models');
+    return {
+        url: url,
+        storedUrl: storedUrl,
+        extension: extension,
+        name: resolved.name || '',
+        isObjkt: isObjkt
+    };
 }
 
 async function readAvatarResponse(response) {
@@ -896,17 +994,18 @@ function setAvatarStatus(text, isError) {
     status.style.color = isError ? '#ff8080' : '#bbb';
 }
 
-function setPreviewRig(rig) {
-    if (!avatarPreview) {
+function setPreviewRig(rig, previewType) {
+    const preview = previewType === 'stone' ? magicianStoneAvatarPreview : avatarPreview;
+    if (!preview) {
         if (rig && !rig.shared) rig.dispose();
         return;
     }
-    if (avatarPreview.rig) {
-        if (avatarPreview.rig.shared) avatarPreview.turntable.remove(avatarPreview.rig.root);
-        else avatarPreview.rig.dispose();
+    if (preview.rig) {
+        if (preview.rig.shared) preview.turntable.remove(preview.rig.root);
+        else preview.rig.dispose();
     }
-    avatarPreview.rig = rig;
-    if (rig) avatarPreview.turntable.add(rig.root);
+    preview.rig = rig;
+    if (rig) preview.turntable.add(rig.root);
 }
 
 // Showcase loop for the preview: walk, swing (mine/attack), walk, jump.
@@ -934,9 +1033,11 @@ function getAvatarPreviewRenderer(canvas) {
     return avatarPreviewRenderer;
 }
 
-function startAvatarPreview() {
-    const canvas = document.getElementById('avatarPreviewCanvas');
-    if (!canvas || avatarPreview) return;
+function startAvatarPreview(canvas, previewType) {
+    previewType = previewType || 'avatar';
+    if (!canvas) canvas = document.getElementById('avatarPreviewCanvas');
+    const activePreview = previewType === 'stone' ? magicianStoneAvatarPreview : avatarPreview;
+    if (!canvas || activePreview) return;
     let renderer;
     try {
         renderer = getAvatarPreviewRenderer(canvas);
@@ -948,12 +1049,15 @@ function startAvatarPreview() {
     renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
     const previewScene = new THREE.Scene();
     const previewCamera = new THREE.PerspectiveCamera(35, (canvas.clientWidth || 300) / (canvas.clientHeight || 300), 0.1, 50);
-    previewCamera.position.set(0, 1.3, 4.6);
-    previewCamera.lookAt(0, 0.9, 0);
+    previewCamera.position.set(0, 1.4, 4);
+    previewCamera.lookAt(0, 0.95, 0);
     previewScene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.0));
     const sun = new THREE.DirectionalLight(0xffffff, 0.8);
     sun.position.set(3, 5, 4);
     previewScene.add(sun);
+    const fill = new THREE.DirectionalLight(0x8db9ff, 0.45);
+    fill.position.set(-4, 2, -3);
+    previewScene.add(fill);
     const grid = new THREE.GridHelper(4, 4, 0x557799, 0x334455);
     previewScene.add(grid);
     const turntable = new THREE.Group();
@@ -967,11 +1071,33 @@ function startAvatarPreview() {
         rig: null,
         frame: 0,
         time: 0,
-        last: performance.now()
+        last: performance.now(),
+        resizeObserver: null,
+        resizeHandler: null
     };
-    avatarPreview = preview;
+    if (previewType === 'stone') magicianStoneAvatarPreview = preview;
+    else avatarPreview = preview;
+    const resize = () => {
+        if ((previewType === 'stone' ? magicianStoneAvatarPreview : avatarPreview) !== preview) return;
+        const width = canvas.clientWidth || 300;
+        const height = canvas.clientHeight || 300;
+        const aspect = width / height;
+        renderer.setSize(width, height, false);
+        previewCamera.aspect = aspect;
+        previewCamera.position.z = Math.max(3.5, Math.max(2.55, 2.4 / aspect) / (2 * Math.tan(THREE.MathUtils.degToRad(previewCamera.fov / 2))) * 1.08);
+        previewCamera.lookAt(0, 0.95, 0);
+        previewCamera.updateProjectionMatrix();
+    };
+    if (typeof ResizeObserver === 'function') {
+        preview.resizeObserver = new ResizeObserver(resize);
+        preview.resizeObserver.observe(canvas);
+    } else {
+        preview.resizeHandler = resize;
+        window.addEventListener('resize', resize);
+    }
+    resize();
     const loop = now => {
-        if (avatarPreview !== preview) return;
+        if ((previewType === 'stone' ? magicianStoneAvatarPreview : avatarPreview) !== preview) return;
         preview.frame = requestAnimationFrame(loop);
         const dt = Math.max(0, Math.min(0.06, (now - preview.last) / 1000));
         preview.last = now;
@@ -985,21 +1111,27 @@ function startAvatarPreview() {
         } catch (e) {
             // A broken model must not kill the loop; drop it and keep rendering.
             console.warn('[Avatar] Preview frame failed:', e);
-            setPreviewRig(null);
-            setAvatarStatus('Model could not be rendered', true);
+            setPreviewRig(null, previewType);
+            if (previewType === 'stone' && typeof setMagicianStonePreviewStatus === 'function') setMagicianStonePreviewStatus('Model could not be rendered', true);
+            else setAvatarStatus('Model could not be rendered', true);
         }
     };
     preview.frame = requestAnimationFrame(loop);
 }
 
-function stopAvatarPreview() {
-    if (!avatarPreview) return;
-    cancelAnimationFrame(avatarPreview.frame);
-    setPreviewRig(null);
-    avatarPreview.grid.geometry.dispose();
-    avatarPreview.grid.material.dispose();
-    avatarPreview.renderer.renderLists.dispose();
-    avatarPreview = null;
+function stopAvatarPreview(previewType) {
+    previewType = previewType || 'avatar';
+    const preview = previewType === 'stone' ? magicianStoneAvatarPreview : avatarPreview;
+    if (!preview) return;
+    cancelAnimationFrame(preview.frame);
+    if (preview.resizeObserver) preview.resizeObserver.disconnect();
+    if (preview.resizeHandler) window.removeEventListener('resize', preview.resizeHandler);
+    setPreviewRig(null, previewType);
+    preview.grid.geometry.dispose();
+    preview.grid.material.dispose();
+    preview.renderer.renderLists.dispose();
+    if (previewType === 'stone') magicianStoneAvatarPreview = null;
+    else avatarPreview = null;
 }
 
 var avatarDialogConfig = null,

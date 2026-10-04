@@ -1435,7 +1435,8 @@ function encodeIPFSPath(path) {
 }
 
 function buildIPFSGatewayUrls(hash, filename = null) {
-    return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}`);
+    const path = filename ? '/' + encodeIPFSPath(filename) : '';
+    return IPFS_GATEWAYS.map(gateway => `${gateway}${hash}${path}`);
 }
 
 function buildIPFSGatewayUrl(hash, filename = null, gatewayIndex = 0) {
@@ -1532,6 +1533,11 @@ function cleanupMagicianStone(stone, key) {
         } catch (e) {
             console.warn(`[MagicianStone] Error cleaning up audio element for key ${key}:`, e);
         }
+    }
+
+    if (stone.mediaObjectUrl) {
+        URL.revokeObjectURL(stone.mediaObjectUrl);
+        stone.mediaObjectUrl = null;
     }
 
     // Clean up GIF animation resources - this is the critical fix for the GIF artifact bug
