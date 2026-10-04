@@ -8,6 +8,7 @@ var AVATAR_HEIGHT = 1.8,
     AVATAR_MAX_BYTES = 32 * 1024 * 1024,
     AVATAR_MAX_URL_LENGTH = 600,
     AVATAR_FETCH_TIMEOUT_MS = 45000,
+    AVATAR_BUFFER_CACHE_LIMIT = 6,
     AVATAR_FORMATS = ['glb', 'gltf', 'vox'],
     AVATAR_STORAGE_PREFIX = 'supgalaxy_avatar_',
     AVATAR_SAMPLE_SOURCE = 'https://objkt.com/tokens/KT1K1SVcUwH9LQgwMLmGSae6kNu7FP6a1mNW/0',
@@ -24,12 +25,15 @@ var AVATAR_HEIGHT = 1.8,
     avatarPreviewRenderer = null;
 
 // Rejects if a lookup/download hangs so a stalled gateway can't leave the dialog stuck on "Loading…".
-function withAvatarTimeout(promise, label) {
+function withAvatarTimeout(promise, label, controller) {
     let timer;
     return Promise.race([
         promise,
         new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error(label + ' timed out')), AVATAR_FETCH_TIMEOUT_MS);
+            timer = setTimeout(() => {
+                if (controller) controller.abort();
+                reject(new Error(label + ' timed out'));
+            }, AVATAR_FETCH_TIMEOUT_MS);
         })
     ]).finally(() => clearTimeout(timer));
 }
@@ -44,7 +48,10 @@ function sanitizeAvatarConfig(config) {
     if (!config || typeof config !== 'object') return null;
     const url = cleanAvatarString(config.url, AVATAR_MAX_URL_LENGTH + 1);
     if (!url || url.length > AVATAR_MAX_URL_LENGTH) return null;
-    if (!/^IPFS:[A-Za-z0-9]{20,}/.test(url) && !/^https:\/\/[^\s]+$/i.test(url)) return null;
+    if (/^IPFS:/.test(url)) {
+        const ipfs = parseAvatarIpfsReference(url);
+        if (!ipfs || (ipfs.path && (!/^[A-Za-z0-9._~%\/-]+$/.test(ipfs.path) || ipfs.path.split('/').some(seg => seg === '..' || seg === '.')))) return null;
+    } else if (!/^https:\/\/[^\s]+$/i.test(url)) return null;
     const format = typeof config.format === 'string' && AVATAR_FORMATS.includes(config.format.toLowerCase()) ? config.format.toLowerCase() : null;
     const color = typeof config.color === 'string' && /^#[0-9a-f]{6}$/i.test(config.color) ? config.color.toLowerCase() : null;
     return {
@@ -173,10 +180,17 @@ async function readAvatarResponse(response) {
 }
 
 function fetchAvatarBuffer(url) {
-    if (avatarBufferCache.has(url)) return avatarBufferCache.get(url);
+    if (avatarBufferCache.has(url)) {
+        // Refresh LRU position.
+        const cached = avatarBufferCache.get(url);
+        avatarBufferCache.delete(url);
+        avatarBufferCache.set(url, cached);
+        return cached;
+    }
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const promise = withAvatarTimeout((async () => {
         const ipfs = parseAvatarIpfsReference(url);
-        if (!ipfs) return readAvatarResponse(await fetch(url));
+        if (!ipfs) return readAvatarResponse(await fetch(url, controller ? { signal: controller.signal } : undefined));
         // Successful downloads are cached here, so earlier gateway failures must not block an explicit retry.
         if (typeof clearIpfsFetchFailure === 'function') {
             clearIpfsFetchFailure(ipfs.hash, ipfs.path);
@@ -192,8 +206,9 @@ function fetchAvatarBuffer(url) {
             }
         }
         throw lastError || new Error('IPFS download failed');
-    })(), 'Model download');
+    })(), 'Model download', controller);
     avatarBufferCache.set(url, promise);
+    while (avatarBufferCache.size > AVATAR_BUFFER_CACHE_LIMIT) avatarBufferCache.delete(avatarBufferCache.keys().next().value);
     promise.catch(() => avatarBufferCache.delete(url));
     return promise;
 }
@@ -1053,6 +1068,7 @@ function openAvatarModal() {
     document.getElementById('avatarWireframe').checked = !!(localAvatarConfig && localAvatarConfig.wireframe);
     document.getElementById('avatarWireColor').value = (localAvatarConfig && localAvatarConfig.color) || '#39ff6a';
     avatarDialogConfig = null;
+    document.getElementById('avatarSourceInput').focus();
     startAvatarPreview();
     loadAvatarDialogPreview();
 }

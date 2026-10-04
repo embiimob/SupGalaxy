@@ -382,9 +382,9 @@
         </div>
     </div>
     <!-- Avatar Modal -->
-    <div id="avatarModal" style="display: none;">
+    <div id="avatarModal" role="dialog" aria-modal="true" aria-labelledby="avatarModalTitle" style="display: none;">
         <div class="avatar-panel">
-            <h3>Avatar</h3>
+            <h3 id="avatarModalTitle">Avatar</h3>
             <label for="avatarSourceInput">Model source</label>
             <input type="text" id="avatarSourceInput" placeholder="objkt.com token URL, IPFS:CID, ipfs://CID or https://.../model.glb">
             <div class="avatar-hint">Mixamo-rigged .glb/.gltf (e.g. objkt.com NFTs) or MagicaVoxel .vox. Leave empty for the default avatar. <a href="#" id="avatarSampleLink">Try sample</a></div>
@@ -393,7 +393,7 @@
                 <input type="color" id="avatarWireColor" value="#39ff6a" title="Wireframe color">
                 <button id="avatarLoadBtn" class="uniform-action-btn">Load Preview</button>
             </div>
-            <canvas id="avatarPreviewCanvas"></canvas>
+            <canvas id="avatarPreviewCanvas" aria-label="Animated avatar preview"></canvas>
             <div id="avatarStatus"></div>
             <div class="avatar-actions">
                 <button id="avatarResetBtn" class="uniform-action-btn">Use Default</button>
