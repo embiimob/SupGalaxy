@@ -2495,6 +2495,8 @@ function openUsersModal() {
         }
     }
 
+    o.appendChild(t.querySelector("#friendHandle").parentElement);
+
     // Known Worlds Section
     var c = document.createElement("h4");
     c.innerText = "► Known Worlds";
