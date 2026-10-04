@@ -152,6 +152,8 @@ function createBlockTexture(e, t) {
     const blockDef = BLOCKS[t] || { color: "#ff00ff" },
         style = blockDef.textureStyle,
         textureSeedId = blockDef.textureSeedId || t,
+        isSeededBrick = style === "weathered_brick" || style === "polished_brick",
+        isPolishedBrick = style === "polished_brick",
         a = style ? 32 : 16,
         n = document.createElement("canvas");
     n.width = a, n.height = a;
@@ -160,13 +162,14 @@ function createBlockTexture(e, t) {
         baseColor = new THREE.Color(blockDef.color),
         palette = makeSeededRandom(e + "_block_palette_" + textureSeedId),
         baseHsl = baseColor.getHSL({}),
-        hueRange = style === "sand" ? .11 : style ? .045 : .13,
+        hueRange = isPolishedBrick ? .16 : style === "weathered_brick" ? .09 : style === "sand" ? .11 : style ? .045 : .13,
         seededBase = baseColor.clone().setHSL(
             (baseHsl.h + (palette() - .5) * hueRange + 1) % 1,
-            Math.max(0, Math.min(1, baseHsl.s + (palette() - .5) * (style ? .16 : .28))),
-            Math.max(.08, Math.min(.92, baseHsl.l + (palette() - .5) * (style ? .14 : .2)))
+            Math.max(0, Math.min(1, baseHsl.s + (palette() - .5) * (isPolishedBrick ? .34 : style === "weathered_brick" ? .24 : style ? .16 : .28))),
+            Math.max(.08, Math.min(.92, baseHsl.l + (palette() - .5) * (isSeededBrick ? .24 : style ? .14 : .2)))
         ),
-        colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle();
+        colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle(),
+        brickSurfaceNoise = isSeededBrick ? makeNoise(e + "_brick_surface_" + textureSeedId) : null;
 
     if (style === "sand") {
         r.fillStyle = colorAt(.98);
@@ -265,20 +268,23 @@ function createBlockTexture(e, t) {
             r.fillStyle = colorAt(shade);
             r.fillRect(Math.floor(s() * a), Math.floor(s() * a), s() > .88 ? 2 : 1, 1);
         }
-    } else if (style === "brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
+    } else if (style === "brick" || style === "weathered_brick" || style === "polished_brick" || style === "stone_bricks" || style === "mossy_bricks" || style === "limestone_bricks" || style === "battlement" || style === "chiseled_stone" || style === "cobble") {
         const brickWidth = style === "cobble" ? 11 : 16,
-            courseHeight = style === "brick" ? 8 : 10;
+            courseHeight = style === "brick" || isPolishedBrick || style === "weathered_brick" ? 8 : 10,
+            isWeathered = style === "weathered_brick";
         r.fillStyle = colorAt(.48);
         r.fillRect(0, 0, a, a);
-        for (let row = 0, course = 0; row < a; row += courseHeight, course++) {
+        for (let row = 0, course = 0; row < a; course++) {
+            const currentCourseHeight = Math.min(a - row, courseHeight + (isWeathered ? Math.floor(s() * 5) - 2 : 0));
             const offset = course % 2 ? -brickWidth / 2 : 0;
             for (let x = offset; x < a; x += brickWidth) {
-                const left = Math.max(1, x + 1),
-                    right = Math.min(a - 1, x + brickWidth - 1),
+                const left = Math.max(1, x + 1 + (isWeathered ? Math.floor(s() * 4) : 0)),
+                    right = Math.min(a - 1, x + brickWidth - 1 - (isWeathered ? Math.floor(s() * 4) : 0)),
                     top = row + 1,
-                    bottom = Math.min(a - 1, row + courseHeight - 1);
+                    bottom = Math.min(a - 1, row + currentCourseHeight - 1);
                 if (right <= left || bottom <= top) continue;
-                const variation = .88 + s() * .28;
+                const seedVariation = brickSurfaceNoise ? (brickSurfaceNoise(x / 5, row / 5) - .5) * (isPolishedBrick ? .42 : .3) : 0;
+                const variation = .88 + s() * .28 + seedVariation;
                 r.fillStyle = colorAt(variation);
                 r.fillRect(left, top, right - left, bottom - top);
                 if (style === "cobble") {
@@ -293,6 +299,32 @@ function createBlockTexture(e, t) {
                 r.fillRect(left, top, right - left, 1);
                 r.fillStyle = colorAt(variation * .72);
                 r.fillRect(left, bottom - 1, right - left, 1);
+                if (isWeathered) {
+                    if (s() > .35) {
+                        const chipX = left + Math.floor(s() * Math.max(1, right - left - 2)),
+                            chipY = top + Math.floor(s() * Math.max(1, bottom - top - 2));
+                        r.fillStyle = colorAt(.48);
+                        r.fillRect(chipX, chipY, 1 + Math.floor(s() * 4), 1 + Math.floor(s() * 3));
+                    }
+                    for (let stain = 0; stain < 3; stain++) {
+                        if (s() > .35) {
+                            const stainX = left + Math.floor(s() * Math.max(1, right - left - 1)),
+                                stainY = top + Math.floor(s() * Math.max(1, bottom - top - 1));
+                            r.fillStyle = colorAt(.56 + s() * .18);
+                            r.fillRect(stainX, stainY, 1 + Math.floor(s() * 3), 1 + Math.floor(s() * 2));
+                        }
+                    }
+                }
+                if (isPolishedBrick) {
+                    for (let streak = 0; streak < 3; streak++) {
+                        const streakX = left + 2 + Math.floor(s() * Math.max(1, right - left - 5)),
+                            streakY = top + 2 + Math.floor(s() * Math.max(1, bottom - top - 4));
+                        r.fillStyle = colorAt(streak % 2 ? 1.18 : .78);
+                        r.globalAlpha = .45;
+                        r.fillRect(streakX, streakY, 2 + Math.floor(s() * 5), 1);
+                    }
+                    r.globalAlpha = 1;
+                }
                 if (style === "chiseled_stone") {
                     r.strokeStyle = colorAt(.68);
                     r.lineWidth = 1;
@@ -303,6 +335,7 @@ function createBlockTexture(e, t) {
                     r.fillRect(left + s() * Math.max(1, right - left - 4), top + s() * Math.max(1, bottom - top - 3), 2 + s() * 3, 1 + s() * 2);
                 }
             }
+            row += currentCourseHeight;
         }
     } else if (style === "roof_tiles") {
         r.fillStyle = colorAt(.48);
