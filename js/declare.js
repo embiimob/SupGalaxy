@@ -1535,6 +1535,11 @@ function cleanupMagicianStone(stone, key) {
         }
     }
 
+    if (stone.mediaObjectUrl) {
+        URL.revokeObjectURL(stone.mediaObjectUrl);
+        stone.mediaObjectUrl = null;
+    }
+
     // Clean up GIF animation resources - this is the critical fix for the GIF artifact bug
     if (stone.gifData) {
         // Dispose the THREE.CanvasTexture to release WebGL resources

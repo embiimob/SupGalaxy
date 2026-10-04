@@ -10,6 +10,9 @@ var AVATAR_HEIGHT = 1.8,
     AVATAR_FETCH_TIMEOUT_MS = 120000,
     AVATAR_BUFFER_CACHE_LIMIT = 4,
     AVATAR_FORMATS = ['glb', 'gltf', 'vox'],
+    MAGICIAN_STONE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'],
+    MAGICIAN_STONE_VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg'],
+    MAGICIAN_STONE_AUDIO_EXTENSIONS = ['mp3', 'wav', 'oga', 'm4a'],
     AVATAR_STORAGE_PREFIX = 'supgalaxy_avatar_',
     AVATAR_SAMPLE_SOURCE = 'https://objkt.com/tokens/KT1K1SVcUwH9LQgwMLmGSae6kNu7FP6a1mNW/0',
     OBJKT_CONTRACT_ALIASES = {
@@ -188,7 +191,8 @@ function detectMagicianStoneExtension(path, mime) {
         'video/ogg': 'ogg',
         'audio/mpeg': 'mp3',
         'audio/wav': 'wav',
-        'audio/ogg': 'oga'
+        'audio/ogg': 'oga',
+        'audio/mp4': 'm4a'
     };
     if (mimeExtensions[mimeType]) return mimeExtensions[mimeType];
     const cleanPath = String(path || '').split(/[?#]/, 1)[0];

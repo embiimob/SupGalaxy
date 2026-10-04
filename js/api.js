@@ -195,7 +195,7 @@ async function fetchIPFSBlob(url) {
                     if (path && (response.status === 404 || response.status === 410)) pathNotFound = true;
                     throw new Error('Failed to fetch from IPFS.');
                 }
-                return response.blob();
+                return await response.blob();
             } catch (error) {
                 lastError = error;
             }

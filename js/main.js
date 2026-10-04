@@ -1667,6 +1667,14 @@ function getMagicianStoneMediaUrl(source) {
     return parsed.href;
 }
 
+async function getMagicianStoneDisplayUrl(source) {
+    const mediaUrl = getMagicianStoneMediaUrl(source);
+    if (mediaUrl.startsWith('blob:')) return mediaUrl;
+    const response = await fetch(mediaUrl);
+    if (!response.ok) throw new Error('Failed to load Magician’s Stone media');
+    return URL.createObjectURL(await response.blob());
+}
+
 function getMagicianStoneResourcePath(source) {
     const ipfs = parseAvatarIpfsReference(source);
     if (ipfs) {
@@ -1760,6 +1768,11 @@ async function createMagicianStoneScreen(stoneData) {
             magicianStonesLoading.delete(key);
             return;
         }
+    }
+    if (!fileExtension) {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+        magicianStonesLoading.delete(key);
+        return;
     }
 
     // Handle GLB/GLTF files
@@ -1924,9 +1937,12 @@ async function createMagicianStoneScreen(stoneData) {
             return;
         }
     }
-    if (['gif', 'jpg', 'jpeg', 'png', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'mp3', 'wav', 'oga'].includes(fileExtension)) {
+    if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(fileExtension) ||
+        MAGICIAN_STONE_VIDEO_EXTENSIONS.includes(fileExtension) ||
+        MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
         try {
-            url = getMagicianStoneMediaUrl(url);
+            url = await getMagicianStoneDisplayUrl(url);
+            stoneData.mediaObjectUrl = url;
         } catch (error) {
             console.error('Invalid media URL for in-world stone:', error);
             magicianStonesLoading.delete(key);
@@ -2013,9 +2029,9 @@ async function createMagicianStoneScreen(stoneData) {
             texture = new THREE.TextureLoader().load(url);
         }
 
-    } else if (['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'].includes(fileExtension)) {
+    } else if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(fileExtension)) {
         texture = new THREE.TextureLoader().load(url);
-    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+    } else if (MAGICIAN_STONE_VIDEO_EXTENSIONS.includes(fileExtension)) {
         const video = document.createElement('video');
         video.src = url;
         video.loop = loop;
@@ -2026,7 +2042,7 @@ async function createMagicianStoneScreen(stoneData) {
         }
         texture = new THREE.VideoTexture(video);
         stoneData.videoElement = video;
-    } else if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+    } else if (MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
         const audio = document.createElement('audio');
         audio.src = url;
         audio.loop = loop;
@@ -2080,7 +2096,7 @@ async function createMagicianStoneScreen(stoneData) {
 
     let screenMesh;
 
-    if (['mp3', 'wav', 'oga'].includes(fileExtension)) {
+    if (MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
         screenMesh = createMusicSymbolMesh();
     } else {
         const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
@@ -6664,8 +6680,16 @@ document.addEventListener("DOMContentLoaded", (async function () {
 
 let magicianStonePreviewRequest = 0;
 let magicianStonePreviewTimer = null;
+let magicianStonePreviewMediaUrl = null;
+
+function releaseMagicianStonePreviewMedia() {
+    if (!magicianStonePreviewMediaUrl) return;
+    URL.revokeObjectURL(magicianStonePreviewMediaUrl);
+    magicianStonePreviewMediaUrl = null;
+}
 
 function setMagicianStonePreviewStatus(message, isError) {
+    releaseMagicianStonePreviewMedia();
     const preview = document.getElementById('magicianStonePreview');
     preview.innerHTML = '';
     const status = document.createElement('span');
@@ -6692,6 +6716,7 @@ function resetMagicianStoneDialog() {
     document.getElementById('magicianStoneCollision').checked = true;
     document.getElementById('magicianStoneDamage').value = '0';
     const preview = document.getElementById('magicianStonePreview');
+    releaseMagicianStonePreviewMedia();
     preview.innerHTML = '<span style="color: #888; font-size: 12px;">URL Preview</span>';
     preview.style.display = 'flex';
 }
@@ -6808,24 +6833,28 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
             }
             let mediaUrl = resolved.url;
             if (mediaUrl.startsWith('IPFS:')) mediaUrl = await resolveIPFS(mediaUrl);
-            if (request !== magicianStonePreviewRequest) return;
-            mediaUrl = getMagicianStoneMediaUrl(mediaUrl);
+            mediaUrl = await getMagicianStoneDisplayUrl(mediaUrl);
+            if (request !== magicianStonePreviewRequest) {
+                if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
+                return;
+            }
+            magicianStonePreviewMediaUrl = mediaUrl.startsWith('blob:') ? mediaUrl : null;
             previewContainer.innerHTML = '';
-            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'].includes(extension)) {
+            if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(extension)) {
                 const img = document.createElement('img');
                 img.className = 'magician-stone-preview-media';
                 img.alt = 'Magician’s Stone media preview';
                 img.src = mediaUrl;
                 img.onerror = () => setMagicianStonePreviewStatus('Failed to load image', true);
                 previewContainer.appendChild(img);
-            } else if (['mp4', 'webm', 'ogg'].includes(extension)) {
+            } else if (MAGICIAN_STONE_VIDEO_EXTENSIONS.includes(extension)) {
                 const video = document.createElement('video');
                 video.className = 'magician-stone-preview-media';
                 video.src = mediaUrl;
                 video.controls = true;
                 video.muted = true;
                 previewContainer.appendChild(video);
-            } else if (['mp3', 'wav', 'oga'].includes(extension)) {
+            } else if (MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(extension)) {
                 const audio = document.createElement('audio');
                 audio.src = mediaUrl;
                 audio.controls = true;
