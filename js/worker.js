@@ -302,8 +302,7 @@ function fbm(noiseFn, x, y, oct, persistence) {
         return sum / max;
 }
 
-function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel) {
-    const maxDepth = seaLevel === 32 ? 16 : 20;
+function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel, maxDepth = 20) {
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
             let floorY = seaLevel;
@@ -501,6 +500,7 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
 
 function generateVulcanTerrain(chunkData, chunkKey, archetype) {
     const worldSeed = chunkKey.split(':')[0];
+    const VULCAN_SEA_LEVEL = 32 + Math.floor(makeSeededRandom(worldSeed + '_vulcan_sea_level')() * 8);
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
     const resourceNoise = makeNoise(worldSeed + '_resources');
@@ -616,7 +616,6 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
             }
 
             // Ocean and beaches
-            const VULCAN_SEA_LEVEL = 32;
             if (height < VULCAN_SEA_LEVEL + 4) { // Process chunks near the sea level
                 if (height < VULCAN_SEA_LEVEL) {
                     // This part is for land below sea level.
@@ -639,7 +638,7 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
         }
     }
 
-    addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, 32);
+    addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, VULCAN_SEA_LEVEL, 16);
 
     // After generating the terrain, scan for volcanoes
     const calderaThreshold = 50; // Min lava blocks to be considered a caldera
