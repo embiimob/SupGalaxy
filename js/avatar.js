@@ -1,12 +1,13 @@
 // Custom player avatars.
 // Supports Mixamo-style rigged .glb/.gltf models (e.g. objkt.com NFTs) and MagicaVoxel .vox models.
-// Models are fitted to the player's ~2 block height, wired to walk/idle/attack/head-pitch
+// Models are fitted to the player's ~2 block height, wired to walk/jump/idle/attack/head-pitch
 // animations, synced to peers via "avatar_update" messages and stored in session saves (profile.avatar).
 
 var AVATAR_HEIGHT = 1.8,
     AVATAR_MAX_WIDTH = 2.4,
     AVATAR_MAX_BYTES = 32 * 1024 * 1024,
     AVATAR_MAX_URL_LENGTH = 600,
+    AVATAR_FETCH_TIMEOUT_MS = 45000,
     AVATAR_FORMATS = ['glb', 'gltf', 'vox'],
     AVATAR_STORAGE_PREFIX = 'supgalaxy_avatar_',
     AVATAR_SAMPLE_SOURCE = 'https://objkt.com/tokens/KT1K1SVcUwH9LQgwMLmGSae6kNu7FP6a1mNW/0',
@@ -19,7 +20,19 @@ var AVATAR_HEIGHT = 1.8,
     avatarBufferCache = new Map(),
     avatarSourceCache = new Map(),
     activeCustomAvatars = new Set(),
-    avatarPreview = null;
+    avatarPreview = null,
+    avatarPreviewRenderer = null;
+
+// Rejects if a lookup/download hangs so a stalled gateway can't leave the dialog stuck on "Loading…".
+function withAvatarTimeout(promise, label) {
+    let timer;
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(label + ' timed out')), AVATAR_FETCH_TIMEOUT_MS);
+        })
+    ]).finally(() => clearTimeout(timer));
+}
 
 function avatarNoopRaycast() { }
 
@@ -140,7 +153,7 @@ function resolveAvatarSource(input) {
     const objkt = raw.match(/objkt\.com\/(?:tokens|asset)\/([A-Za-z0-9_-]+)\/(\d+)/i);
     if (objkt) {
         const contract = OBJKT_CONTRACT_ALIASES[objkt[1].toLowerCase()] || objkt[1];
-        promise = /^KT1[1-9A-HJ-NP-Za-km-z]{33}$/.test(contract) ? resolveObjktToken(contract, objkt[2]) : Promise.reject(new Error('Unsupported objkt contract'));
+        promise = /^KT1[1-9A-HJ-NP-Za-km-z]{33}$/.test(contract) ? withAvatarTimeout(resolveObjktToken(contract, objkt[2]), 'Token lookup') : Promise.reject(new Error('Unsupported objkt contract'));
     } else {
         const url = toAvatarUrl(raw);
         promise = url ? Promise.resolve({ url: url, format: detectAvatarFormat(raw), name: '' }) : Promise.reject(new Error('Use an objkt.com token URL, IPFS:CID, ipfs:// or https:// link'));
@@ -161,9 +174,14 @@ async function readAvatarResponse(response) {
 
 function fetchAvatarBuffer(url) {
     if (avatarBufferCache.has(url)) return avatarBufferCache.get(url);
-    const promise = (async () => {
+    const promise = withAvatarTimeout((async () => {
         const ipfs = parseAvatarIpfsReference(url);
         if (!ipfs) return readAvatarResponse(await fetch(url));
+        // Successful downloads are cached here, so earlier gateway failures must not block an explicit retry.
+        if (typeof clearIpfsFetchFailure === 'function') {
+            clearIpfsFetchFailure(ipfs.hash, ipfs.path);
+            clearIpfsFetchFailure(ipfs.hash, null);
+        }
         const attempts = ipfs.path ? [ipfs.path, null] : [null];
         let lastError = null;
         for (const path of attempts) {
@@ -174,7 +192,7 @@ function fetchAvatarBuffer(url) {
             }
         }
         throw lastError || new Error('IPFS download failed');
-    })();
+    })(), 'Model download');
     avatarBufferCache.set(url, promise);
     promise.catch(() => avatarBufferCache.delete(url));
     return promise;
@@ -199,9 +217,14 @@ function fitAvatarModel(model) {
     return pivot;
 }
 
-function findAvatarBone(bones, patterns) {
-    for (const pattern of patterns) {
-        const bone = bones.find(b => pattern.test(b.name));
+function normalizeAvatarBoneName(name) {
+    return String(name || '').toLowerCase().replace(/^.*mixamorig\d*/, '').replace(/[_.]?\d+$/, '').replace(/[^a-z0-9]/g, '').replace(/^(bip\d*|def|org)/, '').replace(/\d/g, '');
+}
+
+// Matches skeleton bones by normalized name so Mixamo ("mixamorig:LeftUpLeg"), Sketchfab-style suffixed ("LeftUpLeg_057") and Blender ("thigh.L") rigs resolve alike.
+function findAvatarBone(bones, names) {
+    for (const name of names) {
+        const bone = bones.find(b => normalizeAvatarBoneName(b.name) === name);
         if (bone) return bone;
     }
     return null;
@@ -234,13 +257,34 @@ function createBoneController(bone, lowerArm) {
     };
 }
 
-var avatarTmpQuat = new THREE.Quaternion();
+// Elbow axes must be measured with the upper arm already lowered, otherwise the bend axis points the wrong way.
+function createForearmController(armCtrl, bone) {
+    if (!armCtrl || !bone || bone.parent !== armCtrl.bone) return null;
+    armCtrl.bone.quaternion.copy(armCtrl.baseQ);
+    armCtrl.bone.updateMatrixWorld(true);
+    const ctrl = createBoneController(bone);
+    armCtrl.bone.quaternion.copy(armCtrl.restQ);
+    armCtrl.bone.updateMatrixWorld(true);
+    return ctrl;
+}
+
+var avatarTmpQuat = new THREE.Quaternion(),
+    avatarTargetQuat = new THREE.Quaternion();
 
 // Rotates a bone about an avatar-space axis on top of its current (or base) pose.
 function rotateAvatarBone(ctrl, axisName, angle, fromBase) {
     if (!ctrl) return;
     if (fromBase) ctrl.bone.quaternion.copy(ctrl.baseQ);
     if (angle) ctrl.bone.quaternion.premultiply(avatarTmpQuat.setFromAxisAngle(ctrl[axisName], angle));
+}
+
+// Blends a bone from its current (clip-driven) pose toward base pose + avatar-space X rotation.
+function blendAvatarBone(ctrl, angle, weight) {
+    if (!ctrl || weight <= 0) return;
+    avatarTargetQuat.copy(ctrl.baseQ);
+    if (angle) avatarTargetQuat.premultiply(avatarTmpQuat.setFromAxisAngle(ctrl.axisX, angle));
+    if (weight >= 1) ctrl.bone.quaternion.copy(avatarTargetQuat);
+    else ctrl.bone.quaternion.slerp(avatarTargetQuat, weight);
 }
 
 function stripAvatarRootMotion(clip, rootName) {
@@ -253,6 +297,36 @@ function stripAvatarRootMotion(clip, rootName) {
             values[i + 2] = values[2];
         }
     }
+}
+
+// True when a clip is a walk/run cycle: by name, or by how far it swings the thighs.
+function isLocomotionClip(clip, legBones) {
+    if (/walk|run|jog|stride|locomot|sprint/i.test(clip.name)) return true;
+    if (/idle|stand|breath|rest|dance|wave|pose|emote|taunt/i.test(clip.name)) return false;
+    const q0 = new THREE.Quaternion(),
+        q = new THREE.Quaternion();
+    for (const bone of legBones) {
+        if (!bone) continue;
+        const track = clip.tracks.find(t => t.name === bone.name + '.quaternion' && t.getValueSize() === 4);
+        if (!track) continue;
+        const v = track.values;
+        q0.fromArray(v, 0);
+        let range = 0;
+        for (let i = 4; i < v.length; i += 4) range = Math.max(range, q0.angleTo(q.fromArray(v, i)));
+        if (range > 0.35) return true;
+    }
+    return false;
+}
+
+function updateAvatarMotionState(rig, dt, state) {
+    rig.amplitude += ((state.moving ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
+    rig.air += ((state.airborne ? 1 : 0) - rig.air) * Math.min(1, dt * 10);
+    rig.phase += dt * (state.sprint ? 13 : 8) * rig.amplitude;
+    return Math.sin(rig.phase) * rig.amplitude * (1 - rig.air);
+}
+
+function avatarAttackSwing(state) {
+    return state.attack >= 0 ? Math.sin(state.attack * Math.PI) : 0;
 }
 
 function createGltfAvatarRig(gltf) {
@@ -268,97 +342,107 @@ function createGltfAvatarRig(gltf) {
         root: root,
         pivot: root,
         mixer: null,
-        walkAction: null,
-        idleAction: null,
+        locoAction: null,
+        ambientAction: null,
         walkWeight: 0,
         timeScale: 0,
         phase: 0,
         amplitude: 0,
+        air: 0,
         controllers: null
     };
     if (bones.length) {
         const c = {
-            hips: findAvatarBone(bones, [/hips$/i, /pelvis$/i]),
-            leftLeg: findAvatarBone(bones, [/left_?up_?leg$/i, /left_?thigh$/i, /thigh[._]?l$/i, /upper_?leg[._]?l$/i]),
-            rightLeg: findAvatarBone(bones, [/right_?up_?leg$/i, /right_?thigh$/i, /thigh[._]?r$/i, /upper_?leg[._]?r$/i]),
-            leftKnee: findAvatarBone(bones, [/left_?leg$/i, /left_?(calf|shin)$/i, /(calf|shin|lower_?leg)[._]?l$/i]),
-            rightKnee: findAvatarBone(bones, [/right_?leg$/i, /right_?(calf|shin)$/i, /(calf|shin|lower_?leg)[._]?r$/i]),
-            leftArm: findAvatarBone(bones, [/left_?arm$/i, /left_?upper_?arm$/i, /upper_?arm[._]?l$/i]),
-            rightArm: findAvatarBone(bones, [/right_?arm$/i, /right_?upper_?arm$/i, /upper_?arm[._]?r$/i]),
-            head: findAvatarBone(bones, [/head$/i, /neck$/i])
+            hips: findAvatarBone(bones, ['hips', 'pelvis', 'hip']),
+            leftLeg: findAvatarBone(bones, ['leftupleg', 'leftthigh', 'thighl', 'upperlegl', 'leftupperleg', 'lthigh', 'thighleft']),
+            rightLeg: findAvatarBone(bones, ['rightupleg', 'rightthigh', 'thighr', 'upperlegr', 'rightupperleg', 'rthigh', 'thighright']),
+            leftKnee: findAvatarBone(bones, ['leftleg', 'leftcalf', 'leftshin', 'calfl', 'shinl', 'lowerlegl', 'leftlowerleg', 'lcalf', 'leftknee']),
+            rightKnee: findAvatarBone(bones, ['rightleg', 'rightcalf', 'rightshin', 'calfr', 'shinr', 'lowerlegr', 'rightlowerleg', 'rcalf', 'rightknee']),
+            leftArm: findAvatarBone(bones, ['leftarm', 'leftupperarm', 'upperarml', 'upperarmleft', 'lupperarm']),
+            rightArm: findAvatarBone(bones, ['rightarm', 'rightupperarm', 'upperarmr', 'upperarmright', 'rupperarm']),
+            leftForeArm: findAvatarBone(bones, ['leftforearm', 'leftlowerarm', 'forearml', 'lowerarml', 'lforearm', 'leftelbow']),
+            rightForeArm: findAvatarBone(bones, ['rightforearm', 'rightlowerarm', 'forearmr', 'lowerarmr', 'rforearm', 'rightelbow']),
+            head: findAvatarBone(bones, ['head']) || findAvatarBone(bones, ['neck'])
         };
-        const animated = gltf.animations && gltf.animations.length > 0;
-        const animatedNodes = new Set();
-        if (animated) gltf.animations.forEach(clip => clip.tracks.forEach(track => animatedNodes.add(track.name.split('.')[0])));
-        const needsLowering = bone => !!bone && !animatedNodes.has(bone.name);
-        rig.controllers = {
+        const ctrl = {
             leftLeg: createBoneController(c.leftLeg),
             rightLeg: createBoneController(c.rightLeg),
             leftKnee: createBoneController(c.leftKnee),
             rightKnee: createBoneController(c.rightKnee),
-            leftArm: createBoneController(c.leftArm, needsLowering(c.leftArm)),
-            rightArm: createBoneController(c.rightArm, needsLowering(c.rightArm)),
+            leftArm: createBoneController(c.leftArm, true),
+            rightArm: createBoneController(c.rightArm, true),
             head: createBoneController(c.head)
         };
-        if (!rig.controllers.leftLeg && !rig.controllers.rightLeg && !rig.controllers.leftArm && !rig.controllers.head) rig.controllers = null;
+        ctrl.leftForeArm = createForearmController(ctrl.leftArm, c.leftForeArm);
+        ctrl.rightForeArm = createForearmController(ctrl.rightArm, c.rightForeArm);
+        if (ctrl.leftLeg || ctrl.rightLeg || ctrl.leftArm || ctrl.rightArm || ctrl.head) rig.controllers = ctrl;
         const rootBone = c.hips || bones.find(b => !b.parent || !b.parent.isBone);
-        if (animated) {
-            const clips = gltf.animations;
+        const clips = gltf.animations || [];
+        if (clips.length) {
             clips.forEach(clip => stripAvatarRootMotion(clip, rootBone && rootBone.name));
-            const walkClip = clips.find(clip => /walk|run|jog|stride|locomot/i.test(clip.name)) || clips[0];
-            const idleClip = clips.find(clip => clip !== walkClip && /idle|stand|breath|rest/i.test(clip.name)) || null;
+            const locoClip = clips.find(clip => isLocomotionClip(clip, [c.leftLeg, c.rightLeg])) || null;
+            const ambientClip = clips.find(clip => clip !== locoClip && /idle|stand|breath|rest/i.test(clip.name)) ||
+                clips.find(clip => clip !== locoClip) || null;
             rig.mixer = new THREE.AnimationMixer(model);
-            rig.walkAction = rig.mixer.clipAction(walkClip);
-            rig.walkAction.play();
-            rig.walkAction.setEffectiveTimeScale(0);
-            if (idleClip) {
-                rig.idleAction = rig.mixer.clipAction(idleClip);
-                rig.idleAction.play();
-                rig.walkAction.setEffectiveWeight(0);
+            if (locoClip) {
+                rig.locoAction = rig.mixer.clipAction(locoClip);
+                rig.locoAction.play();
+                rig.locoAction.setEffectiveTimeScale(0);
+            }
+            if (ambientClip) {
+                rig.ambientAction = rig.mixer.clipAction(ambientClip);
+                rig.ambientAction.play();
+                if (rig.locoAction) rig.locoAction.setEffectiveWeight(0);
             }
             rig.mixer.update(0);
         }
     }
+    const ctrlList = rig.controllers ? Object.values(rig.controllers).filter(Boolean) : [];
     rig.update = function (dt, state) {
-        const moving = !!state.moving;
-        rig.amplitude += ((moving ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
-        rig.phase += dt * (state.sprint ? 13 : 8) * rig.amplitude;
-        const swing = Math.sin(rig.phase) * rig.amplitude;
+        const swing = updateAvatarMotionState(rig, dt, state);
+        const air = rig.air;
+        const attack = avatarAttackSwing(state);
         const ctrl = rig.controllers;
         if (rig.mixer) {
             const speed = state.sprint ? 1.6 : 1;
-            if (rig.idleAction) {
-                rig.walkWeight += ((moving ? 1 : 0) - rig.walkWeight) * Math.min(1, dt * 6);
-                rig.walkAction.setEffectiveWeight(rig.walkWeight);
-                rig.idleAction.setEffectiveWeight(1 - rig.walkWeight);
-                rig.walkAction.setEffectiveTimeScale(speed);
-            } else {
-                rig.timeScale += ((moving ? speed : 0) - rig.timeScale) * Math.min(1, dt * 6);
-                rig.walkAction.setEffectiveTimeScale(rig.timeScale < 0.02 ? 0 : rig.timeScale);
+            if (rig.locoAction && rig.ambientAction) {
+                rig.walkWeight += ((state.moving ? 1 : 0) - rig.walkWeight) * Math.min(1, dt * 6);
+                rig.locoAction.setEffectiveWeight(rig.walkWeight);
+                rig.ambientAction.setEffectiveWeight(1 - rig.walkWeight);
+                rig.locoAction.setEffectiveTimeScale(speed);
+            } else if (rig.locoAction) {
+                rig.timeScale += ((state.moving ? speed : 0) - rig.timeScale) * Math.min(1, dt * 6);
+                rig.locoAction.setEffectiveTimeScale(rig.timeScale < 0.02 ? 0 : rig.timeScale);
             }
-            // Reset overlay bones first so additive pitch/attack never accumulates on bones the clip doesn't drive.
-            if (ctrl) {
-                [ctrl.head, ctrl.leftArm, ctrl.rightArm].forEach(c => c && c.bone.quaternion.copy(c.baseQ));
-            }
+            // Reset driven bones so bones the clip doesn't animate never accumulate procedural layers.
+            ctrlList.forEach(c => c.bone.quaternion.copy(c.baseQ));
             rig.mixer.update(dt);
-            if (ctrl) {
-                rotateAvatarBone(ctrl.head, 'axisX', clampAvatarPitch(state.pitch), false);
-                if (state.attack >= 0) rotateAvatarBone(ctrl.rightArm, 'axisX', 1.6 * Math.sin(state.attack * Math.PI), false);
+        }
+        if (ctrl) {
+            // Without a walk clip, the standard walk cycle drives the limbs; a jump pose always blends in while airborne.
+            const walk = rig.locoAction ? 0 : swing;
+            const weight = rig.mixer ? Math.max(rig.locoAction ? 0 : rig.amplitude, air) : 1;
+            blendAvatarBone(ctrl.leftLeg, 0.6 * walk + 0.7 * air, weight);
+            blendAvatarBone(ctrl.rightLeg, -0.6 * walk + 0.35 * air, weight);
+            blendAvatarBone(ctrl.leftKnee, -0.9 * Math.max(0, -walk) - 1.1 * air, weight);
+            blendAvatarBone(ctrl.rightKnee, -0.9 * Math.max(0, walk) - 0.6 * air, weight);
+            blendAvatarBone(ctrl.leftArm, -0.5 * walk + 0.6 * air, weight);
+            blendAvatarBone(ctrl.rightArm, 0.5 * walk + 0.6 * air, weight);
+            blendAvatarBone(ctrl.leftForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
+            blendAvatarBone(ctrl.rightForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
+            if (!rig.mixer) blendAvatarBone(ctrl.head, 0, 1);
+            // Mining / attack swing layered on top, mirroring the default avatar's arm chop.
+            if (attack) {
+                rotateAvatarBone(ctrl.rightArm, 'axisX', 1.8 * attack, false);
+                rotateAvatarBone(ctrl.rightForeArm, 'axisX', 0.6 * attack, false);
+                rotateAvatarBone(ctrl.leftArm, 'axisX', 0.5 * attack, false);
             }
-        } else if (ctrl) {
-            rotateAvatarBone(ctrl.leftLeg, 'axisX', 0.6 * swing, true);
-            rotateAvatarBone(ctrl.rightLeg, 'axisX', -0.6 * swing, true);
-            rotateAvatarBone(ctrl.leftKnee, 'axisX', -0.9 * Math.max(0, -swing), true);
-            rotateAvatarBone(ctrl.rightKnee, 'axisX', -0.9 * Math.max(0, swing), true);
-            rotateAvatarBone(ctrl.leftArm, 'axisX', -0.5 * swing, true);
-            const attackSwing = state.attack >= 0 ? 1.6 * Math.sin(state.attack * Math.PI) : 0;
-            rotateAvatarBone(ctrl.rightArm, 'axisX', 0.5 * swing + attackSwing, true);
-            rotateAvatarBone(ctrl.head, 'axisX', clampAvatarPitch(state.pitch), true);
+            rotateAvatarBone(ctrl.head, 'axisX', clampAvatarPitch(state.pitch), false);
             rig.pivot.position.y = Math.abs(swing) * 0.04;
         } else {
             rig.pivot.position.y = Math.abs(swing) * 0.06;
             rig.pivot.rotation.z = swing * 0.06;
-            rig.pivot.rotation.x = state.attack >= 0 ? -0.3 * Math.sin(state.attack * Math.PI) : 0;
+            rig.pivot.rotation.x = -0.3 * attack + 0.12 * air;
         }
     };
     return rig;
@@ -446,18 +530,44 @@ function buildVoxAvatarRig(buffer) {
         centerZ = (minZ + maxZ + 1) / 2,
         legCut = minY + Math.round(height * 0.375),
         headCut = minY + Math.round(height * 0.75),
+        footCut = minY + Math.max(1, Math.floor(height * 0.25)),
         segmented = height >= 6;
-    const legBounds = { legL: [Infinity, -Infinity], legR: [Infinity, -Infinity] };
+    const legBounds = { legL: [Infinity, -Infinity], legR: [Infinity, -Infinity] },
+        armBounds = { armL: [Infinity, -Infinity], armR: [Infinity, -Infinity] };
     if (segmented) {
         for (const cell of cells.values()) {
             if (cell.y < legCut) {
                 cell.part = cell.x + 0.5 < centerX ? 'legL' : 'legR';
-                legBounds[cell.part][0] = Math.min(legBounds[cell.part][0], cell.x);
-                legBounds[cell.part][1] = Math.max(legBounds[cell.part][1], cell.x + 1);
+                // Measure leg width near the feet so a low hip/torso row doesn't widen the span.
+                if (cell.y < footCut) {
+                    legBounds[cell.part][0] = Math.min(legBounds[cell.part][0], cell.x);
+                    legBounds[cell.part][1] = Math.max(legBounds[cell.part][1], cell.x + 1);
+                }
             } else if (cell.y >= headCut) cell.part = 'head';
         }
+        // Torso columns outside the leg span become arms (classic voxel character layout).
+        const legMin = legBounds.legL[0],
+            legMax = legBounds.legR[1];
+        if (isFinite(legMin) && isFinite(legMax)) {
+            const armCells = [];
+            for (const cell of cells.values()) {
+                if (cell.part !== 'body') continue;
+                if (cell.x < legMin) armCells.push([cell, 'armL']);
+                else if (cell.x >= legMax) armCells.push([cell, 'armR']);
+            }
+            if (armCells.some(a => a[1] === 'armL') && armCells.some(a => a[1] === 'armR')) {
+                for (const [cell, part] of armCells) {
+                    cell.part = part;
+                    armBounds[part][0] = Math.min(armBounds[part][0], cell.x);
+                    armBounds[part][1] = Math.max(armBounds[part][1], cell.x + 1);
+                }
+            }
+        }
     }
+    const armPivotX = part => (armBounds[part][0] + armBounds[part][1]) / 2;
     const pivots = {
+        armL: [isFinite(armBounds.armL[0]) ? armPivotX('armL') : centerX, headCut - 0.5, centerZ],
+        armR: [isFinite(armBounds.armR[0]) ? armPivotX('armR') : centerX, headCut - 0.5, centerZ],
         body: [0, 0, 0],
         head: [centerX, headCut, centerZ],
         legL: [isFinite(legBounds.legL[0]) ? (legBounds.legL[0] + legBounds.legL[1]) / 2 : centerX, legCut, centerZ],
@@ -497,17 +607,18 @@ function buildVoxAvatarRig(buffer) {
         parts[name] = holder;
     }
     const root = fitAvatarModel(model);
-    const rig = { root: root, pivot: root, phase: 0, amplitude: 0 };
+    const rig = { root: root, pivot: root, phase: 0, amplitude: 0, air: 0 };
     // Parts live inside the PI-rotated pivot, so avatar-space X rotations are negated here.
     rig.update = function (dt, state) {
-        rig.amplitude += ((state.moving ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
-        rig.phase += dt * (state.sprint ? 13 : 8) * rig.amplitude;
-        const swing = Math.sin(rig.phase) * rig.amplitude;
-        if (parts.legL) parts.legL.rotation.x = -0.6 * swing;
-        if (parts.legR) parts.legR.rotation.x = 0.6 * swing;
+        const swing = updateAvatarMotionState(rig, dt, state);
+        const air = rig.air;
+        const attack = avatarAttackSwing(state);
+        if (parts.legL) parts.legL.rotation.x = -0.6 * swing - 0.6 * air;
+        if (parts.legR) parts.legR.rotation.x = 0.6 * swing - 0.3 * air;
+        if (parts.armL) parts.armL.rotation.x = 0.5 * swing - 0.7 * air - 0.4 * attack;
+        if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air - 1.6 * attack;
         if (parts.head) parts.head.rotation.x = -clampAvatarPitch(state.pitch);
-        const attack = state.attack >= 0 ? Math.sin(state.attack * Math.PI) : 0;
-        if (parts.body) parts.body.rotation.x = 0.25 * attack;
+        if (parts.body) parts.body.rotation.x = parts.armR ? 0 : 0.25 * attack;
         rig.pivot.position.y = Math.abs(swing) * 0.05;
     };
     return rig;
@@ -622,16 +733,23 @@ function updateCustomAvatars(dt, now, localMoving) {
                 moving: localMoving,
                 sprint: isSprinting,
                 pitch: player.pitch,
+                airborne: !player.onGround,
                 attack: isAttacking ? Math.min(1, (now - attackStartTime) / 500) : -1
             };
         } else {
             const position = typeof userPositions !== 'undefined' ? userPositions[group.userData.avatarUser] : null;
             if (!position || position.isDying) continue;
             const attackElapsed = position.localAnimStartTime ? performance.now() - position.localAnimStartTime : -1;
+            // Peers don't send ground state, so infer jumps/falls from the interpolated vertical speed.
+            const lastY = group.userData.avatarLastY;
+            const vy = lastY === undefined || dt <= 0 ? 0 : (group.position.y - lastY) / dt;
+            group.userData.avatarLastY = group.position.y;
+            group.userData.avatarVy = (group.userData.avatarVy || 0) * 0.7 + vy * 0.3;
             state = {
                 moving: !!position.isMoving,
                 sprint: false,
                 pitch: position.targetPitch,
+                airborne: Math.abs(group.userData.avatarVy) > 1.5,
                 attack: attackElapsed >= 0 && attackElapsed < 500 ? attackElapsed / 500 : -1
             };
         }
@@ -744,13 +862,14 @@ function createDefaultPreviewModel() {
         root: pivot,
         shared: true,
         phase: 0,
-        update: function (dt) {
+        update: function (dt, state) {
             this.phase += dt * 8;
-            const swing = 0.5 * Math.sin(this.phase);
+            const swing = state && state.airborne ? 0 : 0.5 * Math.sin(this.phase);
+            const attack = state ? 1.5 * avatarAttackSwing(state) : 0;
             group.children[0].rotation.x = swing;
             group.children[1].rotation.x = -swing;
-            group.children[4].rotation.x = -swing;
-            group.children[5].rotation.x = swing;
+            group.children[4].rotation.x = -swing + attack;
+            group.children[5].rotation.x = swing + attack;
         }
     };
 }
@@ -775,17 +894,42 @@ function setPreviewRig(rig) {
     if (rig) avatarPreview.turntable.add(rig.root);
 }
 
+// Showcase loop for the preview: walk, swing (mine/attack), walk, jump.
+function avatarPreviewState(time) {
+    const t = time % 6;
+    const jump = t >= 4.6 && t < 5.4 ? (t - 4.6) / 0.8 : -1;
+    return {
+        moving: true,
+        sprint: false,
+        pitch: 0,
+        airborne: jump >= 0,
+        jumpHeight: jump >= 0 ? Math.sin(jump * Math.PI) * 0.45 : 0,
+        attack: t >= 2 && t < 2.5 ? (t - 2) / 0.5 : -1
+    };
+}
+
+// One WebGL context is created lazily and reused for every dialog open; recreating it on a canvas
+// whose context was force-lost fails silently, which froze the preview after the first use.
+function getAvatarPreviewRenderer(canvas) {
+    if (avatarPreviewRenderer && avatarPreviewRenderer.domElement === canvas && !avatarPreviewRenderer.getContext().isContextLost()) return avatarPreviewRenderer;
+    if (avatarPreviewRenderer) avatarPreviewRenderer.dispose();
+    avatarPreviewRenderer = null;
+    avatarPreviewRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    avatarPreviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    return avatarPreviewRenderer;
+}
+
 function startAvatarPreview() {
     const canvas = document.getElementById('avatarPreviewCanvas');
     if (!canvas || avatarPreview) return;
     let renderer;
     try {
-        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        renderer = getAvatarPreviewRenderer(canvas);
     } catch (e) {
+        console.warn('[Avatar] Preview renderer failed:', e);
         setAvatarStatus('Preview unavailable (WebGL)', true);
         return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
     const previewScene = new THREE.Scene();
     const previewCamera = new THREE.PerspectiveCamera(35, (canvas.clientWidth || 300) / (canvas.clientHeight || 300), 0.1, 50);
@@ -799,7 +943,7 @@ function startAvatarPreview() {
     previewScene.add(grid);
     const turntable = new THREE.Group();
     previewScene.add(turntable);
-    avatarPreview = {
+    const preview = {
         renderer: renderer,
         scene: previewScene,
         camera: previewCamera,
@@ -807,18 +951,30 @@ function startAvatarPreview() {
         turntable: turntable,
         rig: null,
         frame: 0,
+        time: 0,
         last: performance.now()
     };
+    avatarPreview = preview;
     const loop = now => {
-        if (!avatarPreview) return;
-        const dt = Math.min(0.06, (now - avatarPreview.last) / 1000);
-        avatarPreview.last = now;
+        if (avatarPreview !== preview) return;
+        preview.frame = requestAnimationFrame(loop);
+        const dt = Math.max(0, Math.min(0.06, (now - preview.last) / 1000));
+        preview.last = now;
+        preview.time += dt;
         turntable.rotation.y += dt * 0.7;
-        if (avatarPreview.rig) avatarPreview.rig.update(dt, { moving: true, sprint: false, pitch: 0, attack: -1 });
-        renderer.render(previewScene, previewCamera);
-        avatarPreview.frame = requestAnimationFrame(loop);
+        const state = avatarPreviewState(preview.time);
+        turntable.position.y = state.jumpHeight;
+        try {
+            if (preview.rig) preview.rig.update(dt, state);
+            renderer.render(previewScene, previewCamera);
+        } catch (e) {
+            // A broken model must not kill the loop; drop it and keep rendering.
+            console.warn('[Avatar] Preview frame failed:', e);
+            setPreviewRig(null);
+            setAvatarStatus('Model could not be rendered', true);
+        }
     };
-    avatarPreview.frame = requestAnimationFrame(loop);
+    preview.frame = requestAnimationFrame(loop);
 }
 
 function stopAvatarPreview() {
@@ -827,8 +983,7 @@ function stopAvatarPreview() {
     setPreviewRig(null);
     avatarPreview.grid.geometry.dispose();
     avatarPreview.grid.material.dispose();
-    avatarPreview.renderer.dispose();
-    avatarPreview.renderer.forceContextLoss();
+    avatarPreview.renderer.renderLists.dispose();
     avatarPreview = null;
 }
 
