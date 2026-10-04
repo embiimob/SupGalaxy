@@ -3641,39 +3641,80 @@ function getCeilingLimitedY(x, y, z, targetY) {
     return safeY;
 }
 
+// Mesh (magician stone GLB) collision tuning.
+// The lowest MESH_STEP_HEIGHT of the player's body is handled by ground snapping
+// instead of solid collision, so uneven/sloped model surfaces are walkable
+// without constantly reporting the player as "inside" the mesh.
+const MESH_STEP_HEIGHT = 0.55;
+const MESH_SNAP_DOWN = 0.3;
+const _meshPlayerBox = new THREE.Box3();
+const _meshStoneBox = new THREE.Box3();
+const _meshChildBox = new THREE.Box3();
+const _meshRaycaster = new THREE.Raycaster();
+const _meshRayOrigin = new THREE.Vector3();
+const _meshRayDown = new THREE.Vector3(0, -1, 0);
+const _meshHitNormal = new THREE.Vector3();
+
+function getCollidableStoneMeshes(box) {
+    if (!magicianStones) return [];
+    const meshes = [];
+    for (const stone of Object.values(magicianStones)) {
+        if (!stone.mesh || stone.collision === false) continue;
+        _meshStoneBox.setFromObject(stone.mesh);
+        if (_meshStoneBox.intersectsBox(box)) meshes.push(stone.mesh);
+    }
+    return meshes;
+}
+
 function checkMeshCollision(x, y, z) {
     // Only check if magicianStones exist
     if (!magicianStones || Object.keys(magicianStones).length === 0) return false;
 
-    const playerBox = new THREE.Box3();
-    playerBox.min.set(x, y, z);
-    playerBox.max.set(x + player.width, y + player.height, z + player.depth);
+    // Feet band (below MESH_STEP_HEIGHT) is resolved by getMeshGroundY, not as a solid hit.
+    _meshPlayerBox.min.set(x, y + MESH_STEP_HEIGHT, z);
+    _meshPlayerBox.max.set(x + player.width, y + player.height, z + player.depth);
 
-    // Optimization: Reuse Box3 objects if possible, but creating new ones is safer for now.
-    const stones = Object.values(magicianStones);
-
-    for (const stone of stones) {
-        if (!stone.mesh) continue;
-        
-        // Skip collision check if collision is disabled for this stone
-        if (stone.collision === false) continue;
-
-        const stoneBox = new THREE.Box3().setFromObject(stone.mesh);
-        if (!playerBox.intersectsBox(stoneBox)) continue;
-
-        // Detailed check
+    for (const mesh of getCollidableStoneMeshes(_meshPlayerBox)) {
         let collision = false;
-        stone.mesh.traverse((child) => {
-            if (collision) return;
-            if (child.isMesh) {
-                if (checkGeometryCollision(child, playerBox)) {
-                    collision = true;
-                }
-            }
+        mesh.traverse((child) => {
+            if (collision || !child.isMesh || !child.geometry) return;
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            _meshChildBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
+            if (!_meshChildBox.intersectsBox(_meshPlayerBox)) return;
+            if (checkGeometryCollision(child, _meshPlayerBox)) collision = true;
         });
         if (collision) return true;
     }
     return false;
+}
+
+// Returns the highest mesh surface under the player's footprint between topY and minY, or null if none.
+function getMeshGroundY(x, z, topY, minY) {
+    if (!magicianStones || Object.keys(magicianStones).length === 0) return null;
+    _meshPlayerBox.min.set(x, minY, z);
+    _meshPlayerBox.max.set(x + player.width, topY, z + player.depth);
+    const meshes = getCollidableStoneMeshes(_meshPlayerBox);
+    if (meshes.length === 0) return null;
+
+    const inset = 0.1;
+    const probes = [
+        [player.width / 2, player.depth / 2],
+        [inset, inset],
+        [player.width - inset, inset],
+        [inset, player.depth - inset],
+        [player.width - inset, player.depth - inset]
+    ];
+    let groundY = null;
+    for (const [px, pz] of probes) {
+        _meshRayOrigin.set(x + px, topY, z + pz);
+        _meshRaycaster.set(_meshRayOrigin, _meshRayDown);
+        _meshRaycaster.far = topY - minY;
+        // Only upward-facing surfaces count as ground (skip undersides of overhangs).
+        const hit = _meshRaycaster.intersectObjects(meshes, true).find(h => h.object.isMesh && (!h.face ||
+            _meshHitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0));
+        if (hit && (groundY === null || hit.point.y > groundY)) groundY = hit.point.y;
+    }
+    return groundY;
 }
 
 function checkGeometryCollision(mesh, box) {
@@ -3744,23 +3785,14 @@ function checkGeometryCollision(mesh, box) {
     return false;
 }
 
-function getMeshSurfaceY(x, y, z) {
-    // Cast ray down from head level
-    const origin = new THREE.Vector3(x + player.width/2, y + player.height, z + player.depth/2);
-    const raycaster = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0));
-    // Look down slightly more than player height to find the ground we just hit or are about to hit
-    raycaster.far = player.height + 2;
+const PUSH_OUT_MESSAGE_COOLDOWN_MS = 2000;
+let lastPushOutMessageTime = 0;
 
-    const meshes = Object.values(magicianStones).map(s => s.mesh).filter(m => m);
-    if (meshes.length === 0) return null;
-
-    const intersects = raycaster.intersectObjects(meshes, true);
-
-    if (intersects.length > 0) {
-        // Find the highest intersection point that is below the head
-        return intersects[0].point.y;
-    }
-    return null;
+function notifyPushedOut() {
+    const now = Date.now();
+    if (now - lastPushOutMessageTime < PUSH_OUT_MESSAGE_COOLDOWN_MS) return;
+    lastPushOutMessageTime = now;
+    addMessage("Pushed out of block");
 }
 
 function pushPlayerOut() {
@@ -3793,7 +3825,7 @@ function pushPlayerOut() {
             var a = modWrap(player.x + o.dx, MAP_SIZE),
                 n = modWrap(player.z + o.dz, MAP_SIZE),
                 r = player.y + t;
-            if (!checkCollision(a, r, n)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, addMessage("Pushed out of block"), !0
+            if (!checkCollision(a, r, n)) return player.x = a, player.y = r, player.z = n, player.vy = 0, player.onGround = !0, notifyPushedOut(), !0
         }
     return !1
 }
@@ -5703,6 +5735,8 @@ function gameLoop(e) {
         }
         var u = player.vy * t,
             p = player.y + u;
+        const wasOnGround = player.onGround,
+            previousY = player.y;
         if (u > 0) {
             const safeY = getCeilingLimitedY(player.x, player.y, player.z, p);
             if (safeY < p) player.vy = 0;
@@ -5713,11 +5747,6 @@ function gameLoop(e) {
                 if (checkBlockCollision(player.x, p, player.z)) {
                     const stairLandingY = getStairLandingHeight(player.x, player.y, player.z, p);
                     player.y = stairLandingY === null ? Math.ceil(p - .001) : stairLandingY;
-                } else {
-                    const meshY = getMeshSurfaceY(player.x, player.y, player.z);
-                    if (meshY !== null) {
-                        player.y = meshY;
-                    }
                 }
                 player.vy = 0;
                 player.onGround = !0;
@@ -5725,6 +5754,18 @@ function gameLoop(e) {
         } else {
             player.y = p;
             player.onGround = !1;
+        }
+        if (player.vy <= 0) {
+            // Rest on / step up onto magician stone model surfaces; stick to them when walking downhill.
+            const meshMinY = player.y - (wasOnGround ? MESH_SNAP_DOWN : 0);
+            const meshTopY = Math.max(previousY, player.y) + MESH_STEP_HEIGHT;
+            const meshGroundY = getMeshGroundY(player.x, player.z, meshTopY, meshMinY);
+            if (meshGroundY !== null && meshGroundY >= meshMinY &&
+                !checkCollision(player.x, meshGroundY, player.z)) {
+                player.y = meshGroundY;
+                player.vy = 0;
+                player.onGround = !0;
+            }
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
         for (const e of mobs)
