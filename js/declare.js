@@ -1184,6 +1184,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     gravity = 16,
     projectiles = [],
     projectileLightPool = [],
+    laserImpactLights = [],
+    laserImpactLightPool = [],
     projectileMeshPool = [],
     laserQueue = [],
     laserFireQueue = [],

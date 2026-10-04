@@ -687,7 +687,7 @@ function setupDataChannel(e, t) {
                         }
                     }
                     if (s.world === worldName) {
-                         if (Math.hypot(player.x - s.wx, player.y - s.wy, player.z - s.wz) < maxAudioDistance && (0 !== s.bid ? safePlayAudio(soundPlace) : safePlayAudio(soundBreak)), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed, 'network'), s.originSeed && s.originSeed !== worldSeed) {
+                         if ((0 !== s.bid ? safePlayAudioAt(soundPlace, { x: s.wx, y: s.wy, z: s.wz }) : safePlayAudioAt(soundBreak, { x: s.wx, y: s.wy, z: s.wz })), chunkManager.setBlockGlobal(s.wx, s.wy, s.wz, s.bid, !1, s.originSeed, 'network'), s.originSeed && s.originSeed !== worldSeed) {
                             const e = `${s.wx},${s.wy},${s.wz}`;
                             getCurrentWorldState().foreignBlockOrigins.set(e, s.originSeed)
                         }
@@ -979,7 +979,7 @@ function setupDataChannel(e, t) {
                             addMessage("Hit by " + attacker + "! HP: " + player.health, 1e3);
                         }
                         flashDamageEffect();
-                        safePlayAudio(soundHit);
+                        safePlayAudioAt(soundHit, getAudioPositionForPlayer(s.attacker) || player);
 
                         if (s.kx !== undefined && s.kz !== undefined) {
                             player.vx += s.kx;
@@ -1860,7 +1860,7 @@ function setupDataChannel(e, t) {
                         if (s.username === userName) {
                             addMessage("Placed " + (BLOCKS[s.blockId] ? BLOCKS[s.blockId].name : s.blockId));
                             // Play audio only for the initiating client
-                            safePlayAudio(soundPlace);
+                            safePlayAudioAt(soundPlace, { x: s.x, y: s.y, z: s.z });
                         }
 
                         // Handle light blocks
@@ -1891,7 +1891,7 @@ function setupDataChannel(e, t) {
                         // Play audio only for the initiating client
                         if (s.username === userName) {
                             addMessage("Picked up " + (BLOCKS[blockId] ? BLOCKS[blockId].name : blockId));
-                            safePlayAudio(soundBreak);
+                            safePlayAudioAt(soundBreak, { x: s.x, y: s.y, z: s.z });
                         }
 
                         // Handle light blocks

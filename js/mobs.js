@@ -830,7 +830,7 @@ function handleMobHit(t) {
             }
         }
     }
-    safePlayAudio(soundHit), addMessage("Hit mob!", 800)
+    safePlayAudioAt(soundHit, t.pos), addMessage("Hit mob!", 800)
 }
 function updateAquaticMob(t, delta) {
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
@@ -1141,10 +1141,10 @@ Mob.prototype.update = function (t) {
 
         if (this.engineAudio) {
             const distToPlayer = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            const maxAudioDistance = 192;
+            const maxAudioDistance = 32;
             let volume = 0;
             if (distToPlayer < maxAudioDistance) {
-                volume = Math.max(0, 1 - distToPlayer / maxAudioDistance);
+                volume = Math.pow(Math.max(0, 1 - distToPlayer / maxAudioDistance), rolloffFactor);
             }
             this.engineAudio.volume = volume;
             if (this.engineAudio2) {
@@ -1265,14 +1265,7 @@ Mob.prototype.update = function (t) {
                         if (!playedAudioThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
                             if (fireAudioTemplate) {
-                                const fireAudio = fireAudioTemplate.cloneNode(true);
-                                const distToPlayer = Math.hypot(player.x - pPos.x, player.y - pPos.y, player.z - pPos.z);
-                                let vol = 0;
-                                if (distToPlayer < 192) {
-                                    vol = Math.max(0, 1 - distToPlayer / 192);
-                                }
-                                fireAudio.volume = vol * 0.75;
-                                fireAudio.play().catch(e => {});
+                                safePlayAudioAt(fireAudioTemplate, pPos, maxAudioDistance, 0.75);
                             }
                             playedAudioThisFrame = true;
                         }
@@ -1770,7 +1763,7 @@ Mob.prototype.update = function (t) {
             if (i && o < 1.5) {
                 if (0 === this.lingerTime) this.lingerTime = Date.now();
                 else if (Date.now() - this.lingerTime > 2e3) {
-                    Math.hypot(player.x - i.x, player.y - i.y, player.z - i.z) < maxAudioDistance && safePlayAudio(soundBreak), chunkManager.setBlockGlobal(i.x, i.y, i.z, 0), setTimeout((() => checkAndDeactivateHive(i.x, i.y, i.z)), 100), i = null, this.lingerTime = 0
+                    safePlayAudioAt(soundBreak, i), chunkManager.setBlockGlobal(i.x, i.y, i.z, 0), setTimeout((() => checkAndDeactivateHive(i.x, i.y, i.z)), 100), i = null, this.lingerTime = 0
                     this.crawleyResourceTarget = null;
                 }
             } else this.lingerTime = 0
@@ -2097,7 +2090,7 @@ Mob.prototype.update = function (t) {
         this.wasAttacked = true;
         this.isAggressive = true;
     }
-    this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudio(soundHit);
+    this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudioAt(soundHit, this.pos);
     const s = e === userName ? player : userPositions[e];
     if (s) {
         const t = e === userName ? s.x : s.targetX,
@@ -2193,7 +2186,7 @@ Mob.prototype.update = function (t) {
         player.score += e;
         document.getElementById("score").innerText = player.score;
         addMessage(`+${e} score`);
-        safePlayAudio(soundHit);
+        safePlayAudioAt(soundHit, this.pos);
 
         // Broadcast new score to host so it updates all clients
         if (!isHost) {
