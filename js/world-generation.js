@@ -780,6 +780,8 @@ function handleVolcanoEvent(e) {
                 volcano: e.volcano,
                 soundId: t
             };
+            const distance = Math.hypot(player.x - e.volcano.x, player.y - e.volcano.y, player.z - e.volcano.z);
+            a.volume = distance < maxAudioDistance ? Math.pow(1 - distance / maxAudioDistance, rolloffFactor) : 0;
             activeEruptions.push(n), a.currentTime = 0, safePlayAudio(a), a.onended = () => {
                 console.log(`[Audio] Sound ${t} finished playing.`), activeEruptions = activeEruptions.filter((e => e.id !== o)), a.onended = null
             }
@@ -950,6 +952,36 @@ function safePlayAudio(e) {
             }
         }))
     }
+}
+
+function safePlayAudioAt(audio, position, maxDistance = maxAudioDistance, volumeScale = 1) {
+    if (!audio || !position || !player || isAutoplayPaused) return;
+    const x = Number.isFinite(position.x) ? position.x : null;
+    const y = Number.isFinite(position.y) ? position.y : null;
+    const z = Number.isFinite(position.z) ? position.z : null;
+    if (x === null || y === null || z === null) return;
+
+    const distance = Math.hypot(player.x - x, player.y - y, player.z - z);
+    if (distance >= maxDistance) return;
+
+    const sound = audio.cloneNode(true);
+    sound.volume = audio.volume * volumeScale * Math.pow(Math.max(0, 1 - distance / maxDistance), rolloffFactor);
+    sound.onended = () => sound.remove();
+    const playPromise = sound.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => sound.remove());
+    }
+}
+
+function getAudioPositionForPlayer(username) {
+    if (username === userName) return player;
+    const position = userPositions[username];
+    if (!position) return null;
+    return {
+        x: Number.isFinite(position.targetX) ? position.targetX : position.x,
+        y: Number.isFinite(position.targetY) ? position.targetY : position.y,
+        z: Number.isFinite(position.targetZ) ? position.targetZ : position.z
+    };
 }
 
 function manageTreeSeeds() {

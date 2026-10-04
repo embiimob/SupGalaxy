@@ -1287,12 +1287,13 @@ function getProjectileLight(colorHex) {
         if (!projectileLightPool[i].inUse) {
             projectileLightPool[i].inUse = true;
             projectileLightPool[i].color.setHex(colorHex);
-            projectileLightPool[i].intensity = 1;
+            projectileLightPool[i].intensity = 2.5;
+            projectileLightPool[i].distance = 24;
             scene.add(projectileLightPool[i]);
             return projectileLightPool[i];
         }
     }
-    const light = new THREE.PointLight(colorHex, 1, 10);
+    const light = new THREE.PointLight(colorHex, 2.5, 24);
     light.inUse = true;
     scene.add(light);
     projectileLightPool.push(light);
@@ -1304,6 +1305,43 @@ function releaseProjectileLight(light) {
         light.inUse = false;
         light.intensity = 0;
         scene.remove(light);
+    }
+}
+
+function createLaserImpactLight(position, colorHex) {
+    const maxActiveLights = 24;
+    if (laserImpactLights.length >= maxActiveLights) return;
+
+    let light = laserImpactLightPool.find(candidate => !candidate.inUse);
+    if (!light) {
+        light = new THREE.PointLight(colorHex, 0, 18);
+        laserImpactLightPool.push(light);
+    }
+    light.inUse = true;
+    light.color.setHex(colorHex);
+    light.position.copy(position);
+    light.intensity = 4;
+    scene.add(light);
+    laserImpactLights.push({
+        light,
+        startedAt: performance.now(),
+        duration: 1200,
+        intensity: 4
+    });
+}
+
+function updateLaserImpactLights(now) {
+    for (let i = laserImpactLights.length - 1; i >= 0; i--) {
+        const impact = laserImpactLights[i];
+        const progress = (now - impact.startedAt) / impact.duration;
+        if (progress >= 1) {
+            impact.light.intensity = 0;
+            impact.light.inUse = false;
+            scene.remove(impact.light);
+            laserImpactLights.splice(i, 1);
+        } else {
+            impact.light.intensity = impact.intensity * Math.pow(1 - progress, 2);
+        }
     }
 }
 
@@ -1343,8 +1381,8 @@ function createProjectile(e, t, o, a, n = "red") {
         u = new THREE.Quaternion;
     u.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a), c.quaternion.copy(u), c.position.copy(o);
     if (b) { c.scale.set(3, 3, 6); } else { c.scale.set(1, 1, 1); }
-    const p = b ? null : getProjectileLight(i);
-    p.position.copy(c.position), c.light = p, projectiles.push({
+    const p = b || r ? null : getProjectileLight(i);
+    p && p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
         user: t,
         mesh: c,
@@ -2441,7 +2479,7 @@ function onPointerDown(e) {
                 username: userName
             });
             for (const [, e] of peers.entries()) e.dc && "open" === e.dc.readyState && (e.dc.send(t), e.dc.send(o));
-            safePlayAudio(soundHit), addMessage(`Hit ${e.username}!`, 800)
+            safePlayAudioAt(soundHit, player), addMessage(`Hit ${e.username}!`, 800)
         }
         return
     }
@@ -2721,7 +2759,7 @@ function updateBlockDamageVisuals(x, y, z, hits) {
 
     const soundName = `pick${Math.floor(Math.random() * 3)}`;
     const soundElement = document.getElementById(soundName);
-    safePlayAudio(soundElement);
+    safePlayAudioAt(soundElement, { x, y, z });
 }
 
 function handlePlayerHit(e) {
@@ -2737,7 +2775,7 @@ function handlePlayerHit(e) {
             d = o === userName ? n.y : n.targetY || n.y,
             c = o === userName ? n.z : n.targetZ || n.z;
         if (Math.hypot(r - l, s - d, i - c) < 6) {
-            t === userName && (safePlayAudio(soundHit), addMessage("Hit " + o + "!", 800));
+            t === userName && (safePlayAudioAt(soundHit, player), addMessage("Hit " + o + "!", 800));
             const a = l - r,
                 n = c - i,
                 s = Math.hypot(a, n),
@@ -2752,7 +2790,7 @@ function handlePlayerHit(e) {
                 attacker: e.username,
                 kx: u,
                 kz: p
-            })) : e.target === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudio(soundHit), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
+            })) : e.target === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudioAt(soundHit, getAudioPositionForPlayer(e.username) || player), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
         } else t === userName && addMessage("Miss! Target is out of range.", 800)
     }
 }
@@ -2956,7 +2994,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
             crackMeshes.add(d);
             const c = `pick${Math.floor(Math.random() * 3)}`;
             const u = document.getElementById(c);
-            safePlayAudio(u);
+            safePlayAudioAt(u, { x: e, y: t, z: o });
 
             if (isHost) {
                 const blockDamagedMsg = JSON.stringify({
@@ -3002,7 +3040,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
                         addMessage("Found 5 Tree Seeds" + (l ? ` from ${l}` : ""));
                     }
 
-                    safePlayAudio(soundBreak);
+                    safePlayAudioAt(soundBreak, { x: e, y: t, z: o });
                 } else if (isHost) {
                     const peer = peers.get(breaker);
                     if (peer && peer.dc && peer.dc.readyState === 'open') {
@@ -3227,7 +3265,7 @@ function placeBlockAt(e, t, o, a) {
                         } else {
                             addMessage("Placed " + (BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId));
                         }
-                        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudio(soundPlace), BLOCKS[a] && BLOCKS[a].light) {
+                        if (n.count -= 1, n.count <= 0 && (INVENTORY[selectedHotIndex] = null), updateHotbarUI(), safePlayAudioAt(soundPlace, { x: e, y: t, z: o }), BLOCKS[a] && BLOCKS[a].light) {
                             const key = `${e},${t},${o}`;
                             torchRegistry.set(key, {
                                 x: e,
@@ -3849,7 +3887,7 @@ function performAttack() {
     })).sort((function (e, t) {
         return e.intersect.distance - t.intersect.distance
     }));
-    if (o.length > 0) return o[0].mob.hurt(4), safePlayAudio(soundHit), void addMessage("Hit mob!", 800);
+    if (o.length > 0) return o[0].mob.hurt(4), safePlayAudioAt(soundHit, o[0].mob.pos), void addMessage("Hit mob!", 800);
     for (var a = .6; a < 3; a += .6) {
         var n = t.clone().addScaledVector(e, a),
             r = Math.round(n.x),
@@ -5809,8 +5847,8 @@ function gameLoop(e) {
                 const t = document.getElementById(e.soundId);
                 if (t) {
                     const o = Math.hypot(player.x - e.volcano.x, player.y - e.volcano.y, player.z - e.volcano.z),
-                        a = 192;
-                    t.volume = o < a ? Math.max(0, 1 - o / a) : 0
+                        a = maxAudioDistance;
+                    t.volume = o < a ? Math.pow(1 - o / a, rolloffFactor) : 0
                 }
             }
         updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
@@ -5863,6 +5901,7 @@ function gameLoop(e) {
             }
             lastStateUpdateTime = e;
         }
+        updateLaserImpactLights(performance.now());
         for (let e = pebbles.length - 1; e >= 0; e--) {
             const o = pebbles[e];
             o.mesh.position.add(o.velocity.clone().multiplyScalar(t));
@@ -5910,14 +5949,7 @@ function gameLoop(e) {
                         if (t.color === "blue" && !playedBlueSoundThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
                             if (fireAudioTemplate) {
-                                const fireAudio = fireAudioTemplate.cloneNode(true);
-                                const distToPlayer = Math.hypot(player.x - t.position.x, player.y - t.position.y, player.z - t.position.z);
-                                let vol = 0;
-                                if (distToPlayer < 192) {
-                                    vol = Math.max(0, 1 - distToPlayer / 192);
-                                }
-                                fireAudio.volume = vol * 0.75;
-                                fireAudio.play().catch(err => {});
+                                safePlayAudioAt(fireAudioTemplate, t.position, maxAudioDistance, 0.75);
                                 playedBlueSoundThisFrame = true;
                             }
                         }
@@ -5928,14 +5960,7 @@ function gameLoop(e) {
                 if (e.color === "blue" && !playedBlueSoundThisFrame) {
                     const fireAudioTemplate = document.getElementById('ufoCannonFire');
                     if (fireAudioTemplate) {
-                        const fireAudio = fireAudioTemplate.cloneNode(true);
-                        const distToPlayer = Math.hypot(player.x - e.position.x, player.y - e.position.y, player.z - e.position.z);
-                        let vol = 0;
-                        if (distToPlayer < 192) {
-                            vol = Math.max(0, 1 - distToPlayer / 192);
-                        }
-                        fireAudio.volume = vol * 0.75;
-                        fireAudio.play().catch(err => {});
+                        safePlayAudioAt(fireAudioTemplate, e.position, maxAudioDistance, 0.75);
                         playedBlueSoundThisFrame = true;
                     }
                 }
@@ -6015,17 +6040,11 @@ function gameLoop(e) {
                         const impactAudioId = Math.random() < 0.5 ? 'ufoCannonImpact1' : 'ufoCannonImpact2';
                         const impactTemplate = document.getElementById(impactAudioId);
                         if (impactTemplate) {
-                            const impactAudio = impactTemplate.cloneNode(true);
-                            const distToPlayer = Math.hypot(player.x - a, player.y - n, player.z - r);
-                            let vol = 0;
-                            if (distToPlayer < 192) {
-                                vol = Math.max(0, 1 - distToPlayer / 192);
-                            }
-                            impactAudio.volume = vol;
-                            impactAudio.play().catch(e => {});
+                            safePlayAudioAt(impactTemplate, { x: a, y: n, z: r });
                         }
                     }
 
+                    createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                     createBlockParticles(a, n, r, getBlockAt(a, n, r));
                     releaseProjectileMesh(o.mesh);
                     releaseProjectileLight(o.light);
@@ -6071,6 +6090,7 @@ function gameLoop(e) {
                                 }
                             }
                         }
+                        createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);
@@ -6097,7 +6117,7 @@ function gameLoop(e) {
                             updateHealthBar();
                             addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
                             flashDamageEffect();
-                            safePlayAudio(soundHit);
+                            safePlayAudioAt(soundHit, stepPos);
                             player.health <= 0 && handlePlayerDeath();
 
                             hitPlayer = true;
@@ -6136,6 +6156,7 @@ function gameLoop(e) {
 
                     // If any player was hit, destroy the projectile
                     if (hitPlayer) {
+                        createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);
@@ -6764,7 +6785,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', function(
             INVENTORY[selectedHotIndex] = null;
         }
         updateHotbarUI();
-        safePlayAudio(soundPlace);
+        safePlayAudioAt(soundPlace, { x: magicianStonePlacement.x, y: magicianStonePlacement.y, z: magicianStonePlacement.z });
 
         createMagicianStoneScreen(stoneData);
 
@@ -6830,7 +6851,7 @@ document.getElementById('calligraphyStoneSave').addEventListener('click', functi
             INVENTORY[selectedHotIndex] = null;
         }
         updateHotbarUI();
-        safePlayAudio(soundPlace);
+        safePlayAudioAt(soundPlace, { x: calligraphyStonePlacement.x, y: calligraphyStonePlacement.y, z: calligraphyStonePlacement.z });
 
         createCalligraphyStoneScreen(stoneData);
 
