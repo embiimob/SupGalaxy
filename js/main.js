@@ -1667,6 +1667,20 @@ function getMagicianStoneMediaUrl(source) {
     return parsed.href;
 }
 
+function getMagicianStoneResourcePath(source) {
+    const ipfs = parseAvatarIpfsReference(source);
+    if (ipfs) {
+        const directory = ipfs.path ? ipfs.path.split('/').slice(0, -1).filter(Boolean).join('/') : '';
+        return buildIPFSGatewayUrls(ipfs.hash, directory || null)[0].replace(/\/?$/, '/');
+    }
+    try {
+        const url = new URL(source, window.location.href);
+        return url.href.slice(0, url.href.lastIndexOf('/') + 1);
+    } catch (error) {
+        return '';
+    }
+}
+
 async function createMagicianStoneScreen(stoneData) {
     let { x, y, z, url, width, height, offsetX, offsetY, offsetZ, loop, autoplay, autoplayAnimation, distance, collision = true, damage = 0 } = stoneData;
     
@@ -1723,16 +1737,6 @@ async function createMagicianStoneScreen(stoneData) {
         }
     }
 
-    if (url.startsWith('IPFS:')) {
-        try {
-            url = await resolveIPFS(url);
-        } catch (error) {
-            console.error('Error resolving IPFS URL for in-world screen:', error);
-            magicianStonesLoading.delete(key); // Remove from loading set on error
-            return; // Don't create a screen if the URL is invalid
-        }
-    }
-
     const mediaPath = stoneData.url.split(/[?#]/, 1)[0].replace(/[\\/]+$/, '');
     const fileName = mediaPath.split(/[\\/]/).pop();
     const extensionIndex = fileName.lastIndexOf('.');
@@ -1741,9 +1745,7 @@ async function createMagicianStoneScreen(stoneData) {
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
         const loader = new THREE.GLTFLoader();
-        loader.load(
-            url,
-            function(gltf) {
+        const onModelLoaded = function(gltf) {
                 // Post-async-load deduplication check: another load may have completed while this one was in progress.
                 // This check is entity-based (using position key) and independent of file extension.
                 if (!isBlockStillValid(x, y, z, 127)) {
@@ -1832,11 +1834,8 @@ async function createMagicianStoneScreen(stoneData) {
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, mixer: mixer, isMuted: false, lastDamageTime: 0 };
                 magicianStonesLoading.delete(key);
                 scene.add(screenMesh);
-            },
-            function(progress) {
-                // Loading progress
-            },
-            function(error) {
+            };
+        const onModelError = function(error) {
                 console.error('Error loading GLB/GLTF for in-world display:', error);
                 // Create an error placeholder
                 const canvas = document.createElement('canvas');
@@ -1888,12 +1887,23 @@ async function createMagicianStoneScreen(stoneData) {
                 magicianStones[key] = { ...stoneData, mesh: screenMesh, isMuted: false, lastDamageTime: 0 };
                 magicianStonesLoading.delete(key);
                 scene.add(screenMesh);
-            }
-        );
+            };
+        fetchAvatarBuffer(stoneData.url)
+            .then(buffer => loader.parse(buffer, getMagicianStoneResourcePath(stoneData.url), onModelLoaded, onModelError))
+            .catch(onModelError);
         return;
     }
 
     // Original code for non-GLB/GLTF files
+    if (url.startsWith('IPFS:')) {
+        try {
+            url = await resolveIPFS(url);
+        } catch (error) {
+            console.error('Error resolving IPFS URL for in-world screen:', error);
+            magicianStonesLoading.delete(key);
+            return;
+        }
+    }
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
 
