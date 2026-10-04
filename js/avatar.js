@@ -1079,6 +1079,8 @@ function closeAvatarModal() {
     const modal = document.getElementById('avatarModal');
     if (modal) modal.style.display = 'none';
     isPromptOpen = false;
+    // Don't hand focus back to the HUD button: Space (jump) would re-open the dialog.
+    if (modal && modal.contains(document.activeElement)) document.activeElement.blur();
 }
 
 async function applyAvatarDialog() {
@@ -1101,6 +1103,8 @@ function initAvatarUI() {
     document.getElementById('avatarLoadBtn').addEventListener('click', loadAvatarDialogPreview);
     document.getElementById('avatarSourceInput').addEventListener('keydown', e => {
         if (e.key === 'Enter') loadAvatarDialogPreview();
+    });
+    document.getElementById('avatarModal').addEventListener('keydown', e => {
         if (e.key === 'Escape') closeAvatarModal();
     });
     document.getElementById('avatarWireframe').addEventListener('change', loadAvatarDialogPreview);
