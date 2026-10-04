@@ -283,7 +283,11 @@
             const transformed = mesh(floor, true, THREE.FrontSide);
             transformed.position.set(5, 3, 7); transformed.scale.set(-2, 0.5, 3); transformed.rotation.y = 0.4;
             const transformedIndex = await build(transformed);
-            assert(near(groundY(transformedIndex, 5, 7, 5, 1), 3), 'transformed mirrored front-side model');
+            assert(near(groundY(transformedIndex, 5, 7, 5, 1), 3), 'mirrored front-side floor retains upward grounding');
+            const mirroredRaycaster = new THREE.Raycaster(new THREE.Vector3(5, 5, 7), new THREE.Vector3(0, -1, 0), 0, 4);
+            const mirroredReference = mirroredRaycaster.intersectObject(transformed, false)[0];
+            assert(mirroredReference && near(mirroredReference.point.y, groundY(transformedIndex, 5, 7, 5, 1)) &&
+                transformedIndex.normalY.every(value => value > 0), 'mirrored grounding matches Three local-winding raycast and upward normals');
             assert(transformedIndex.worldBounds.containsPoint(new THREE.Vector3(5, 3, 7)), 'cached world bounds');
             assert(intersectsBox(transformedIndex, new THREE.Box3(new THREE.Vector3(4.9, 2.9, 6.9), new THREE.Vector3(5.1, 3.1, 7.1))), 'transformed mirrored body triangle');
             const tilted = mesh(floor, false, THREE.FrontSide);
