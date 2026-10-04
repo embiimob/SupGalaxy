@@ -215,7 +215,7 @@ function detectMagicianStoneExtensionFromBuffer(buffer) {
     }
     if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return 'webm';
     if (header.slice(0, 4) === 'RIFF' && header.slice(8, 12) === 'WAVE') return 'wav';
-    if (header.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return 'mp3';
+    if (header.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) !== 0)) return 'mp3';
     return sniffAvatarFormat(buffer);
 }
 

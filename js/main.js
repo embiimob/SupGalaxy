@@ -1675,6 +1675,12 @@ async function getMagicianStoneDisplayUrl(source) {
     return URL.createObjectURL(await response.blob());
 }
 
+function releaseMagicianStoneMediaUrl(stoneData) {
+    if (!stoneData || !stoneData.mediaObjectUrl) return;
+    URL.revokeObjectURL(stoneData.mediaObjectUrl);
+    stoneData.mediaObjectUrl = null;
+}
+
 function getMagicianStoneResourcePath(source) {
     const ipfs = parseAvatarIpfsReference(source);
     if (ipfs) {
@@ -1973,6 +1979,7 @@ async function createMagicianStoneScreen(stoneData) {
             if (!isBlockStillValid(x, y, z, 127)) {
                 console.log(`[MagicianStone] Post-load abort for GIF ${key}: block is no longer 127`);
                 if (texture) texture.dispose();
+                releaseMagicianStoneMediaUrl(stoneData);
                 magicianStonesLoading.delete(key);
                 return;
             }
@@ -1982,6 +1989,7 @@ async function createMagicianStoneScreen(stoneData) {
                 if (texture) {
                     texture.dispose();
                 }
+                releaseMagicianStoneMediaUrl(stoneData);
                 return;
             }
 
@@ -2091,6 +2099,7 @@ async function createMagicianStoneScreen(stoneData) {
             stoneData.audioElement.pause();
             stoneData.audioElement.src = '';
         }
+        releaseMagicianStoneMediaUrl(stoneData);
         return;
     }
 
@@ -2147,6 +2156,7 @@ async function createMagicianStoneScreen(stoneData) {
             stoneData.audioElement.pause();
             stoneData.audioElement.src = '';
         }
+        releaseMagicianStoneMediaUrl(stoneData);
         magicianStonesLoading.delete(key);
         return;
     }
@@ -6812,7 +6822,6 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
         try {
             const resolved = await resolveMagicianStoneSource(source);
             if (request !== magicianStonePreviewRequest) return;
-            if (resolved.storedUrl !== source) input.value = resolved.storedUrl;
             const extension = resolved.extension;
             if (['glb', 'gltf'].includes(extension)) {
                 setMagicianStonePreviewStatus('Loading 3D model…');
