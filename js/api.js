@@ -179,15 +179,18 @@ async function resolveIPFS(url) {
     const hash = parts.shift();
     const filename = parts.filter(Boolean).join('/').split(/[?#]/, 1)[0] || null;
     const paths = filename ? [filename, null] : [null];
+    let pathNotFound = false;
     
     let lastError;
     for (let attempt = 0; attempt < 3; attempt++) {
         for (const path of paths) {
+            if (pathNotFound && path) continue;
             try {
                 if (attempt > 0) clearIpfsFetchFailure(hash, path);
                 if (attempt > 0 && path === paths[0]) await new Promise(resolve => setTimeout(resolve, attempt * 500));
                 const response = await fetchIPFSWithFallback(hash, path);
                 if (!response.ok) {
+                    if (path && (response.status === 404 || response.status === 410)) pathNotFound = true;
                     throw new Error('Failed to fetch from IPFS.');
                 }
                 const blob = await response.blob();

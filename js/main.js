@@ -6815,26 +6815,40 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
 });
 
 document.getElementById('magicianStoneSave').addEventListener('click', async function() {
+    const saveButton = this;
+    if (saveButton.disabled) return;
+    const placement = magicianStonePlacement;
+    if (!placement) {
+        addMessage('Select a Magician’s Stone placement first.', 3000);
+        return;
+    }
+    saveButton.disabled = true;
     const rawUrl = document.getElementById('magicianStoneUrl').value.trim();
     let url;
     try {
         const resolved = await resolveMagicianStoneSource(rawUrl);
         url = resolved.storedUrl;
-        document.getElementById('magicianStoneUrl').value = url;
     } catch (error) {
         addMessage(error.message || 'Invalid asset URL.', 3000);
+        saveButton.disabled = false;
         return;
     }
     if (!url) {
         addMessage("URL is required.", 3000);
+        saveButton.disabled = false;
         return;
     }
 
-    if (!magicianStonePlacement) return;
+    if (magicianStonePlacement !== placement) {
+        addMessage('Placement was cancelled before the asset finished loading.', 3000);
+        saveButton.disabled = false;
+        return;
+    }
+    document.getElementById('magicianStoneUrl').value = url;
     const stoneData = {
-        x: magicianStonePlacement.x,
-        y: magicianStonePlacement.y,
-        z: magicianStonePlacement.z,
+        x: placement.x,
+        y: placement.y,
+        z: placement.z,
         url: url,
         width: parseFloat(document.getElementById('magicianStoneWidth').value),
         height: parseFloat(document.getElementById('magicianStoneHeight').value),
@@ -6847,20 +6861,20 @@ document.getElementById('magicianStoneSave').addEventListener('click', async fun
         distance: parseFloat(document.getElementById('magicianStoneDistance').value),
         collision: document.getElementById('magicianStoneCollision').checked,
         damage: parseFloat(document.getElementById('magicianStoneDamage').value) || 0,
-        direction: magicianStonePlacement.direction // Use the direction saved on placement
+        direction: placement.direction // Use the direction saved on placement
     , source: 'local'
     };
 
     const n = INVENTORY[selectedHotIndex];
-    if (magicianStonePlacement && n && n.id === 127) {
-        chunkManager.setBlockGlobal(magicianStonePlacement.x, magicianStonePlacement.y, magicianStonePlacement.z, 127, true, n.originSeed);
+    if (n && n.id === 127) {
+        chunkManager.setBlockGlobal(placement.x, placement.y, placement.z, 127, true, n.originSeed);
 
         n.count -= 1;
         if (n.count <= 0) {
             INVENTORY[selectedHotIndex] = null;
         }
         updateHotbarUI();
-        safePlayAudioAt(soundPlace, { x: magicianStonePlacement.x, y: magicianStonePlacement.y, z: magicianStonePlacement.z });
+        safePlayAudioAt(soundPlace, { x: placement.x, y: placement.y, z: placement.z });
 
         createMagicianStoneScreen(stoneData);
 
@@ -6880,6 +6894,7 @@ document.getElementById('magicianStoneSave').addEventListener('click', async fun
     document.getElementById('magicianStoneModal').style.display = 'none';
     isPromptOpen = false;
     magicianStonePlacement = null;
+    saveButton.disabled = false;
 });
 
 // Calligraphy Stone event handlers

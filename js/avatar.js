@@ -218,7 +218,7 @@ async function resolveMagicianStoneSource(input) {
         if (ipfs && ipfs.path && (!/^[A-Za-z0-9._~%/-]+$/.test(ipfs.path) || ipfs.path.split('/').some(segment => segment === '.' || segment === '..'))) {
             throw new Error('Invalid IPFS asset path');
         }
-        if (!extension && ipfs) extension = 'glb';
+        if (!extension && ipfs) throw new Error('Add the asset file extension, such as /artifact.glb or /artifact.jpg');
         if (ipfs) {
             const path = !ipfs.path || !/\.[a-z0-9]+$/i.test(ipfs.path) ? 'artifact.' + extension : ipfs.path;
             url = 'IPFS:' + ipfs.hash + '/' + path;
