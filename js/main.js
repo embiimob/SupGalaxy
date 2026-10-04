@@ -1788,6 +1788,13 @@ async function createMagicianStoneScreen(stoneData) {
     // Handle GLB/GLTF files
     if (['glb', 'gltf'].includes(fileExtension)) {
         if (getCurrentWorldState() !== worldState || !magicianStonesLoading.has(key) || magicianStones[key]) return;
+        width = Number(width);
+        height = Number(height);
+        if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+            console.warn('[MagicianStone] Invalid GLB dimensions; import skipped:', key);
+            magicianStonesLoading.delete(key);
+            return;
+        }
         const loader = new THREE.GLTFLoader();
         const loadToken = StoneCollision.beginLoad(key, worldState, magicianStonesLoading);
         const pendingStone = { ...stoneData, pendingModel: true, collisionStatus: 'loading' };
