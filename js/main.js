@@ -5757,7 +5757,7 @@ function updateAvatarAnimation(e, t) {
         if (t < 500) {
             const e = 1.5 * Math.sin(t / 500 * Math.PI);
             avatarGroup.children[4].rotation.x = avatarGroup.heldPickaxe ? .2 * e : e,
-                avatarGroup.children[5].rotation.x = avatarGroup.heldPickaxe ? pickaxeAttackSwing(t / 500) : e
+                avatarGroup.children[5].rotation.x = avatarGroup.heldPickaxe ? pickaxeArmAttackSwing(t / 500) : e
         } else isAttacking = !1, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
     } else if (t) {
         const t = .5 * Math.sin(.005 * e);
@@ -6140,7 +6140,7 @@ function gameLoop(e) {
                     if (o < a) {
                         const e = 1.5 * Math.sin(o / a * Math.PI);
                         v.children[4].rotation.x = v.heldPickaxe ? .2 * e : e,
-                            v.children[5].rotation.x = v.heldPickaxe ? pickaxeAttackSwing(o / a) : e
+                            v.children[5].rotation.x = v.heldPickaxe ? pickaxeArmAttackSwing(o / a) : e
                     } else {
                         e.localAnimStartTime = null;
                         v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;

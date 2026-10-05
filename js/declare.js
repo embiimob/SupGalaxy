@@ -1,4 +1,4 @@
-// Forward-facing handle: positive X lifts it, negative X chops the lower head tip down.
+// Wrist-centered first-person swing: positive X lifts the handle, negative X chops.
 function pickaxeSwingEase(t) {
     return t * t * (3 - 2 * t);
 }
@@ -8,6 +8,14 @@ function pickaxeAttackSwing(progress) {
     if (progress < .22) return .55 * pickaxeSwingEase(progress / .22);
     if (progress < .55) return .55 - 2 * pickaxeSwingEase((progress - .22) / .33);
     return -1.45 * (1 - pickaxeSwingEase((progress - .55) / .45));
+}
+
+// Shoulder-centered swing stays positive so the lower tip strikes down in front (-Z).
+function pickaxeArmAttackSwing(progress) {
+    if (progress < 0 || progress >= 1) return 0;
+    if (progress < .22) return 1.4 * pickaxeSwingEase(progress / .22);
+    if (progress < .55) return 1.4 - 1.25 * pickaxeSwingEase((progress - .22) / .33);
+    return .15 * (1 - pickaxeSwingEase((progress - .55) / .45));
 }
 
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,

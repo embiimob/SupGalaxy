@@ -577,7 +577,7 @@ function createGltfAvatarRig(gltf) {
             blendAvatarBone(ctrl.head, 0, 1);
             // Mining / attack swing layered on top, mirroring the default avatar's arm chop.
             if (state.pickaxe && state.attack >= 0) {
-                const chop = pickaxeAttackSwing(state.attack);
+                const chop = pickaxeArmAttackSwing(state.attack);
                 rotateAvatarBone(ctrl.rightArm, 'axisX', chop, false);
                 rotateAvatarBone(ctrl.rightForeArm, 'axisX', .3 * Math.abs(chop), false);
                 rotateAvatarBone(ctrl.leftArm, 'axisX', .2 * attack, false);
@@ -591,7 +591,7 @@ function createGltfAvatarRig(gltf) {
         } else if (!ctrl) {
             rig.pivot.position.y = Math.abs(swing) * 0.06;
             rig.pivot.rotation.z = swing * 0.06;
-            rig.pivot.rotation.x = -0.3 * (state.pickaxe ? pickaxeAttackSwing(state.attack) : attack) + 0.12 * air;
+            rig.pivot.rotation.x = -0.3 * (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : attack) + 0.12 * air;
         } else {
             rig.pivot.position.y = 0;
         }
@@ -768,7 +768,7 @@ function buildVoxAvatarRig(buffer) {
         if (parts.legR) parts.legR.rotation.x = 0.6 * swing - 0.3 * air;
         if (parts.armL) parts.armL.rotation.x = 0.5 * swing - 0.7 * air - 0.4 * attack;
         if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air -
-            (state.pickaxe ? pickaxeAttackSwing(state.attack) : 1.6 * attack);
+            (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : 1.6 * attack);
         if (parts.head) parts.head.rotation.x = -clampAvatarPitch(state.pitch);
         if (parts.body) parts.body.rotation.x = parts.armR ? 0 : 0.25 * attack;
         rig.pivot.position.y = Math.abs(swing) * 0.05;
