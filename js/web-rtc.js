@@ -595,6 +595,7 @@ function setupDataChannel(e, t) {
 
                             if (playerAvatars.has(t)) {
                                 const avatar = playerAvatars.get(t);
+                                updateHeldPickaxe(avatar, e.selectedBlockId);
                                 if (avatar.torchLight) {
                                     if (e.selectedBlockId === 120) {
                                         avatar.torchLight.intensity = 1.15;
@@ -645,6 +646,7 @@ function setupDataChannel(e, t) {
 
                     if (playerAvatars.has(n)) {
                         const avatar = playerAvatars.get(n);
+                        updateHeldPickaxe(avatar, s.selectedBlockId);
                         if (avatar.torchLight) {
                             if (s.selectedBlockId === 120) {
                                 avatar.torchLight.intensity = 1.15;
@@ -958,9 +960,18 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_hit":
-                    if (isHost) {
-                        const e = mobs.find((e => e.id === s.id));
-                        e && (!e.spawnCommandKey || canRemoveFishSpawnCommand(e.spawnCommandKey, n)) && e.hurt(s.damage || 4, s.username)
+                    {
+                        const mob = mobs.find(mob => mob.id === s.id);
+                        if (!mob || (mob.spawnCommandKey && !canRemoveFishSpawnCommand(mob.spawnCommandKey, s.username))) break;
+                        const damage = "toolId" in s ? 4 * getPickaxeMultiplier(s.toolId) : s.damage || 4;
+                        if (mob.spawner === userName || (isHost && !mob.spawner) || peers.size === 0) {
+                            mob.hurt(damage, s.username);
+                        } else if (isHost) {
+                            const spawnerPeer = peers.get(mob.spawner);
+                            if (spawnerPeer && spawnerPeer.dc && spawnerPeer.dc.readyState === "open") {
+                                spawnerPeer.dc.send(JSON.stringify(s));
+                            }
+                        }
                     }
                     break;
                 case "player_hit":
@@ -1276,6 +1287,7 @@ function setupDataChannel(e, t) {
                 case "remove_peer":
                     s.username && cleanupPeer(s.username);
                     break;
+                case 'request_block_break':
                 case "block_hit":
                     if (isHost) {
                         const originalWorldName = worldName;
@@ -1295,7 +1307,7 @@ function setupDataChannel(e, t) {
                             if (s.isBlue && typeof applyBlueLaserDamage === 'function') {
                                 applyBlueLaserDamage(s.x, s.y, s.z, s.username);
                             } else {
-                                removeBlockAt(s.x, s.y, s.z, s.username);
+                                removeBlockAt(s.x, s.y, s.z, s.username, 1, false, s.toolId, s.laserColor);
                             }
 
                         } catch (error) {
@@ -1745,118 +1757,6 @@ function setupDataChannel(e, t) {
                         const doorHasClearance = !BLOCKS[s.blockId] || BLOCKS[s.blockId].model !== "door_closed" || (s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR);
                         if (isDoorToggle && doorHasClearance && isChunkMutationAllowed(chunkKey, s.username)) {
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, null, 'network');
-                        }
-                    }
-                    break;
-                case 'request_block_break':
-                    if (isHost) {
-                        console.log(`[WebRTC] Host received block break request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
-
-                        // Validate ownership
-                        const breakChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
-                        const breakChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
-                        const breakChunkKey = makeChunkKey(s.world, breakChunkX, breakChunkZ);
-                        const blockId = getBlockAt(s.x, s.y, s.z);
-                        const blockCannotBreak = BLOCKS[blockId] && BLOCKS[blockId].unbreakable;
-
-                        if (!blockCannotBreak && isChunkMutationAllowed(breakChunkKey, s.username)) {
-                            // Allowed: break block and broadcast
-                            const blockKey = `${s.x},${s.y},${s.z}`;
-                            const worldState = getCurrentWorldState();
-                            const originSeed = worldState.foreignBlockOrigins.get(blockKey);
-
-                            const replacementBlockId = blockId === 136 ? 6 : BLOCK_AIR;
-                            chunkManager.setBlockGlobal(s.x, s.y, s.z, replacementBlockId, s.username, null, 'network');
-                            if (originSeed) worldState.foreignBlockOrigins.delete(blockKey);
-
-                            // Renew or establish ownership on edit
-                            const normalized = breakChunkKey.replace(/^#/, "");
-                            const ownership = OWNED_CHUNKS.get(normalized);
-                            const now = Date.now();
-
-                            if (!ownership || ownership.type === 'ipfs') {
-                                // Check if this is not a home spawn chunk
-                                const parsed = parseChunkKey(normalized);
-                                let isHomeSpawn = false;
-                                if (parsed && spawnChunks.size > 0) {
-                                    for (const [spawnKey, spawnData] of spawnChunks) {
-                                        if (spawnData.cx === parsed.cx && spawnData.cz === parsed.cz && spawnData.world === parsed.world) {
-                                            isHomeSpawn = true;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                if (!isHomeSpawn) {
-                                    if (!ownership) {
-                                        // No ownership exists - establish new ownership for 1 year
-                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] New ownership established for ${s.username} at chunk ${normalized}`);
-                                    } else if (ownership.username === s.username) {
-                                        // Owner is editing - renew for 1 year from now
-                                        const claimDateToUse = ownership.claimDate ? ownership.claimDate : now;
-                                        updateChunkOwnership(normalized, s.username, claimDateToUse, 'ipfs', now);
-                                        console.log(`[Ownership] Ownership renewed for ${s.username} at chunk ${normalized}`);
-                                    } else if (ownership.expiryDate && now > ownership.expiryDate) {
-                                        // Previous ownership expired - establish new ownership
-                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Expired ownership replaced for ${s.username} at chunk ${normalized}`);
-                                    } else if (ownership.claimDate && now - ownership.claimDate <= IPFS_MATURITY_PERIOD) {
-                                        // Pending ownership - anyone can claim by editing
-                                        updateChunkOwnership(normalized, s.username, now, 'ipfs', now);
-                                        console.log(`[Ownership] Pending ownership claimed by ${s.username} at chunk ${normalized}`);
-                                    }
-                                }
-                            }
-
-                            // Send inventory update to the breaker
-                            const peer = peers.get(s.username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({
-                                    type: 'add_to_inventory',
-                                    blockId: blockId,
-                                    count: 1,
-                                    originSeed: originSeed
-                                }));
-                            }
-
-                            // Broadcast to all clients
-                            const breakMsg = JSON.stringify({
-                                type: 'block_break',
-                                x: s.x,
-                                y: s.y,
-                                z: s.z,
-                                blockId: blockId,
-                                replacementBlockId: replacementBlockId,
-                                username: s.username,
-                                world: s.world,
-                                originSeed: originSeed
-                            });
-                            for (const [peerName, peer] of peers.entries()) {
-                                if (peer.dc && peer.dc.readyState === 'open') {
-                                    peer.dc.send(breakMsg);
-                                }
-                            }
-                            console.log(`[Ownership] Block break allowed for ${s.username} at chunk ${breakChunkKey}`);
-                        } else {
-                            // Denied: send denial message
-                            const ownerName = getChunkOwnerName(breakChunkKey);
-                            const reason = blockCannotBreak
-                                ? 'Cannot break that block'
-                                : ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
-
-                            const peer = peers.get(s.username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({
-                                    type: 'block_action_denied',
-                                    x: s.x,
-                                    y: s.y,
-                                    z: s.z,
-                                    reason: reason,
-                                    chunkKey: breakChunkKey
-                                }));
-                            }
-                            console.log(`[Ownership] Block break denied for ${s.username} at chunk ${breakChunkKey}: ${reason}`);
                         }
                     }
                     break;

@@ -67,6 +67,28 @@ Real-time text chat with all connected players via WebRTC. Press `/` to open cha
 - **Green Laser Gun** — deals 10 damage per shot, fires two blasts at once (consumes Emerald)
 - **Blue Laser Gun** — deals 15 damage per shot, fires three blasts at once (consumes Blue Calcite, drops from UFOs)
 
+### ⛏ Mining and Picks
+
+Select a pick in the hotbar and **left-click** to mine or attack (mobile: ⚔ or tap).
+
+| Block | Hands / Iron Pick | Blue Iron Pick |
+|-------|-------------------|----------------|
+| Grass, Moss | 1 hit | 1 hit |
+| Dirt, Sand, Glass (including stained glass and glass tiles) | 2 hits | 1 hit |
+| Wood, Iron Ore, Blue Calcite | 4 hits | 2 hits |
+| Stone | Iron Pick only: 2 hits | 1 hit |
+| Emerald | Iron Pick only: 4 hits | 2 hits |
+| Dark Glass | Iron Pick only: 2 hits | 1 hit |
+| Obsidian | Cannot break | 4 hits |
+| Bedrock | Cannot break | Cannot break |
+
+Other blocks retain their existing strengths; the Blue Iron Pick halves their required hits, rounded up.
+
+- **Iron Pick:** craft with 1 Iron Ore + 1 Sand + 1 Torch + 1 Wood. Each left-click use has a **1 in 500** chance of breaking one pick; melee damage is **double** normal damage.
+- **Blue Iron Pick:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
+- Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
+- **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** retain their existing area mining behavior and can damage Obsidian. Bedrock and chunk ownership protections remain in effect.
+
 ---
 
 # 🎮 How to Play

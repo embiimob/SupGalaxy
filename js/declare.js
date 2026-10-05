@@ -53,18 +53,19 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         3: {
             name: "Dirt",
             color: "#7a4f29",
-            strength: 1
+            strength: 2
         },
         4: {
             name: "Stone",
             color: "#9aa0a6",
-            strength: 2
+            strength: 2,
+            requiresPick: !0
         },
         5: {
             name: "Sand",
             color: "#e7d08d",
             textureStyle: "sand",
-            strength: 1
+            strength: 2
         },
         6: {
             name: "Water",
@@ -75,7 +76,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         7: {
             name: "Wood",
             color: "#8b5a33",
-            strength: 2
+            strength: 4
         },
         8: {
             name: "Leaves",
@@ -134,31 +135,31 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Glass",
             color: "#b3e6ff",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         101: {
             name: "Stained Glass - Red",
             color: "#ff4b4b",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         102: {
             name: "Stained Glass - Blue",
             color: "#4b6bff",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         103: {
             name: "Stained Glass - Green",
             color: "#57c84d",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         104: {
             name: "Stained Glass - Yellow",
             color: "#fff95b",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         105: {
             name: "Brick",
@@ -244,13 +245,14 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Dark Glass",
             color: "#3a3a3a",
             transparent: !0,
-            strength: 1
+            strength: 2,
+            requiresPick: !0
         },
         117: {
             name: "Glass Tile",
             color: "#aeeaff",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         118: {
             name: "Sandstone",
@@ -291,18 +293,19 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         124: {
             name: "Iron Ore",
             color: "#a8a8a8",
-            strength: 3
+            strength: 4
         },
         125: {
             name: "Emerald",
             color: "#00ff7b",
-            strength: 4
+            strength: 4,
+            requiresPick: !0
         },
         134: {
             name: "Blue Calcite",
             color: "#4da6ff",
             transparent: !0,
-            strength: 3,
+            strength: 4,
             light: !0
         },
         135: {
@@ -659,6 +662,24 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             model: "battlement",
             strength: 30,
             breakable: !0
+        },
+        174: {
+            name: "Iron Pick",
+            color: "#a8a8a8",
+            itemOnly: !0,
+            hand_attachable: !0,
+            pickaxe: !0,
+            breakChance: 1 / 500,
+            meleeMultiplier: 2
+        },
+        175: {
+            name: "Blue Iron Pick",
+            color: "#4da6ff",
+            itemOnly: !0,
+            hand_attachable: !0,
+            pickaxe: !0,
+            breakChance: 1 / 100,
+            meleeMultiplier: 3
         }
     },
     BIOMES = [{
@@ -699,6 +720,14 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         featureDensity: .04
     }],
     RECIPES = [{
+        id: "iron_pick",
+        out: { id: 174, count: 1 },
+        requires: { 124: 1, 5: 1, 120: 1, 7: 1 }
+    }, {
+        id: "blue_iron_pick",
+        out: { id: 175, count: 1 },
+        requires: { 16: 1, 174: 1, 134: 1 }
+    }, {
         id: "glass",
         out: {
             id: 100,
@@ -1391,6 +1420,23 @@ const lightManager = {
  * Cached effective local IPFS root path - determined once from URL query parameter.
  * Initialized to null and set on first call to getLocalIpfsRoot().
  */
+function getPickaxeMultiplier(toolId) {
+    const tool = BLOCKS[toolId];
+    return tool && tool.pickaxe ? tool.meleeMultiplier : 1;
+}
+
+function getMiningDamage(blockId, toolId = null, laserColor = null) {
+    const block = BLOCKS[blockId];
+    if (!block || block.unbreakable || blockId === 6) return 0;
+    if (laserColor === "blue") return 1;
+    if (laserColor === "green") return blockId === 110 ? 0 : 1;
+    if (laserColor === "red") toolId = null;
+    if (blockId === 110) return toolId === 175 ? block.strength / 4 : 0;
+    const tool = BLOCKS[toolId];
+    if (block.requiresPick && !(tool && tool.pickaxe)) return 0;
+    return toolId === 175 ? 2 : 1;
+}
+
 var effectiveLocalIpfsRoot = null;
 
 /**

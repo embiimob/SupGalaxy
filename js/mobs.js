@@ -807,7 +807,8 @@ function manageMobs() {
     }
 }
 
-function handleMobHit(t) {
+function handleMobHit(t, toolId = null) {
+    const damage = 4 * getPickaxeMultiplier(toolId);
     const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
     if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
         addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
@@ -815,16 +816,20 @@ function handleMobHit(t) {
     }
     // We shouldn't set lastMoveTime here, we do it in projectile logic (main.js). If we do it here, it will trigger for anyone handling the hit, not just the user.
     if (isLocalSpawner) {
-        t.hurt(4, userName);
+        t.hurt(damage, userName);
     } else {
-        // Forward hit to whoever is the host so they can route it or handle it
-        for (const [e, s] of peers.entries()) {
+        const spawnerPeer = peers.get(t.spawner);
+        const recipients = spawnerPeer && spawnerPeer.dc && spawnerPeer.dc.readyState === "open"
+            ? [[t.spawner, spawnerPeer]] : peers.entries();
+        // Send directly to the spawner when connected; otherwise the host routes the hit.
+        for (const [e, s] of recipients) {
             if (s.dc && "open" === s.dc.readyState) {
                 console.log(`[WebRTC] Sending mob_hit to host ${e}`);
                 s.dc.send(JSON.stringify({
                     type: "mob_hit",
                     id: t.id,
-                    damage: 4,
+                    damage: damage,
+                    toolId: toolId,
                     username: userName
                 }));
             }
