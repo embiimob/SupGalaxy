@@ -964,8 +964,8 @@ function updateFirstPersonPickaxe(now) {
     const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
     const windup = Math.max(0, swing) / .55;
     const strike = Math.max(0, -swing) / 1.45;
-    // Raise by a third of the head height; retain near-plane clearance at full strike.
-    firstPersonPickaxe.position.set(.56 - .12 * strike, -.24 + .5 * 1.4 / 3 + .10 * windup - .12 * strike, -.28 - .18 * strike);
+    // Hide the rear handle cap offscreen right; retreat during the strike for near-plane clearance.
+    firstPersonPickaxe.position.set(.65 * Math.max(1, camera.aspect / (16 / 9)) - .12 * strike, -.24 + .5 * 1.4 / 3 + .10 * windup - .12 * strike, -.16 - .30 * strike);
     firstPersonPickaxe.rotation.set(1.05 * swing, .12 * strike, -.12 - .18 * strike);
 }
 
