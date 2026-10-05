@@ -924,9 +924,22 @@ function updateHeldPickaxe(avatar, toolId) {
         pick.userData.toolId = selectedPick;
         pick.position.set(0, -.25, -.2);
         pick.rotation.x = Math.PI / 2;
-        avatar.children[5].add(pick);
+        pick.updateMatrix();
+        pick.userData.gripMatrix = pick.matrix.clone();
+        pick.matrixAutoUpdate = false;
+        avatar.add(pick);
         avatar.heldPickaxe = pick;
+        updateHeldPickaxePose(avatar);
     }
+}
+
+function updateHeldPickaxePose(avatar) {
+    if (!avatar?.heldPickaxe) return;
+    const arm = avatar.children[5];
+    arm.updateMatrix();
+    // Follow the arm without inheriting hidden hitbox visibility on custom avatars.
+    avatar.heldPickaxe.matrix.multiplyMatrices(arm.matrix, avatar.heldPickaxe.userData.gripMatrix);
+    avatar.heldPickaxe.matrixWorldNeedsUpdate = true;
 }
 
 function initHotbar() {
@@ -5652,7 +5665,8 @@ function updateAvatarAnimation(e, t) {
     } else if (t) {
         const t = .5 * Math.sin(.005 * e);
         avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
-    } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
+    } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
+    updateHeldPickaxePose(avatarGroup);
 }
 
 function initMinimap() {
@@ -6033,6 +6047,7 @@ function gameLoop(e) {
                     const e = .5 * Math.sin(.005 * t);
                     v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e
                 } else v.children[0].rotation.x = 0, v.children[1].rotation.x = 0, v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                updateHeldPickaxePose(v);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,
