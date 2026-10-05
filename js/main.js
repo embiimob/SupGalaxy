@@ -905,6 +905,7 @@ function createPickaxeMesh(toolId) {
     const model = new THREE.Group();
     // Keep the grip fixed: handle +Y points forward (-Z), head +X points skyward (+Y).
     model.rotation.set(-Math.PI / 2, -Math.PI / 2, 0);
+    model.position.z = -.325;
     group.add(model);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(.08, .65, .08),
         new THREE.MeshStandardMaterial({ color: BLOCKS[7].color }));
