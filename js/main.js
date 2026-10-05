@@ -966,7 +966,7 @@ function updateFirstPersonPickaxe(now) {
     const strike = Math.max(0, -swing) / 1.45;
     // Hide the rear handle cap offscreen right; retreat during the strike for near-plane clearance.
     firstPersonPickaxe.position.set(.65 * Math.max(1, camera.aspect / (16 / 9)) - .12 * strike, -.24 + .5 * 1.4 / 3 + .10 * windup - .12 * strike, -.16 - .30 * strike);
-    firstPersonPickaxe.rotation.set(1.05 * swing, .12 * strike, -.12 - .18 * strike);
+    firstPersonPickaxe.rotation.set(Math.PI / 9 + 1.05 * swing, .12 * strike, -.12 - .18 * strike);
 }
 
 function updateAvatarHeldLight(avatar, sourcePosition) {
