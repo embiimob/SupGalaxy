@@ -902,6 +902,10 @@ function createAndSetupAvatar(e, t, o = 0) {
 
 function createPickaxeMesh(toolId) {
     const group = new THREE.Group();
+    const model = new THREE.Group();
+    // Keep the grip fixed: handle +Y points forward (-Z), head +X points skyward (+Y).
+    model.rotation.set(-Math.PI / 2, -Math.PI / 2, 0);
+    group.add(model);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(.08, .65, .08),
         new THREE.MeshStandardMaterial({ color: BLOCKS[7].color }));
     const head = new THREE.Mesh(new THREE.BoxGeometry(.5, .1, .12),
@@ -911,14 +915,14 @@ function createPickaxeMesh(toolId) {
             emissiveIntensity: toolId === 175 ? .65 : 0
         }));
     head.position.y = .28;
-    group.add(handle, head);
+    model.add(handle, head);
     if (toolId === 175) {
         const glow = new THREE.MeshStandardMaterial({ color: 0x9eeaff, emissive: 0x36bbff, emissiveIntensity: 2 });
         const edge = new THREE.Mesh(new THREE.BoxGeometry(.52, .025, .13), glow);
         edge.position.y = .33;
         const collar = new THREE.Mesh(new THREE.BoxGeometry(.105, .08, .105), glow);
         collar.position.y = .18;
-        group.add(edge, collar);
+        model.add(edge, collar);
     }
     return group;
 }
@@ -953,7 +957,7 @@ function updateFirstPersonPickaxe(now) {
     firstPersonPickaxe.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
         player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
     const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
-    firstPersonPickaxe.position.set(.32, -.32 - .06 * Math.max(0, swing), -.65);
+    firstPersonPickaxe.position.set(.32, -.32 - .06 * Math.max(0, -swing), -.65);
     firstPersonPickaxe.rotation.set(.85 * swing, 0, -.12);
 }
 

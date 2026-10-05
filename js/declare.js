@@ -1,13 +1,13 @@
-// Upright pick: lift back, chop forward, then return to the grip.
+// Forward-facing handle: positive X lifts it, negative X chops the lower head tip down.
 function pickaxeSwingEase(t) {
     return t * t * (3 - 2 * t);
 }
 
 function pickaxeAttackSwing(progress) {
     if (progress < 0 || progress >= 1) return 0;
-    if (progress < .22) return -.55 * pickaxeSwingEase(progress / .22);
-    if (progress < .55) return -.55 + 2 * pickaxeSwingEase((progress - .22) / .33);
-    return 1.45 * (1 - pickaxeSwingEase((progress - .55) / .45));
+    if (progress < .22) return .55 * pickaxeSwingEase(progress / .22);
+    if (progress < .55) return .55 - 2 * pickaxeSwingEase((progress - .22) / .33);
+    return -1.45 * (1 - pickaxeSwingEase((progress - .55) / .45));
 }
 
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
