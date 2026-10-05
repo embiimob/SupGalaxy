@@ -942,6 +942,7 @@ function updateFirstPersonPickaxe(now) {
         if (toolId) {
             firstPersonPickaxe = createPickaxeMesh(toolId);
             firstPersonPickaxe.userData.toolId = toolId;
+            firstPersonPickaxe.scale.setScalar(1.4);
             firstPersonPickaxe.traverse(o => {
                 if (!o.isMesh) return;
                 o.renderOrder = 1000;
@@ -958,7 +959,7 @@ function updateFirstPersonPickaxe(now) {
     firstPersonPickaxe.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
         player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
     const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
-    firstPersonPickaxe.position.set(.32, -.32 - .06 * Math.max(0, -swing), -.65);
+    firstPersonPickaxe.position.set(.48, -.40 - .06 * Math.max(0, -swing), -.45);
     firstPersonPickaxe.rotation.set(.85 * swing, 0, -.12);
 }
 
@@ -1025,6 +1026,8 @@ function updateHeldPickaxePose(avatar) {
     // Follow the arm without inheriting hidden hitbox visibility on custom avatars.
     avatar.heldPickaxe.matrix.multiplyMatrices(arm.matrix, avatar.heldPickaxe.userData.gripMatrix);
     const rig = avatar.userData.customAvatar;
+    // Skins use a hand anchor rather than the default arm's recessed grip.
+    avatar.heldPickaxe.children[0].position.z = rig ? 0 : -.325;
     avatar.heldPickaxe.visible = !rig?.ambientPlaying;
     if (rig?.rightHand) {
         // Use the visible skeleton's hand, not the invisible box hitbox's hand.
