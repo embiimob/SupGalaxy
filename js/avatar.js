@@ -473,6 +473,7 @@ function createGltfAvatarRig(gltf) {
         controllers: null
     };
     if (bones.length) {
+        rig.rightHand = findAvatarBone(bones, ['righthand', 'handr', 'handright', 'rhand']);
         const c = {
             hips: findAvatarBone(bones, ['hips', 'pelvis', 'hip']),
             leftLeg: findAvatarBone(bones, ['leftupleg', 'leftthigh', 'thighl', 'upperlegl', 'leftupperleg', 'lthigh', 'thighleft']),
@@ -575,7 +576,12 @@ function createGltfAvatarRig(gltf) {
             blendAvatarBone(ctrl.rightForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
             blendAvatarBone(ctrl.head, 0, 1);
             // Mining / attack swing layered on top, mirroring the default avatar's arm chop.
-            if (attack) {
+            if (state.pickaxe && state.attack >= 0) {
+                const chop = pickaxeArmAttackSwing(state.attack);
+                rotateAvatarBone(ctrl.rightArm, 'axisX', chop, false);
+                rotateAvatarBone(ctrl.rightForeArm, 'axisX', .3 * Math.abs(chop), false);
+                rotateAvatarBone(ctrl.leftArm, 'axisX', .2 * attack, false);
+            } else if (attack) {
                 rotateAvatarBone(ctrl.rightArm, 'axisX', 1.8 * attack, false);
                 rotateAvatarBone(ctrl.rightForeArm, 'axisX', 0.6 * attack, false);
                 rotateAvatarBone(ctrl.leftArm, 'axisX', 0.5 * attack, false);
@@ -585,7 +591,7 @@ function createGltfAvatarRig(gltf) {
         } else if (!ctrl) {
             rig.pivot.position.y = Math.abs(swing) * 0.06;
             rig.pivot.rotation.z = swing * 0.06;
-            rig.pivot.rotation.x = -0.3 * attack + 0.12 * air;
+            rig.pivot.rotation.x = -0.3 * (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : attack) + 0.12 * air;
         } else {
             rig.pivot.position.y = 0;
         }
@@ -761,7 +767,8 @@ function buildVoxAvatarRig(buffer) {
         if (parts.legL) parts.legL.rotation.x = -0.6 * swing - 0.6 * air;
         if (parts.legR) parts.legR.rotation.x = 0.6 * swing - 0.3 * air;
         if (parts.armL) parts.armL.rotation.x = 0.5 * swing - 0.7 * air - 0.4 * attack;
-        if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air - 1.6 * attack;
+        if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air -
+            (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : 1.6 * attack);
         if (parts.head) parts.head.rotation.x = -clampAvatarPitch(state.pitch);
         if (parts.body) parts.body.rotation.x = parts.armR ? 0 : 0.25 * attack;
         rig.pivot.position.y = Math.abs(swing) * 0.05;
@@ -871,7 +878,7 @@ function updateCustomAvatars(dt, now, localMoving) {
             detachCustomAvatar(group);
             continue;
         }
-        if (!group.visible || group.userData.profileDefaultAvatar) continue;
+        if ((!group.visible && group !== avatarGroup) || group.userData.profileDefaultAvatar) continue;
         let state;
         if (group === avatarGroup) {
             state = {
@@ -898,7 +905,10 @@ function updateCustomAvatars(dt, now, localMoving) {
                 attack: attackElapsed >= 0 && attackElapsed < 500 ? attackElapsed / 500 : -1
             };
         }
+        state.pickaxe = !!group.heldPickaxe;
         rig.update(dt, state);
+        if (typeof updateHeldPickaxePose === 'function') updateHeldPickaxePose(group);
+        if (group === avatarGroup && typeof updateFirstPersonPickaxe === 'function') updateFirstPersonPickaxe(now);
     }
 }
 

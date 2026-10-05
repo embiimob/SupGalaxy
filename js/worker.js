@@ -215,6 +215,8 @@ const BLOCKS = {
         126: { name: 'Green Laser Gun', color: '#00ff00', hand_attachable: true },
         127: { name: "Magician's Stone", color: "#8A2BE2" },
         133: { name: 'Blue Laser Gun', color: '#0000ff', hand_attachable: true },
+        174: { name: 'Iron Pick', color: '#a8a8a8', itemOnly: true, hand_attachable: true },
+        175: { name: 'Blue Iron Pick', color: '#4da6ff', itemOnly: true, hand_attachable: true },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
         139: { name: 'Castle Stone Bricks', color: '#72777d' },
         140: { name: 'Mossy Castle Bricks', color: '#63745d' },

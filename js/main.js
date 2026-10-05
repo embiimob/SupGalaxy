@@ -743,6 +743,7 @@ function initThree() {
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    scene.add(camera);
     scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
@@ -895,7 +896,154 @@ function createAndSetupAvatar(e, t, o = 0) {
 
     t ? avatarGroup = n : playerAvatars.set(e, n), scene.add(n);
     if (typeof applyCustomAvatarToGroup === "function") applyCustomAvatarToGroup(n, getAvatarConfigForUser(e, t));
+    updateHeldPickaxe(n, t ? selectedBlockId : userPositions[e]?.selectedBlockId);
     return n
+}
+
+function createPickaxeMesh(toolId) {
+    const group = new THREE.Group();
+    const model = new THREE.Group();
+    // Keep the grip fixed: handle +Y points forward (-Z), head +X points skyward (+Y).
+    model.rotation.set(-Math.PI / 2, -Math.PI / 2, 0);
+    model.position.z = -.325;
+    group.add(model);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(.08, .65, .08),
+        new THREE.MeshStandardMaterial({ color: BLOCKS[7].color }));
+    const head = new THREE.Mesh(new THREE.BoxGeometry(.5, .1, .12),
+        new THREE.MeshStandardMaterial({
+            color: BLOCKS[toolId].color, metalness: .6, roughness: .4,
+            emissive: toolId === 175 ? 0x087bff : 0,
+            emissiveIntensity: toolId === 175 ? .65 : 0
+        }));
+    head.position.y = .28;
+    model.add(handle, head);
+    if (toolId === 175) {
+        const glow = new THREE.MeshStandardMaterial({ color: 0x9eeaff, emissive: 0x36bbff, emissiveIntensity: 2 });
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(.52, .025, .13), glow);
+        edge.position.y = .33;
+        const collar = new THREE.Mesh(new THREE.BoxGeometry(.105, .08, .105), glow);
+        collar.position.y = .18;
+        model.add(edge, collar);
+    }
+    return group;
+}
+
+var firstPersonPickaxe = null;
+
+function updateFirstPersonPickaxe(now) {
+    if (!camera) return;
+    const toolId = BLOCKS[selectedBlockId]?.pickaxe ? selectedBlockId : null;
+    if ((firstPersonPickaxe?.userData.toolId || null) !== toolId) {
+        if (firstPersonPickaxe) {
+            firstPersonPickaxe.parent.remove(firstPersonPickaxe);
+            disposeObject(firstPersonPickaxe);
+            firstPersonPickaxe = null;
+        }
+        if (toolId) {
+            firstPersonPickaxe = createPickaxeMesh(toolId);
+            firstPersonPickaxe.userData.toolId = toolId;
+            firstPersonPickaxe.scale.setScalar(1.4);
+            const handle = firstPersonPickaxe.children[0].children[0];
+            handle.scale.y = 2 / 3;
+            handle.position.y = .65 / 6;
+            firstPersonPickaxe.traverse(o => {
+                if (!o.isMesh) return;
+                o.renderOrder = 1000;
+                o.frustumCulled = false;
+                o.material.transparent = true;
+                o.material.opacity = 1;
+                o.material.depthTest = false;
+                o.material.depthWrite = false;
+            });
+            camera.add(firstPersonPickaxe);
+        }
+    }
+    if (!firstPersonPickaxe) return;
+    firstPersonPickaxe.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
+        player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
+    const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
+    const windup = Math.max(0, swing) / .55;
+    const strike = Math.max(0, -swing) / 1.45;
+    // Hide the rear handle cap offscreen right; retreat during the strike for near-plane clearance.
+    firstPersonPickaxe.position.set(.65 * Math.max(1, camera.aspect / (16 / 9)) - .12 * strike, -.24 + .5 * 1.4 / 3 + .10 * windup - .12 * strike, -.16 - .30 * strike);
+    firstPersonPickaxe.rotation.set(Math.PI / 9 + 1.05 * swing, .12 * strike, -.12 - .18 * strike);
+}
+
+function updateAvatarHeldLight(avatar, sourcePosition) {
+    if (!avatar?.torchLight) return;
+    const toolId = avatar.userData.heldBlockId;
+    if (toolId === 175 && sourcePosition) {
+        // Cache source context on network updates, not on every animation frame.
+        const cell = `${Math.floor(sourcePosition.x)},${Math.floor(sourcePosition.y)},${Math.floor(sourcePosition.z)}`;
+        if (avatar.userData.heldLightCell !== cell) {
+            avatar.userData.heldLightCell = cell;
+            avatar.userData.heldLightUnderground = lightManager.getUndergroundContext(
+                sourcePosition.x, sourcePosition.y, sourcePosition.z).isUnderground;
+        }
+    }
+    const light = avatar.torchLight;
+    if (toolId === 175) {
+        applyBlueCalciteLight(light, avatar.userData.heldLightUnderground);
+    } else {
+        light.color.setHex(0xffddaa);
+        light.distance = 22;
+        light.decay = 2;
+        light.intensity = toolId === 120 ? 1.15 : 0;
+        avatar.userData.heldLightCell = null;
+    }
+    // The local scene light serves both camera modes; never double it here.
+    const state = userPositions[avatar.userData.avatarUser];
+    if (avatar === avatarGroup || !avatar.visible || avatar.userData.heldLightDead ||
+        state?.isDying ||
+        avatar.userData.customAvatar?.ambientPlaying) light.intensity = 0;
+}
+
+function updateHeldPickaxe(avatar, toolId, sourcePosition) {
+    if (avatar === avatarGroup) updateFirstPersonPickaxe(performance.now());
+    if (!avatar || !avatar.children[5]) return;
+    avatar.userData.heldBlockId = toolId;
+    updateAvatarHeldLight(avatar, sourcePosition);
+    const selectedPick = BLOCKS[toolId]?.pickaxe ? toolId : null;
+    if ((avatar.heldPickaxe?.userData.toolId || null) === selectedPick) return;
+    if (avatar.heldPickaxe) {
+        avatar.heldPickaxe.parent.remove(avatar.heldPickaxe);
+        disposeObject(avatar.heldPickaxe);
+        avatar.heldPickaxe = null;
+    }
+    if (selectedPick) {
+        const pick = createPickaxeMesh(selectedPick);
+        pick.userData.toolId = selectedPick;
+        pick.position.set(0, -.35, .25);
+        pick.updateMatrix();
+        pick.userData.gripMatrix = pick.matrix.clone();
+        pick.userData.handPosition = new THREE.Vector3();
+        pick.matrixAutoUpdate = false;
+        avatar.add(pick);
+        avatar.heldPickaxe = pick;
+        updateHeldPickaxePose(avatar);
+    }
+}
+
+function updateHeldPickaxePose(avatar) {
+    updateAvatarHeldLight(avatar);
+    if (!avatar?.heldPickaxe) return;
+    const arm = avatar.children[5];
+    arm.updateMatrix();
+    // Follow the arm without inheriting hidden hitbox visibility on custom avatars.
+    avatar.heldPickaxe.matrix.multiplyMatrices(arm.matrix, avatar.heldPickaxe.userData.gripMatrix);
+    const rig = avatar.userData.customAvatar;
+    // Skins use a hand anchor rather than the default arm's recessed grip.
+    avatar.heldPickaxe.children[0].position.z = rig ? 0 : -.325;
+    avatar.heldPickaxe.visible = !rig?.ambientPlaying;
+    if (rig?.rightHand) {
+        // Use the visible skeleton's hand, not the invisible box hitbox's hand.
+        rig.rightHand.getWorldPosition(avatar.heldPickaxe.userData.handPosition);
+        avatar.worldToLocal(avatar.heldPickaxe.userData.handPosition);
+        avatar.heldPickaxe.userData.handPosition.y += .08;
+        avatar.heldPickaxe.userData.handPosition.z += .04;
+        avatar.heldPickaxe.matrix.setPosition(avatar.heldPickaxe.userData.handPosition);
+    }
+    avatar.heldPickaxe.matrixWorldNeedsUpdate = true;
 }
 
 function initHotbar() {
@@ -987,7 +1135,8 @@ function updateHotbarUI() {
             }
         }
         e.style.background = "rgba(" + r.join(",") + ", " + (a ? .45 : .2) + ")", e.querySelector(".hot-label").innerText = displayName, e.querySelector(".hot-count").innerText = n > 0 ? n : "", e.classList.toggle("active", t === selectedHotIndex)
-    })), selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null
+    })), selectedBlockId = INVENTORY[selectedHotIndex] ? INVENTORY[selectedHotIndex].id : null;
+    updateHeldPickaxe(avatarGroup, selectedBlockId);
 }
 
 function addToInventory(e, t, o = null) {
@@ -1402,13 +1551,13 @@ function createProjectile(e, t, o, a, n = "red") {
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
-    const s = new THREE.SphereGeometry(.25, 16, 16),
-        i = new THREE.MeshStandardMaterial({
+    const l = r.pickaxe ? createPickaxeMesh(o) : new THREE.Mesh(
+        new THREE.SphereGeometry(.25, 16, 16),
+        new THREE.MeshStandardMaterial({
             color: r.color,
             emissive: r.color,
             emissiveIntensity: .5
-        }),
-        l = new THREE.Mesh(s, i);
+        }));
 
     // Give dropping blue laser guns the same visual scale as their fired projectiles
     if (o === 133) {
@@ -2457,6 +2606,20 @@ function dropSelectedItem(dropAll = false) {
 }
 
 let lastPointerDownTime = 0;
+function useSelectedPickaxe() {
+    const item = INVENTORY[selectedHotIndex];
+    const tool = item && BLOCKS[item.id];
+    if (!tool || !tool.pickaxe) return null;
+    const toolId = item.id;
+    if (Math.random() < tool.breakChance) {
+        item.count--;
+        if (item.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        addMessage(`${tool.name} broke!`, 2000);
+    }
+    return toolId;
+}
+
 function onPointerDown(e) {
     if ("first" !== cameraMode || isPromptOpen) return;
 
@@ -2590,6 +2753,7 @@ function onPointerDown(e) {
         }
         return;
     }
+    const toolId = e.button === 0 ? useSelectedPickaxe() : null;
     if (e.button === 2 && t && (t.id === 137 || t.id === 138)) {
         const direction = new THREE.Vector3();
         camera.getWorldDirection(direction);
@@ -2622,7 +2786,7 @@ function onPointerDown(e) {
         }
         if (e) {
             const t = mobs.find((t => t.id === e));
-            if (t) return animateAttack(), void handleMobHit(t)
+            if (t) return animateAttack(), void handleMobHit(t, toolId)
         }
     }
     const n = Array.from(playerAvatars.entries()).filter((([e]) => e !== userName)).map((([e, t]) => ({
@@ -2635,7 +2799,8 @@ function onPointerDown(e) {
         const t = JSON.stringify({
             type: "player_hit",
             target: e.username,
-            username: userName
+            username: userName,
+            toolId: toolId
         });
         if (isHost) handlePlayerHit(JSON.parse(t));
         else {
@@ -2687,15 +2852,16 @@ function onPointerDown(e) {
                 // Left click: Break
                 animateAttack();
                 if (isHost || peers.size === 0) {
-                    removeBlockAt(cx, cy, cz, userName);
+                    removeBlockAt(cx, cy, cz, userName, 1, false, toolId);
                 } else {
                     const requestMsg = JSON.stringify({
-                        type: 'request_block_break',
+                        type: 'block_hit',
                         x: cx,
                         y: cy,
                         z: cz,
                         username: userName,
-                        world: worldName
+                        world: worldName,
+                        toolId: toolId
                     });
                     for (const [, peer] of peers.entries()) {
                         if (peer.dc && peer.dc.readyState === 'open') {
@@ -2786,7 +2952,7 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
 
         if (isHost || peers.size === 0) {
-            removeBlockAt(x, y, z, userName);
+            removeBlockAt(x, y, z, userName, 1, false, toolId);
         } else {
             const blockId = getBlockAt(x, y, z);
             if (blockId > 0) { // Don't send for air
@@ -2797,7 +2963,8 @@ function onPointerDown(e) {
                     z: z,
                     username: userName,
                     world: worldName,
-                    blockId: blockId
+                    blockId: blockId,
+                    toolId: toolId
                 });
                 for (const [, peer] of peers.entries()) {
                     if (peer.dc && peer.dc.readyState === 'open') {
@@ -2928,6 +3095,7 @@ function updateBlockDamageVisuals(x, y, z, hits) {
 }
 
 function handlePlayerHit(e) {
+    const damage = getPickaxeMultiplier(e.toolId);
     const t = e.username,
         o = e.target,
         a = t === userName ? player : userPositions[t],
@@ -2951,11 +3119,11 @@ function handlePlayerHit(e) {
             const m = peers.get(e.target);
             m && m.dc && "open" === m.dc.readyState ? m.dc.send(JSON.stringify({
                 type: "player_damage",
-                damage: 1,
+                damage: damage,
                 attacker: e.username,
                 kx: u,
                 kz: p
-            })) : e.target === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudioAt(soundHit, getAudioPositionForPlayer(e.username) || player), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
+            })) : e.target === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - damage), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudioAt(soundHit, getAudioPositionForPlayer(e.username) || player), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
         } else t === userName && addMessage("Miss! Target is out of range.", 800)
     }
 }
@@ -3049,7 +3217,7 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
         for (let dx = -1; dx <= 1; dx++) {
             for (let dz = -1; dz <= 1; dz++) {
                 for (let dy = 0; dy < 2; dy++) {
-                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true);
+                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true, null, "blue");
                 }
             }
         }
@@ -3078,14 +3246,15 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
     }
 }
 
-function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
+function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolId = null, laserColor = null) {
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 6) return;
 
     const n = BLOCKS[a] || { strength: 1 };
     const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
     if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
-    if (n.unbreakable && !isUfo) {
+    const miningDamage = isUfo ? 1 : getMiningDamage(a, toolId, laserColor);
+    if (!miningDamage) {
         const message = "Cannot break that block";
         if (isHost && breaker && breaker !== userName) {
             const peer = peers.get(breaker);
@@ -3123,7 +3292,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false) {
         hits: 0,
         mesh: null
     };
-    s.hits += damageAmount;
+    s.hits += damageAmount * miningDamage;
 
     // UFO lasers can break unbreakable blocks by treating them as strength 100000 if hit repeatedly (reduced damage)
     const strength = Number.isFinite(n.strength) && n.strength > 0 ? n.strength : 1;
@@ -3334,7 +3503,7 @@ function placeBlockAt(e, t, o, a) {
         const facing = getBuildFacing();
         const placedBlockId = getOrientedBuildBlockId(a, facing);
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
-        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(`${BLOCKS[a].name} can only be released into water.`, 2000);
+        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(BLOCKS[a].pickaxe ? "Select the pick and left-click to use it." : `${BLOCKS[a].name} can only be released into water.`, 2000);
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
@@ -3536,6 +3705,7 @@ function getBlockAt(e, t, o) {
 
 function handlePlayerDeath() {
     if (deathScreenShown || isDying) return;
+    if (lightManager.playerLight) lightManager.playerLight.intensity = 0;
     avatarGroup && (avatarGroup.visible = !0), isDying = !0, deathAnimationStart = performance.now(), INVENTORY = new Array(36).fill(null), player.score = 0, document.getElementById("score").innerText = player.score, player.health = 0, updateHealthBar(), updateHotbarUI(), addMessage("You died! All items and score lost.", 5e3);
     const e = JSON.stringify({
         type: "player_death",
@@ -3984,6 +4154,7 @@ function toggleCameraMode() {
     // Toggle controls and avatar visibility
     controls.enabled = "third" === cameraMode;
     avatarGroup.visible = "third" === cameraMode;
+    updateFirstPersonPickaxe(performance.now());
 
     if ("third" === cameraMode) {
         // Switch to Third Person
@@ -4740,7 +4911,7 @@ function setupMobile() {
                     // If item is a gun (121, 126) or consumable (122), use Left Click (Button 0)
                     // because Right Click with hand_attachable items triggers 'drop' logic.
                     // Guns and honey are usually 0 to fire/eat.
-                    if (item && (item.id === 121 || item.id === 126 || item.id === 122)) {
+                    if (item && (item.id === 121 || item.id === 126 || item.id === 122 || BLOCKS[item.id]?.pickaxe)) {
                         button = 0;
                     }
 
@@ -5595,12 +5766,15 @@ function updateAvatarAnimation(e, t) {
         const t = e - attackStartTime;
         if (t < 500) {
             const e = 1.5 * Math.sin(t / 500 * Math.PI);
-            avatarGroup.children[4].rotation.x = e, avatarGroup.children[5].rotation.x = e
+            avatarGroup.children[4].rotation.x = avatarGroup.heldPickaxe ? .2 * e : e,
+                avatarGroup.children[5].rotation.x = avatarGroup.heldPickaxe ? pickaxeArmAttackSwing(t / 500) : e
         } else isAttacking = !1, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
     } else if (t) {
         const t = .5 * Math.sin(.005 * e);
         avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
-    } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
+    } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
+    updateHeldPickaxePose(avatarGroup);
+    updateFirstPersonPickaxe(e);
 }
 
 function initMinimap() {
@@ -5975,12 +6149,17 @@ function gameLoop(e) {
                         a = 500;
                     if (o < a) {
                         const e = 1.5 * Math.sin(o / a * Math.PI);
-                        v.children[4].rotation.x = e, v.children[5].rotation.x = e
-                    } else e.localAnimStartTime = null
+                        v.children[4].rotation.x = v.heldPickaxe ? .2 * e : e,
+                            v.children[5].rotation.x = v.heldPickaxe ? pickaxeArmAttackSwing(o / a) : e
+                    } else {
+                        e.localAnimStartTime = null;
+                        v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                    }
                 } else if (e.isMoving) {
                     const e = .5 * Math.sin(.005 * t);
                     v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e
                 } else v.children[0].rotation.x = 0, v.children[1].rotation.x = 0, v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                updateHeldPickaxePose(v);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,
@@ -6154,7 +6333,7 @@ function gameLoop(e) {
                             applyBlueLaserDamage(a, n, r, o.user);
 
                         } else {
-                            removeBlockAt(a, n, r, o.user);
+                            removeBlockAt(a, n, r, o.user, 1, false, null, o.isGreen ? "green" : "red");
                         }
                     } else {
                         // Clients only broadcast block hit if they own the projectile
@@ -6187,7 +6366,8 @@ function gameLoop(e) {
                                         z: r,
                                         username: o.user,
                                         world: worldName,
-                                        blockId: blockId
+                                        blockId: blockId,
+                                        laserColor: o.isGreen ? "green" : "red"
                                     });
                                     for (const [, peer] of peers.entries()) {
                                         if (peer.dc && peer.dc.readyState === 'open') {
