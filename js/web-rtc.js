@@ -595,14 +595,7 @@ function setupDataChannel(e, t) {
 
                             if (playerAvatars.has(t)) {
                                 const avatar = playerAvatars.get(t);
-                                updateHeldPickaxe(avatar, e.selectedBlockId);
-                                if (avatar.torchLight) {
-                                    if (e.selectedBlockId === 120) {
-                                        avatar.torchLight.intensity = 1.15;
-                                    } else {
-                                        avatar.torchLight.intensity = 0;
-                                    }
-                                }
+                                updateHeldPickaxe(avatar, e.selectedBlockId, e);
                             }
                         }
                     break;
@@ -646,14 +639,7 @@ function setupDataChannel(e, t) {
 
                     if (playerAvatars.has(n)) {
                         const avatar = playerAvatars.get(n);
-                        updateHeldPickaxe(avatar, s.selectedBlockId);
-                        if (avatar.torchLight) {
-                            if (s.selectedBlockId === 120) {
-                                avatar.torchLight.intensity = 1.15;
-                            } else {
-                                avatar.torchLight.intensity = 0;
-                            }
-                        }
+                        updateHeldPickaxe(avatar, s.selectedBlockId, s);
                     }
                     break;
                 case "block_change":
@@ -1062,7 +1048,11 @@ function setupDataChannel(e, t) {
                     if (userPositions[m]) {
                         userPositions[m].isDying = !0, userPositions[m].deathAnimationStart = performance.now();
                         const e = playerAvatars.get(m);
-                        e && (e.visible = !0)
+                        if (e) {
+                            e.visible = !0;
+                            e.userData.heldLightDead = true;
+                            updateAvatarHeldLight(e);
+                        }
                     }
                     break;
                 case "avatar_update": {

@@ -743,6 +743,7 @@ function initThree() {
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 1e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+    scene.add(camera);
     scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
@@ -904,14 +905,92 @@ function createPickaxeMesh(toolId) {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(.08, .65, .08),
         new THREE.MeshStandardMaterial({ color: BLOCKS[7].color }));
     const head = new THREE.Mesh(new THREE.BoxGeometry(.5, .1, .12),
-        new THREE.MeshStandardMaterial({ color: BLOCKS[toolId].color, metalness: .6, roughness: .4 }));
+        new THREE.MeshStandardMaterial({
+            color: BLOCKS[toolId].color, metalness: .6, roughness: .4,
+            emissive: toolId === 175 ? 0x087bff : 0,
+            emissiveIntensity: toolId === 175 ? .65 : 0
+        }));
     head.position.y = .28;
     group.add(handle, head);
+    if (toolId === 175) {
+        const glow = new THREE.MeshStandardMaterial({ color: 0x9eeaff, emissive: 0x36bbff, emissiveIntensity: 2 });
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(.52, .025, .13), glow);
+        edge.position.y = .33;
+        const collar = new THREE.Mesh(new THREE.BoxGeometry(.105, .08, .105), glow);
+        collar.position.y = .18;
+        group.add(edge, collar);
+    }
     return group;
 }
 
-function updateHeldPickaxe(avatar, toolId) {
+var firstPersonPickaxe = null;
+
+function updateFirstPersonPickaxe(now) {
+    if (!camera) return;
+    const toolId = BLOCKS[selectedBlockId]?.pickaxe ? selectedBlockId : null;
+    if ((firstPersonPickaxe?.userData.toolId || null) !== toolId) {
+        if (firstPersonPickaxe) {
+            firstPersonPickaxe.parent.remove(firstPersonPickaxe);
+            disposeObject(firstPersonPickaxe);
+            firstPersonPickaxe = null;
+        }
+        if (toolId) {
+            firstPersonPickaxe = createPickaxeMesh(toolId);
+            firstPersonPickaxe.userData.toolId = toolId;
+            firstPersonPickaxe.traverse(o => {
+                if (!o.isMesh) return;
+                o.renderOrder = 1000;
+                o.frustumCulled = false;
+                o.material.transparent = true;
+                o.material.opacity = 1;
+                o.material.depthTest = false;
+                o.material.depthWrite = false;
+            });
+            camera.add(firstPersonPickaxe);
+        }
+    }
+    if (!firstPersonPickaxe) return;
+    firstPersonPickaxe.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
+        player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
+    const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
+    firstPersonPickaxe.position.set(.32, -.32 - .06 * Math.max(0, swing), -.65);
+    firstPersonPickaxe.rotation.set(.85 * swing, 0, -.12);
+}
+
+function updateAvatarHeldLight(avatar, sourcePosition) {
+    if (!avatar?.torchLight) return;
+    const toolId = avatar.userData.heldBlockId;
+    if (toolId === 175 && sourcePosition) {
+        // Cache source context on network updates, not on every animation frame.
+        const cell = `${Math.floor(sourcePosition.x)},${Math.floor(sourcePosition.y)},${Math.floor(sourcePosition.z)}`;
+        if (avatar.userData.heldLightCell !== cell) {
+            avatar.userData.heldLightCell = cell;
+            avatar.userData.heldLightUnderground = lightManager.getUndergroundContext(
+                sourcePosition.x, sourcePosition.y, sourcePosition.z).isUnderground;
+        }
+    }
+    const light = avatar.torchLight;
+    if (toolId === 175) {
+        applyBlueCalciteLight(light, avatar.userData.heldLightUnderground);
+    } else {
+        light.color.setHex(0xffddaa);
+        light.distance = 22;
+        light.decay = 2;
+        light.intensity = toolId === 120 ? 1.15 : 0;
+        avatar.userData.heldLightCell = null;
+    }
+    // The local scene light serves both camera modes; never double it here.
+    const state = userPositions[avatar.userData.avatarUser];
+    if (avatar === avatarGroup || !avatar.visible || avatar.userData.heldLightDead ||
+        state?.isDying ||
+        avatar.userData.customAvatar?.ambientPlaying) light.intensity = 0;
+}
+
+function updateHeldPickaxe(avatar, toolId, sourcePosition) {
+    if (avatar === avatarGroup) updateFirstPersonPickaxe(performance.now());
     if (!avatar || !avatar.children[5]) return;
+    avatar.userData.heldBlockId = toolId;
+    updateAvatarHeldLight(avatar, sourcePosition);
     const selectedPick = BLOCKS[toolId]?.pickaxe ? toolId : null;
     if ((avatar.heldPickaxe?.userData.toolId || null) === selectedPick) return;
     if (avatar.heldPickaxe) {
@@ -922,10 +1001,10 @@ function updateHeldPickaxe(avatar, toolId) {
     if (selectedPick) {
         const pick = createPickaxeMesh(selectedPick);
         pick.userData.toolId = selectedPick;
-        pick.position.set(0, -.25, -.2);
-        pick.rotation.x = Math.PI / 2;
+        pick.position.set(0, -.35, .25);
         pick.updateMatrix();
         pick.userData.gripMatrix = pick.matrix.clone();
+        pick.userData.handPosition = new THREE.Vector3();
         pick.matrixAutoUpdate = false;
         avatar.add(pick);
         avatar.heldPickaxe = pick;
@@ -934,11 +1013,22 @@ function updateHeldPickaxe(avatar, toolId) {
 }
 
 function updateHeldPickaxePose(avatar) {
+    updateAvatarHeldLight(avatar);
     if (!avatar?.heldPickaxe) return;
     const arm = avatar.children[5];
     arm.updateMatrix();
     // Follow the arm without inheriting hidden hitbox visibility on custom avatars.
     avatar.heldPickaxe.matrix.multiplyMatrices(arm.matrix, avatar.heldPickaxe.userData.gripMatrix);
+    const rig = avatar.userData.customAvatar;
+    avatar.heldPickaxe.visible = !rig?.ambientPlaying;
+    if (rig?.rightHand) {
+        // Use the visible skeleton's hand, not the invisible box hitbox's hand.
+        rig.rightHand.getWorldPosition(avatar.heldPickaxe.userData.handPosition);
+        avatar.worldToLocal(avatar.heldPickaxe.userData.handPosition);
+        avatar.heldPickaxe.userData.handPosition.y += .08;
+        avatar.heldPickaxe.userData.handPosition.z += .04;
+        avatar.heldPickaxe.matrix.setPosition(avatar.heldPickaxe.userData.handPosition);
+    }
     avatar.heldPickaxe.matrixWorldNeedsUpdate = true;
 }
 
@@ -3601,6 +3691,7 @@ function getBlockAt(e, t, o) {
 
 function handlePlayerDeath() {
     if (deathScreenShown || isDying) return;
+    if (lightManager.playerLight) lightManager.playerLight.intensity = 0;
     avatarGroup && (avatarGroup.visible = !0), isDying = !0, deathAnimationStart = performance.now(), INVENTORY = new Array(36).fill(null), player.score = 0, document.getElementById("score").innerText = player.score, player.health = 0, updateHealthBar(), updateHotbarUI(), addMessage("You died! All items and score lost.", 5e3);
     const e = JSON.stringify({
         type: "player_death",
@@ -4049,6 +4140,7 @@ function toggleCameraMode() {
     // Toggle controls and avatar visibility
     controls.enabled = "third" === cameraMode;
     avatarGroup.visible = "third" === cameraMode;
+    updateFirstPersonPickaxe(performance.now());
 
     if ("third" === cameraMode) {
         // Switch to Third Person
@@ -5660,13 +5752,15 @@ function updateAvatarAnimation(e, t) {
         const t = e - attackStartTime;
         if (t < 500) {
             const e = 1.5 * Math.sin(t / 500 * Math.PI);
-            avatarGroup.children[4].rotation.x = e, avatarGroup.children[5].rotation.x = e
+            avatarGroup.children[4].rotation.x = avatarGroup.heldPickaxe ? .2 * e : e,
+                avatarGroup.children[5].rotation.x = avatarGroup.heldPickaxe ? pickaxeAttackSwing(t / 500) : e
         } else isAttacking = !1, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
     } else if (t) {
         const t = .5 * Math.sin(.005 * e);
         avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
     } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
     updateHeldPickaxePose(avatarGroup);
+    updateFirstPersonPickaxe(e);
 }
 
 function initMinimap() {
@@ -6041,8 +6135,12 @@ function gameLoop(e) {
                         a = 500;
                     if (o < a) {
                         const e = 1.5 * Math.sin(o / a * Math.PI);
-                        v.children[4].rotation.x = e, v.children[5].rotation.x = e
-                    } else e.localAnimStartTime = null
+                        v.children[4].rotation.x = v.heldPickaxe ? .2 * e : e,
+                            v.children[5].rotation.x = v.heldPickaxe ? pickaxeAttackSwing(o / a) : e
+                    } else {
+                        e.localAnimStartTime = null;
+                        v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                    }
                 } else if (e.isMoving) {
                     const e = .5 * Math.sin(.005 * t);
                     v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e

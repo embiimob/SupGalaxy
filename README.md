@@ -86,6 +86,7 @@ Other blocks retain their existing strengths; the Blue Iron Pick halves their re
 
 - **Iron Pick:** craft with 1 Iron Ore + 1 Sand + 1 Torch + 1 Wood. Each left-click use has a **1 in 500** chance of breaking one pick; melee damage is **double** normal damage.
 - **Blue Iron Pick:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
+  Its glowing head lights the mining area with the same blue light as Blue Calcite, in first person, third person, and multiplayer.
 - Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
 - **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** retain their existing area mining behavior and can damage Obsidian. Bedrock and chunk ownership protections remain in effect.
 

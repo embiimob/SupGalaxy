@@ -1,3 +1,15 @@
+// Upright pick: lift back, chop forward, then return to the grip.
+function pickaxeSwingEase(t) {
+    return t * t * (3 - 2 * t);
+}
+
+function pickaxeAttackSwing(progress) {
+    if (progress < 0 || progress >= 1) return 0;
+    if (progress < .22) return -.55 * pickaxeSwingEase(progress / .22);
+    if (progress < .55) return -.55 + 2 * pickaxeSwingEase((progress - .22) / .33);
+    return 1.45 * (1 - pickaxeSwingEase((progress - .55) / .45));
+}
+
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,
@@ -1268,6 +1280,21 @@ var volcanoes = [],
     // This allows stone media/behaviors to be preserved and restored when switching worlds.
     // Key: worldName, Value: { magicianStones: {}, calligraphyStones: {}, chests: {} }
     WORLD_STONE_DATA = new Map();
+const BLUE_CALCITE_LIGHT = {
+    surfaceIntensity: .45,
+    undergroundIntensity: .55,
+    color: 0x4da6ff,
+    distance: 36,
+    decay: 1
+};
+
+function applyBlueCalciteLight(light, underground) {
+    light.intensity = underground ? BLUE_CALCITE_LIGHT.undergroundIntensity : BLUE_CALCITE_LIGHT.surfaceIntensity;
+    light.color.setHex(BLUE_CALCITE_LIGHT.color);
+    light.distance = BLUE_CALCITE_LIGHT.distance;
+    light.decay = BLUE_CALCITE_LIGHT.decay;
+}
+
 const lightManager = {
     lights: [],
     poolSize: 8,
@@ -1365,11 +1392,19 @@ const lightManager = {
         scene.add(this.playerLight);
     },
     update: function (e) {
-        if (typeof selectedBlockId !== 'undefined' && selectedBlockId === 120) {
+        const heldLightVisible = !isDying && !deathScreenShown && player.health > 0 &&
+            !avatarGroup?.userData.customAvatar?.ambientPlaying;
+        if (heldLightVisible && (selectedBlockId === 120 || selectedBlockId === 175)) {
             const underground = this.getUndergroundContext(e.x, e.y, e.z).isUnderground;
-            this.playerLight.intensity = underground ? 1.15 : 0.9;
+            if (selectedBlockId === 175) {
+                applyBlueCalciteLight(this.playerLight, underground);
+            } else {
+                this.playerLight.intensity = underground ? 1.15 : 0.9;
+                this.playerLight.color.setHex(16755251);
+                this.playerLight.distance = underground ? 22 : 18;
+                this.playerLight.decay = 1;
+            }
             this.playerLight.position.set(e.x, e.y + 2, e.z);
-            this.playerLight.distance = underground ? 22 : 18;
         } else {
             this.playerLight.intensity = 0;
         }
@@ -1403,9 +1438,7 @@ const lightManager = {
                 }
 
                 if (o.type === 134) {
-                    a.intensity = playerIsOnSurface ? 0.45 : 0.55;
-                    a.color.setHex(0x4da6ff);
-                    a.distance = 36;
+                    applyBlueCalciteLight(a, !playerIsOnSurface);
                 } else {
                     a.intensity = playerIsOnSurface ? 0.9 : 1.15;
                     a.color.setHex(16755251);
