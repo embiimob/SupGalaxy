@@ -18,6 +18,19 @@ function pickaxeArmAttackSwing(progress) {
     return .15 * (1 - pickaxeSwingEase((progress - .55) / .45));
 }
 
+// Laser guns snap from barrel-up rest to on-target, hold through follow-up shots, then lower.
+function laserGunAimWeight(elapsedMs) {
+    if (!(elapsedMs >= 0) || elapsedMs >= 1100) return 0;
+    if (elapsedMs < 90) return pickaxeSwingEase(elapsedMs / 90);
+    if (elapsedMs < 700) return 1;
+    return 1 - pickaxeSwingEase((elapsedMs - 700) / 400);
+}
+
+// Shoulder angle that points a hanging arm (default box, VOX or skeletal) along the view pitch.
+function laserGunArmAngle(pitch) {
+    return Math.PI / 2 + Math.max(-1.2, Math.min(1.2, pitch || 0));
+}
+
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,

@@ -533,7 +533,7 @@ function createGltfAvatarRig(gltf) {
         const air = rig.air;
         const attack = avatarAttackSwing(state);
         const ctrl = rig.controllers;
-        const active = state.moving || state.airborne || state.attack >= 0;
+        const active = state.moving || state.airborne || state.attack >= 0 || state.gunAim > 0;
         if (active) {
             rig.idleTime = 0;
             if (rig.ambientPlaying) {
@@ -585,6 +585,11 @@ function createGltfAvatarRig(gltf) {
                 rotateAvatarBone(ctrl.rightArm, 'axisX', 1.8 * attack, false);
                 rotateAvatarBone(ctrl.rightForeArm, 'axisX', 0.6 * attack, false);
                 rotateAvatarBone(ctrl.leftArm, 'axisX', 0.5 * attack, false);
+            }
+            // Laser guns: straighten the arm along the view pitch so the barrel tracks the target.
+            if (state.gunAim > 0) {
+                blendAvatarBone(ctrl.rightArm, laserGunArmAngle(state.pitch), state.gunAim);
+                blendAvatarBone(ctrl.rightForeArm, 0, state.gunAim);
             }
             rotateAvatarBone(ctrl.head, 'axisX', clampAvatarPitch(state.pitch), false);
             rig.pivot.position.y = Math.abs(swing) * 0.04;
@@ -769,6 +774,7 @@ function buildVoxAvatarRig(buffer) {
         if (parts.armL) parts.armL.rotation.x = 0.5 * swing - 0.7 * air - 0.4 * attack;
         if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air -
             (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : 1.6 * attack);
+        if (parts.armR && state.gunAim > 0) parts.armR.rotation.x += (-laserGunArmAngle(state.pitch) - parts.armR.rotation.x) * state.gunAim;
         if (parts.head) parts.head.rotation.x = -clampAvatarPitch(state.pitch);
         if (parts.body) parts.body.rotation.x = parts.armR ? 0 : 0.25 * attack;
         rig.pivot.position.y = Math.abs(swing) * 0.05;
@@ -906,6 +912,7 @@ function updateCustomAvatars(dt, now, localMoving) {
             };
         }
         state.pickaxe = !!group.heldPickaxe;
+        state.gunAim = typeof getLaserGunAim === 'function' ? getLaserGunAim(group) : 0;
         rig.update(dt, state);
         if (typeof updateHeldPickaxePose === 'function') updateHeldPickaxePose(group);
         if (group === avatarGroup && typeof updateFirstPersonPickaxe === 'function') updateFirstPersonPickaxe(now);
