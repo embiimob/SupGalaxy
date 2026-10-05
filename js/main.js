@@ -959,8 +959,10 @@ function updateFirstPersonPickaxe(now) {
     firstPersonPickaxe.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
         player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
     const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
-    firstPersonPickaxe.position.set(.48, -.40 - .06 * Math.max(0, -swing), -.45);
-    firstPersonPickaxe.rotation.set(.85 * swing, 0, -.12);
+    const windup = Math.max(0, swing) / .55;
+    const strike = Math.max(0, -swing) / 1.45;
+    firstPersonPickaxe.position.set(.56 - .12 * strike, -.24 + .10 * windup - .12 * strike, -.36 - .10 * strike);
+    firstPersonPickaxe.rotation.set(1.05 * swing, .12 * strike, -.12 - .18 * strike);
 }
 
 function updateAvatarHeldLight(avatar, sourcePosition) {
