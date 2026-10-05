@@ -653,7 +653,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             name: "Rose Stained Glass",
             color: "#d88ea2",
             transparent: !0,
-            strength: 1
+            strength: 2
         },
         153: {
             name: "Battlement Stone",

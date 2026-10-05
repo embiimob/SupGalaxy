@@ -824,7 +824,7 @@ function handleMobHit(t, toolId = null) {
         // Send directly to the spawner when connected; otherwise the host routes the hit.
         for (const [e, s] of recipients) {
             if (s.dc && "open" === s.dc.readyState) {
-                console.log(`[WebRTC] Sending mob_hit to host ${e}`);
+                console.log(`[WebRTC] Sending mob_hit to ${e}`);
                 s.dc.send(JSON.stringify({
                     type: "mob_hit",
                     id: t.id,

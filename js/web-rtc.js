@@ -963,7 +963,11 @@ function setupDataChannel(e, t) {
                     {
                         const mob = mobs.find(mob => mob.id === s.id);
                         if (!mob || (mob.spawnCommandKey && !canRemoveFishSpawnCommand(mob.spawnCommandKey, s.username))) break;
-                        const damage = "toolId" in s ? 4 * getPickaxeMultiplier(s.toolId) : s.damage || 4;
+                        if (!("toolId" in s)) {
+                            if (isHost) mob.hurt(s.damage || 4, s.username);
+                            break;
+                        }
+                        const damage = 4 * getPickaxeMultiplier(s.toolId);
                         if (mob.spawner === userName || (isHost && !mob.spawner) || peers.size === 0) {
                             mob.hurt(damage, s.username);
                         } else if (isHost) {
