@@ -943,6 +943,9 @@ function updateFirstPersonPickaxe(now) {
             firstPersonPickaxe = createPickaxeMesh(toolId);
             firstPersonPickaxe.userData.toolId = toolId;
             firstPersonPickaxe.scale.setScalar(1.4);
+            const handle = firstPersonPickaxe.children[0].children[0];
+            handle.scale.y = 2 / 3;
+            handle.position.y = .65 / 6;
             firstPersonPickaxe.traverse(o => {
                 if (!o.isMesh) return;
                 o.renderOrder = 1000;
@@ -961,7 +964,8 @@ function updateFirstPersonPickaxe(now) {
     const swing = pickaxeAttackSwing(isAttacking ? (now - attackStartTime) / 500 : -1);
     const windup = Math.max(0, swing) / .55;
     const strike = Math.max(0, -swing) / 1.45;
-    firstPersonPickaxe.position.set(.56 - .12 * strike, -.24 + .10 * windup - .12 * strike, -.36 - .10 * strike);
+    // Raise by a third of the head height; retain near-plane clearance at full strike.
+    firstPersonPickaxe.position.set(.56 - .12 * strike, -.24 + .5 * 1.4 / 3 + .10 * windup - .12 * strike, -.28 - .18 * strike);
     firstPersonPickaxe.rotation.set(1.05 * swing, .12 * strike, -.12 - .18 * strike);
 }
 
