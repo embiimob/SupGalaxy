@@ -1357,6 +1357,9 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
             }
         }
     } catch (e) {
+        if (a && typeof worker !== "undefined") {
+            worker.postMessage({ type: "clear_pending", transactionIds: [a] });
+        }
         console.error("[ChunkManager] Failed to apply chunk updates:", e)
     }
 }

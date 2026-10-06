@@ -714,6 +714,7 @@ var profileByAddressCache = new Map();
 var keywordByAddressCache = new Map();
 var addressByKeywordCache = new Map();
 var processedMessages = new Set();
+var pendingChunkTransactions = new Set();
 var processedOfferMessages = new Set();
 var processedAnswerMessages = new Set();
 var API_CALLS_PER_SECOND = 10;
@@ -1106,8 +1107,9 @@ self.onmessage = async function(e) {
                         skip += qty;
                     }
                     for (var msg of messages || []) {
-                        if (msg.TransactionId && processedMessages.has(msg.TransactionId)) {
-                            console.log('[Worker] Skipping already processed chunk message at cached ID:', msg.TransactionId);
+                        var pendingTransactionId = null;
+                        if (msg.TransactionId && (processedMessages.has(msg.TransactionId) || pendingChunkTransactions.has(msg.TransactionId))) {
+                            console.log('[Worker] Skipping processed or pending chunk message at cached ID:', msg.TransactionId);
                             continue; // Allow processing of older messages that may have been missed
                         }
                         if (!msg.TransactionId) continue;
@@ -1121,7 +1123,15 @@ self.onmessage = async function(e) {
                             }
                             // Add delay before IPFS fetch to respect rate limiting
                             await waitForP2fkApiSlot();
-                            var data = await fetchIPFS(hash);
+                            pendingChunkTransactions.add(msg.TransactionId);
+                            pendingTransactionId = msg.TransactionId;
+                            var data;
+                            try {
+                                data = await fetchIPFS(hash);
+                            } catch (error) {
+                                pendingChunkTransactions.delete(msg.TransactionId);
+                                throw error;
+                            }
                             var processData = data;
                             if (data && data.playerData) {
                                 processData = data.playerData;
@@ -1214,13 +1224,15 @@ self.onmessage = async function(e) {
                                     chests: processData.chests || null,
                                     foreignBlockOrigins: processData.foreignBlockOrigins || null
                                 });
+                                pendingTransactionId = null;
                             } else {
+                                pendingChunkTransactions.delete(msg.TransactionId);
                                 console.log('[Worker] No valid deltas in IPFS data for chunk message:', hash, 'txId:', msg.TransactionId);
                             }
                         }
-                        processedMessages.add(msg.TransactionId);
                     }
                 } catch (e) {
+                    if (pendingTransactionId) pendingChunkTransactions.delete(pendingTransactionId);
                     console.error('[Worker] Error in chunk poll:', e);
                 }
             }
@@ -1732,7 +1744,12 @@ self.onmessage = async function(e) {
                 console.error('[Worker] Error in answer_updates poll:', e);
             }
         } else if (type === "update_processed") {
-            data.transactionIds.forEach(function(id) { processedMessages.add(id); });
+            data.transactionIds.forEach(function(id) {
+                processedMessages.add(id);
+                pendingChunkTransactions.delete(id);
+            });
+        } else if (type === "clear_pending") {
+            data.transactionIds.forEach(function(id) { pendingChunkTransactions.delete(id); });
         } else if (type === "retry_chunk") {
             self.postMessage({ type: "poll", chunkKeys: [data.chunkKey], masterKey: masterKey, userAddress: userAddress, worldName: worldName });
         } else if (type === "cleanup_pending") {
