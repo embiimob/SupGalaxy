@@ -2,6 +2,343 @@
 // manageMobs spawns or despawns a mob changes the light count and forces three.js to recompile
 // every lit material, which stalls rendering for a frame each management tick.
 let mobGlowTexture = null;
+const wolfTameRequests = new Map();
+const wolfTamePending = new Map();
+const wolfTameUnacknowledged = new Map();
+const combatRemovedPetIds = new Set();
+const wolfTameSession = Math.random().toString(36).slice(2);
+let wolfTameSequence = 0;
+
+function sanitizePetData(data) {
+    const result = [];
+    if (!Array.isArray(data)) return result;
+    for (const pet of data) {
+        if (!pet || !((typeof pet.id === "string" && pet.id.length > 0 && pet.id.length <= 160) ||
+            (typeof pet.id === "number" && Number.isFinite(pet.id)))) continue;
+        if (combatRemovedPetIds.has(pet.id)) continue;
+        if (result.some(entry => entry.id === pet.id)) continue;
+        if (!Number.isFinite(pet.hp) || pet.hp <= 0) continue;
+        result.push({ id: pet.id, hp: pet.hp,
+            maxHp: Math.max(pet.hp, Number.isFinite(pet.maxHp) ? pet.maxHp : 12),
+            feedRevision: Number.isSafeInteger(pet.feedRevision) && pet.feedRevision >= 0 ? pet.feedRevision : 0,
+            originSeed: typeof pet.originSeed === "string" ? pet.originSeed.slice(0, 200) : worldSeed });
+        if (result.length === 3) break;
+    }
+    return result;
+}
+
+function getPetSaveData() {
+    player.pets = sanitizePetData(player.pets);
+    for (const pet of player.pets) {
+        const mob = mobs.find(mob => mob.id === pet.id && mob.petOwner === userName);
+        if (mob && mob.hp > 0) {
+            pet.hp = mob.hp;
+            pet.maxHp = Math.max(mob.hp, Number.isFinite(mob.maxHp) ? mob.maxHp : pet.maxHp);
+            pet.feedRevision = mob.feedRevision || 0;
+        }
+    }
+    return player.pets.map(pet => ({ ...pet }));
+}
+
+function restorePetSaveData(data) {
+    combatRemovedPetIds.clear();
+    wolfTamePending.clear();
+    wolfTameUnacknowledged.clear();
+    player.pets = sanitizePetData(data);
+    mobs = mobs.filter(mob => {
+        if (mob.petOwner !== userName) return true;
+        const pet = player.pets.find(pet => pet.id === mob.id);
+        if (pet) {
+            mob.hp = pet.hp;
+            mob.maxHp = pet.maxHp;
+            mob.feedRevision = pet.feedRevision;
+            mob.originSeed = pet.originSeed;
+            return true;
+        }
+        scene.remove(mob.mesh);
+        disposeObject(mob.mesh);
+        return false;
+    });
+}
+
+function removePlayerPet(id) {
+    combatRemovedPetIds.add(id);
+    player.pets = sanitizePetData(player.pets).filter(pet => pet.id !== id);
+}
+
+function clearWorldPetsForOwner(owner, broadcast = false) {
+    const removed = new Set();
+    function removePet(mob, world) {
+        if (mob.petOwner !== owner) return true;
+        if (!removed.has(mob)) {
+            removed.add(mob);
+            if (mob.mesh) {
+                scene.remove(mob.mesh);
+                disposeObject(mob.mesh);
+            }
+            if (broadcast) {
+                const message = JSON.stringify({
+                    type: "mob_despawn", id: mob.id, petOwner: owner, relocation: true, world
+                });
+                for (const [, peer] of peers) if (peer.dc?.readyState === "open") peer.dc.send(message);
+            }
+        }
+        return false;
+    }
+    mobs = mobs.filter(mob => removePet(mob, worldName));
+    if (window.mobsByWorld) {
+        for (const world of Object.keys(window.mobsByWorld)) {
+            const cached = window.mobsByWorld[world];
+            if (Array.isArray(cached)) window.mobsByWorld[world] = cached.filter(mob => removePet(mob, world));
+        }
+    }
+    if (window.mobUpdateQueue) {
+        const ids = new Set([...removed].map(mob => mob.id));
+        window.mobUpdateQueue = window.mobUpdateQueue.filter(update => !ids.has(update.id));
+    }
+}
+
+function clearPlayerPetsForWorldSwitch() {
+    getPetSaveData();
+    for (const [id, pending] of wolfTamePending) wolfTameUnacknowledged.set(id, pending);
+    wolfTamePending.clear();
+    clearWorldPetsForOwner(userName, true);
+}
+
+function clearDisconnectedPlayerPets(owner) {
+    if (!owner || owner === userName) return;
+    clearWorldPetsForOwner(owner, isHost);
+}
+
+function getPlayerPetIds(owner) {
+    const ids = new Set(owner === userName ? getPetSaveData().map(pet => pet.id) :
+        (Array.isArray(userPositions[owner]?.petIds) ? userPositions[owner].petIds.slice(0, 3) : []));
+    for (const mob of mobs) if (mob.petOwner === owner && mob.hp > 0) ids.add(mob.id);
+    return ids;
+}
+
+function getWolfTargets() {
+    return mobs.filter(mob => mob.type === "timber_wolf" && mob.hp > 0).map(mob => ({
+        name: `wolf:${mob.id}`, username: `wolf:${mob.id}`, mob,
+        x: mob.pos.x, y: mob.pos.y, z: mob.pos.z, health: mob.hp, armed: false
+    }));
+}
+
+function sendWolfAuthorityMessage(mob, message) {
+    const direct = mob.spawner && peers.get(mob.spawner);
+    if (direct?.dc?.readyState === "open") {
+        direct.dc.send(JSON.stringify(message));
+        return true;
+    }
+    for (const [, peer] of peers) {
+        if (peer.dc?.readyState === "open") {
+            peer.dc.send(JSON.stringify(message));
+            return true;
+        }
+    }
+    return false;
+}
+
+function tryTameWolf(mob) {
+    if (mob.type !== "timber_wolf") return false;
+    if (wolfTamePending.size) {
+        addMessage("Waiting for the wolf to eat its bone…", 1200);
+        return true;
+    }
+    const bone = INVENTORY[selectedHotIndex];
+    if (!bone || bone.id !== 176 || !(bone.count > 0) || selectedBlockId !== 176) return true;
+    if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
+    const requestId = `${userName}:${wolfTameSession}:${++wolfTameSequence}`;
+    const request = { type: "wolf_tame_request", id: mob.id, owner: userName, username: userName, requestId, world: worldName };
+    if (!isMobAuthority(mob) && !sendWolfAuthorityMessage(mob, request)) return true;
+    bone.count--;
+    if (bone.count <= 0) INVENTORY[selectedHotIndex] = null;
+    updateHotbarUI();
+    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isHost ? userName : peers.keys().next().value),
+        startedAt: Date.now(), sentAt: Date.now() });
+    if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId);
+    return true;
+}
+
+function handleWolfTameRequest(mob, owner, requestId) {
+    if (typeof owner !== "string" ||
+        typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`)) return;
+    const key = `${owner}|${requestId}`;
+    let result = wolfTameRequests.get(key);
+    if (!result) {
+        if (!mob || !isMobAuthority(mob)) return;
+        const position = owner === userName ? player : userPositions[owner];
+        const x = owner === userName ? position?.x : position?.targetX;
+        const y = owner === userName ? position?.y : position?.targetY;
+        const z = owner === userName ? position?.z : position?.targetZ;
+        const fed = mob.type === "timber_wolf" && mob.hp > 0 &&
+            position && (owner === userName || position.world === worldName) &&
+            Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) <= 6;
+        if (fed) {
+            mob.hp += 10;
+            mob.maxHp = Math.max(Number.isFinite(mob.maxHp) ? mob.maxHp : 12, mob.hp);
+            mob.feedRevision = (mob.feedRevision || 0) + 1;
+        }
+        const success = !!fed && !mob.petOwner && getPlayerPetIds(owner).size < 3 && Math.random() < 1 / 3;
+        if (success) {
+            mob.petOwner = owner;
+            mob.spawner = owner;
+            mob.aiState = "FOLLOW";
+            mob.provokedBy = {};
+            mob.lastSentPetOwner = null;
+            if (owner !== userName && userPositions[owner]) {
+                userPositions[owner].petIds = [...getPlayerPetIds(owner)].slice(0, 3);
+            }
+        }
+        result = { type: "wolf_tame_result", id: mob.id, owner, requestId, success, tamed: success, fed: !!fed,
+            petOwner: mob.petOwner || null, hp: mob.hp, maxHp: mob.maxHp, feedRevision: mob.feedRevision || 0, originSeed: mob.originSeed,
+            world: worldName, authority: userName };
+        wolfTameRequests.set(key, result);
+        if (fed) queueEliteMobUpdate(mob);
+    }
+    handleWolfTameResult(result);
+    const message = JSON.stringify(result);
+    for (const [, peer] of peers) if (peer.dc?.readyState === "open") peer.dc.send(message);
+}
+
+function handleWolfTameResult(message) {
+    if (!message || typeof message.owner !== "string") return;
+    const pending = wolfTamePending.get(message.requestId) || wolfTameUnacknowledged.get(message.requestId);
+    if (message.owner === userName && !pending) return;
+    const mob = mobs.find(mob => mob.id === message.id);
+    if (!mob && pending && message.authority !== pending.authority) return;
+    if (mob && message.authority !== mob.spawner && message.authority !== mob.petOwner &&
+        !(message.success === true && mob.petOwner === message.owner)) return;
+    if (mob && message.world === worldName && message.fed === true && Number.isFinite(message.hp) && message.hp > 0 &&
+        Number.isFinite(message.feedRevision) && message.feedRevision > (mob.feedRevision || 0)) {
+        mob.hp = message.hp;
+        mob.maxHp = Math.max(message.hp, Number.isFinite(message.maxHp) ? message.maxHp : 12);
+        mob.feedRevision = message.feedRevision;
+    }
+    if (message.owner === userName && pending && pending.request.id === message.id) {
+        wolfTamePending.delete(message.requestId);
+        wolfTameUnacknowledged.delete(message.requestId);
+        if (message.fed === true && message.petOwner === userName && !combatRemovedPetIds.has(message.id)) {
+            const pet = mob && mob.hp > 0 ? {
+                id: message.id, hp: mob.hp, maxHp: mob.maxHp, feedRevision: mob.feedRevision, originSeed: mob.originSeed
+            } : message;
+            player.pets = sanitizePetData([...getPetSaveData(), pet]);
+            addMessage(message.tamed ? "The Timber Wolf is now your pet! +10 HP" : "Fed your wolf! +10 HP", 2000);
+        } else addMessage(combatRemovedPetIds.has(message.id) ? "This wolf was lost to combat." :
+            message.fed ? "Fed the wolf! +10 HP" : "The wolf is no longer close enough to feed.", 1800);
+    }
+    if (mob && message.world === worldName && message.success === true && message.petOwner === message.owner &&
+        !(message.owner === userName && combatRemovedPetIds.has(message.id))) {
+        mob.petOwner = message.owner;
+        mob.spawner = message.owner;
+        mob.aiState = "FOLLOW";
+    }
+}
+
+function findPlayerPetPosition(petId, index = 0) {
+    const centerX = player.x + (player.width || 0.8) / 2;
+    const centerZ = player.z + (player.depth || 0.8) / 2;
+    let fallback = null;
+    for (const radius of [2, 3, 1, 4, 0]) {
+        const steps = radius ? 8 : 1;
+        for (let step = 0; step < steps; step++) {
+            const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
+            const x = modWrap(Math.floor(centerX + Math.cos(angle) * radius) + 0.5, MAP_SIZE);
+            const z = modWrap(Math.floor(centerZ + Math.sin(angle) * radius) + 0.5, MAP_SIZE);
+            if (![[-0.45, -0.45], [-0.45, 0.45], [0.45, -0.45], [0.45, 0.45]]
+                .every(([dx, dz]) => isPositionInLoadedSpace(x + dx, z + dz))) continue;
+            for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+                const y = player.y + dy;
+                if (y < 1 || checkCollisionWithBlock(x, y, z) || checkCollisionWithBlock(x, y + 0.4, z)) continue;
+                if (mobs.some(mob => mob.id !== petId && mob.petOwner === userName &&
+                    Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) < 1.5)) continue;
+                const position = { x, y, z };
+                const block = getBlockAt(x, y, z);
+                if (isSolid(getBlockAt(x, y - 0.2, z)) || block === 6 || block === 136) return position;
+                if (!fallback) fallback = position;
+            }
+        }
+    }
+    return fallback;
+}
+
+function maintainPlayerPets() {
+    if (!chunkManager || !worldArchetype || !Number.isFinite(player.x) || !Number.isFinite(player.y)) return;
+    for (const [index, pet] of getPetSaveData().entries()) {
+        let mob = mobs.find(mob => mob.id === pet.id);
+        if (!mob) {
+            const position = findPlayerPetPosition(pet.id, index);
+            if (!position) continue;
+            mob = spawnMobAndBroadcast("timber_wolf", position.x, position.z, position.y,
+                { id: pet.id, petOwner: userName, hp: pet.hp, maxHp: pet.maxHp,
+                    feedRevision: pet.feedRevision, originSeed: pet.originSeed });
+        }
+        mob.petOwner = userName;
+        mob.spawner = userName;
+        if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
+            const position = findPlayerPetPosition(pet.id, index);
+            if (!position) continue;
+            mob.pos.set(position.x, position.y, position.z);
+            mob.prevPos.copy(mob.pos);
+            mob.targetPos.copy(mob.pos);
+            mob.vx = mob.vz = 0;
+            mob.aiState = "FOLLOW";
+            mob.mesh.position.copy(mob.pos);
+            queueEliteMobUpdate(mob);
+        }
+    }
+    for (const [id, pending] of wolfTamePending) {
+        if (Date.now() - pending.startedAt >= 15000) {
+            wolfTameUnacknowledged.set(id, pending);
+            wolfTamePending.delete(id);
+            addMessage("No response from the wolf. You can try feeding again.", 1800);
+            continue;
+        }
+        if (pending.request.world !== worldName || Date.now() - pending.sentAt < 3000) continue;
+        const mob = mobs.find(mob => mob.id === pending.request.id);
+        if (mob) sendWolfAuthorityMessage(mob, pending.request);
+        pending.sentAt = Date.now();
+    }
+}
+
+function handleMobDamageFromMob(target, source, damage) {
+    if (!target || !source || target === source || !(target.hp > 0) || !(source.hp > 0) ||
+        !(damage > 0) || !Number.isFinite(damage) || !isMobAuthority(target)) return;
+    if (source.type === "timber_wolf" && target.type === "timber_wolf") return;
+    if (!target.pos || !source.pos) return;
+    // Wolves bite at close range; projectile mobs also shoot from high above the terrain.
+    const reach = source.type === "timber_wolf" ? 4 :
+        isEliteMobType(source.type) || source.type === "ufo_saucer" ? 350 : 6;
+    const distance = Math.hypot(target.pos.x - source.pos.x, target.pos.y - source.pos.y, target.pos.z - source.pos.z);
+    if (!Number.isFinite(distance) || distance > reach) return;
+    target.hurt(Math.min(source.type === "timber_wolf" ? 2 : 50, damage),
+        `${source.type === "timber_wolf" ? "wolf" : "mob"}:${source.id}`);
+}
+
+function sendMobDamageFromMob(target, source, damage) {
+    if (!target || !source || !isMobAuthority(source)) return;
+    if (isMobAuthority(target)) handleMobDamageFromMob(target, source, damage);
+    else sendWolfAuthorityMessage(target, {
+        type: "mob_hit", id: target.id, sourceMobId: source.id, damage, username: userName, world: worldName
+    });
+}
+
+function findLegacyMobTarget(mob) {
+    const candidates = [{ x: player.x, y: player.y, z: player.z, health: player.health, username: userName },
+        ...getWolfTargets()];
+    for (const [name, pos] of Object.entries(userPositions)) {
+        if (pos.world === worldName) candidates.push({
+            x: pos.targetX, y: pos.targetY, z: pos.targetZ, health: pos.health || 20, username: name
+        });
+    }
+    let best = null;
+    for (const target of candidates) {
+        if (!(target.health > 0) || Math.abs(target.y - mob.pos.y) >= 30) continue;
+        const distance = Math.hypot(target.x - mob.pos.x, target.y - mob.pos.y, target.z - mob.pos.z);
+        if (!best || distance < best.distance) best = { ...target, distance };
+    }
+    return best;
+}
 
 function createMobGlowSprite(color, size, opacity = 1) {
     if (!mobGlowTexture) {
@@ -633,6 +970,10 @@ function manageMobs() {
 
     // Assign mobs to their nearest active area so we can check if we have authority over them
     for (const mob of mobs) {
+        if (mob.petOwner) {
+            mob.spawner = mob.petOwner;
+            continue;
+        }
         let nearestArea = null;
         let minDistance = Infinity;
         for (const area of activeAreas) {
@@ -694,6 +1035,13 @@ function manageMobs() {
     }
 
     mobs = mobs.filter((mob) => {
+        if (mob.petOwner) {
+            const ownerHere = mob.petOwner === userName || userPositions[mob.petOwner]?.world === worldName;
+            if (ownerHere) return true;
+            scene.remove(mob.mesh);
+            disposeObject(mob.mesh);
+            return false;
+        }
         // Score-tier checks run only on the mob's authority, which has the freshest scores for its area.
         const isAuthority = isMobAuthority(mob);
         const isWideRange = isWideRangeMobType(mob.type);
@@ -780,7 +1128,7 @@ function manageMobs() {
             // Count mobs of this type in this specific area (wide-ranging types count the whole loaded map)
             let countInArea = isWideRangeMobType(type) ? countMobsOfType(type) : 0;
             for (const mob of mobs) {
-                if (mob.type === type) {
+                if (mob.type === type && !mob.petOwner) {
                     // Check if mob is near this area
                     // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
                     // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
@@ -831,9 +1179,15 @@ function manageMobs() {
 }
 
 // Creates a mob owned by this client, queues its first update and announces it to peers.
-function spawnMobAndBroadcast(type, x, z, y = null) {
-    const newMob = new Mob(x, z, Date.now() + Math.random(), type, y);
-    newMob.spawner = userName;
+function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
+    const newMob = new Mob(x, z, pet ? pet.id : Date.now() + Math.random(), type, y, pet?.originSeed);
+    newMob.petOwner = pet?.petOwner || null;
+    newMob.spawner = newMob.petOwner || userName;
+    if (pet) {
+        newMob.hp = pet.hp;
+        newMob.maxHp = pet.maxHp;
+        newMob.feedRevision = pet.feedRevision || 0;
+    }
     mobs.push(newMob);
 
     if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
@@ -847,8 +1201,12 @@ function spawnMobAndBroadcast(type, x, z, y = null) {
         aiState: newMob.aiState,
         type: newMob.type,
         hp: newMob.hp,
+        maxHp: newMob.maxHp,
+        feedRevision: newMob.feedRevision || 0,
         isAggressive: newMob.isAggressive,
-        originSeed: newMob.originSeed
+        originSeed: newMob.originSeed,
+        petOwner: newMob.petOwner,
+        spawner: newMob.spawner
     });
 
     const spawnMsg = JSON.stringify({
@@ -858,9 +1216,13 @@ function spawnMobAndBroadcast(type, x, z, y = null) {
         y: newMob.pos.y,
         z: newMob.pos.z,
         hp: newMob.hp,
+        maxHp: newMob.maxHp,
+        feedRevision: newMob.feedRevision || 0,
         mobType: newMob.type,
         isAggressive: newMob.isAggressive,
         originSeed: newMob.originSeed,
+        petOwner: newMob.petOwner,
+        spawner: newMob.spawner,
         world: worldName,
         username: userName
     });
@@ -934,7 +1296,7 @@ function updateAquaticMob(t, delta) {
         let curiousAboutPlayer = false;
         if (t.type === "whale") {
             if (t.wasAttacked) {
-                const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+                const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z }, ...getWolfTargets()];
                 for (const [name, pos] of Object.entries(userPositions)) {
                     if (pos.world === worldName && pos.targetX !== undefined) {
                         candidates.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
@@ -945,7 +1307,9 @@ function updateAquaticMob(t, delta) {
                 if (target && Math.hypot(target.x - t.pos.x, target.y - t.pos.y, target.z - t.pos.z) < 3 && now - t.attackCooldown > 1400) {
                     t.attackCooldown = now;
                     const peer = peers.get(target.name);
-                    if (target.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                    if (target.mob) {
+                        sendMobDamageFromMob(target.mob, t, 2);
+                    } else if (target.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
                         peer.dc.send(JSON.stringify({ type: "player_damage", damage: 2, attacker: "whale" }));
                     } else if (target.name === userName) {
                         player.health = Math.max(0, player.health - 2);
@@ -965,7 +1329,7 @@ function updateAquaticMob(t, delta) {
                     target = meal.pos;
                     if (t.pos.distanceTo(meal.pos) < (meal.type === "crawley" ? 4.5 : 1.8) && now - (t.lastMealTime || 0) > 3000) {
                         t.lastMealTime = now;
-                        meal.die("whale");
+                        sendMobDamageFromMob(meal, t, Math.max(1, meal.hp));
                     }
                 }
             }
@@ -980,7 +1344,7 @@ function updateAquaticMob(t, delta) {
                 target = t.pos.clone().add(away.normalize().multiplyScalar(14));
             }
 
-            const nearbyPlayers = [{ name: userName, x: player.x, y: player.y, z: player.z }];
+            const nearbyPlayers = [{ name: userName, x: player.x, y: player.y, z: player.z }, ...getWolfTargets()];
             for (const [name, pos] of Object.entries(userPositions)) {
                 if (pos.world === worldName && Number.isFinite(pos.targetX) && Number.isFinite(pos.targetY) && Number.isFinite(pos.targetZ)) {
                     nearbyPlayers.push({ name, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
@@ -996,7 +1360,9 @@ function updateAquaticMob(t, delta) {
                 if (playerDistance < 1.6 && now - t.attackCooldown > 1600) {
                     t.attackCooldown = now;
                     const peer = peers.get(nearestPlayer.name);
-                    if (nearestPlayer.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
+                    if (nearestPlayer.mob) {
+                        sendMobDamageFromMob(nearestPlayer.mob, t, 1);
+                    } else if (nearestPlayer.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
                         peer.dc.send(JSON.stringify({ type: "player_damage", damage: 1, attacker: "fish" }));
                     } else if (nearestPlayer.name === userName) {
                         player.health = Math.max(0, player.health - 1);
@@ -1171,7 +1537,7 @@ Mob.prototype.update = function (t) {
         this.mesh.rightWing.rotation.z = -.5 * Math.sin(this.animationTime);
     }
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
-    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(this);
 
     if (!isLocalSpawner) {
     if ("crawley" === this.type && this.mesh.eyeLight) this.mesh.eyeLight.visible = isNight;
@@ -1303,6 +1669,14 @@ Mob.prototype.update = function (t) {
                     targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
                 }
             }
+            if (!foundIdlePlayer) {
+                for (const wolf of getWolfTargets()) {
+                    if (Math.hypot(wolf.x - this.pos.x, wolf.z - this.pos.z) <
+                        Math.hypot(targetPos.x - this.pos.x, targetPos.z - this.pos.z)) {
+                        targetPos.set(wolf.x, wolf.y, wolf.z);
+                    }
+                }
+            }
 
             const dx = targetPos.x - this.pos.x;
             const dz = targetPos.z - this.pos.z;
@@ -1378,10 +1752,11 @@ Mob.prototype.update = function (t) {
             let ceilingY = chunkManager.getCeilingY(this.pos.x, this.pos.z, this.pos.y) - 0.5;
 
             // Safe access to player
-            let pExists = typeof player !== 'undefined' && player !== null;
+            const spiderTarget = findLegacyMobTarget(this);
+            const pExists = !!spiderTarget;
             if (pExists && this.aiState !== "FALLING") {
-                let playerDist = Math.hypot(this.pos.x - player.x, this.pos.z - player.z);
-                if (playerDist < 2.0 && this.pos.y > player.y + 1) {
+                let playerDist = Math.hypot(this.pos.x - spiderTarget.x, this.pos.z - spiderTarget.z);
+                if (playerDist < 2.0 && this.pos.y > spiderTarget.y + 1) {
                     this.aiState = "FALLING";
                 }
             }
@@ -1392,10 +1767,10 @@ Mob.prototype.update = function (t) {
 
                 // Check if we hit the player
                 if (pExists) {
-                    let playerDistXZ = Math.hypot(this.pos.x - player.x, this.pos.z - player.z);
+                    let playerDistXZ = Math.hypot(this.pos.x - spiderTarget.x, this.pos.z - spiderTarget.z);
                     if (playerDistXZ < 1.5) {
-                        let playerTopY = player.y + 1.6;
-                        if (this.pos.y <= playerTopY && this.pos.y > player.y) {
+                        let playerTopY = spiderTarget.y + 1.6;
+                        if (this.pos.y <= playerTopY && this.pos.y > spiderTarget.y) {
                             this.pos.y = playerTopY;
                             this.aiState = "ATTACKING_PLAYER";
                             this.attackLinger = 0;
@@ -1403,11 +1778,19 @@ Mob.prototype.update = function (t) {
                             // Deal drop damage
                             this.lastEatTime = this.lastEatTime || 0;
                             if (Date.now() - this.lastEatTime > 1000) {
+                                if (spiderTarget.mob) sendMobDamageFromMob(spiderTarget.mob, this, 2);
+                                else if (spiderTarget.username !== userName) {
+                                    const peer = peers.get(spiderTarget.username);
+                                    if (peer?.dc?.readyState === "open") peer.dc.send(JSON.stringify({
+                                        type: "player_damage", damage: 2, attacker: "spider"
+                                    }));
+                                } else {
                                 player.health = Math.max(0, player.health - 2);
                                 document.getElementById("health").innerText = player.health;
                                 if (typeof updateHealthBar === 'function') updateHealthBar();
                                 addMessage("Spider dropped on you! HP: " + player.health, 1000);
                                 if (player.health <= 0 && typeof handlePlayerDeath === 'function') handlePlayerDeath();
+                                }
                                 this.lastEatTime = Date.now();
                             }
                         }
@@ -1420,9 +1803,9 @@ Mob.prototype.update = function (t) {
                 }
             } else if (this.aiState === "ATTACKING_PLAYER") {
                 if (pExists) {
-                    this.pos.x = player.x;
-                    this.pos.z = player.z;
-                    this.pos.y = player.y + 1.6;
+                    this.pos.x = spiderTarget.x;
+                    this.pos.z = spiderTarget.z;
+                    this.pos.y = spiderTarget.y + 1.6;
 
                     this.attackLinger += t;
                     if (this.attackLinger > 2.0) {
@@ -1708,6 +2091,8 @@ Mob.prototype.update = function (t) {
                             type: this.type,
                             hp: this.hp,
                             isAggressive: this.isAggressive,
+                            petOwner: this.petOwner || null,
+                            spawner: this.spawner,
                             wasAttacked: this.wasAttacked,
                             originSeed: this.originSeed,
                             spawnCommandKey: this.spawnCommandKey
@@ -1774,30 +2159,13 @@ Mob.prototype.update = function (t) {
                 9 === getBlockAt(t.x, t.y, t.z) ? (this.targetBlock = t, this.lingerTime = Date.now()) : (this.aiState = "IDLE", this.targetBlock = null)
             }
         } else if (this.isAggressive || !i) {
-            let t = null,
-                e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
-                x: player.x,
-                z: player.z,
-                health: player.health,
-                username: userName
-            });
-            for (const [peerName, peerData] of peers.entries())
-                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
-                    const pos = userPositions[peerName],
-                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
-                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
-                        x: pos.targetX,
-                        z: pos.targetZ,
-                        health: pos.health || 20,
-                        username: peerName
-                    })
-                } if (t && e < 10 && (i = {
+            const t = findLegacyMobTarget(this), e = t ? t.distance : Infinity;
+            if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
                 }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
+                if (t.mob) sendMobDamageFromMob(t.mob, this, 1);
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
                     type: "player_damage",
@@ -2019,30 +2387,13 @@ Mob.prototype.update = function (t) {
             this.pos.y += (this.beeFlightHeight - this.pos.y) * (1 - Math.exp(-6 * t));
         }
         if (this.isAggressive || !i) {
-            let t = null,
-                e = 1 / 0,
-                s = Math.hypot(player.x - this.pos.x, player.y - this.pos.y, player.z - this.pos.z);
-            s < e && Math.abs(player.y - this.pos.y) < 30 && (e = s, t = {
-                x: player.x,
-                z: player.z,
-                health: player.health,
-                username: userName
-            });
-            for (const [peerName, peerData] of peers.entries())
-                if (userPositions[peerName] && userPositions[peerName].world === worldName) {
-                    const pos = userPositions[peerName],
-                        o = Math.hypot(pos.targetX - this.pos.x, pos.targetY - this.pos.y, pos.targetZ - this.pos.z);
-                    o < e && Math.abs(pos.targetY - this.pos.y) < 30 && (e = o, t = {
-                        x: pos.targetX,
-                        z: pos.targetZ,
-                        health: pos.health || 20,
-                        username: peerName
-                    })
-                } if (t && e < 10 && (i = {
+            const t = findLegacyMobTarget(this), e = t ? t.distance : Infinity;
+            if (t && e < 10 && (i = {
                     x: t.x,
                     z: t.z
                 }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
+                if (t.mob) sendMobDamageFromMob(t.mob, this, 1);
                 const e = peers.get(t.username);
                 e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
                     type: "player_damage",
@@ -2171,8 +2522,9 @@ Mob.prototype.update = function (t) {
         t.rotation.x = 0
     })))
 }, Mob.prototype.hurt = function (t, e) {
-    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(this);
     if (!isLocalSpawner) return;
+    if (!(t > 0) || !Number.isFinite(t)) return;
     if (this.type === "whale") {
         this.wasAttacked = true;
         this.isAggressive = true;
@@ -2198,18 +2550,31 @@ Mob.prototype.update = function (t) {
             y: this.pos.y,
             z: this.pos.z,
             hp: this.hp,
+            maxHp: this.maxHp,
+            feedRevision: this.feedRevision || 0,
             flash: !0,
             type: this.type,
             isMoving: this.isMoving,
             aiState: this.aiState,
             isAggressive: this.isAggressive,
+            petOwner: this.petOwner || null,
+            spawner: this.spawner,
             wasAttacked: this.wasAttacked,
             quaternion: this.mesh.quaternion.toArray()
         });
     }
 }, Mob.prototype.die = function (t) {
-    const isLocalSpawner = (this.spawner === userName) || (isHost && !this.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(this);
     if (!isLocalSpawner) return;
+    if (typeof t === "string" && t.startsWith("wolf:")) {
+        const wolf = mobs.find(mob => mob.type === "timber_wolf" && `wolf:${mob.id}` === t);
+        t = wolf?.petOwner || null;
+    }
+    if (this.petOwner === userName) removePlayerPet(this.id);
+    else if (this.petOwner && userPositions[this.petOwner]) {
+        const ids = userPositions[this.petOwner].petIds;
+        if (Array.isArray(ids)) userPositions[this.petOwner].petIds = ids.filter(id => id !== this.id);
+    }
 
     if (this.type === "ufo_saucer") {
         if (!window.activeExplosions) window.activeExplosions = [];
@@ -2303,18 +2668,30 @@ Mob.prototype.update = function (t) {
                 }
             }
         }
-    } else {
+    } else if (typeof t === "string" && t.length > 0 &&
+        (peers.has(t) || userPositions[t] || mobs.some(mob => mob.type === "timber_wolf" && mob.petOwner === t))) {
         const s = peers.get(t);
+        const message = JSON.stringify({
+            type: "add_score",
+            target: t,
+            amount: e
+        });
         if (s && s.dc && "open" === s.dc.readyState) {
-            s.dc.send(JSON.stringify({
-                type: "add_score",
-                amount: e
-            }));
+            s.dc.send(message);
+        } else {
+            for (const [, peer] of peers) {
+                if (peer.dc?.readyState === "open") {
+                    peer.dc.send(message);
+                    break;
+                }
+            }
         }
     }
     const s = JSON.stringify({
         type: "mob_kill",
         id: this.id,
+        petOwner: this.petOwner || null,
+        petRemoved: !!this.petOwner,
         world: worldName
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)

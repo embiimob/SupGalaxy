@@ -110,7 +110,7 @@ const ELITE_MOB_TYPES = {
         name: "Timber Wolf",
         burstColor: 0x8a8278,
         inspiredBy: "Veloren (Wolf)",
-        archetypes: ["Earth"],
+        archetypes: ["Earth", "Massive", "Desert"],
         day: true, night: true,
         hp: 12, score: 25, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 0.6, hitRadius: 1.1,
@@ -541,7 +541,7 @@ function isEliteTargetHostile(mob, target) {
     return !!provokedAt && Date.now() - provokedAt < (def.grudgeMs || ELITE_PROVOKE_MS);
 }
 
-function getEliteTargetablePlayers() {
+function getEliteTargetablePlayers(source = null) {
     const list = [];
     if (player.health > 0) {
         list.push({ name: userName, x: player.x + player.width / 2, y: player.y, z: player.z + player.depth / 2, local: true, armed: isEliteHeldItemArmed(selectedBlockId) });
@@ -551,13 +551,21 @@ function getEliteTargetablePlayers() {
             list.push({ name, x: pos.targetX + 0.4, y: pos.targetY, z: pos.targetZ + 0.4, armed: isEliteHeldItemArmed(pos.selectedBlockId) });
         }
     }
-    return list;
+    if (source?.type === "timber_wolf") {
+        const players = source.petOwner ? [] : list.filter(target => getPlayerPetIds(target.name).size === 0);
+        for (const mob of mobs) {
+            if (mob.type === "timber_wolf" || mob.hp <= 0) continue;
+            players.push({ name: `mob:${mob.id}`, mob, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z, armed: false });
+        }
+        return players;
+    }
+    return list.concat(getWolfTargets());
 }
 
 function findEliteTarget(mob, range, maxDy = 24) {
     let best = null;
     let bestDistance = range;
-    for (const p of getEliteTargetablePlayers()) {
+    for (const p of getEliteTargetablePlayers(mob)) {
         if (Math.abs(p.y - mob.pos.y) > maxDy) continue;
         if (!isEliteTargetHostile(mob, p)) continue;
         const d = Math.hypot(p.x - mob.pos.x, p.z - mob.pos.z);
@@ -669,6 +677,8 @@ function fireEliteProjectile(mob, style, origin, direction, index = 0) {
 }
 
 function dispatchEliteAttack(mob, attack) {
+    if (mob.type === "timber_wolf" && !String(attack.target).startsWith("mob:") &&
+        (mob.petOwner || getPlayerPetIds(attack.target).size > 0)) return;
     const payload = Object.assign({
         type: "elite_mob_attack",
         attackId: `${mob.id}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
@@ -676,6 +686,19 @@ function dispatchEliteAttack(mob, attack) {
         world: worldName,
         username: userName
     }, attack);
+    const radius = Math.max(0.5, Math.min(12, Number(payload.radius) || 2.5));
+    const targets = mob.type === "timber_wolf"
+        ? mobs.filter(target => target.type !== "timber_wolf" && `mob:${target.id}` === payload.target)
+        : mobs.filter(target => target.type === "timber_wolf" && target.hp > 0);
+    for (const target of targets) {
+        const horizontal = Math.hypot(target.pos.x - payload.x, target.pos.z - payload.z);
+        if (payload.mode === "target") {
+            if (payload.target !== `${target.type === "timber_wolf" ? "wolf" : "mob"}:${target.id}` ||
+                Math.hypot(horizontal, target.pos.y + 0.6 - payload.y) > radius) continue;
+        } else if (horizontal > radius || Math.abs(target.pos.y - payload.y) > 3) continue;
+        if (payload.groundedOnly && target.aiState === "LUNGE") continue;
+        sendMobDamageFromMob(target, mob, Math.min(ELITE_ATTACK_DAMAGE_CAP, Number(payload.damage) || 0));
+    }
     applyEliteAttackLocally(payload);
     const message = JSON.stringify(payload);
     for (const [peerName, peer] of peers.entries()) {
@@ -835,6 +858,11 @@ function isProjectileHittingMob(mob, point) {
 
 // Applies a projectile hit from the local shooter; non-authority shooters route it to the mob's authority.
 function sendProjectileMobDamage(mob, damage, shooter) {
+    const source = mobs.find(source => source.id === shooter);
+    if (source) {
+        sendMobDamageFromMob(mob, source, damage);
+        return;
+    }
     if (isMobAuthority(mob)) {
         mob.hurt(damage, shooter);
         return;
@@ -848,6 +876,15 @@ function sendProjectileMobDamage(mob, damage, shooter) {
     for (const [, peer] of peers.entries()) {
         if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
     }
+}
+
+function handleEliteProjectileWolfHit(projectile, point) {
+    const target = mobs.find(mob => mob.type === "timber_wolf" && mob.hp > 0 &&
+        mob.id !== projectile.user && isProjectileHittingMob(mob, point));
+    if (!target) return false;
+    const source = mobs.find(mob => mob.id === projectile.user);
+    if (source && isMobAuthority(source)) sendMobDamageFromMob(target, source, projectile.damage);
+    return true;
 }
 
 // ---------- construction ----------
@@ -1607,7 +1644,9 @@ function setEliteState(mob, state, now) {
 function queueEliteMobUpdate(mob) {
     const moved = mob.pos.distanceTo(mob.lastSentPos) > 0.1;
     const rotated = mob.mesh.quaternion.angleTo(mob.lastSentQuaternion) > 0.01;
-    if (!moved && !rotated && mob.lastSentState === mob.aiState && mob.lastSentHp === mob.hp) return;
+    if (!moved && !rotated && mob.lastSentState === mob.aiState && mob.lastSentHp === mob.hp &&
+        mob.lastSentPetOwner === mob.petOwner && mob.lastSentMaxHp === mob.maxHp &&
+        mob.lastSentFeedRevision === (mob.feedRevision || 0)) return;
     if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
     window.mobUpdateQueue.push({
         id: mob.id,
@@ -1619,13 +1658,20 @@ function queueEliteMobUpdate(mob) {
         aiState: mob.aiState,
         type: mob.type,
         hp: mob.hp,
+        maxHp: mob.maxHp,
+        feedRevision: mob.feedRevision || 0,
         isAggressive: mob.isAggressive,
-        originSeed: mob.originSeed
+        originSeed: mob.originSeed,
+        petOwner: mob.petOwner || null,
+        spawner: mob.spawner
     });
     mob.lastSentPos.copy(mob.pos);
     mob.lastSentQuaternion.copy(mob.mesh.quaternion);
     mob.lastSentState = mob.aiState;
     mob.lastSentHp = mob.hp;
+    mob.lastSentMaxHp = mob.maxHp;
+    mob.lastSentFeedRevision = mob.feedRevision || 0;
+    mob.lastSentPetOwner = mob.petOwner;
 }
 
 // Minecraft skeleton: keeps its distance, strafes, draws its bow and looses arcing arrows.
@@ -2423,9 +2469,9 @@ function thinkTimberWolf(mob, dt, now) {
         return;
     }
     settleEliteOnGround(mob, dt);
-    const target = findEliteTarget(mob, 22, 8);
+    const target = findEliteTarget(mob, mob.petOwner ? 32 : 22, 8);
     let move = null;
-    if (mob.hp <= mob.maxHp * 0.3 && target) {
+    if (!mob.petOwner && mob.hp <= mob.maxHp * 0.3 && target) {
         setEliteState(mob, "FLEE", now);
         move = { x: mob.pos.x - target.x, z: mob.pos.z - target.z, speed: mob.speed * 1.15 };
         faceEliteMob(mob, move.x, move.z, 8, dt);
@@ -2456,6 +2502,20 @@ function thinkTimberWolf(mob, dt, now) {
             move = { x: -dz * side + dx * radial, z: dx * side + dz * radial, speed: mob.speed * 0.8 };
         }
         faceEliteMob(mob, move.x, move.z, 8, dt);
+    } else if (mob.petOwner) {
+        const owner = mob.petOwner === userName ? { x: player.x, y: player.y, z: player.z } :
+            userPositions[mob.petOwner]?.world === worldName ? {
+                x: userPositions[mob.petOwner].targetX, y: userPositions[mob.petOwner].targetY,
+                z: userPositions[mob.petOwner].targetZ
+            } : null;
+        setEliteState(mob, "FOLLOW", now);
+        if (owner) {
+            const dx = owner.x - mob.pos.x, dz = owner.z - mob.pos.z;
+            if (Math.hypot(dx, dz) > 2.5) {
+                move = { x: dx, z: dz, speed: mob.speed * 1.2 };
+                faceEliteMob(mob, dx, dz, 8, dt);
+            }
+        }
     } else {
         setEliteState(mob, "IDLE", now);
         move = eliteWander(mob, dt, mob.speed * 0.35, now);
