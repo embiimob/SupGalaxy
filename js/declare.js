@@ -68,9 +68,11 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
     MAX_LOADED_CHUNKS = 420,
+    // Horizontal distance (blocks) within which other players' avatars are drawn.
+    REMOTE_PLAYER_VIEW_DISTANCE = 64,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v1.0.7",
+    VERSION = "SupGalaxy v1.3.0",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 20,
     BLOCKS = {
@@ -715,6 +717,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             pickaxe: !0,
             breakChance: 1 / 100,
             meleeMultiplier: 3
+        },
+        176: {
+            name: "Bone",
+            color: "#ece4cf",
+            itemOnly: !0,
+            craftingItem: !0,
+            bone: !0
         }
     },
     BIOMES = [{
@@ -1484,7 +1493,8 @@ function getPickaxeMultiplier(toolId) {
 function getMiningDamage(blockId, toolId = null, laserColor = null) {
     const block = BLOCKS[blockId];
     if (!block || block.unbreakable || blockId === 6) return 0;
-    if (laserColor === "blue") return 1;
+    // Blue lasers blast through any breakable block in one hit; obsidian resists for four hits.
+    if (laserColor === "blue") return blockId === 110 ? block.strength / 4 : block.strength;
     if (laserColor === "green") return blockId === 110 ? 0 : 1;
     if (laserColor === "red") toolId = null;
     if (blockId === 110) return toolId === 175 ? block.strength / 4 : 0;
@@ -1702,3 +1712,11 @@ function cleanupChest(chest, key) {
         disposeObject(chest.mesh);
     }
 }
+
+// Keep visible version labels in sync with the VERSION constant.
+(function applyVersionLabels() {
+    if (typeof document === "undefined") return;
+    const label = document.getElementById("versionLabel");
+    if (label) label.textContent = VERSION;
+    document.title = VERSION;
+})();

@@ -1,3 +1,32 @@
+// Mob glows use additive sprites instead of PointLights: every scene light added or removed when
+// manageMobs spawns or despawns a mob changes the light count and forces three.js to recompile
+// every lit material, which stalls rendering for a frame each management tick.
+let mobGlowTexture = null;
+
+function createMobGlowSprite(color, size, opacity = 1) {
+    if (!mobGlowTexture) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 64;
+        const ctx = canvas.getContext("2d"),
+            gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, "rgba(255,255,255,1)");
+        gradient.addColorStop(0.35, "rgba(255,255,255,0.45)");
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gradient, ctx.fillRect(0, 0, 64, 64);
+        mobGlowTexture = new THREE.CanvasTexture(canvas);
+    }
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: mobGlowTexture,
+        color: color,
+        transparent: !0,
+        opacity: opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: !1
+    }));
+    sprite.scale.set(size, size, size);
+    return sprite;
+}
+
 function isAquaticMobType(type) {
     return type === "fish_rare" || type === "fish_school" || type === "whale";
 }
@@ -87,7 +116,7 @@ function createAquaticFishSkinTexture(seed, type, baseColor) {
 
 function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     this.lastDamageTime = 0, this.lastRegenTime = 0;
-    let yPos = i === "ufo_saucer" ? 220 : isAquaticMobType(i) && aquaticY !== null ? aquaticY : chunkManager.getSurfaceY(t, e) + 1;
+    let yPos = i === "ufo_saucer" ? 220 : (isAquaticMobType(i) || isEliteMobType(i)) && Number.isFinite(aquaticY) ? aquaticY : chunkManager.getSurfaceY(t, e) + 1;
     if (i === "spider") {
         yPos = chunkManager.getCeilingY(t, e, 60) - 0.5; // Spawn on cavern ceiling instead of floor
         // Check if spawn was in sky
@@ -309,11 +338,17 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.mesh.add(h);
         const a = new THREE.BoxGeometry(.2, .2, .1),
             n = new THREE.Mesh(a, i);
-        n.position.set(-.25, .2, -.45), this.mesh.add(n);
+        // The face sits on local +Z, the direction the mob is rotated to face (atan2(dx, dz)).
+        n.position.set(-.25, .2, .45), this.mesh.add(n);
         const r = new THREE.Mesh(a, i);
-        r.position.set(.25, .2, -.45), this.mesh.add(r);
-        const l = new THREE.PointLight(16711680, 1, 5);
-        l.position.set(0, .2, -.5), this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
+        r.position.set(.25, .2, .45), this.mesh.add(r);
+        // One glow sprite per eye, tinted to the eye colour (red, green or blue).
+        const l = new THREE.Group;
+        for (const eyeX of [-.25, .25]) {
+            const glow = createMobGlowSprite(s, .45, .9);
+            glow.position.set(eyeX, .2, .5), l.add(glow);
+        }
+        this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
         const p = new THREE.BoxGeometry(.1, .6, .1);
         for (let e = 0; e < 6; e++) {
             const s = new THREE.Mesh(p, t),
@@ -413,7 +448,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         u.position.set(.4 * t, -.2 * t, .5 * t), u.rotation.z = -Math.PI / 6, r.add(u), this.pinchers.push(u);
         const M = makeSeededRandom(worldSeed + "_grub_glow_" + this.id),
             w = (new THREE.Color).setHSL(M(), .7 + .3 * M(), .5 + .2 * M());
-        this.glowLight = new THREE.PointLight(w, 0, 10 * t), this.mesh.add(this.glowLight);
+        this.glowLight = createMobGlowSprite(w, 2.2 * t, 0), this.glowLight.position.set(0, .2 * t, -1.05 * t), this.mesh.add(this.glowLight);
         const T = new THREE.MeshLambertMaterial({
             color: 16711680
         });
@@ -499,19 +534,24 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
 
         // Engines at the rear (z = length/2 rotated by PI, so effectively -length/2 in mesh space)
         const rearZ = length/2 - voxelSize;
-        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight1 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight1.userData.engineGlow = true;
         engineLight1.position.set(-width*0.2, 0, rearZ);
         this.mesh.add(engineLight1);
 
-        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight2 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight2.userData.engineGlow = true;
         engineLight2.position.set(width*0.2, 0, rearZ);
         this.mesh.add(engineLight2);
 
-        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight3 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight3.userData.engineGlow = true;
         engineLight3.position.set(0, height*0.3, rearZ);
         this.mesh.add(engineLight3);
 
         this.originalColor = null;
+    } else if (isEliteMobType(this.type)) {
+        buildEliteMob(this);
     }
     if (this.mesh) { this.mesh.userData.mobId = this.id; this.mesh.position.set(this.pos.x, this.pos.y + (("crawley" === this.type || "spider" === this.type) ? 0.45 : 0), this.pos.z); scene.add(this.mesh); this.lastSentPos = new THREE.Vector3().copy(this.pos); this.lastSentQuaternion = new THREE.Quaternion().copy(this.mesh.quaternion); }
 }
@@ -524,12 +564,13 @@ function manageMobs() {
 
     // 1. Find all players in the current world
     const playersInWorld = [];
-    playersInWorld.push({ name: userName, x: player.x, y: player.y, z: player.z });
+    playersInWorld.push({ name: userName, x: player.x, y: player.y, z: player.z, score: Number(player.score) || 0 });
     for (const [peerName, pos] of Object.entries(userPositions)) {
         if (pos.world === worldName && pos.targetX !== undefined) {
-            playersInWorld.push({ name: peerName, x: pos.targetX, y: pos.targetY, z: pos.targetZ });
+            playersInWorld.push({ name: peerName, x: pos.targetX, y: pos.targetY, z: pos.targetZ, score: Number.isFinite(pos.score) ? pos.score : 0 });
         }
     }
+    announceMobEvolution(player.score);
 
     // 2. Group players into active areas (clusters within 96 blocks)
     const activeAreas = [];
@@ -605,6 +646,8 @@ function manageMobs() {
         }
         if (nearestArea && minDistance < 96) {
             mob.spawner = nearestArea.spawner;
+        } else if (isWideRangeMobType(mob.type) && (mob.spawner === userName || (mob.spawner && peers.has(mob.spawner)))) {
+            // Wide-ranging mobs keep their owner while they roam the owner's loaded map beyond 96 blocks.
         } else {
             mob.spawner = null;
         }
@@ -651,8 +694,17 @@ function manageMobs() {
     }
 
     mobs = mobs.filter((mob) => {
-        const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
-        const isAllowedType = allowedTypes.includes(mob.type);
+        // Score-tier checks run only on the mob's authority, which has the freshest scores for its area.
+        const isAuthority = isMobAuthority(mob);
+        const isWideRange = isWideRangeMobType(mob.type);
+        // Wide-ranging mobs stay until their chunk leaves the authority's loaded map; other clients wait for
+        // the authority's mob_despawn instead of culling them by distance.
+        const isNearAnyPlayer = isWideRange
+            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) : true)
+            : playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
+        const isAllowedType = isEliteMobType(mob.type)
+            ? !isAuthority || isEliteMobAllowedAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld)
+            : allowedTypes.includes(mob.type) && !(isAuthority && isMobTypeRetiredAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld));
 
         if (mob.type === "ufo_saucer" && (!isAllowedType || !isNearAnyPlayer)) {
             // If the player is no longer idle or too far, transition the UFO to LEAVING instead of instantly despawning
@@ -671,6 +723,7 @@ function manageMobs() {
             if (mob.engineAudio2) mob.engineAudio2.pause();
             scene.remove(mob.mesh);
             disposeObject(mob.mesh);
+            markMobRecentlyRemoved(mob.id);
 
             // We should only broadcast despawn if we are a spawner for an area near the mob, or if we are host.
             // Since active areas can shift, it's safest to just let whoever sees it too far broadcast it.
@@ -700,15 +753,23 @@ function manageMobs() {
 
     // Spawn new mobs for our active areas
     for (const area of mySpawningAreas) {
-        for (const type of allowedTypes) {
+        const areaScore = Math.max(0, ...area.players.map(p => Number(p.score) || 0));
+        const areaEvolution = getMobEvolution(areaScore);
+        const areaTypes = allowedTypes.filter(type => !areaEvolution.retired.has(type)).concat(getEliteSpawnTypes(areaScore));
+        for (const type of areaTypes) {
             let maxCount;
             if ("crawley" === type) maxCount = 10;
             else if ("bee" === type) maxCount = 8;
-            else if ("grub" === type) maxCount = 2;
+            else if ("grub" === type) maxCount = getWideRangeMobCap("grub");
             else if ("spider" === type) maxCount = 6;
             else if ("fish_school" === type) maxCount = 6;
             else if ("fish_rare" === type) maxCount = 1;
             else if ("whale" === type) maxCount = 3;
+            else if (isEliteMobType(type)) {
+                maxCount = isWideRangeMobType(type) ? getWideRangeMobCap(type) : getEliteMobDef(type).maxCount;
+                if (!hasEliteWorldCapacity(type)) continue;
+                if (Math.random() > getEliteMobDef(type).spawnChance) continue;
+            }
             else if ("ufo_saucer" === type) {
                 maxCount = 1;
                 if (Math.random() > 0.02) continue;
@@ -716,14 +777,14 @@ function manageMobs() {
             if (type === "fish_rare" && Math.random() > 0.12) continue;
             if (type === "whale" && Math.random() > 0.025) continue;
 
-            // Count mobs of this type in this specific area
-            let countInArea = 0;
+            // Count mobs of this type in this specific area (wide-ranging types count the whole loaded map)
+            let countInArea = isWideRangeMobType(type) ? countMobsOfType(type) : 0;
             for (const mob of mobs) {
                 if (mob.type === type) {
                     // Check if mob is near this area
                     // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
                     // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
-                    if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
+                    if (isWideRangeMobType(type)) { /* already counted globally */ } else if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 
@@ -742,69 +803,85 @@ function manageMobs() {
                     spawnZ = modWrap(randomPlayer.z + Math.sin(angle) * distance, MAP_SIZE);
                 }
 
-                let aquaticSpawn = null;
+                let spawnY = null;
+                let waterSurfaceY = null;
+                let eliteSpawn = null;
                 if (isAquaticMobType(type)) {
                     const spawnPlayer = area.players[Math.floor(Math.random() * area.players.length)];
-                    aquaticSpawn = nearestAquaticSpawnPosition(spawnPlayer.x, spawnPlayer.z, type);
+                    const aquaticSpawn = nearestAquaticSpawnPosition(spawnPlayer.x, spawnPlayer.z, type);
                     if (!aquaticSpawn) continue;
                     spawnX = aquaticSpawn.x;
                     spawnZ = aquaticSpawn.z;
+                    spawnY = aquaticSpawn.y;
+                    waterSurfaceY = aquaticSpawn.surfaceY;
+                } else if (isEliteMobType(type)) {
+                    eliteSpawn = getEliteSpawnPosition(type, area.players[Math.floor(Math.random() * area.players.length)]);
+                    if (!eliteSpawn) continue;
+                    spawnX = eliteSpawn.x;
+                    spawnZ = eliteSpawn.z;
+                    spawnY = eliteSpawn.y;
+                    if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
                 }
-                const newMob = new Mob(spawnX, spawnZ, Date.now() + Math.random(), type, aquaticSpawn && aquaticSpawn.y);
-                if (aquaticSpawn) {
-                    newMob.spawner = userName;
-                    newMob.waterSurfaceY = aquaticSpawn.surfaceY;
-                }
-                mobs.push(newMob);
-
-                if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
-                window.mobUpdateQueue.push({
-                    id: newMob.id,
-                    x: newMob.pos.x,
-                    y: newMob.pos.y,
-                    z: newMob.pos.z,
-                    quaternion: newMob.mesh.quaternion.toArray(),
-                    isMoving: newMob.isMoving,
-                    aiState: newMob.aiState,
-                    type: newMob.type,
-                    hp: newMob.hp,
-                    isAggressive: newMob.isAggressive,
-                    originSeed: newMob.originSeed
-                });
-
-                const spawnMsg = JSON.stringify({
-                    type: "mob_spawn",
-                    id: newMob.id,
-                    x: newMob.pos.x,
-                    y: newMob.pos.y,
-                    z: newMob.pos.z,
-                    hp: newMob.hp,
-                    mobType: newMob.type,
-                    isAggressive: newMob.isAggressive,
-                    originSeed: newMob.originSeed,
-                    world: worldName,
-                    username: userName
-                });
-
-                if (isHost || peers.size === 0) {
-                    for (const [peerName, peer] of peers.entries()) {
-                        const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
-                        if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
-                            peer.dc.send(spawnMsg);
-                        }
-                    }
-                } else {
-                    // Client sends to host, host will relay
-                    for (const [peerName, peer] of peers.entries()) {
-                        if (peer.dc && "open" === peer.dc.readyState) {
-                            peer.dc.send(spawnMsg);
-                            break;
-                        }
-                    }
-                }
+                const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
+                if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
+                if (eliteSpawn) onEliteMobSpawned(newMob, eliteSpawn);
             }
         }
     }
+}
+
+// Creates a mob owned by this client, queues its first update and announces it to peers.
+function spawnMobAndBroadcast(type, x, z, y = null) {
+    const newMob = new Mob(x, z, Date.now() + Math.random(), type, y);
+    newMob.spawner = userName;
+    mobs.push(newMob);
+
+    if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+    window.mobUpdateQueue.push({
+        id: newMob.id,
+        x: newMob.pos.x,
+        y: newMob.pos.y,
+        z: newMob.pos.z,
+        quaternion: newMob.mesh.quaternion.toArray(),
+        isMoving: newMob.isMoving,
+        aiState: newMob.aiState,
+        type: newMob.type,
+        hp: newMob.hp,
+        isAggressive: newMob.isAggressive,
+        originSeed: newMob.originSeed
+    });
+
+    const spawnMsg = JSON.stringify({
+        type: "mob_spawn",
+        id: newMob.id,
+        x: newMob.pos.x,
+        y: newMob.pos.y,
+        z: newMob.pos.z,
+        hp: newMob.hp,
+        mobType: newMob.type,
+        isAggressive: newMob.isAggressive,
+        originSeed: newMob.originSeed,
+        world: worldName,
+        username: userName
+    });
+
+    if (isHost || peers.size === 0) {
+        for (const [peerName, peer] of peers.entries()) {
+            const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
+            if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                peer.dc.send(spawnMsg);
+            }
+        }
+    } else {
+        // Client sends to host, host will relay
+        for (const [peerName, peer] of peers.entries()) {
+            if (peer.dc && "open" === peer.dc.readyState) {
+                peer.dc.send(spawnMsg);
+                break;
+            }
+        }
+    }
+    return newMob;
 }
 
 function handleMobHit(t, toolId = null) {
@@ -1084,6 +1161,10 @@ Mob.prototype.update = function (t) {
         updateAquaticMob(this, t);
         return;
     }
+    if (isEliteMobType(this.type)) {
+        updateEliteMob(this, t);
+        return;
+    }
     if ("bee" === this.type) {
         this.animationTime += 40 * t;
         this.mesh.leftWing.rotation.z = .5 * Math.sin(this.animationTime);
@@ -1095,7 +1176,7 @@ Mob.prototype.update = function (t) {
     if (!isLocalSpawner) {
     if ("crawley" === this.type && this.mesh.eyeLight) this.mesh.eyeLight.visible = isNight;
     if ("grub" === this.type && this.glowLight) {
-        this.glowLight.intensity = isNight ? (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : 0;
+        this.glowLight.material.opacity = isNight ? ((Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4) / 1.2 * .7 : 0;
     }
     if (this.lastUpdateTime > 0) {
         const now = performance.now();
@@ -1116,10 +1197,10 @@ Mob.prototype.update = function (t) {
     } else if ("ufo_saucer" === this.type) {
         this.lingerTime += t * 1000;
 
-        const lights = this.mesh.children.filter(c => c.isPointLight);
+        const lights = this.mesh.children.filter(c => c.userData.engineGlow);
         if (lights.length > 0) {
-            const intensity = 5 + Math.sin(Date.now() * 0.01) * 5;
-            lights.forEach(l => l.intensity = intensity);
+            const intensity = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
+            lights.forEach(l => l.material.opacity = intensity);
         }
 
         if (!this.engineAudio) {
@@ -1177,6 +1258,7 @@ Mob.prototype.update = function (t) {
                     disposeObject(this.mesh);
                 } catch (e) {}
                 mobs = mobs.filter((t => t.id !== this.id));
+                markMobRecentlyRemoved(this.id);
                 const s = JSON.stringify({ type: "mob_despawn", id: this.id, world: worldName });
                 for (const [peerName, peer] of peers.entries()) {
                     if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
@@ -2039,8 +2121,8 @@ Mob.prototype.update = function (t) {
             const t = this.wanderDir.clone().normalize();
             const e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);
-        } else if (this.isMoving && "crawley" === this.type && i && typeof o !== 'undefined' && o > 0.01) {
-            // Point towards the target when seeking
+        } else if ("crawley" === this.type && i && typeof o !== 'undefined' && o > 0.01) {
+            // Face the target while seeking or attacking, even when blocked or standing still
             const targetVec = new THREE.Vector3(i.x - this.pos.x, 0, i.z - this.pos.z).normalize();
             if (targetVec.lengthSq() > 0) {
                  const e = Math.atan2(targetVec.x, targetVec.z);
@@ -2095,6 +2177,7 @@ Mob.prototype.update = function (t) {
         this.wasAttacked = true;
         this.isAggressive = true;
     }
+    if (isEliteMobType(this.type)) markEliteMobProvoked(this, e);
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudioAt(soundHit, this.pos);
     const s = e === userName ? player : userPositions[e];
     if (s) {
@@ -2159,7 +2242,7 @@ Mob.prototype.update = function (t) {
     if (this.spawnCommandKey && typeof removeFishSpawnCommandByKey === "function") {
         removeFishSpawnCommandByKey(this.spawnCommandKey);
     }
-    mobs = mobs.filter((t => t.id !== this.id)), addMessage("Mob defeated!");
+    mobs = mobs.filter((t => t.id !== this.id)), markMobRecentlyRemoved(this.id), addMessage("Mob defeated!");
     const isFish = this.type === "fish_rare" || this.type === "fish_school";
     if (isFish && t !== "whale") {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
@@ -2186,6 +2269,9 @@ Mob.prototype.update = function (t) {
                 window.createDroppedItemOrb(`${userName}-${Date.now()}-ufo-drop`, this.pos.clone(), 133, worldSeed, userName, 1);
             }
         }
+    } else if (isEliteMobType(this.type)) {
+        e = getEliteMobDef(this.type).score;
+        onEliteMobDeath(this, t);
     } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
     if (t === userName) {
         player.score += e;

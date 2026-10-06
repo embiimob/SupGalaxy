@@ -1,4 +1,7 @@
-# 🌌 SupGalaxy v1.2.0
+# 🌌 SupGalaxy v1.3.0
+
+![SupGalaxy v1.3.0](SupGalaxy.jpg)
+
 **SupGalaxy** is an open-source, serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
 Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **ChatGPT** and **github CoPilot**.
@@ -6,6 +9,23 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 > **License: CC0 (Public Domain)**  
 > Use, modify, remix, or commercialize freely.  
 > **Demo: https://supgalaxy.org**
+
+---
+
+## 🆕 What's New in v1.3.0
+
+- **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
+- **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
+- **👹 Level 2 mobs (score ≥ 500)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Timber Wolves, Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
+- **❓ …and more beyond** — keep raising your score. Rumour has it that stranger, deadlier things wait at higher tiers, and that the crawleys won't be around forever.
+- **👀 Longer player view** — other players' avatars are now drawn up to 64 blocks away (was 32).
+- **🦴 Bones** — scattered under Dust Vulture roosts. Pick them up and keep them as a crafting item.
+- **🔵 Blue laser rework** — one blue blast breaks any breakable block (castle bricks included). Obsidian resists and takes 4 blasts.
+- **🎒 Lean starter kit** — new players start with **7 torches and a red Laser Gun**. If it's night when you spawn, the torch is in your hand; by day your hands are empty.
+- **🎞 No more 5-second FPS stutter** — crawley eyes (red, green or blue per eye), grub glows and UFO engines now glow with additive sprites instead of real lights, so mobs spawning or despawning no longer recompile every shader.
+- **👁 Crawleys face their prey** — crawleys now turn their glowing eyes toward the player they are attacking.
+- **🧊 No more freeze when mobs shoot** — laser lights now come from fixed pools, and mob projectiles carry no lights, so firing no longer forces every material's shaders to recompile.
+- **🔗 Sturdier multiplayer mob sync** — mobs owned by any player (not just the host) now stream their updates, shots damage mobs exactly once, and removed mobs no longer reappear from late packets.
 
 ---
 
@@ -88,7 +108,88 @@ Other blocks retain their existing strengths; the Blue Iron Pick halves their re
 - **Blue Iron Pick:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
   Its glowing head lights the mining area with the same blue light as Blue Calcite, in first person, third person, and multiplayer.
 - Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
-- **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** retain their existing area mining behavior and can damage Obsidian. Bedrock and chunk ownership protections remain in effect.
+- **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** mine an area, and one blast breaks any breakable block (including castle bricks). Obsidian resists and needs 4 blasts. Bedrock and chunk ownership protections remain in effect.
+
+### 🏰 Building Blocks: Stairs, Doors & Castles
+
+Directional blocks (doors, stairs, portcullis) face the way your camera is looking when you place them.
+
+| Block | Recipe | Notes |
+|-------|--------|-------|
+| Oak Door | 5 Wooden Planks + 1 Iron Ore → 1 | Two blocks tall. **Right-click** to open/close; it won't close on top of a player. Toggles sync in multiplayer and respect chunk ownership. |
+| Oak Stairs | 6 Wooden Planks → 4 | Walk up them without jumping. |
+| Castle Stone Stairs | 6 Castle Stone Bricks → 4 | Stone variant of stairs. |
+| Portcullis | 4 Iron Ore + 1 Coal → 1 | See-through iron gate grid. |
+| Castle Stone Bricks | 3 Stone + 1 Brick → 4 | Core castle wall block. |
+| Mossy Castle Bricks | 3 Castle Stone Bricks + 1 Moss → 4 | Weathered walls. |
+| Battlement Stone | 3 Castle Stone Bricks + 1 Smooth Stone → 4 | Crenellated wall tops. |
+| Chiseled Limestone | 2 Marble + 1 Coal → 2 | Decorative trim. |
+| Polished Limestone | 3 Smooth Stone + 1 Sand → 4 | Clean pale stone. |
+| Red Roof Tile | 2 Brick + 1 Clay → 4 | Roofing. |
+| Slate Roof Tile | 2 Cobblestone + 1 Coal → 4 | Roofing. |
+| Oak Support Beam | 2 Wood + 2 Wooden Planks → 4 | Timber framing. |
+| Rose Stained Glass | 2 Glass + 1 Flower → 2 | Tinted castle windows. |
+
+---
+
+## 👹 Mob Evolution & Elite Mobs
+
+The galaxy fights back as you get stronger. Mob tiers unlock from the **highest score of any player in an area** (players within ~96 blocks of each other), so a veteran raises the danger for everyone nearby.
+
+| Tier | Score | Effect |
+|------|-------|--------|
+| 1 | 0 – 499 | The starting mobs (below) |
+| 2 | 500+ | One **level-2 mob** per world type joins the existing spawns (always hostile, moderate difficulty) |
+| ? | ??? | *Higher scores awaken things that are not listed here. Go find them.* |
+
+You get a warning message whenever your score crosses into a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
+
+### Level 1 — starting mobs
+
+| Mob | Where / when | Notes |
+|-----|--------------|-------|
+| **Bee** | 🌍 Earth by day, 🗿 Massive by night | Gathers pollen and makes honey. |
+| **Crawley** | Night on 🌍 Earth, 🏜 Desert and 🗿 Massive; day on 🌙 Moon; any time on 🌋 Vulcan | Hunts honey and smashes hives, and fears torchlight. Eye colour shows its toughness: **green** (5 HP), **red** (10 HP) or **blue** (15 HP, rare). |
+| **Spider** | 🌋 Vulcan | Eight-legged hunter. |
+| **Grub** | 🏜 Desert (max 2 per loaded map) | A segmented giant that eats cactus and glows at night. |
+| **Fish & Whales** | Water (every world but the Moon) | Schools of fish, rare fish and whales that feed on them. |
+| **UFO** | Near idle players | Drops Blue Calcite for the Blue Laser Gun. |
+
+### Level 2 (score 500+)
+
+Each mob is based on a different voxel game and borrows that game's way of fighting.
+
+| World | Mob | Inspired by | How it fights | HP | Score | Drop |
+|-------|-----|-------------|---------------|----|-------|------|
+| 🌍 Earth / 🗿 Massive | **Bone Archer** *(night only)* | *Minecraft* Skeleton | Keeps about 6–15 blocks away, strafes around you and backs off if you rush it. It then draws its bow and fires **arcing arrows**. Break line of sight or close in fast. Leaves at sunrise. | 20 | 40 | Iron Ore (50%) |
+| 🌍 Earth | **Timber Wolf** *(pack)* | *Veloren* Wolf | Hunts in packs of up to 3, day or night. Wolves **circle you 4–6 blocks out**, then one at a time **lunge in for a bite** and fall back to the circle. A wolf below 30% HP **breaks off and flees**. | 12 | 25 | 2 Bones (60%) |
+| 🏜 Desert | **Dust Vulture** *(flying)* | *7 Days to Die* Vultures | The flock **circles a roost far out at the edge of the loaded map** (about 60–75 blocks away; easy to spot in third person). There are never more than **4 per world**. Get within ~26 blocks of the roost and they **dive-bomb** you for a bite, then climb away. They follow you up to ~40 blocks from the roost. **Bones** lie scattered on the ground under every roost. | 12 | 30 | 2 Bones (60%) |
+| 🌙 Moon / 🌍 Earth swamps | **Crater Hopper** | *Cube World* Slime | A wobbling jelly cube. It **squashes down, then bounces at you** in long low-gravity arcs, damaging you if it lands on you. Sidestep while it's in the air. On Earth it only appears in **swamp** biomes, is green, and drops Green Crystal instead. | 10 | 25 | Blue Crystal (50%) · Green Crystal on Earth (50%) |
+| 🌋 Vulcan | **Ember Drifter** | *Vintage Story* Drifter | A hunched, ash-grey shambler with a smouldering chest. It's rare, and only **notices you within 11 blocks** (it keeps chasing out to 22 once engaged). It **lobs glowing cinders** and **claws** you up close. | 14 | 25 | 2 Torches (60%) |
+| 🗿 Massive | **Moss Brute** | *Hytale* Trork | A tusked, club-carrying brute. It **roars (0.85 s warning), then charges** in a straight line. Dodge sideways and it **stumbles, dazed**, for about 1.7 s. Up close it **swings its club**. | 22 | 30 | 3 Leaves (60%) |
+
+### Wide-ranging Mobs & Despawning
+
+Grubs (max **2**) and Dust Vultures (max **4**) are counted across the **whole loaded map**, not just near each player. They **don't despawn when you walk away**. They leave only when their chunk unloads from the authority's loaded (third-person viewable) map, or when no player in the world still meets their tier. Other mobs still despawn beyond ~96 blocks.
+
+Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not only voxel boxes. They have animated rigs (bow draw, slime squash-and-stretch, cinder throw, charge, wing flaps) and flash red when hit. Arrows and cinders are real projectiles that arc under gravity. Elite projectiles never destroy blocks, can be blocked by walls, and carry **no dynamic lights**: adding or removing a scene light recompiles every material and causes a visible freeze. Hits spawn a small shard burst instead.
+
+### 🦴 Bones
+
+Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's spawning authority keeps about 3 there and announces them to peers via `item_dropped`. Walk over a bone to pick it up. Bones are an **item-only crafting ingredient**: you can't place them, and their recipes are coming in a future update.
+
+### Multiplayer Behaviour
+
+- Elites use the shared mob pipeline (`mob_spawn` / `mob_update_batch` / `mob_hit` / `mob_kill` / `mob_despawn`). Only the mob's **authority** runs its AI (the area spawner, or the host as fallback). Everyone else interpolates its position and aiState, so animations match on every screen.
+- Ranged attacks travel as `laser_fired_batch` projectiles. Each client checks hits **against its own player only**, so a dodge on your screen is a real dodge.
+- Melee and area attacks (vulture bite, hopper squash, drifter claw, brute charge/club, wolf bite and more) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
+- A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.
+- Player scores and the held item ride along with `player_move` (also sent when you switch hotbar slots while standing still), so every spawner knows the area's tier and what each player is holding.
+
+### Adding the Next Tier
+
+1. Add a definition to `ELITE_MOB_TYPES` and its builder/`think`/animation code in `js/mob-evolution.js`. Fields include `archetypes`, day/night, HP, score, drop, hitbox, and the optional `provoke: "armed" | "attacked"`, `grudgeMs`, `worldMax`, `wideRange`, `biomes`, per-world `drops`, `roost` and `burrows`.
+2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 5, minScore: 5000, introduces: [...], retires: [...] }`).
 
 ---
 
@@ -146,7 +247,7 @@ Spawn, explore, build, fight, survive.
 
 **Tips:**  
 - 2 sand → 4 glass  
-- +10 score per mob defeated  
+- +10 score per mob defeated (elite mobs: +25 to +220)  
 - Players & mobs spawn in loaded chunks  
 - TURN server recommended for multiplayer  
 - Press `/` to open chat and talk with other players in your world  

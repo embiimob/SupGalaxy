@@ -744,6 +744,7 @@ function initThree() {
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     scene.add(camera);
+    warmLaserLightPools();
     scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
@@ -1677,21 +1678,37 @@ function createInventorySlot(e) {
 }
 
 
-function getProjectileLight(colorHex) {
-    for (let i = 0; i < projectileLightPool.length; i++) {
-        if (!projectileLightPool[i].inUse) {
-            projectileLightPool[i].inUse = true;
-            projectileLightPool[i].color.setHex(colorHex);
-            projectileLightPool[i].intensity = 2.5;
-            projectileLightPool[i].distance = 24;
-            scene.add(projectileLightPool[i]);
-            return projectileLightPool[i];
-        }
+// Laser lights live in fixed-size pools that stay in the scene. Adding or removing a light changes the
+// scene's light count, which makes three.js recompile every lit material and freezes the game for a moment.
+// Pooled lights are switched off by setting intensity to 0, and shots fired while the pool is busy get no light.
+const PROJECTILE_LIGHT_POOL_SIZE = 6;
+const LASER_IMPACT_LIGHT_POOL_SIZE = 6;
+
+function ensureLaserLightPool(pool, size, distance) {
+    if (typeof scene === "undefined" || !scene) return;
+    while (pool.length < size) {
+        const light = new THREE.PointLight(0xffffff, 0, distance);
+        light.inUse = false;
+        pool.push(light);
     }
-    const light = new THREE.PointLight(colorHex, 2.5, 24);
+    for (const light of pool) {
+        if (light.parent !== scene) scene.add(light);
+    }
+}
+
+function warmLaserLightPools() {
+    ensureLaserLightPool(projectileLightPool, PROJECTILE_LIGHT_POOL_SIZE, 24);
+    ensureLaserLightPool(laserImpactLightPool, LASER_IMPACT_LIGHT_POOL_SIZE, 18);
+}
+
+function getProjectileLight(colorHex) {
+    ensureLaserLightPool(projectileLightPool, PROJECTILE_LIGHT_POOL_SIZE, 24);
+    const light = projectileLightPool.find(candidate => !candidate.inUse);
+    if (!light) return null;
     light.inUse = true;
-    scene.add(light);
-    projectileLightPool.push(light);
+    light.color.setHex(colorHex);
+    light.intensity = 2.5;
+    light.distance = 24;
     return light;
 }
 
@@ -1699,24 +1716,17 @@ function releaseProjectileLight(light) {
     if (light) {
         light.inUse = false;
         light.intensity = 0;
-        scene.remove(light);
     }
 }
 
 function createLaserImpactLight(position, colorHex) {
-    const maxActiveLights = 24;
-    if (laserImpactLights.length >= maxActiveLights) return;
-
-    let light = laserImpactLightPool.find(candidate => !candidate.inUse);
-    if (!light) {
-        light = new THREE.PointLight(colorHex, 0, 18);
-        laserImpactLightPool.push(light);
-    }
+    ensureLaserLightPool(laserImpactLightPool, LASER_IMPACT_LIGHT_POOL_SIZE, 18);
+    const light = laserImpactLightPool.find(candidate => !candidate.inUse);
+    if (!light) return;
     light.inUse = true;
     light.color.setHex(colorHex);
     light.position.copy(position);
     light.intensity = 4;
-    scene.add(light);
     laserImpactLights.push({
         light,
         startedAt: performance.now(),
@@ -1732,7 +1742,6 @@ function updateLaserImpactLights(now) {
         if (progress >= 1) {
             impact.light.intensity = 0;
             impact.light.inUse = false;
-            scene.remove(impact.light);
             laserImpactLights.splice(i, 1);
         } else {
             impact.light.intensity = impact.intensity * Math.pow(1 - progress, 2);
@@ -1768,6 +1777,30 @@ function releaseProjectileMesh(mesh) {
 }
 
 function createProjectile(e, t, o, a, n = "red") {
+    const mobStyle = typeof MOB_PROJECTILE_STYLES !== "undefined" && Object.prototype.hasOwnProperty.call(MOB_PROJECTILE_STYLES, n) ? MOB_PROJECTILE_STYLES[n] : null;
+    if (mobStyle) {
+        const mesh = getProjectileMesh(mobStyle.color),
+            quaternion = new THREE.Quaternion;
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a.clone().normalize()), mesh.quaternion.copy(quaternion), mesh.position.copy(o);
+        mesh.scale.set(mobStyle.scale[0], mobStyle.scale[1], mobStyle.scale[2]);
+        const light = mobStyle.light ? getProjectileLight(mobStyle.color) : null;
+        light && light.position.copy(mesh.position);
+        projectiles.push({
+            id: e,
+            user: t,
+            mesh,
+            velocity: a.clone().normalize().multiplyScalar(mobStyle.speed),
+            createdAt: Date.now(),
+            light,
+            mobStyle: n,
+            gravity: mobStyle.gravity || 0,
+            damage: mobStyle.damage,
+            hitRadius: mobStyle.hitRadius,
+            color: mobStyle.color,
+            label: mobStyle.label
+        });
+        return;
+    }
     const b = "blue" === n,
         r = "green" === n,
         s = b ? 30 : (r ? 20 : 10), // Adjust speeds based on color
@@ -1792,7 +1825,7 @@ function createProjectile(e, t, o, a, n = "red") {
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
-    const l = r.pickaxe ? createPickaxeMesh(o) : new THREE.Mesh(
+    const l = r.pickaxe ? createPickaxeMesh(o) : r.bone ? createBoneMesh() : new THREE.Mesh(
         new THREE.SphereGeometry(.25, 16, 16),
         new THREE.MeshStandardMaterial({
             color: r.color,
@@ -3324,6 +3357,8 @@ function attackAtPoint(e) {
             if (dx < 30 && dy < 15 && dz < 50) {
                 hitMob = true;
             }
+        } else if (isEliteMobType(t.type)) {
+            hitMob = isProjectileHittingMob(t, e);
         } else if (t.mesh.position.distanceTo(e) < 1.5) {
             hitMob = true;
         }
@@ -3689,7 +3724,7 @@ function placeBlockAt(e, t, o, a) {
         const facing = getBuildFacing();
         const placedBlockId = getOrientedBuildBlockId(a, facing);
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
-        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(BLOCKS[a].pickaxe ? "Select the pick and left-click to use it." : `${BLOCKS[a].name} can only be released into water.`, 2000);
+        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(BLOCKS[a].pickaxe ? "Select the pick and left-click to use it." : BLOCKS[a].craftingItem ? `${BLOCKS[a].name} is a crafting item and can't be placed.` : `${BLOCKS[a].name} can only be released into water.`, 2000);
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
@@ -5408,23 +5443,11 @@ async function startGame() {
     }
     console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
         id: 120,
-        count: 8
+        count: 7
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, INVENTORY[2] = {
-        id: 126,
-        count: 1
-    }, INVENTORY[3] = {
-        id: 133,
-        count: 1
-    }, INVENTORY[4] = {
-        id: 125,
-        count: 32
-    }, INVENTORY[5] = {
-        id: 134,
-        count: 32
-    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 
@@ -6226,7 +6249,7 @@ function gameLoop(e) {
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
             e.update(t)
-        })), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
 
         // Update chest animations
         for (const key in chests) {
@@ -6292,8 +6315,9 @@ function gameLoop(e) {
             camera.position.copy(f)
         }
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
-            k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01;
-        if (e - lastUpdateTime > 50 && (I || k)) {
+            k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
+            heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
             if (I || isAttacking) {
@@ -6305,7 +6329,8 @@ function gameLoop(e) {
                 y: player.y,
                 z: player.z,
                 yaw: player.yaw,
-                pitch: player.pitch
+                pitch: player.pitch,
+                selectedBlockId: selectedBlockId
             };
             const t = {
                 type: "player_move",
@@ -6319,6 +6344,7 @@ function gameLoop(e) {
                 isMoving: o,
                 isAttacking: isAttacking,
                 selectedBlockId: selectedBlockId,
+                score: Number(player.score) || 0,
                 timestamp: Date.now()
             };
             for (const [e, o] of peers.entries()) e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
@@ -6375,7 +6401,7 @@ function gameLoop(e) {
                         v.position.y -= .05 * e
                     }
                     s >= 1 && (e.isDying = !1)
-                } else v.visible = Math.hypot(player.x - v.position.x, player.z - v.position.z) < 32
+                } else v.visible = Math.hypot(player.x - v.position.x, player.z - v.position.z) < REMOTE_PLAYER_VIEW_DISTANCE
             }
         }
         for (const [e, t] of userAudioStreams.entries())
@@ -6426,21 +6452,29 @@ function gameLoop(e) {
                 };
                 for (const [e, o] of peers.entries()) o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify(t))
             }
-            if (window.mobUpdateQueue && window.mobUpdateQueue.length > 0) {
+            lastStateUpdateTime = e;
+        }
+        // Every mob authority (host or client spawner) flushes its queued mob updates.
+        if (e - (window.lastMobBatchTime || 0) > 100 && window.mobUpdateQueue && window.mobUpdateQueue.length > 0) {
+            if (peers.size > 0) {
+                // Collapse per-frame updates to the latest state for each mob.
+                const latestMobUpdates = new Map();
+                for (const update of window.mobUpdateQueue) latestMobUpdates.set(update.id, Object.assign(latestMobUpdates.get(update.id) || {}, update));
                 const mobBatchMsg = JSON.stringify({
                     type: "mob_update_batch",
                     world: worldName,
-                    mobs: window.mobUpdateQueue
+                    username: userName,
+                    mobs: Array.from(latestMobUpdates.values())
                 });
                 for (const [peerName, peer] of peers.entries()) {
                     const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && (!isHost || peerWorld === worldName)) {
                         peer.dc.send(mobBatchMsg);
                     }
                 }
-                window.mobUpdateQueue = [];
             }
-            lastStateUpdateTime = e;
+            window.mobUpdateQueue = [];
+            window.lastMobBatchTime = e;
         }
         updateLaserImpactLights(performance.now());
         for (let e = pebbles.length - 1; e >= 0; e--) {
@@ -6472,6 +6506,7 @@ function gameLoop(e) {
         if (e - lastLaserBatchTime > 100 && laserFireQueue.length > 0) {
             const t = JSON.stringify({
                 type: "laser_fired_batch",
+                world: worldName,
                 projectiles: laserFireQueue
             });
             for (const [e, s] of peers.entries()) e !== userName && s.dc && "open" === s.dc.readyState && s.dc.send(t);
@@ -6513,6 +6548,10 @@ function gameLoop(e) {
         }
         for (let e = projectiles.length - 1; e >= 0; e--) {
             const o = projectiles[e];
+            if (o.gravity) {
+                o.velocity.y -= o.gravity * t;
+                o.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), o.velocity.clone().normalize());
+            }
             o.mesh.position.x += o.velocity.x * t, o.mesh.position.y += o.velocity.y * t, o.mesh.position.z += o.velocity.z * t, o.light && o.light.position.copy(o.mesh.position);
             const newPos = o.mesh.position.clone();
             const oldPos = newPos.clone().sub(o.velocity.clone().multiplyScalar(t));
@@ -6531,6 +6570,16 @@ function gameLoop(e) {
                 const r = Math.floor(stepPos.z);
 
                 // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
+                if (isSolid(getBlockAt(a, n, r)) && o.mobStyle) {
+                    // Elite mob projectiles shatter on terrain without destroying blocks (light-free burst).
+                    spawnEliteBurst(stepPos, o.color, 5);
+                    createBlockParticles(a, n, r, getBlockAt(a, n, r));
+                    releaseProjectileMesh(o.mesh);
+                    releaseProjectileLight(o.light);
+                    projectiles.splice(e, 1);
+                    s = !0;
+                    break;
+                }
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isHost || peers.size === 0) {
                         if (o.isBlue) {
@@ -6599,43 +6648,35 @@ function gameLoop(e) {
                     break; // break steps loop
                 }
 
+                // Elite mob projectiles: every client resolves hits against its own player only.
+                if (o.mobStyle) {
+                    const localCenter = new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2);
+                    if (player.health > 0 && stepPos.distanceTo(localCenter) < o.hitRadius) {
+                        const push = o.velocity.clone().setY(0).normalize().multiplyScalar(4);
+                        applyEliteDamageToLocalPlayer(o.damage, o.label, push.x, push.z);
+                        spawnEliteBurst(stepPos, o.color, 5);
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                        break;
+                    }
+                    continue;
+                }
+
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
                     // Prevent mobs from hitting themselves
                     if (o.user === mob.id) continue;
 
-                    let hitMob = false;
-                    if (mob.type === "ufo_saucer") {
-                        // UFO is large, use a bounding box collision
-                        const dx = Math.abs(stepPos.x - mob.pos.x);
-                        const dy = Math.abs(stepPos.y - mob.pos.y);
-                        const dz = Math.abs(stepPos.z - mob.pos.z);
-                        // width = 60, height = 15, length = 100
-                        if (dx < 30 && dy < 15 && dz < 50) {
-                            hitMob = true;
-                        }
-                    } else if (stepPos.distanceTo(mob.pos) < 1.5) { // Regular mob hit threshold
-                        hitMob = true;
-                    }
-
-                    if (hitMob) {
+                    if (isProjectileHittingMob(mob, stepPos)) {
                         if (o.user === userName) {
                             lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
                         }
                         const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
-                        if (isHost || 0 === peers.size) mob.hurt(damage, o.user);
-                        else {
-                            for (const [peerId, peer] of peers.entries()) {
-                                if (peer.dc && "open" === peer.dc.readyState) {
-                                    peer.dc.send(JSON.stringify({
-                                        type: "mob_hit",
-                                        id: mob.id,
-                                        damage: damage,
-                                        username: o.user
-                                    }));
-                                }
-                            }
-                        }
+                        // Only the shooter reports the hit so damage is applied exactly once by the mob's authority.
+                        if (o.user === userName) sendProjectileMobDamage(mob, damage, o.user);
+                        else if (mobs.some(shooterMob => shooterMob.id === o.user) && isMobAuthority(mob)) mob.hurt(damage, o.user);
                         createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
