@@ -608,6 +608,8 @@ function manageMobs() {
         }
         if (nearestArea && minDistance < 96) {
             mob.spawner = nearestArea.spawner;
+        } else if (isWideRangeMobType(mob.type) && (mob.spawner === userName || (mob.spawner && peers.has(mob.spawner)))) {
+            // Wide-ranging mobs keep their owner while they roam the owner's loaded map beyond 96 blocks.
         } else {
             mob.spawner = null;
         }
@@ -654,9 +656,14 @@ function manageMobs() {
     }
 
     mobs = mobs.filter((mob) => {
-        const isNearAnyPlayer = playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         // Score-tier checks run only on the mob's authority, which has the freshest scores for its area.
         const isAuthority = isMobAuthority(mob);
+        const isWideRange = isWideRangeMobType(mob.type);
+        // Wide-ranging mobs stay until their chunk leaves the authority's loaded map; other clients wait for
+        // the authority's mob_despawn instead of culling them by distance.
+        const isNearAnyPlayer = isWideRange
+            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) : true)
+            : playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = isEliteMobType(mob.type)
             ? !isAuthority || isEliteMobAllowedAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld)
             : allowedTypes.includes(mob.type) && !(isAuthority && isMobTypeRetiredAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld));
@@ -715,13 +722,13 @@ function manageMobs() {
             let maxCount;
             if ("crawley" === type) maxCount = 10;
             else if ("bee" === type) maxCount = 8;
-            else if ("grub" === type) maxCount = 2;
+            else if ("grub" === type) maxCount = getWideRangeMobCap("grub");
             else if ("spider" === type) maxCount = 6;
             else if ("fish_school" === type) maxCount = 6;
             else if ("fish_rare" === type) maxCount = 1;
             else if ("whale" === type) maxCount = 3;
             else if (isEliteMobType(type)) {
-                maxCount = getEliteMobDef(type).maxCount;
+                maxCount = isWideRangeMobType(type) ? getWideRangeMobCap(type) : getEliteMobDef(type).maxCount;
                 if (!hasEliteWorldCapacity(type)) continue;
                 if (Math.random() > getEliteMobDef(type).spawnChance) continue;
             }
@@ -732,14 +739,14 @@ function manageMobs() {
             if (type === "fish_rare" && Math.random() > 0.12) continue;
             if (type === "whale" && Math.random() > 0.025) continue;
 
-            // Count mobs of this type in this specific area
-            let countInArea = 0;
+            // Count mobs of this type in this specific area (wide-ranging types count the whole loaded map)
+            let countInArea = isWideRangeMobType(type) ? countMobsOfType(type) : 0;
             for (const mob of mobs) {
                 if (mob.type === type) {
                     // Check if mob is near this area
                     // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
                     // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
-                    if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
+                    if (isWideRangeMobType(type)) { /* already counted globally */ } else if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 

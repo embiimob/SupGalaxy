@@ -21,10 +21,18 @@ const MOB_EVOLUTION_TIERS = [
         // hostile toward players holding a laser gun or players who attack them first.
         level: 3,
         minScore: 200,
-        introduces: ["sentinel_drone", "brick_golem", "magma_wyrm"],
+        introduces: ["sentinel_drone", "brick_golem", "magma_wyrm", "tomb_crawler"],
         retires: ["crawley"]
+    },
+    {
+        // Level 4 (score past 300): one rare titan per world, inspired by famous boss fights.
+        // Titans ignore players until attacked; at most one roams the loaded map at a time.
+        level: 4,
+        minScore: 300,
+        introduces: ["ancient_guardian", "lunar_overlord", "fire_giant", "sand_tyrant", "stone_colossus"],
+        retires: []
     }
-    // Future tiers (score 300+) slot in here: add a { level, minScore, introduces, retires } entry.
+    // Future tiers slot in here: add a { level, minScore, introduces, retires } entry.
 ];
 
 // Mob projectiles never carry PointLights: adding or removing a scene light forces every lit
@@ -34,7 +42,10 @@ const MOB_PROJECTILE_STYLES = {
     sentinel: { color: 0xffb020, speed: 30, gravity: 0, scale: [0.9, 0.9, 3.2], damage: 2, hitRadius: 1.3, label: "Zapped by a Sentinel" },
     fireball: { color: 0xff5a00, speed: 16, gravity: 3, scale: [3, 3, 3], damage: 4, hitRadius: 1.6, label: "Scorched by a Magma Wyrm" },
     boulder: { color: 0x7d6f60, speed: 17, gravity: 12, scale: [4, 4, 4], damage: 5, hitRadius: 1.7, label: "Crushed by a Brick Golem boulder" },
-    ember: { color: 0xff7a1a, speed: 13, gravity: 11, scale: [1.6, 1.6, 1.6], damage: 2, hitRadius: 1.2, label: "Hit by an Ember Drifter's cinder" }
+    ember: { color: 0xff7a1a, speed: 13, gravity: 11, scale: [1.6, 1.6, 1.6], damage: 2, hitRadius: 1.2, label: "Hit by an Ember Drifter's cinder" },
+    guardian: { color: 0xff3df0, speed: 46, gravity: 0, scale: [0.8, 0.8, 6], damage: 8, hitRadius: 1.5, label: "Vaporised by an Ancient Guardian" },
+    phantasm: { color: 0x6dffd8, speed: 20, gravity: 0, scale: [1.4, 1.4, 1.4], damage: 4, hitRadius: 1.4, label: "Struck by a Lunar Overlord's phantasmal bolt" },
+    giant_fire: { color: 0xff4500, speed: 18, gravity: 6, scale: [4, 4, 4], damage: 6, hitRadius: 2, label: "Incinerated by a Fire Giant" }
 };
 
 // Laser guns: red, green and blue. Holding one counts as "armed" for provoke: "armed" mobs.
@@ -57,7 +68,7 @@ const ELITE_MOB_TYPES = {
         inspiredBy: "7 Days to Die (Vultures)",
         archetypes: ["Desert"],
         day: true, night: true, flying: true,
-        hp: 12, score: 30, maxCount: 4, worldMax: 4, spawnChance: 0.4, spawnAltitude: 18,
+        hp: 12, score: 30, maxCount: 4, worldMax: 4, wideRange: true, spawnChance: 0.4, spawnAltitude: 18,
         roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
         drop: { id: 176, count: 2, chance: 0.6 }
@@ -66,11 +77,14 @@ const ELITE_MOB_TYPES = {
         name: "Crater Hopper",
         burstColor: 0x9ad8ff,
         inspiredBy: "Cube World (Slime)",
-        archetypes: ["Moon"],
+        archetypes: ["Moon", "Earth"],
+        // On Earth worlds hoppers only live in swamps, where they are green and drop Green Crystals.
+        biomes: { Earth: ["swamp"] },
         day: true, night: true,
         hp: 10, score: 25, maxCount: 3, spawnChance: 0.4,
         hitCenterY: 0.6, hitRadius: 1.1,
-        drop: { id: 111, count: 1, chance: 0.5 }
+        drop: { id: 111, count: 1, chance: 0.5 },
+        drops: { Earth: { id: 113, count: 1, chance: 0.5 } }
     },
     ember_drifter: {
         name: "Ember Drifter",
@@ -78,7 +92,7 @@ const ELITE_MOB_TYPES = {
         inspiredBy: "Vintage Story (Drifter)",
         archetypes: ["Vulcan"],
         day: true, night: true,
-        hp: 14, score: 25, maxCount: 3, spawnChance: 0.35,
+        hp: 14, score: 25, maxCount: 3, spawnChance: 0.175,
         hitCenterY: 1, hitRadius: 1.2,
         drop: { id: 120, count: 2, chance: 0.6 }
     },
@@ -97,9 +111,9 @@ const ELITE_MOB_TYPES = {
         name: "Sentinel Drone",
         burstColor: 0xb8bcc4,
         inspiredBy: "No Man's Sky (Sentinels)",
-        archetypes: ["Moon"],
+        archetypes: ["Moon", "Vulcan"],
         day: true, night: true, flying: true, provoke: "armed",
-        hp: 24, score: 50, maxCount: 1, worldMax: 2, spawnChance: 0.08, spawnAltitude: 9,
+        hp: 24, score: 50, maxCount: 1, worldMax: 2, wideRange: true, spawnChance: 0.08, spawnAltitude: 9,
         hitCenterY: 0, hitRadius: 1.4,
         drop: { id: 134, count: 1, chance: 0.6 }
     },
@@ -122,8 +136,72 @@ const ELITE_MOB_TYPES = {
         hp: 45, score: 70, maxCount: 1, spawnChance: 0.25,
         hitCenterY: 0, hitRadius: 2.6, heavy: true,
         drop: { id: 125, count: 2, chance: 1 }
+    },
+    tomb_crawler: {
+        name: "Tomb Crawler",
+        burstColor: 0xc9a56a,
+        inspiredBy: "Terraria (Tomb Crawler)",
+        archetypes: ["Desert"],
+        day: true, night: true, provoke: "armed", burrows: true,
+        hp: 40, score: 60, maxCount: 1, spawnChance: 0.35,
+        hitCenterY: 2, hitRadius: 2.4, heavy: true,
+        drop: { id: 176, count: 4, chance: 1 }
+    },
+    // ---- level 4 (score 300+) — rare titans, passive until attacked ----
+    ancient_guardian: {
+        name: "Ancient Guardian",
+        burstColor: 0xc8a070,
+        inspiredBy: "The Legend of Zelda: Breath of the Wild (Guardian Stalker)",
+        archetypes: ["Earth"],
+        day: true, night: true, provoke: "attacked", grudgeMs: 60000,
+        hp: 150, score: 150, maxCount: 1, worldMax: 1, wideRange: true, spawnChance: 0.15,
+        hitCenterY: 2.6, hitRadius: 2.6, heavy: true,
+        drop: { id: 134, count: 4, chance: 1 }
+    },
+    lunar_overlord: {
+        name: "Lunar Overlord",
+        burstColor: 0x6dffd8,
+        inspiredBy: "Terraria (Moon Lord)",
+        archetypes: ["Moon"],
+        day: true, night: true, flying: true, provoke: "attacked", grudgeMs: 60000,
+        hp: 180, score: 180, maxCount: 1, worldMax: 1, wideRange: true, spawnChance: 0.15, spawnAltitude: 14,
+        hitCenterY: 0, hitRadius: 3, heavy: true,
+        drop: { id: 113, count: 6, chance: 1 }
+    },
+    fire_giant: {
+        name: "Fire Giant",
+        burstColor: 0xff4500,
+        inspiredBy: "Elden Ring (Fire Giant)",
+        archetypes: ["Vulcan"],
+        day: true, night: true, provoke: "attacked", grudgeMs: 60000,
+        hp: 200, score: 200, maxCount: 1, worldMax: 1, wideRange: true, spawnChance: 0.15,
+        hitCenterY: 4, hitRadius: 3.6, heavy: true,
+        drop: { id: 125, count: 6, chance: 1 }
+    },
+    sand_tyrant: {
+        name: "Sand Tyrant",
+        burstColor: 0xd8b878,
+        inspiredBy: "Monster Hunter (Diablos)",
+        archetypes: ["Desert"],
+        day: true, night: true, provoke: "attacked", grudgeMs: 60000,
+        hp: 170, score: 170, maxCount: 1, worldMax: 1, wideRange: true, spawnChance: 0.15,
+        hitCenterY: 2.2, hitRadius: 3, heavy: true,
+        drop: { id: 176, count: 10, chance: 1 }
+    },
+    stone_colossus: {
+        name: "Stone Colossus",
+        burstColor: 0x9a9488,
+        inspiredBy: "Shadow of the Colossus (Gaius)",
+        archetypes: ["Massive"],
+        day: true, night: true, provoke: "attacked", grudgeMs: 60000,
+        hp: 220, score: 220, maxCount: 1, worldMax: 1, wideRange: true, spawnChance: 0.15,
+        hitCenterY: 4.5, hitRadius: 4, heavy: true,
+        drop: { id: 139, count: 12, chance: 1 }
     }
 };
+
+// Grubs share the loaded-map cap and unload-only despawn rule used by wide-ranging elites.
+const WIDE_RANGE_BASE_MOBS = { grub: 2 };
 
 const ELITE_ATTACK_DAMAGE_CAP = 10;
 const BONE_ITEM_ID = 176;
@@ -223,7 +301,9 @@ function getEliteSpawnTypes(areaScore) {
 
 function isEliteMobAllowedAt(type, x, z, players) {
     if (!isEliteMobAllowedForWorld(type)) return false;
-    return getMobEvolution(getMaxScoreNear(x, z, players)).active.has(type);
+    // Wide-ranging mobs may roam beyond 96 blocks of everyone, so any player in the world keeps their tier.
+    const radius = getEliteMobDef(type).wideRange ? Infinity : 96;
+    return getMobEvolution(getMaxScoreNear(x, z, players, radius)).active.has(type);
 }
 
 function isMobTypeRetiredAt(type, x, z, players) {
@@ -238,7 +318,7 @@ function announceMobEvolution(score) {
             .map(type => getEliteMobDef(type))
             .filter(def => def && worldArchetype && def.archetypes.includes(worldArchetype.name))
             .map(def => def.name);
-        const verb = level >= 3 ? " now roam (they only fight armed or hostile players)" : " now hunt";
+        const verb = level >= 4 ? " now roam (titans: they only fight back when attacked)" : level >= 3 ? " now roam (they only fight armed or hostile players)" : " now hunt";
         addMessage(`⚠ Mob evolution level ${level}! ${names.length ? names.join(", ") + verb : "Stronger mobs now roam"} this ${worldArchetype ? worldArchetype.name : ""} world.`, 5000);
     }
     lastMobEvolutionLevel = level;
@@ -250,11 +330,28 @@ function getEliteSpawnPosition(type, anchor) {
         const spot = nearestAquaticSpawnPosition(anchor.x, anchor.z, "whale");
         return spot ? { x: spot.x, y: spot.y, z: spot.z, waterSurfaceY: spot.surfaceY } : null;
     }
-    if (def.roost) return getEliteRoostSpawnPosition(type, def, anchor);
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 28 + Math.random() * 24;
-    const x = modWrap(anchor.x + Math.cos(angle) * distance, MAP_SIZE);
-    const z = modWrap(anchor.z + Math.sin(angle) * distance, MAP_SIZE);
+    if (def.roost) {
+        const roostSpot = getEliteRoostSpawnPosition(type, def, anchor);
+        // Wide-ranging mobs despawn once their chunk unloads, so never spawn them outside the loaded map.
+        return roostSpot && (!def.wideRange || isPositionInLoadedSpace(roostSpot.x, roostSpot.z)) ? roostSpot : null;
+    }
+    const biomes = getEliteBiomeRestriction(def);
+    const minDistance = def.wideRange ? 40 : 28;
+    const spread = def.wideRange ? 40 : 24;
+    let x = null;
+    let z = null;
+    for (let attempt = 0; attempt < (biomes || def.wideRange ? 16 : 1); attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = minDistance + Math.random() * spread;
+        const cx = modWrap(anchor.x + Math.cos(angle) * distance, MAP_SIZE);
+        const cz = modWrap(anchor.z + Math.sin(angle) * distance, MAP_SIZE);
+        if (biomes && !biomes.includes(getBiomeKeyAt(cx, cz))) continue;
+        if (def.wideRange && !isPositionInLoadedSpace(cx, cz)) continue;
+        x = cx;
+        z = cz;
+        break;
+    }
+    if (x === null) return null;
     if (def.flying) {
         const y = Math.min(MAX_HEIGHT - 8, chunkManager.getSurfaceY(x, z) + def.spawnAltitude);
         return { x, y, z };
@@ -332,6 +429,61 @@ function hasEliteWorldCapacity(type) {
     return count < def.worldMax;
 }
 
+// Wide-ranging mobs (grubs, vultures, sentinels, level-4 titans) are capped across the whole loaded map
+// rather than per spawning area, and only despawn once the chunk they are in is unloaded.
+function isWideRangeMobType(type) {
+    if (Object.prototype.hasOwnProperty.call(WIDE_RANGE_BASE_MOBS, type)) return true;
+    const def = getEliteMobDef(type);
+    return !!(def && def.wideRange);
+}
+
+function getWideRangeMobCap(type) {
+    if (Object.prototype.hasOwnProperty.call(WIDE_RANGE_BASE_MOBS, type)) return WIDE_RANGE_BASE_MOBS[type];
+    const def = getEliteMobDef(type);
+    return def ? (def.worldMax || def.maxCount) : 0;
+}
+
+function countMobsOfType(type) {
+    let count = 0;
+    for (const mob of mobs) if (mob.type === type) count++;
+    return count;
+}
+
+// True while the chunk under (x, z) is loaded and meshed, i.e. part of the map you can see in third person.
+function isPositionInLoadedSpace(x, z) {
+    if (typeof chunkManager === "undefined" || !chunkManager || !chunkManager.chunks) return false;
+    const cx = Math.floor(modWrap(x, MAP_SIZE) / CHUNK_SIZE);
+    const cz = Math.floor(modWrap(z, MAP_SIZE) / CHUNK_SIZE);
+    const chunk = chunkManager.chunks.get(makeChunkKey(worldName, cx, cz));
+    return !!(chunk && chunk.generated && chunk.mesh);
+}
+
+var biomeNoiseCache = { seed: null, noise: null };
+
+// Mirrors pickBiome in the terrain worker so the main thread can tell which biome a column belongs to.
+function getBiomeKeyAt(x, z) {
+    if (!worldArchetype) return null;
+    const mods = worldArchetype.biomeModifications || {};
+    if (mods.onlyDesert) return "desert";
+    if (worldArchetype.terrainGenerator && worldArchetype.terrainGenerator !== "generateStandardTerrain") return null;
+    const seed = makeChunkKey(worldName, 0, 0).split(":")[0];
+    if (biomeNoiseCache.seed !== seed) biomeNoiseCache = { seed, noise: makeNoise(seed) };
+    const nx = (modWrap(Math.floor(x), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;
+    const nz = (modWrap(Math.floor(z), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;
+    const scale = mods.largeBiomes ? 0.002 : 0.005;
+    const n = fbm(biomeNoiseCache.noise, nx * scale, nz * scale, 5, 0.6);
+    if (n > 0.68) return "snow";
+    if (n < 0.25) return "desert";
+    if (n > 0.45) return "forest";
+    if (n < 0.35) return "swamp";
+    return "plains";
+}
+
+function getEliteBiomeRestriction(def) {
+    const archetypeName = worldArchetype ? worldArchetype.name : null;
+    return def.biomes && archetypeName && def.biomes[archetypeName] ? def.biomes[archetypeName] : null;
+}
+
 function createBoneMesh() {
     const group = new THREE.Group();
     const material = new THREE.MeshLambertMaterial({ color: 0xece4cf, emissive: 0x2a2620 });
@@ -361,12 +513,14 @@ function markEliteMobProvoked(mob, attacker) {
     mob.provokedBy[attacker] = Date.now();
 }
 
+// provoke: "armed" (level 3) also targets anyone holding a laser gun; provoke: "attacked" (level 4)
+// only targets players who hurt the mob within its grudge window.
 function isEliteTargetHostile(mob, target) {
     const def = getEliteMobDef(mob.type);
-    if (!def || def.provoke !== "armed") return true;
-    if (target.armed) return true;
+    if (!def || !def.provoke) return true;
+    if (def.provoke === "armed" && target.armed) return true;
     const provokedAt = mob.provokedBy && mob.provokedBy[target.name];
-    return !!provokedAt && Date.now() - provokedAt < ELITE_PROVOKE_MS;
+    return !!provokedAt && Date.now() - provokedAt < (def.grudgeMs || ELITE_PROVOKE_MS);
 }
 
 function getEliteTargetablePlayers() {
@@ -628,6 +782,7 @@ function isProjectileHittingMob(mob, point) {
     }
     const def = getEliteMobDef(mob.type);
     if (def) {
+        if (def.burrows && mob.aiState === "BURROWED") return false;
         return Math.hypot(point.x - mob.pos.x, point.y - (mob.pos.y + def.hitCenterY), point.z - mob.pos.z) < def.hitRadius;
     }
     return point.distanceTo(mob.pos) < 1.5;
@@ -697,6 +852,12 @@ function buildEliteMob(mob) {
     else if (mob.type === "crater_hopper") buildCraterHopper(mob, variant);
     else if (mob.type === "ember_drifter") buildEmberDrifter(mob, variant);
     else if (mob.type === "moss_brute") buildMossBrute(mob, variant);
+    else if (mob.type === "tomb_crawler") buildTombCrawler(mob, variant);
+    else if (mob.type === "ancient_guardian") buildAncientGuardian(mob, variant);
+    else if (mob.type === "lunar_overlord") buildLunarOverlord(mob, variant);
+    else if (mob.type === "fire_giant") buildFireGiant(mob, variant);
+    else if (mob.type === "sand_tyrant") buildSandTyrant(mob, variant);
+    else if (mob.type === "stone_colossus") buildStoneColossus(mob, variant);
 }
 
 function buildBoneArcher(mob) {
@@ -916,8 +1077,9 @@ function buildMagmaWyrm(mob) {
 
 function buildCraterHopper(mob, variant) {
     mob.speed = 4;
-    const jelly = eliteMaterial(mob, variant < 0.5 ? 0x9ad8ff : 0xb8f0d8, { params: { transparent: true, opacity: 0.72 } });
-    const core = eliteMaterial(mob, 0x4a7ab0);
+    const swamp = !!(worldArchetype && worldArchetype.name === "Earth");
+    const jelly = eliteMaterial(mob, swamp ? (variant < 0.5 ? 0x7fd85a : 0x9be06a) : (variant < 0.5 ? 0x9ad8ff : 0xb8f0d8), { params: { transparent: true, opacity: 0.72 } });
+    const core = eliteMaterial(mob, swamp ? 0x3f7a2a : 0x4a7ab0);
     const eye = new THREE.MeshBasicMaterial({ color: 0x0b1a2a });
     const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const body = new THREE.Group();
@@ -1006,6 +1168,263 @@ function buildMossBrute(mob, variant) {
     mob.body = body;
 }
 
+function buildTombCrawler(mob) {
+    mob.speed = 6.5;
+    const shell = eliteMaterial(mob, 0xc9a66b);
+    const shellDark = eliteMaterial(mob, 0x8a6a3e);
+    const mandible = eliteMaterial(mob, 0x4a3a28);
+    const eye = new THREE.MeshBasicMaterial({ color: 0xff3a1a });
+    const rig = mob.rig;
+    mob.wormParts = [];
+    const head = new THREE.Group();
+    head.add(eliteBox(1.5, 1.3, 1.5, shell));
+    head.add(eliteBox(1.6, 0.25, 1.1, shellDark, 0, 0.6, -0.1));
+    for (const side of [-1, 1]) {
+        head.add(eliteBox(0.2, 0.18, 0.06, eye, side * 0.42, 0.25, 0.76));
+        const jaw = eliteBox(0.22, 0.22, 0.9, mandible, side * 0.5, -0.35, 1.0);
+        jaw.rotation.y = -side * 0.35;
+        head.add(jaw);
+    }
+    rig.add(head);
+    mob.wormParts.push(head);
+    for (let i = 0; i < 9; i++) {
+        const size = 1.35 - i * 0.07;
+        const segment = new THREE.Group();
+        segment.add(eliteBox(size, size, size * 0.9, i % 2 ? shellDark : shell));
+        segment.add(eliteBox(size * 1.05, 0.18, 0.3, mandible, 0, size * 0.42, 0));
+        rig.add(segment);
+        mob.wormParts.push(segment);
+    }
+    // Sand mound shown while burrowed so players can track it.
+    mob.mound = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), eliteMaterial(mob, 0xdcc48a));
+    mob.mound.scale.y = 0.35;
+    mob.mesh.add(mob.mound);
+}
+
+function buildAncientGuardian(mob, variant) {
+    mob.speed = 3.4;
+    const shell = eliteMaterial(mob, 0x8b8f7a, { standard: true, params: { metalness: 0.4, roughness: 0.55 } });
+    const copper = eliteMaterial(mob, variant < 0.5 ? 0x5f8f7a : 0x6a9a84, { standard: true, params: { metalness: 0.6, roughness: 0.4 } });
+    const runes = new THREE.MeshBasicMaterial({ color: 0x3ac8ff });
+    const rig = mob.rig;
+    const body = new THREE.Group();
+    body.position.y = 2.8;
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(1.8, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), shell);
+    body.add(dome);
+    body.add(eliteBox(3.4, 0.5, 3.4, copper, 0, -0.1, 0));
+    for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        body.add(eliteBox(0.5, 0.06, 0.08, runes, Math.sin(a) * 1.72, 0.18, Math.cos(a) * 1.72));
+    }
+    mob.eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x3ac8ff });
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), mob.eyeMaterial);
+    eye.position.set(0, 0.9, 1.45);
+    body.add(eye);
+    const iris = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 20), copper);
+    iris.position.set(0, 0.9, 1.52);
+    body.add(iris);
+    rig.add(body);
+    mob.body = body;
+    mob.head = dome;
+    mob.legs = [];
+    for (let i = 0; i < 6; i++) {
+        const a = (i + 0.5) / 6 * Math.PI * 2;
+        const leg = new THREE.Group();
+        leg.position.set(Math.sin(a) * 1.5, 2.6, Math.cos(a) * 1.5);
+        leg.rotation.y = a;
+        const upper = eliteBox(0.32, 0.32, 1.8, copper, 0, 0.3, 0.9);
+        upper.rotation.x = -0.45;
+        leg.add(upper);
+        leg.add(eliteBox(0.28, 2.8, 0.28, shell, 0, -1.2, 1.75));
+        rig.add(leg);
+        mob.legs.push(leg);
+    }
+    mob.lockBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.06, 1),
+        new THREE.MeshBasicMaterial({ color: 0xff3df0, transparent: true, opacity: 0.8, depthWrite: false })
+    );
+    mob.lockBeam.visible = false;
+    mob.mesh.add(mob.lockBeam);
+}
+
+function buildLunarOverlord(mob) {
+    mob.speed = 5;
+    const flesh = eliteMaterial(mob, 0x9fb7ad);
+    const fleshDark = eliteMaterial(mob, 0x6b8379);
+    mob.eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x6dffd8 });
+    const pupil = new THREE.MeshBasicMaterial({ color: 0x0a2a24 });
+    const rig = mob.rig;
+    const head = new THREE.Group();
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(1.7, 18, 14), flesh);
+    skull.scale.set(1, 1.15, 0.9);
+    head.add(skull);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10), mob.eyeMaterial);
+    eye.position.set(0, 0.3, 1.35);
+    head.add(eye);
+    head.add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), pupil).translateZ(1.85).translateY(0.3));
+    mob.tentacles = [];
+    for (let i = 0; i < 6; i++) {
+        const tentacle = makeLimb(fleshDark, 0.22, 2.4, 0.22, (i - 2.5) * 0.4, -1.4, 0.6);
+        head.add(tentacle);
+        mob.tentacles.push(tentacle);
+    }
+    rig.add(head);
+    mob.head = head;
+    mob.hands = [];
+    for (const side of [-1, 1]) {
+        const hand = new THREE.Group();
+        hand.position.set(side * 4.2, -0.5, 0.6);
+        hand.add(eliteBox(1.4, 1.6, 0.6, flesh));
+        for (let f = 0; f < 3; f++) hand.add(eliteBox(0.28, 1.0, 0.28, fleshDark, (f - 1) * 0.42, 1.25, 0));
+        const handEye = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), mob.eyeMaterial);
+        handEye.position.set(0, 0, 0.36);
+        hand.add(handEye);
+        rig.add(hand);
+        mob.hands.push(hand);
+    }
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), mob.eyeMaterial);
+    core.position.set(0, -2.4, 0);
+    rig.add(core);
+    mob.core = core;
+}
+
+function buildFireGiant(mob, variant) {
+    mob.speed = 2.2;
+    const skin = eliteMaterial(mob, 0x8a5a40);
+    const fur = eliteMaterial(mob, variant < 0.5 ? 0x5a4636 : 0x4e3a2c);
+    const iron = eliteMaterial(mob, 0x3a3a40, { standard: true, params: { metalness: 0.7, roughness: 0.45 } });
+    const fire = new THREE.MeshBasicMaterial({ color: 0xff6a1a });
+    const rig = mob.rig;
+    mob.legs = [makeLimb(fur, 1.1, 3.4, 1.1, -0.8, 3.4, 0), makeLimb(fur, 1.1, 3.4, 1.1, 0.8, 3.4, 0)];
+    mob.legs.forEach(leg => rig.add(leg));
+    const torso = new THREE.Group();
+    torso.position.y = 3.4;
+    torso.add(eliteBox(2.8, 3.2, 1.6, skin, 0, 1.6, 0));
+    torso.add(eliteBox(3.0, 0.6, 1.7, iron, 0, 0.3, 0));
+    torso.add(eliteBox(0.6, 3.4, 0.2, iron, 0.4, 1.7, 0.82));
+    const head = new THREE.Group();
+    head.position.set(0, 3.5, 0.1);
+    head.add(eliteBox(1.4, 1.4, 1.3, skin, 0, 0.6, 0));
+    head.add(eliteBox(1.6, 0.6, 1.4, fur, 0, 1.3, -0.1));
+    head.add(eliteBox(1.2, 0.8, 0.5, fur, 0, 0.1, 0.55));
+    mob.eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffd040 });
+    for (const side of [-1, 1]) head.add(eliteBox(0.22, 0.14, 0.05, mob.eyeMaterial, side * 0.32, 0.85, 0.66));
+    torso.add(head);
+    mob.head = head;
+    // The great eye in the giant's belly (Elden Ring).
+    const bellyEye = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), fire);
+    bellyEye.position.set(-0.5, 1.2, 0.8);
+    torso.add(bellyEye);
+    mob.bellyEye = bellyEye;
+    mob.arms = [];
+    for (const side of [-1, 1]) {
+        const arm = new THREE.Group();
+        arm.position.set(side * 1.85, 3.0, 0);
+        arm.add(eliteBox(0.95, 3.2, 0.95, skin, 0, -1.6, 0));
+        arm.add(eliteBox(1.1, 0.4, 1.1, iron, 0, -1.0, 0));
+        torso.add(arm);
+        mob.arms.push(arm);
+    }
+    mob.fireball = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 8), fire);
+    mob.fireball.position.set(0, -3.4, 0.2);
+    mob.fireball.visible = false;
+    mob.arms[1].add(mob.fireball);
+    rig.add(torso);
+    mob.torso = torso;
+}
+
+function buildSandTyrant(mob, variant) {
+    mob.speed = 4;
+    const hide = eliteMaterial(mob, variant < 0.5 ? 0xb89a6a : 0xa88a5a);
+    const hideDark = eliteMaterial(mob, 0x6e5a3c);
+    const horn = eliteMaterial(mob, 0xeee2c8);
+    const eye = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+    const rig = mob.rig;
+    const body = new THREE.Group();
+    body.position.y = 2.4;
+    body.add(eliteBox(2.4, 2.0, 4.2, hide));
+    body.add(eliteBox(2.0, 0.5, 3.8, hideDark, 0, 1.1, -0.1));
+    const head = new THREE.Group();
+    head.position.set(0, 0.6, 2.6);
+    head.add(eliteBox(1.4, 1.2, 1.8, hide, 0, 0, 0.6));
+    head.add(eliteBox(2.6, 0.9, 0.4, hideDark, 0, 0.5, 0));
+    for (const side of [-1, 1]) {
+        const h = new THREE.Mesh(new THREE.ConeGeometry(0.22, 2.6, 6), horn);
+        h.rotation.x = Math.PI / 2 - 0.2;
+        h.rotation.z = side * 0.35;
+        h.position.set(side * 0.9, 0.7, 1.5);
+        head.add(h);
+        head.add(eliteBox(0.18, 0.12, 0.05, eye, side * 0.5, 0.25, 1.5));
+    }
+    body.add(head);
+    mob.head = head;
+    mob.wings = [];
+    for (const side of [-1, 1]) {
+        const wing = new THREE.Group();
+        wing.position.set(side * 1.2, 0.8, 0.4);
+        wing.add(eliteBox(2.6, 0.12, 2.0, hideDark, side * 1.3, 0, 0));
+        body.add(wing);
+        mob.wings.push(wing);
+    }
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.2, -2.1);
+    tail.add(eliteBox(1.0, 0.9, 2.4, hide, 0, 0, -1.2));
+    const club = eliteBox(1.4, 1.2, 1.2, hideDark, 0, 0, -2.8);
+    tail.add(club);
+    body.add(tail);
+    mob.tail = tail;
+    rig.add(body);
+    mob.body = body;
+    mob.legs = [];
+    for (const [x, z] of [[-1.1, 1.2], [1.1, 1.2], [-1.1, -1.2], [1.1, -1.2]]) {
+        const leg = makeLimb(hideDark, 0.7, 1.9, 0.8, x, 1.9, z);
+        rig.add(leg);
+        mob.legs.push(leg);
+    }
+}
+
+function buildStoneColossus(mob, variant) {
+    mob.speed = 1.5;
+    const stone = eliteMaterial(mob, variant < 0.5 ? 0x8a8a80 : 0x7f8478);
+    const stoneDark = eliteMaterial(mob, 0x5e5e58);
+    const fur = eliteMaterial(mob, 0x4f6a3a);
+    const sigil = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+    const rig = mob.rig;
+    mob.legs = [makeLimb(stone, 1.5, 4.0, 1.5, -1.1, 4.0, 0), makeLimb(stone, 1.5, 4.0, 1.5, 1.1, 4.0, 0)];
+    mob.legs.forEach(leg => rig.add(leg));
+    const torso = new THREE.Group();
+    torso.position.y = 4.0;
+    torso.add(eliteBox(3.8, 3.6, 2.2, stone, 0, 1.8, 0));
+    torso.add(eliteBox(3.9, 1.0, 2.3, stoneDark, 0, 0.4, 0));
+    torso.add(eliteBox(3.2, 2.2, 0.4, fur, 0, 2.2, -1.25));
+    const sigilMesh = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.1, 6, 16), sigil);
+    sigilMesh.position.set(0, 2.2, 1.12);
+    torso.add(sigilMesh);
+    mob.sigil = sigilMesh;
+    const head = new THREE.Group();
+    head.position.set(0, 3.6, 0.1);
+    head.add(eliteBox(1.5, 1.4, 1.4, stoneDark, 0, 0.7, 0));
+    for (const side of [-1, 1]) head.add(eliteBox(0.3, 0.16, 0.05, sigil, side * 0.35, 0.8, 0.72));
+    torso.add(head);
+    mob.head = head;
+    mob.arms = [];
+    for (const side of [-1, 1]) {
+        const arm = new THREE.Group();
+        arm.position.set(side * 2.4, 3.3, 0);
+        arm.add(eliteBox(1.2, 3.6, 1.2, stone, 0, -1.8, 0));
+        arm.add(eliteBox(1.4, 0.9, 1.4, stoneDark, 0, -3.6, 0));
+        torso.add(arm);
+        mob.arms.push(arm);
+    }
+    const sword = new THREE.Group();
+    sword.position.set(0, -3.9, 0.2);
+    sword.add(eliteBox(0.3, 0.3, 1.2, stoneDark, 0, 0, 0));
+    sword.add(eliteBox(0.5, 0.25, 6.5, eliteMaterial(mob, 0xb8bcc4, { standard: true, params: { metalness: 0.7, roughness: 0.35 } }), 0, 0, 3.6));
+    mob.arms[1].add(sword);
+    rig.add(torso);
+    mob.torso = torso;
+}
+
 // ---------- per-frame update ----------
 
 function updateEliteMob(mob, dt) {
@@ -1022,6 +1441,12 @@ function updateEliteMob(mob, dt) {
         else if (mob.type === "crater_hopper") thinkCraterHopper(mob, dt, now);
         else if (mob.type === "ember_drifter") thinkEmberDrifter(mob, dt, now);
         else if (mob.type === "moss_brute") thinkMossBrute(mob, dt, now);
+        else if (mob.type === "tomb_crawler") thinkTombCrawler(mob, dt, now);
+        else if (mob.type === "ancient_guardian") thinkAncientGuardian(mob, dt, now);
+        else if (mob.type === "lunar_overlord") thinkLunarOverlord(mob, dt, now);
+        else if (mob.type === "fire_giant") thinkFireGiant(mob, dt, now);
+        else if (mob.type === "sand_tyrant") thinkSandTyrant(mob, dt, now);
+        else if (mob.type === "stone_colossus") thinkStoneColossus(mob, dt, now);
         queueEliteMobUpdate(mob);
     } else {
         if (mob.lastUpdateTime > 0) {
@@ -1142,18 +1567,13 @@ function thinkSentinelDrone(mob, dt, now) {
         } else {
             const orbitAngle = mob.animationTime * 0.45 + (mob.orbitOffset || (mob.orbitOffset = Math.random() * Math.PI * 2));
             goal = new THREE.Vector3(target.x + Math.cos(orbitAngle) * 11, target.y + 5.5, target.z + Math.sin(orbitAngle) * 11);
+            // Single aimed blasts on a steady cadence (no bursts).
             if (now >= (mob.nextBurstAt || 0)) {
-                mob.burstShots = 3;
-                mob.nextBurstAt = now + 2400 + Math.random() * 600;
-                mob.nextShotAt = now;
-            }
-            if (mob.burstShots > 0 && now >= mob.nextShotAt) {
+                mob.nextBurstAt = now + 1500 + Math.random() * 500;
                 const forward = new THREE.Vector3(dx, 0, dz).normalize();
                 const origin = mob.pos.clone().add(forward.multiplyScalar(0.9));
                 const aim = new THREE.Vector3(target.x, target.y + 1, target.z);
-                fireEliteProjectile(mob, "sentinel", origin, getBallisticDirection(origin, aim, MOB_PROJECTILE_STYLES.sentinel.speed, 0, 0.05), mob.burstShots);
-                mob.burstShots--;
-                mob.nextShotAt = now + 180;
+                fireEliteProjectile(mob, "sentinel", origin, getBallisticDirection(origin, aim, MOB_PROJECTILE_STYLES.sentinel.speed, 0, 0.05));
             }
             if (mob.hp <= mob.maxHp * 0.35 && !mob.repaired) {
                 mob.repaired = true;
@@ -1393,7 +1813,9 @@ function thinkCraterHopper(mob, dt, now) {
 // Vintage Story drifter: a hunched shambler that lurches after you, lobs cinders from range and swipes up close.
 function thinkEmberDrifter(mob, dt, now) {
     settleEliteOnGround(mob, dt);
-    const target = findEliteTarget(mob, 22, 12);
+    // Drifters notice players at 11 blocks, then keep chasing out to 22 once engaged.
+    const engaged = mob.aiState !== "IDLE";
+    const target = findEliteTarget(mob, engaged ? 22 : 11, 12);
     let move = null;
     if (mob.aiState === "THROW") {
         if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 5, dt);
@@ -1423,7 +1845,7 @@ function thinkEmberDrifter(mob, dt, now) {
             mob.swiped = false;
             mob.swipeReadyAt = now + 1500;
             setEliteState(mob, "SWIPE", now);
-        } else if (target.distance > 5 && target.distance < 16 && now >= (mob.throwReadyAt || 0)) {
+        } else if (target.distance > 4 && target.distance < 16 && now >= (mob.throwReadyAt || 0)) {
             mob.thrown = false;
             mob.throwReadyAt = now + 3800 + Math.random() * 2400;
             setEliteState(mob, "THROW", now);
@@ -1499,6 +1921,351 @@ function thinkMossBrute(mob, dt, now) {
         setEliteState(mob, "IDLE", now);
         move = eliteWander(mob, dt, mob.speed * 0.45, now);
         if (move) faceEliteMob(mob, move.x, move.z, 2, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Terraria Tomb Crawler: travels under the sand as a moving mound, then erupts beneath armed intruders
+// in a towering arc and dives back down.
+function thinkTombCrawler(mob, dt, now) {
+    const target = findEliteTarget(mob, 26, 14);
+    if (mob.aiState === "ERUPT") {
+        if (mob.eruptAttack && !mob.eruptHit && now - mob.stateSince > 250) {
+            mob.eruptHit = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 3.5, damage: 5, knockback: 6, lift: 9, fx: "shockwave",
+                label: "Swallowed by a Tomb Crawler"
+            });
+        }
+        if (now - mob.stateSince > 1800) {
+            setEliteState(mob, "BURROWED", now);
+            mob.eruptReadyAt = now + 2200 + Math.random() * 1200;
+            mob.breachAt = now + 9000 + Math.random() * 6000;
+        }
+        mob.isMoving = false;
+        return;
+    }
+    if (mob.aiState !== "BURROWED") setEliteState(mob, "BURROWED", now);
+    let move = null;
+    if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 6, dt);
+        if (target.distance < 2.2 && now >= (mob.eruptReadyAt || 0)) {
+            mob.eruptAttack = true;
+            mob.eruptHit = false;
+            spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xdcc48a, 18);
+            setEliteState(mob, "ERUPT", now);
+            return;
+        }
+        move = { x: dx, z: dz, speed: mob.speed };
+    } else {
+        if (!mob.breachAt) mob.breachAt = now + 6000 + Math.random() * 6000;
+        if (now >= mob.breachAt) {
+            mob.eruptAttack = false;
+            mob.eruptHit = false;
+            setEliteState(mob, "ERUPT", now);
+            return;
+        }
+        move = eliteWander(mob, dt, mob.speed * 0.4, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 2, dt);
+    }
+    mob.isMoving = false;
+    if (move) {
+        const length = Math.hypot(move.x, move.z);
+        if (length > 1e-4) {
+            // Burrowing ignores walls; it simply follows the surface from below.
+            mob.pos.x = modWrap(mob.pos.x + move.x / length * move.speed * dt, MAP_SIZE);
+            mob.pos.z = modWrap(mob.pos.z + move.z / length * move.speed * dt, MAP_SIZE);
+            mob.isMoving = true;
+        }
+    }
+    mob.pos.y = chunkManager.getSurfaceY(mob.pos.x, mob.pos.z) + 1;
+}
+
+// Zelda BotW Guardian Stalker: dormant until struck, then skitters into range, paints its attacker with a
+// laser sight and fires a devastating beam once the lock completes. Stomps anyone who closes in.
+function thinkAncientGuardian(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 48, 20);
+    let move = null;
+    if (mob.aiState === "LOCKON") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 6, dt);
+        if (now - mob.stateSince > 2600) {
+            if (target) {
+                const origin = mob.pos.clone().add(new THREE.Vector3(0, 3.7, 0)).add(new THREE.Vector3(0, 0, 1.6).applyQuaternion(mob.mesh.quaternion));
+                const aim = new THREE.Vector3(target.x, target.y + 1, target.z);
+                fireEliteProjectile(mob, "guardian", origin, getBallisticDirection(origin, aim, MOB_PROJECTILE_STYLES.guardian.speed, 0, 0.01));
+            }
+            mob.beamReadyAt = now + 3200 + Math.random() * 1500;
+            setEliteState(mob, "COOLDOWN", now);
+        }
+    } else if (mob.aiState === "COOLDOWN") {
+        if (now - mob.stateSince > 900) setEliteState(mob, target ? "CHASE" : "IDLE", now);
+    } else if (mob.aiState === "STOMP") {
+        if (!mob.stomped && now - mob.stateSince > 700) {
+            mob.stomped = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 5, damage: 6, knockback: 10, lift: 5, groundedOnly: true, fx: "shockwave",
+                label: "Crushed by an Ancient Guardian"
+            });
+        }
+        if (now - mob.stateSince > 1100) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 3, dt);
+        if (target.distance < 4.5 && now >= (mob.stompReadyAt || 0)) {
+            mob.stomped = false;
+            mob.stompReadyAt = now + 3000;
+            setEliteState(mob, "STOMP", now);
+        } else if (target.distance < 34 && now >= (mob.beamReadyAt || 0)) {
+            setEliteState(mob, "LOCKON", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 12) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.35, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 1.5, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Terraria Moon Lord: a floating head and two eyed hands drift calmly over the craters. Once wounded it
+// hovers over its attacker, alternating fans of phantasmal bolts from the hands with a heavy eye volley.
+function thinkLunarOverlord(mob, dt, now) {
+    const target = findEliteTarget(mob, 60, 40);
+    let goal;
+    if (mob.aiState === "BOLTS" || mob.aiState === "VOLLEY") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 3, dt);
+        if (target && !mob.fired && now - mob.stateSince > 900) {
+            mob.fired = true;
+            const aim = new THREE.Vector3(target.x, target.y + 1, target.z);
+            const style = MOB_PROJECTILE_STYLES.phantasm;
+            if (mob.aiState === "BOLTS") {
+                for (const side of [-1, 1]) {
+                    const origin = mob.pos.clone().add(new THREE.Vector3(side * 4.2, -0.5, 0.6).applyQuaternion(mob.mesh.quaternion));
+                    const base = getBallisticDirection(origin, aim, style.speed, 0, 0);
+                    for (let i = -1; i <= 1; i++) {
+                        const dir = base.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.22).normalize();
+                        fireEliteProjectile(mob, "phantasm", origin, dir, i + 2 + (side > 0 ? 3 : 0));
+                    }
+                }
+            } else {
+                const origin = mob.pos.clone().add(new THREE.Vector3(0, 0.3, 1.9).applyQuaternion(mob.mesh.quaternion));
+                for (let i = 0; i < 3; i++) {
+                    fireEliteProjectile(mob, "guardian", origin, getBallisticDirection(origin, aim, MOB_PROJECTILE_STYLES.guardian.speed, 0, 0.04), i + 1);
+                }
+            }
+        }
+        if (now - mob.stateSince > 1500) {
+            const enraged = mob.hp < mob.maxHp * 0.5;
+            mob.attackReadyAt = now + (enraged ? 1800 : 3200) + Math.random() * 1000;
+            setEliteState(mob, "HOVER", now);
+        }
+        goal = mob.pos.clone();
+    } else if (target) {
+        const offsetAngle = now / 4000;
+        goal = new THREE.Vector3(target.x + Math.sin(offsetAngle) * 14, target.y + 12, target.z + Math.cos(offsetAngle) * 14);
+        faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 3, dt);
+        if (now >= (mob.attackReadyAt || 0) && target.distance < 40) {
+            mob.fired = false;
+            mob.nextAttack = mob.nextAttack === "BOLTS" ? "VOLLEY" : "BOLTS";
+            setEliteState(mob, mob.nextAttack, now);
+        } else {
+            setEliteState(mob, "HOVER", now);
+        }
+    } else {
+        setEliteState(mob, "PATROL", now);
+        if (!mob.patrolGoal || mob.pos.distanceTo(mob.patrolGoal) < 3 || now > (mob.patrolGoalUntil || 0)) {
+            const ground = chunkManager.getSurfaceY(mob.pos.x, mob.pos.z) + 1;
+            mob.patrolGoal = new THREE.Vector3(
+                mob.pos.x + (Math.random() - 0.5) * 30,
+                ground + 12 + Math.random() * 6,
+                mob.pos.z + (Math.random() - 0.5) * 30
+            );
+            mob.patrolGoalUntil = now + 9000;
+        }
+        goal = mob.patrolGoal;
+        faceEliteMob(mob, goal.x - mob.pos.x, goal.z - mob.pos.z, 0.8, dt);
+    }
+    mob.isMoving = moveEliteFlyer(mob, goal, target ? mob.speed : mob.speed * 0.4, 6, 1.5, dt);
+}
+
+// Elden Ring Fire Giant: towering and slow. Stomps out a shockwave you must jump, and hurls a fan of
+// flaming boulders at attackers who keep their distance.
+function thinkFireGiant(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 40, 18);
+    let move = null;
+    if (mob.aiState === "STOMP") {
+        if (!mob.stomped && now - mob.stateSince > 1300) {
+            mob.stomped = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 9, damage: 7, knockback: 11, lift: 6, groundedOnly: true, fx: "shockwave",
+                label: "Flattened by a Fire Giant"
+            });
+            spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xff6a1a, 24);
+        }
+        if (now - mob.stateSince > 1900) setEliteState(mob, "CHASE", now);
+    } else if (mob.aiState === "HURL") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 2, dt);
+        if (!mob.thrown && now - mob.stateSince > 1100 && target) {
+            mob.thrown = true;
+            const style = MOB_PROJECTILE_STYLES.giant_fire;
+            const origin = new THREE.Vector3(mob.pos.x, mob.pos.y + 8.5, mob.pos.z);
+            const base = getBallisticDirection(origin, new THREE.Vector3(target.x, target.y + 0.8, target.z), style.speed, style.gravity, 0.02);
+            for (let i = -1; i <= 1; i++) {
+                fireEliteProjectile(mob, "giant_fire", origin, base.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.18).normalize(), i + 2);
+            }
+        }
+        if (now - mob.stateSince > 1700) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 1.5, dt);
+        if (target.distance < 8 && now >= (mob.stompReadyAt || 0)) {
+            mob.stomped = false;
+            mob.stompReadyAt = now + 4200;
+            setEliteState(mob, "STOMP", now);
+        } else if (target.distance > 10 && target.distance < 34 && now >= (mob.hurlReadyAt || 0)) {
+            mob.thrown = false;
+            mob.hurlReadyAt = now + 5000 + Math.random() * 2500;
+            setEliteState(mob, "HURL", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 4) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.4, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 1, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Monster Hunter Diablos: grazes peacefully until provoked, then roars, charges horn-first across the
+// dunes and sweeps its clubbed tail at anyone standing close.
+function thinkSandTyrant(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 44, 16);
+    let move = null;
+    if (mob.aiState === "ROAR") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 4, dt);
+        if (!mob.roared && now - mob.stateSince > 300) {
+            mob.roared = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 9, damage: 1, knockback: 8, fx: "shockwave", label: "Deafened by a Sand Tyrant's roar"
+            });
+        }
+        if (now - mob.stateSince > 1100) {
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(mob.mesh.quaternion);
+            mob.chargeDir = { x: forward.x, z: forward.z };
+            mob.chargeHit = false;
+            setEliteState(mob, "CHARGE", now);
+        }
+    } else if (mob.aiState === "CHARGE") {
+        const stepped = stepEliteOnGround(mob, mob.chargeDir.x, mob.chargeDir.z, 12 * dt);
+        mob.isMoving = stepped;
+        if (target && !mob.chargeHit && Math.hypot(target.x - mob.pos.x, target.z - mob.pos.z) < 3 && Math.abs(target.y - mob.pos.y) < 3) {
+            mob.chargeHit = true;
+            dispatchEliteAttack(mob, {
+                mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 4, damage: 8, knockback: 12, lift: 6, label: "Impaled by a Sand Tyrant"
+            });
+        }
+        if (!stepped || now - mob.stateSince > 2200) {
+            mob.chargeReadyAt = now + 5000;
+            setEliteState(mob, "CHASE", now);
+        }
+        return;
+    } else if (mob.aiState === "TAIL") {
+        if (!mob.swept && now - mob.stateSince > 500) {
+            mob.swept = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 5.5, damage: 5, knockback: 10, lift: 3, label: "Tail-swept by a Sand Tyrant"
+            });
+        }
+        if (now - mob.stateSince > 1100) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 2.5, dt);
+        if (target.distance < 5 && now >= (mob.tailReadyAt || 0)) {
+            mob.swept = false;
+            mob.tailReadyAt = now + 2600;
+            setEliteState(mob, "TAIL", now);
+        } else if (target.distance > 7 && target.distance < 30 && now >= (mob.chargeReadyAt || 0)) {
+            mob.roared = false;
+            setEliteState(mob, "ROAR", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 3) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.35, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 1.5, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Shadow of the Colossus (Gaius): a slow stone knight. Raises its great sword high before slamming it down
+// in front of itself, and stamps on anyone lurking at its feet.
+function thinkStoneColossus(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 40, 18);
+    let move = null;
+    if (mob.aiState === "RAISE") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 1.2, dt);
+        if (now - mob.stateSince > 1600) {
+            setEliteState(mob, "SLAM", now);
+            const forward = new THREE.Vector3(0, 0, 6).applyQuaternion(mob.mesh.quaternion);
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x + forward.x, y: mob.pos.y, z: mob.pos.z + forward.z,
+                radius: 6, damage: 9, knockback: 10, lift: 6, fx: "shockwave",
+                label: "Cleaved by a Stone Colossus"
+            });
+            spawnEliteBurst(new THREE.Vector3(mob.pos.x + forward.x, mob.pos.y + 0.5, mob.pos.z + forward.z), 0x9a9a90, 22);
+        }
+    } else if (mob.aiState === "SLAM") {
+        if (now - mob.stateSince > 1200) setEliteState(mob, "CHASE", now);
+    } else if (mob.aiState === "STAMP") {
+        if (!mob.stamped && now - mob.stateSince > 800) {
+            mob.stamped = true;
+            dispatchEliteAttack(mob, {
+                mode: "area", x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 4.5, damage: 6, knockback: 9, lift: 4, groundedOnly: true, fx: "shockwave",
+                label: "Stamped by a Stone Colossus"
+            });
+        }
+        if (now - mob.stateSince > 1300) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 1.2, dt);
+        if (target.distance < 3.5 && now >= (mob.stampReadyAt || 0)) {
+            mob.stamped = false;
+            mob.stampReadyAt = now + 2800;
+            setEliteState(mob, "STAMP", now);
+        } else if (target.distance < 10 && now >= (mob.slamReadyAt || 0)) {
+            mob.slamReadyAt = now + 4200;
+            setEliteState(mob, "RAISE", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 6) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.4, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 0.8, dt);
     }
     mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
 }
@@ -1744,20 +2511,123 @@ function animateEliteMob(mob, dt, now) {
         mob.body.rotation.x += (lean - mob.body.rotation.x) * Math.min(1, dt * 8);
         mob.head.rotation.z = mob.aiState === "STUNNED" ? Math.sin(t * 9) * 0.3 : 0;
         mob.head.rotation.x = mob.aiState === "ROAR" ? -0.4 : 0;
+    } else if (mob.type === "tomb_crawler") {
+        const erupting = mob.aiState === "ERUPT";
+        mob.mound.visible = !erupting;
+        if (!erupting) {
+            mob.mound.scale.set(1 + Math.sin(t * 8) * 0.06, mob.isMoving ? 0.35 + Math.abs(Math.sin(t * 10)) * 0.1 : 0.3, 1);
+            mob.wormParts.forEach(part => { part.visible = false; });
+        } else {
+            // The body follows a tall parabolic arc out of the ground and back under it.
+            const progress = stateAge / 1800;
+            mob.wormParts.forEach((part, i) => {
+                const p = progress * 1.45 - i * 0.05;
+                part.visible = p > 0 && p < 1;
+                if (!part.visible) return;
+                part.position.set(0, Math.sin(p * Math.PI) * 7.5 - 0.6, (p - 0.5) * 6);
+                part.rotation.x = -Math.cos(p * Math.PI) * 1.2;
+            });
+        }
+    } else if (mob.type === "ancient_guardian") {
+        const locking = mob.aiState === "LOCKON";
+        const hostile = mob.aiState !== "IDLE";
+        mob.eyeMaterial.color.setHex(locking ? (Math.sin(t * (6 + stateAge / 120)) > 0 ? 0xff3df0 : 0xffffff) : hostile ? 0xff3df0 : 0x3ac8ff);
+        mob.lockBeam.visible = locking;
+        if (locking) {
+            const length = 30;
+            const local = new THREE.Vector3(0, 3.7, 1.5 + length / 2);
+            mob.lockBeam.scale.set(1, 1, length);
+            mob.lockBeam.position.copy(local);
+            mob.lockBeam.material.opacity = 0.4 + Math.min(1, stateAge / 2600) * 0.5;
+        }
+        const scurry = mob.isMoving ? t * 12 : 0;
+        mob.legs.forEach((leg, i) => {
+            leg.rotation.x = mob.isMoving ? Math.sin(scurry + i * Math.PI / 3 * (i % 2 ? 1 : -1)) * 0.3 : 0;
+        });
+        const crouch = mob.aiState === "STOMP" ? (stateAge < 700 ? 0.6 : -0.4) : 0;
+        mob.body.position.y += (2.8 + crouch - mob.body.position.y) * Math.min(1, dt * 8);
+        mob.head.rotation.y = mob.aiState === "IDLE" ? Math.sin(t * 0.7) * 0.6 : 0;
+    } else if (mob.type === "lunar_overlord") {
+        const attacking = mob.aiState === "BOLTS" || mob.aiState === "VOLLEY";
+        mob.rig.position.y = Math.sin(t * 1.4) * 0.4;
+        mob.tentacles.forEach((tentacle, i) => {
+            tentacle.rotation.x = Math.sin(t * 2 + i) * 0.3;
+            tentacle.rotation.z = Math.cos(t * 1.6 + i) * 0.2;
+        });
+        mob.hands.forEach((hand, i) => {
+            const side = i === 0 ? -1 : 1;
+            const raise = mob.aiState === "BOLTS" ? Math.min(1, stateAge / 800) : 0;
+            hand.position.y = -0.5 + Math.sin(t * 1.8 + i * 1.7) * 0.5 + raise * 1.5;
+            hand.rotation.z = side * (0.2 + raise * 0.5);
+        });
+        mob.head.scale.setScalar(mob.aiState === "VOLLEY" && stateAge < 900 ? 1 + stateAge / 9000 : 1);
+        mob.eyeMaterial.color.setHex(attacking ? 0xb0fff0 : 0x6dffd8);
+        mob.core.rotation.y += dt * 1.5;
+    } else if (mob.type === "fire_giant") {
+        const walk = mob.isMoving ? Math.sin(t * 2.4) * 0.35 : 0;
+        let legX = [walk, -walk];
+        let armX = [-walk * 0.5, walk * 0.5];
+        let lean = 0;
+        if (mob.aiState === "STOMP") {
+            const lift = stateAge < 1300 ? Math.min(1, stateAge / 1000) : 0;
+            legX = [-1.1 * lift, 0];
+            lean = -0.15 * lift;
+        } else if (mob.aiState === "HURL") {
+            const progress = Math.min(1, stateAge / 1100);
+            armX = [-0.2, progress < 1 ? -Math.PI * 0.9 * progress : 0.5];
+        }
+        mob.fireball.visible = mob.aiState === "HURL" && stateAge < 1100;
+        mob.legs[0].rotation.x += (legX[0] - mob.legs[0].rotation.x) * Math.min(1, dt * 8);
+        mob.legs[1].rotation.x += (legX[1] - mob.legs[1].rotation.x) * Math.min(1, dt * 8);
+        mob.arms[0].rotation.x += (armX[0] - mob.arms[0].rotation.x) * Math.min(1, dt * 8);
+        mob.arms[1].rotation.x += (armX[1] - mob.arms[1].rotation.x) * Math.min(1, dt * 8);
+        mob.torso.rotation.x += (lean - mob.torso.rotation.x) * Math.min(1, dt * 6);
+        mob.bellyEye.scale.setScalar(1 + Math.sin(t * 3) * 0.12);
+    } else if (mob.type === "sand_tyrant") {
+        const charging = mob.aiState === "CHARGE";
+        const walk = mob.isMoving ? Math.sin(t * (charging ? 13 : 5)) * (charging ? 0.7 : 0.4) : 0;
+        mob.legs.forEach((leg, i) => { leg.rotation.x = (i === 0 || i === 3) ? walk : -walk; });
+        const roaring = mob.aiState === "ROAR";
+        mob.head.rotation.x += ((roaring ? -0.5 : charging ? 0.35 : 0) - mob.head.rotation.x) * Math.min(1, dt * 8);
+        mob.wings.forEach((wing, i) => {
+            const side = i === 0 ? -1 : 1;
+            wing.rotation.z = side * (roaring ? 0.6 : charging ? -0.2 : Math.sin(t * 1.5) * 0.08);
+        });
+        mob.body.rotation.y = mob.aiState === "TAIL" ? Math.min(1, stateAge / 900) * Math.PI * 2 : 0;
+        mob.tail.rotation.y = Math.sin(t * 1.6) * 0.25;
+    } else if (mob.type === "stone_colossus") {
+        const walk = mob.isMoving ? Math.sin(t * 1.8) * 0.3 : 0;
+        let legX = [walk, -walk];
+        let swordArm = walk * 0.4;
+        if (mob.aiState === "RAISE") swordArm = -Math.PI * 0.95 * Math.min(1, stateAge / 1300);
+        else if (mob.aiState === "SLAM") swordArm = -0.9;
+        else if (mob.aiState === "STAMP") legX = [stateAge < 800 ? -0.9 * Math.min(1, stateAge / 600) : 0.1, 0];
+        mob.legs[0].rotation.x += (legX[0] - mob.legs[0].rotation.x) * Math.min(1, dt * 8);
+        mob.legs[1].rotation.x += (legX[1] - mob.legs[1].rotation.x) * Math.min(1, dt * 8);
+        mob.arms[0].rotation.x += (-walk * 0.4 - mob.arms[0].rotation.x) * Math.min(1, dt * 6);
+        mob.arms[1].rotation.x += (swordArm - mob.arms[1].rotation.x) * Math.min(1, dt * (mob.aiState === "SLAM" ? 18 : 5));
+        mob.torso.rotation.x += ((mob.aiState === "SLAM" ? 0.2 : 0) - mob.torso.rotation.x) * Math.min(1, dt * 6);
+        mob.sigil.rotation.z += dt * (mob.aiState === "IDLE" ? 0.5 : 2.5);
     }
+}
+
+function getEliteDrop(def) {
+    const archetypeName = worldArchetype ? worldArchetype.name : null;
+    return def.drops && archetypeName && def.drops[archetypeName] ? def.drops[archetypeName] : def.drop;
 }
 
 function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
     spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
-    if (!def.drop || !killer || Math.random() > def.drop.chance || !BLOCKS[def.drop.id]) return;
+    const drop = getEliteDrop(def);
+    if (!drop || !killer || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
     if (killer === userName) {
-        addToInventory(def.drop.id, def.drop.count, worldSeed);
-        addMessage(`${def.name} dropped ${def.drop.count} ${BLOCKS[def.drop.id].name}!`, 2500);
+        addToInventory(drop.id, drop.count, worldSeed);
+        addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
     } else {
         const peer = peers.get(killer);
         if (peer && peer.dc && peer.dc.readyState === "open") {
-            peer.dc.send(JSON.stringify({ type: "add_to_inventory", blockId: def.drop.id, count: def.drop.count, originSeed: worldSeed }));
+            peer.dc.send(JSON.stringify({ type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed }));
         }
     }
 }

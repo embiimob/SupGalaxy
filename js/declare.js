@@ -68,6 +68,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
     MAX_LOADED_CHUNKS = 420,
+    // Horizontal distance (blocks) within which other players' avatars are drawn.
+    REMOTE_PLAYER_VIEW_DISTANCE = 64,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
     VERSION = "SupGalaxy v1.3.0",

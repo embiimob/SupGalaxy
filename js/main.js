@@ -6413,7 +6413,7 @@ function gameLoop(e) {
                         v.position.y -= .05 * e
                     }
                     s >= 1 && (e.isDying = !1)
-                } else v.visible = Math.hypot(player.x - v.position.x, player.z - v.position.z) < 32
+                } else v.visible = Math.hypot(player.x - v.position.x, player.z - v.position.z) < REMOTE_PLAYER_VIEW_DISTANCE
             }
         }
         for (const [e, t] of userAudioStreams.entries())

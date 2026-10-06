@@ -17,7 +17,9 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 - **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
 - **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
 - **👹 Level 2 mobs (score ≥ 100)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
-- **🐉 Level 3 mobs (score ≥ 200)** — crawleys retire. The Sentinel Drone, Brick Golem and Magma Wyrm arrive, but they **only fight players who are holding a laser gun or who attack them first**.
+- **🐉 Level 3 mobs (score ≥ 200)** — crawleys retire. The Sentinel Drone, Brick Golem, Magma Wyrm and Tomb Crawler arrive, but they **only fight players who are holding a laser gun or who attack them first**.
+- **🗿 Level 4 titans (score ≥ 300)** — the toughest mobs yet: Ancient Guardian, Lunar Overlord, Fire Giant, Sand Tyrant and Stone Colossus. Only one per world, and they stay **peaceful until you attack them**.
+- **👀 Longer player view** — other players' avatars are now drawn up to 64 blocks away (was 32).
 - **🦴 Bones** — scattered under Dust Vulture roosts. Pick them up and keep them as a crafting item.
 - **🔵 Blue laser rework** — one blue blast breaks any breakable block (castle bricks included). Obsidian resists and takes 4 blasts.
 - **🧊 No more freeze when mobs shoot** — laser lights now come from fixed pools, and mob projectiles carry no lights, so firing no longer forces every material's shaders to recompile.
@@ -137,6 +139,7 @@ The galaxy fights back as you get stronger. Mob tiers unlock from the **highest 
 | 1 | 0 – 99 | Classic mobs: bees, crawlers, spiders, grubs, fish, whales, UFOs |
 | 2 | 100+ | One **level-2 mob** per world type joins the existing spawns (always hostile, moderate difficulty) |
 | 3 | 200+ | Crawleys retire. **Level-3 heavy hitters** arrive, but they stay passive unless you are holding a laser gun (red, green or blue) or you hit them first (they hold a grudge for 30 s). |
+| 4 | 300+ | **Level-4 titans** arrive: one per world, never aggressive unless you attack them (they hold a grudge for 60 s). |
 
 You get a warning message whenever your score crosses into a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
 
@@ -148,19 +151,36 @@ Each mob is based on a different voxel game and borrows that game's way of fight
 |-------|-----|-------------|---------------|----|-------|------|
 | 🌍 Earth / 🗿 Massive | **Bone Archer** *(night only)* | *Minecraft* Skeleton | Keeps about 6–15 blocks away, strafes around you and backs off if you rush it. It then draws its bow and fires **arcing arrows**. Break line of sight or close in fast. Leaves at sunrise. | 20 | 40 | Iron Ore (50%) |
 | 🏜 Desert | **Dust Vulture** *(flying)* | *7 Days to Die* Vultures | The flock **circles a roost far out at the edge of the loaded map** (about 60–75 blocks away; easy to spot in third person). There are never more than **4 per world**. Get within ~26 blocks of the roost and they **dive-bomb** you for a bite, then climb away. They follow you up to ~40 blocks from the roost. **Bones** lie scattered on the ground under every roost. | 12 | 30 | 2 Bones (60%) |
-| 🌙 Moon | **Crater Hopper** | *Cube World* Slime | A wobbling jelly cube. It **squashes down, then bounces at you** in long low-gravity arcs, damaging you if it lands on you. Sidestep while it's in the air. | 10 | 25 | Blue Crystal (50%) |
-| 🌋 Vulcan | **Ember Drifter** | *Vintage Story* Drifter | A hunched, ash-grey shambler with a smouldering chest. It **lobs glowing cinders** from 5–16 blocks and **claws** you up close. | 14 | 25 | 2 Torches (60%) |
+| 🌙 Moon / 🌍 Earth swamps | **Crater Hopper** | *Cube World* Slime | A wobbling jelly cube. It **squashes down, then bounces at you** in long low-gravity arcs, damaging you if it lands on you. Sidestep while it's in the air. On Earth it only appears in **swamp** biomes, is green, and drops Green Crystal instead. | 10 | 25 | Blue Crystal (50%) · Green Crystal on Earth (50%) |
+| 🌋 Vulcan | **Ember Drifter** | *Vintage Story* Drifter | A hunched, ash-grey shambler with a smouldering chest. It's rare, and only **notices you within 11 blocks** (it keeps chasing out to 22 once engaged). It **lobs glowing cinders** and **claws** you up close. | 14 | 25 | 2 Torches (60%) |
 | 🗿 Massive | **Moss Brute** | *Hytale* Trork | A tusked, club-carrying brute. It **roars (0.85 s warning), then charges** in a straight line. Dodge sideways and it **stumbles, dazed**, for about 1.7 s. Up close it **swings its club**. | 22 | 30 | 3 Leaves (60%) |
 
 ### Level 3 (score 200+) — only hostile to armed or aggressive players
 
 | World | Mob | Inspired by | How it fights | HP | Score | Drop |
 |-------|-----|-------------|---------------|----|-------|------|
-| 🌙 Moon | **Sentinel Drone** *(flying, rare)* | *No Man's Sky* Sentinels | Patrols the sky. If you are armed, it **scans you with a beam** for 2 s. Once alerted it calls **one reinforcement**, circles you and fires **3-shot energy bursts**. At low HP it **pulls back to repair**. At most 2 per world. | 24 | 50 | Blue Calcite (60%) |
+| 🌙 Moon / 🌋 Vulcan | **Sentinel Drone** *(flying, rare)* | *No Man's Sky* Sentinels | Patrols the sky. If you are armed, it **scans you with a beam** for 2 s. Once alerted it calls **one reinforcement**, circles you and fires **single energy blasts** every ~1.5–2 s. At low HP it **pulls back to repair**. At most 2 per world. | 24 | 50 | Blue Calcite (60%) |
 | 🗿 Massive | **Brick Golem** | *Dragon Quest Builders* Golem | A slow, heavy brick giant. Up close it raises its arms and **ground-slams** (radius 7, telegraphed for 1.2 s). **Jump to dodge** the shockwave. At range it **hurls boulders**. | 60 | 80 | 4 Castle Stone Bricks |
 | 🌋 Vulcan | **Magma Wyrm** *(aquatic)* | *Subnautica* Sea Dragon Leviathan | Lurks in **deep Vulcan water** (the only realm deep enough). It **surfaces to spit fireballs**, dives, and **lunges** with a bite when you swim close. | 45 | 70 | 2 Emerald |
+| 🏜 Desert | **Tomb Crawler** *(burrowing)* | *Terraria* Tomb Crawler | Travels **under the sand** as a moving mound and can't be hit while buried. Carry a laser near it and it **erupts beneath you** in a tall arc (knock-up + damage), then dives back down. Even when calm it breaches every 6–15 s, so you can spot it. | 40 | 60 | 4 Bones |
 
-"Armed" means holding a Laser Gun, Green Laser Gun or Blue Laser Gun in the selected hotbar slot. Hitting a level-3 mob with anything (fists and picks included) also provokes it for 30 s. Your held item is synced to peers, so a mob's authority sees the same thing you do.
+### Level 4 (score 300+) — titans, passive until attacked
+
+The toughest mobs yet. Each world has **at most one titan** in the whole loaded map. It spawns 40–80 blocks away (visible in third person) and ignores you until **you hit it**. Then it fights you (and only you) for 60 s.
+
+| World | Mob | Inspired by | How it fights | HP | Score | Drop |
+|-------|-----|-------------|---------------|----|-------|------|
+| 🌍 Earth | **Ancient Guardian** | *Zelda: Breath of the Wild* Guardian Stalker | A six-legged dome with a single eye. It **paints you with a pink laser sight for 2.6 s** (its eye flickers faster as the lock completes), then fires a **fast beam**. Break line of sight before it fires. Up close it **stomps** (jump to dodge). | 150 | 150 | 4 Blue Calcite |
+| 🌙 Moon | **Lunar Overlord** *(flying)* | *Terraria* Moon Lord | A floating eyed head with two eyed hands. It circles 12 blocks above you, alternating a **fan of 6 phantasmal bolts** from its hands with a **3-beam eye volley**. It attacks faster below half HP. | 180 | 180 | 6 Green Crystal |
+| 🌋 Vulcan | **Fire Giant** | *Elden Ring* Fire Giant | A towering giant with a burning eye in its belly. It **raises a foot and stomps** a radius-9 shockwave (**jump to dodge**) and **hurls a fan of 3 flaming boulders** at range. | 200 | 200 | 6 Emerald |
+| 🏜 Desert | **Sand Tyrant** | *Monster Hunter* Diablos | A horned desert wyvern. It **roars** (knock-back), then **charges horn-first** across the dunes. Up close it spins a **tail sweep**. Dodge sideways from the charge. | 170 | 170 | 10 Bones |
+| 🗿 Massive | **Stone Colossus** | *Shadow of the Colossus* (Gaius) | A 9-block stone knight with a great sword. It **raises the sword for 1.6 s, then slams** it down in front of itself. It **stamps** on anyone at its feet (jump to dodge). | 220 | 220 | 12 Castle Stone Bricks |
+
+### Wide-ranging Mobs & Despawning
+
+Grubs (max **2**), Dust Vultures (max **4**), Sentinel Drones (max **2**) and level-4 titans (max **1**) are counted across the **whole loaded map**, not just near each player. They **don't despawn when you walk away**. They leave only when their chunk unloads from the authority's loaded (third-person viewable) map, or when no player in the world still meets their tier. Other mobs still despawn beyond ~96 blocks.
+
+"Armed" means holding a Laser Gun, Green Laser Gun or Blue Laser Gun in the selected hotbar slot. Hitting a level-3 mob with anything (fists and picks included) also provokes it for 30 s. Level-4 titans ignore held weapons and only respond to being hit. Your held item is synced to peers, so a mob's authority sees the same thing you do.
 
 Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not only voxel boxes. They have animated rigs (bow draw, slime squash-and-stretch, cinder throw, charge, rotor spin, wing flaps, slam windup, serpentine swim) and flash red when hit. Arrows, energy bolts, cinders, boulders and fireballs are real projectiles. Most arc under gravity. Elite projectiles never destroy blocks, can be blocked by walls, and carry **no dynamic lights**: adding or removing a scene light recompiles every material and caused the old Sentinel freeze. Hits spawn a small shard burst instead.
 
@@ -172,14 +192,14 @@ Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's 
 
 - Elites use the shared mob pipeline (`mob_spawn` / `mob_update_batch` / `mob_hit` / `mob_kill` / `mob_despawn`). Only the mob's **authority** runs its AI (the area spawner, or the host as fallback). Everyone else interpolates its position and aiState, so animations match on every screen.
 - Ranged attacks travel as `laser_fired_batch` projectiles. Each client checks hits **against its own player only**, so a dodge on your screen is a real dodge.
-- Melee and area attacks (vulture bite, hopper squash, drifter claw, brute charge/club, wyrm lunge, golem slam) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
+- Melee and area attacks (vulture bite, hopper squash, drifter claw, brute charge/club, wyrm lunge, golem slam, tomb-crawler eruption, titan stomps, charges and sword slams) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
 - A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.
 - Player scores and the held item ride along with `player_move` (also sent when you switch hotbar slots while standing still), so every spawner knows the area's tier and who is armed.
 
 ### Adding the Next Tier
 
-1. Add a definition to `ELITE_MOB_TYPES` (`archetypes`, day/night, HP, score, drop, hitbox, optional `provoke: "armed"`, `worldMax`, `roost`) and its builder/`think`/animation code in `js/mob-evolution.js`.
-2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 4, minScore: 300, introduces: [...], retires: [...] }`).
+1. Add a definition to `ELITE_MOB_TYPES` and its builder/`think`/animation code in `js/mob-evolution.js`. Fields include `archetypes`, day/night, HP, score, drop, hitbox, and the optional `provoke: "armed" | "attacked"`, `grudgeMs`, `worldMax`, `wideRange`, `biomes`, per-world `drops`, `roost` and `burrows`.
+2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 5, minScore: 400, introduces: [...], retires: [...] }`).
 
 ---
 
