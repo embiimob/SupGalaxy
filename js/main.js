@@ -761,6 +761,9 @@ function initThree() {
             clearPointerHold();
             pointerHoldTimeout = setTimeout(() => {
                 pointerHoldInterval = setInterval(() => {
+                    // Holding the trigger keeps the gun on target between cooldown-gated shots.
+                    if (isLaserGunId(selectedBlockId) && getLaserGunAimWeight(avatarGroup, performance.now()) > 0)
+                        markLaserGunAim(avatarGroup, performance.now(), false);
                     onPointerDown(e);
                 }, 200);
             }, 500);
@@ -928,10 +931,246 @@ function createPickaxeMesh(toolId) {
     return group;
 }
 
+// Gun-local frame: grip at the origin, barrel along -Z above the grip (+Y).
+var LASER_GUN_MUZZLES = {
+    121: new THREE.Vector3(0, .09, -.47),
+    126: new THREE.Vector3(0, .09, -.47),
+    133: new THREE.Vector3(0, .13, -.5)
+};
+var laserGunTmpMatrix = new THREE.Matrix4(),
+    laserGunTmpMatrix2 = new THREE.Matrix4(),
+    laserGunTmpQuat = new THREE.Quaternion(),
+    laserGunTmpEuler = new THREE.Euler(),
+    laserGunTmpVec = new THREE.Vector3(),
+    laserGunTmpScale = new THREE.Vector3(1, 1, 1);
+
+function isLaserGunId(id) {
+    return id === 121 || id === 126 || id === 133;
+}
+
+function createLaserGunMesh(toolId) {
+    const group = new THREE.Group();
+    const accent = toolId === 126 ? 0x00ff44 : toolId === 133 ? 0x2a7dff : 0xff1a1a;
+    const mat = (color, emissive, intensity, metal) => new THREE.MeshStandardMaterial({
+        color: color, metalness: metal || .55, roughness: .45,
+        emissive: emissive || 0, emissiveIntensity: emissive ? intensity : 0
+    });
+    const box = (w, h, d, material, x, y, z, rx) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        mesh.position.set(x, y, z);
+        if (rx) mesh.rotation.x = rx;
+        group.add(mesh);
+        return mesh;
+    };
+    const glow = mat(accent, accent, 1.6, .2);
+    if (toolId === 133) {
+        // Blue cannon: wide bore, segmented coils and a heavy rear housing.
+        const hull = mat(0x1b2a4a, 0, 0, .7);
+        const dark = mat(0x111824, 0, 0, .4);
+        const tube = (r1, r2, len, material, z) => {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 12), material);
+            mesh.rotation.x = Math.PI / 2;
+            mesh.position.set(0, .13, z);
+            group.add(mesh);
+        };
+        tube(.085, .1, .6, hull, -.18);
+        [-.03, -.17, -.31].forEach(z => tube(.11, .11, .04, glow, z));
+        tube(.1, .1, .03, mat(0x9ad8ff, 0x66ccff, 2.4, .1), -.47);
+        box(.21, .21, .18, hull, 0, .13, .17);
+        box(.15, .06, .12, glow, 0, .13, .265);
+        box(.045, .05, .22, dark, 0, .27, -.06);
+        box(.075, .17, .09, dark, 0, -.04, .04, .25);
+        box(.03, .06, .07, dark, 0, .02, -.04);
+    } else {
+        // Red and green blasters share the same shell; only the energy accents differ.
+        const body = mat(0x2b2f36, 0, 0, .6);
+        const dark = mat(0x1a1c21, 0, 0, .3);
+        box(.09, .11, .34, body, 0, .07, -.08);
+        box(.05, .05, .2, mat(0x4a5059, 0, 0, .8), 0, .09, -.33);
+        box(.065, .065, .04, glow, 0, .09, -.45);
+        box(.095, .02, .24, glow, 0, .13, -.08);
+        box(.06, .065, .08, glow, 0, .07, .13);
+        box(.07, .16, .08, dark, 0, -.05, .04, .25);
+        box(.02, .05, .06, dark, 0, -.005, -.04);
+    }
+    const muzzle = new THREE.Object3D();
+    muzzle.position.copy(LASER_GUN_MUZZLES[toolId]);
+    group.add(muzzle);
+    group.userData.muzzle = muzzle;
+    group.userData.toolId = toolId;
+    return group;
+}
+
+// Arm-space grip: w=0 holds the barrel up in front of the hand, w=1 runs it down the aimed arm.
+function laserGunGripMatrix(toolId, w, skinned, out) {
+    const restZ = toolId === 133 ? (skinned ? -.24 : -.36) : (skinned ? -.14 : -.26);
+    const restY = skinned ? .02 : (toolId === 133 ? -.3 : -.36);
+    const aimY = skinned ? -.04 : -.45;
+    laserGunTmpVec.set(0, restY + (aimY - restY) * w, restZ * (1 - w));
+    laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(Math.PI / 2 - Math.PI * w, 0, 0));
+    return out.compose(laserGunTmpVec, laserGunTmpQuat, laserGunTmpScale);
+}
+
+function getLaserGunAimWeight(avatar, now) {
+    const data = avatar?.userData;
+    if (!data || data.laserAimTime === undefined) return 0;
+    // Frame timestamps can trail the performance.now() stamp of a shot/hold refresh by a few ms;
+    // clamp so that never reads as "not aiming" and flashes the barrel-up rest pose.
+    return laserGunAimWeight(Math.max(0, now - data.laserAimStart), Math.max(0, now - data.laserAimTime));
+}
+
+function getLaserGunAim(avatar) {
+    if (!avatar?.heldLaserGun) return 0;
+    return getLaserGunAimWeight(avatar, performance.now());
+}
+
+// Keeps the gun on target; only a fully lowered gun restarts the raise, so repeat fire never bobs.
+function markLaserGunAim(avatar, now, fired) {
+    if (!avatar) return;
+    if (!(getLaserGunAimWeight(avatar, now) > 0)) avatar.userData.laserAimStart = now;
+    avatar.userData.laserAimTime = now;
+    if (fired) avatar.userData.laserFireTime = now;
+}
+
+// Called after the box arm's absolute per-frame rotation so the aim never compounds.
+function applyLaserGunArmAim(avatar, pitch) {
+    const w = getLaserGunAim(avatar);
+    if (!w || !avatar.children[5]) return;
+    const arm = avatar.children[5];
+    arm.rotation.x += (laserGunArmAngle(pitch) - arm.rotation.x) * w;
+}
+
+function updateHeldLaserGun(avatar, toolId) {
+    const selectedGun = isLaserGunId(toolId) ? toolId : null;
+    if ((avatar.heldLaserGun?.userData.toolId || null) === selectedGun) return;
+    if (avatar.heldLaserGun) {
+        avatar.heldLaserGun.parent.remove(avatar.heldLaserGun);
+        disposeObject(avatar.heldLaserGun);
+        avatar.heldLaserGun = null;
+    }
+    if (selectedGun) {
+        const gun = createLaserGunMesh(selectedGun);
+        gun.userData.handPosition = new THREE.Vector3();
+        gun.matrixAutoUpdate = false;
+        avatar.add(gun);
+        avatar.heldLaserGun = gun;
+        updateHeldLaserGunPose(avatar);
+    }
+}
+
+function updateHeldLaserGunPose(avatar) {
+    const gun = avatar?.heldLaserGun;
+    if (!gun) return;
+    const arm = avatar.children[5];
+    arm.updateMatrix();
+    const rig = avatar.userData.customAvatar;
+    const hand = rig?.rightHand;
+    laserGunGripMatrix(gun.userData.toolId, getLaserGunAim(avatar), !!hand, laserGunTmpMatrix);
+    gun.matrix.multiplyMatrices(arm.matrix, laserGunTmpMatrix);
+    gun.visible = !rig?.ambientPlaying;
+    if (hand) {
+        // Keep the box arm's aim orientation, but grip at the visible skeleton's hand.
+        hand.getWorldPosition(gun.userData.handPosition);
+        avatar.worldToLocal(gun.userData.handPosition);
+        laserGunTmpVec.setFromMatrixPosition(gun.matrix).sub(arm.position).add(gun.userData.handPosition);
+        gun.matrix.setPosition(laserGunTmpVec);
+    }
+    gun.matrixWorldNeedsUpdate = true;
+}
+
+var firstPersonLaserGun = null;
+
+function poseFirstPersonLaserGun(w, recoil) {
+    const gun = firstPersonLaserGun;
+    const widen = Math.max(1, camera.aspect / (16 / 9));
+    // The bulkier cannon sits farther out so it frames the shot instead of filling the view.
+    // Both sit roughly one gun-width right of the old spot to keep the crosshair area clear.
+    const cannon = gun.userData.toolId === 133;
+    const rest = laserGunTmpVec.set((cannon ? .62 : .48) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
+    const aimX = (cannon ? .44 : .33) * widen, aimY = cannon ? -.27 : -.2, aimZ = cannon ? -.8 : -.5;
+    gun.position.set(rest.x + (aimX - rest.x) * w, rest.y + (aimY - rest.y) * w, rest.z + (aimZ - rest.z) * w + .07 * recoil);
+    // Rest tips the barrel up and inward; aiming points it from the grip at the crosshair target.
+    const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(1.05, .25, .15));
+    const distance = gun.userData.aimDistance || 20;
+    const aimDir = new THREE.Vector3(-aimX, -aimY, -distance - aimZ).normalize();
+    gun.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
+    gun.quaternion.slerpQuaternions(restQuat, gun.quaternion.clone(), w);
+}
+
+function updateFirstPersonLaserGun(now) {
+    const toolId = isLaserGunId(selectedBlockId) ? selectedBlockId : null;
+    if ((firstPersonLaserGun?.userData.toolId || null) !== toolId) {
+        if (firstPersonLaserGun) {
+            firstPersonLaserGun.parent.remove(firstPersonLaserGun);
+            disposeObject(firstPersonLaserGun);
+            firstPersonLaserGun = null;
+        }
+        if (toolId) {
+            firstPersonLaserGun = createLaserGunMesh(toolId);
+            firstPersonLaserGun.scale.setScalar(1.25);
+            firstPersonLaserGun.traverse(o => {
+                if (!o.isMesh) return;
+                o.renderOrder = 1000;
+                o.frustumCulled = false;
+                o.material.transparent = true;
+                o.material.opacity = 1;
+                o.material.depthTest = false;
+                o.material.depthWrite = false;
+            });
+            camera.add(firstPersonLaserGun);
+        }
+    }
+    if (!firstPersonLaserGun) return;
+    firstPersonLaserGun.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
+        player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
+    const elapsed = Math.max(0, now - avatarGroup?.userData.laserFireTime);
+    poseFirstPersonLaserGun(getLaserGunAimWeight(avatarGroup, now), elapsed >= 0 && elapsed < 140 ? 1 - elapsed / 140 : 0);
+}
+
+// Lasers leave the first-person muzzle locally and the avatar muzzle for peers, converging on the crosshair.
+function prepareLaserShot(toolId) {
+    const now = performance.now();
+    markLaserGunAim(avatarGroup, now, true);
+    camera.updateMatrixWorld();
+    const camPos = camera.getWorldPosition(new THREE.Vector3());
+    const camDir = camera.getWorldDirection(new THREE.Vector3());
+    const point = new THREE.Vector3();
+    let distance = .5;
+    for (; distance < 64; distance += .25) {
+        point.copy(camPos).addScaledVector(camDir, distance);
+        if (isSolid(getBlockAt(Math.floor(point.x), Math.floor(point.y), Math.floor(point.z)))) break;
+    }
+    distance = Math.max(3, distance);
+    const target = camPos.clone().addScaledVector(camDir, distance);
+    const origin = new THREE.Vector3(player.x, player.y + 1.5, player.z);
+    updateFirstPersonLaserGun(now);
+    if (firstPersonLaserGun && firstPersonLaserGun.userData.toolId === toolId) {
+        firstPersonLaserGun.userData.aimDistance = distance;
+        poseFirstPersonLaserGun(1, 0);
+        firstPersonLaserGun.updateMatrixWorld(true);
+        firstPersonLaserGun.userData.muzzle.getWorldPosition(origin);
+    }
+    // Mirror the default arm's fully aimed pose at the position/yaw peers render this avatar with.
+    const arm = avatarGroup?.children[5];
+    laserGunTmpMatrix2.compose(arm ? arm.position : laserGunTmpVec.set(.38, .97, 0),
+        laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(laserGunArmAngle(player.pitch), 0, 0)), laserGunTmpScale);
+    laserGunTmpMatrix2.multiply(laserGunGripMatrix(toolId, 1, false, laserGunTmpMatrix));
+    const remoteOrigin = LASER_GUN_MUZZLES[toolId].clone().applyMatrix4(laserGunTmpMatrix2)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw).add(new THREE.Vector3(player.x, player.y, player.z));
+    return {
+        origin: origin,
+        direction: target.clone().sub(origin).normalize(),
+        remoteOrigin: remoteOrigin,
+        remoteDirection: target.clone().sub(remoteOrigin).normalize(),
+        side: new THREE.Vector3().crossVectors(camera.up, camDir).normalize()
+    };
+}
+
 var firstPersonPickaxe = null;
 
 function updateFirstPersonPickaxe(now) {
     if (!camera) return;
+    updateFirstPersonLaserGun(now);
     const toolId = BLOCKS[selectedBlockId]?.pickaxe ? selectedBlockId : null;
     if ((firstPersonPickaxe?.userData.toolId || null) !== toolId) {
         if (firstPersonPickaxe) {
@@ -1003,6 +1242,7 @@ function updateHeldPickaxe(avatar, toolId, sourcePosition) {
     if (!avatar || !avatar.children[5]) return;
     avatar.userData.heldBlockId = toolId;
     updateAvatarHeldLight(avatar, sourcePosition);
+    updateHeldLaserGun(avatar, toolId);
     const selectedPick = BLOCKS[toolId]?.pickaxe ? toolId : null;
     if ((avatar.heldPickaxe?.userData.toolId || null) === selectedPick) return;
     if (avatar.heldPickaxe) {
@@ -1026,6 +1266,7 @@ function updateHeldPickaxe(avatar, toolId, sourcePosition) {
 
 function updateHeldPickaxePose(avatar) {
     updateAvatarHeldLight(avatar);
+    updateHeldLaserGunPose(avatar);
     if (!avatar?.heldPickaxe) return;
     const arm = avatar.children[5];
     arm.updateMatrix();
@@ -2606,6 +2847,17 @@ function dropSelectedItem(dropAll = false) {
 }
 
 let lastPointerDownTime = 0;
+function queueLaserShot(id, position, direction, color) {
+    laserFireQueue.push({
+        id: id,
+        user: userName,
+        world: worldName,
+        position: { x: position.x, y: position.y, z: position.z },
+        direction: { x: direction.x, y: direction.y, z: direction.z },
+        color: color
+    });
+}
+
 function useSelectedPickaxe() {
     const item = INVENTORY[selectedHotIndex];
     const tool = item && BLOCKS[item.id];
@@ -2638,25 +2890,10 @@ function onPointerDown(e) {
         const e = Date.now();
         if (e - (player.lastFireTime || 0) < 1e3) return;
         player.lastFireTime = e;
-        const t = `${userName}-${Date.now()}`,
-            o = new THREE.Vector3;
-        let a;
-        camera.getWorldDirection(o), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (a = new THREE.Vector3, avatarGroup.gun.getWorldPosition(a)) : a = new THREE.Vector3(player.x, player.y + 1.5, player.z), createProjectile(t, userName, a, o.clone(), "red"), laserFireQueue.push({
-            id: t,
-            user: userName,
-            world: worldName,
-            position: {
-                x: a.x,
-                y: a.y,
-                z: a.z
-            },
-            direction: {
-                x: o.x,
-                y: o.y,
-                z: o.z
-            },
-            color: "red"
-        });
+        const id = `${userName}-${Date.now()}`,
+            shot = prepareLaserShot(121);
+        createProjectile(id, userName, shot.origin, shot.direction.clone(), "red");
+        queueLaserShot(id, shot.remoteOrigin, shot.remoteDirection, "red");
         return
     }
     if (t && 126 === t.id) {
@@ -2669,46 +2906,12 @@ function onPointerDown(e) {
                 break
             } if (-1 === t) return void addMessage("No emeralds to fire!", 1e3);
         INVENTORY[t].count--, INVENTORY[t].count <= 0 && (INVENTORY[t] = null), updateHotbarUI(), player.lastFireTime = e;
-        const o = new THREE.Vector3;
-        camera.getWorldDirection(o);
-        const a = new THREE.Vector3;
-        let n;
-        a.crossVectors(camera.up, o).normalize(), "third" === cameraMode && avatarGroup && avatarGroup.gun ? (n = new THREE.Vector3, avatarGroup.gun.getWorldPosition(n)) : n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
-        const r = `${userName}-${Date.now()}-1`,
-            s = n.clone().add(a.clone().multiplyScalar(.2));
-        createProjectile(r, userName, s, o.clone(), "green");
-        const i = `${userName}-${Date.now()}-2`,
-            l = n.clone().add(a.clone().multiplyScalar(-.2));
-        createProjectile(i, userName, l, o.clone(), "green"), laserFireQueue.push({
-            id: r,
-            user: userName,
-            world: worldName,
-            position: {
-                x: s.x,
-                y: s.y,
-                z: s.z
-            },
-            direction: {
-                x: o.x,
-                y: o.y,
-                z: o.z
-            },
-            color: "green"
-        }), laserFireQueue.push({
-            id: i,
-            user: userName,
-            world: worldName,
-            position: {
-                x: l.x,
-                y: l.y,
-                z: l.z
-            },
-            direction: {
-                x: o.x,
-                y: o.y,
-                z: o.z
-            },
-            color: "green"
+        const shot = prepareLaserShot(126);
+        // Twin beams straddle the single emitter.
+        [1, -1].forEach((sign, i) => {
+            const id = `${userName}-${Date.now()}-${i + 1}`;
+            createProjectile(id, userName, shot.origin.clone().addScaledVector(shot.side, .05 * sign), shot.direction.clone(), "green");
+            queueLaserShot(id, shot.remoteOrigin.clone().addScaledVector(shot.side, .05 * sign), shot.remoteDirection, "green");
         });
         return
     }
@@ -2726,29 +2929,12 @@ function onPointerDown(e) {
         if (INVENTORY[tIndex].count <= 0) INVENTORY[tIndex] = null;
         updateHotbarUI();
         player.lastFireTime = e;
-        const o = new THREE.Vector3;
-        camera.getWorldDirection(o);
-        const a = new THREE.Vector3;
-        let n;
-        a.crossVectors(camera.up, o).normalize();
-        if ("third" === cameraMode && avatarGroup && avatarGroup.gun) {
-            n = new THREE.Vector3;
-            avatarGroup.gun.getWorldPosition(n);
-        } else {
-            n = new THREE.Vector3(player.x, player.y + 1.5, player.z);
-        }
+        const shot = prepareLaserShot(133);
         for (let i = 0; i < 3; i++) {
             setTimeout(() => {
                 const r = `${userName}-${Date.now()}-blue-${i}`;
-                createProjectile(r, userName, n.clone(), o.clone(), "blue");
-                laserFireQueue.push({
-                    id: r,
-                    user: userName,
-                    world: worldName,
-                    position: {x: n.x, y: n.y, z: n.z},
-                    direction: {x: o.x, y: o.y, z: o.z},
-                    color: "blue"
-                });
+                createProjectile(r, userName, shot.origin.clone(), shot.direction.clone(), "blue");
+                queueLaserShot(r, shot.remoteOrigin, shot.remoteDirection, "blue");
             }, i * 150);
         }
         return;
@@ -5226,6 +5412,18 @@ async function startGame() {
     }, INVENTORY[1] = {
         id: 121,
         count: 1
+    }, INVENTORY[2] = {
+        id: 126,
+        count: 1
+    }, INVENTORY[3] = {
+        id: 133,
+        count: 1
+    }, INVENTORY[4] = {
+        id: 125,
+        count: 32
+    }, INVENTORY[5] = {
+        id: 134,
+        count: 32
     }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
@@ -5773,6 +5971,7 @@ function updateAvatarAnimation(e, t) {
         const t = .5 * Math.sin(.005 * e);
         avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
     } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
+    applyLaserGunArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
 }
@@ -6159,6 +6358,7 @@ function gameLoop(e) {
                     const e = .5 * Math.sin(.005 * t);
                     v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e
                 } else v.children[0].rotation.x = 0, v.children[1].rotation.x = 0, v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                if (!e.isDying) applyLaserGunArmAim(v, e.targetPitch);
                 updateHeldPickaxePose(v);
                 if (e.isDying) {
                     const o = 1500,
@@ -6286,6 +6486,8 @@ function gameLoop(e) {
             if ("laser_fired_batch" === e.type) {
                 for (const t of e.projectiles) {
                     if (t.user !== userName) {
+                        const shooter = playerAvatars.get(t.user);
+                        if (shooter) shooter.userData.laserFireTime = performance.now();
                         createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
                         if (t.color === "blue" && !playedBlueSoundThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
@@ -6297,6 +6499,8 @@ function gameLoop(e) {
                     }
                 }
             } else if (e.user !== userName) {
+                const shooter = playerAvatars.get(e.user);
+                if (shooter) shooter.userData.laserFireTime = performance.now();
                 createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
                 if (e.color === "blue" && !playedBlueSoundThisFrame) {
                     const fireAudioTemplate = document.getElementById('ufoCannonFire');

@@ -18,6 +18,21 @@ function pickaxeArmAttackSwing(progress) {
     return .15 * (1 - pickaxeSwingEase((progress - .55) / .45));
 }
 
+// Laser guns snap from barrel-up rest to on-target, stay aimed while shots keep coming, then lower.
+// sinceAimStart times the raise; sinceAimRefresh (last shot or held trigger) times the hold and lowering.
+function laserGunAimWeight(sinceAimStart, sinceAimRefresh) {
+    if (!(sinceAimStart >= 0) || !(sinceAimRefresh >= 0) || sinceAimRefresh >= 1700) return 0;
+    const raise = sinceAimStart < 90 ? pickaxeSwingEase(sinceAimStart / 90) : 1;
+    // The hold outlasts the slowest auto-fire gap (1s red cooldown + 200ms repeat) so bursts never dip.
+    const lower = sinceAimRefresh < 1300 ? 1 : 1 - pickaxeSwingEase((sinceAimRefresh - 1300) / 400);
+    return Math.min(raise, lower);
+}
+
+// Shoulder angle that points a hanging arm (default box, VOX or skeletal) along the view pitch.
+function laserGunArmAngle(pitch) {
+    return Math.PI / 2 + Math.max(-1.2, Math.min(1.2, pitch || 0));
+}
+
 var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,
