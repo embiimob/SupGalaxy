@@ -135,7 +135,7 @@ The galaxy fights back as you get stronger. Mob tiers unlock from the **highest 
 | 1 | 100+ | One **elite mob** per world type joins the existing spawns |
 | 2 | 200+ | *(Coming soon)* Crawleys retire and level-2 mobs take over. The tier is scaffolded in `js/mob-evolution.js` and switches on once its roster ships. |
 
-You get a warning message the first time your score crosses a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
+You get a warning message whenever your score crosses into a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
 
 ### Tier 1 Elites
 

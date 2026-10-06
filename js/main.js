@@ -6677,7 +6677,7 @@ function gameLoop(e) {
                         const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                         // Only the shooter reports the hit so damage is applied exactly once by the mob's authority.
                         if (o.user === userName) sendProjectileMobDamage(mob, damage, o.user);
-                        else if (!playerAvatars.has(o.user) && isMobAuthority(mob)) mob.hurt(damage, o.user);
+                        else if (mobs.some(shooterMob => shooterMob.id === o.user) && isMobAuthority(mob)) mob.hurt(damage, o.user);
                         createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);

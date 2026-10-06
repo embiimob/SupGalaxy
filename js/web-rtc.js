@@ -849,6 +849,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update_batch":
                     if (!Array.isArray(s.mobs)) break;
+                    const relayMobs = [];
                     for (const t of s.mobs) {
                         // Store updates globally in case we need them when switching worlds
                         if (!window.mobsByWorld) window.mobsByWorld = {};
@@ -895,10 +896,11 @@ function setupDataChannel(e, t) {
                             }
                             o.lastUpdateTime = updateTime;
                         }
+                        relayMobs.push(t);
                     }
                     // Relay to other clients in the same world if host
-                    if (isHost) {
-                        const batchMsg = JSON.stringify(s);
+                    if (isHost && relayMobs.length > 0) {
+                        const batchMsg = JSON.stringify(Object.assign({}, s, { mobs: relayMobs }));
                         for (const [peerName, peer] of peers.entries()) {
                             const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
                             if (peerName !== n && peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === (s.world || worldName)) {

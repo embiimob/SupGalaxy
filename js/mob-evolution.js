@@ -139,7 +139,8 @@ function wasMobRecentlyRemoved(id) {
 }
 
 function isMobAuthority(mob) {
-    return (mob.spawner === userName) || (isHost && !mob.spawner) || peers.size === 0;
+    // The host also takes over mobs whose spawner has disconnected.
+    return (mob.spawner === userName) || (isHost && (!mob.spawner || !peers.has(mob.spawner))) || peers.size === 0;
 }
 
 function getKnownPlayerScore(name) {

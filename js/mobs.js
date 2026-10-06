@@ -773,6 +773,7 @@ function manageMobs() {
                     spawnX = eliteSpawn.x;
                     spawnZ = eliteSpawn.z;
                     spawnY = eliteSpawn.y;
+                    if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
                 }
                 const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
                 if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
