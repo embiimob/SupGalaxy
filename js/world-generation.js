@@ -607,17 +607,21 @@ function initSky() {
 }
 
 // Night follows the local clock and the primary sun's offset; usable before the first updateSky.
-function computeIsNightNow() {
+function computePrimarySunSine() {
     const t = new Date;
     const o = (t.getHours() + t.getMinutes() / 60) / 24 * Math.PI * 2;
     const offset = skyProps && skyProps.suns && skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0;
-    return Math.sin(o + offset) < -.1;
+    return Math.sin(o + offset);
+}
+
+function computeIsNightNow() {
+    return computePrimarySunSine() < -.1;
 }
 
 function updateSky(e) {
     const t = new Date;
     const o = (t.getHours() + t.getMinutes() / 60) / 24 * Math.PI * 2,
-        n = Math.sin(o + (skyProps.suns.length > 0 ? skyProps.suns[0].angleOffset : 0));
+        n = computePrimarySunSine();
     isNight = n < -.1, skyProps.suns.forEach((e => {
         const t = o + e.angleOffset;
         e.mesh.position.set(camera.position.x + 4e3 * Math.cos(t), camera.position.y + 4e3 * Math.sin(t), camera.position.z + 1500 * Math.sin(t)), e.mesh.visible = Math.sin(t) > -.1
