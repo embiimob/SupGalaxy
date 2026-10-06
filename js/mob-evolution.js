@@ -1170,7 +1170,7 @@ function thinkSentinelDrone(mob, dt, now) {
 }
 
 function callSentinelReinforcement(mob, target) {
-    if (mob.isReinforcement || mob.calledReinforcement || typeof spawnMobAndBroadcast !== "function") return;
+    if (mob.isReinforcement || mob.calledReinforcement || typeof spawnMobAndBroadcast !== "function" || !hasEliteWorldCapacity("sentinel_drone")) return;
     mob.calledReinforcement = true;
     const nearby = mobs.filter(other => other.type === "sentinel_drone" && Math.hypot(other.pos.x - target.x, other.pos.z - target.z) < 96).length;
     if (nearby >= ELITE_MOB_TYPES.sentinel_drone.maxCount + 1) return;

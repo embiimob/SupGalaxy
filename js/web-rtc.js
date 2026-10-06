@@ -914,6 +914,7 @@ function setupDataChannel(e, t) {
                     if ((d && isMobAuthority(d)) || (!d && wasMobRecentlyRemoved(s.id))) break;
                     if (!d) {
                         d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
+                        d.spawner = s.username || n;
                         mobs.push(d);
                         d.pos.set(s.x, s.y, s.z);
                     }
