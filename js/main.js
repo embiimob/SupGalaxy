@@ -5443,23 +5443,11 @@ async function startGame() {
     }
     console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
         id: 120,
-        count: 8
+        count: 7
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, INVENTORY[2] = {
-        id: 126,
-        count: 1
-    }, INVENTORY[3] = {
-        id: 133,
-        count: 1
-    }, INVENTORY[4] = {
-        id: 125,
-        count: 32
-    }, INVENTORY[5] = {
-        id: 134,
-        count: 32
-    }, selectedHotIndex = 0, selectedBlockId = 120, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 

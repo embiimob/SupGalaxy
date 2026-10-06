@@ -2,7 +2,7 @@
 //
 // Each tier unlocks once any player in an active area reaches its score. Tiers are cumulative:
 // later tiers may introduce new mob types and retire older ones (for example crawleys).
-// Level-2 (score 100) and level-3 (score 200) "elite" mobs are defined in ELITE_MOB_TYPES, each modelled
+// Level-2 (score 500) and level-3 (score 1500) "elite" mobs are defined in ELITE_MOB_TYPES, each modelled
 // on a different voxel game. They reuse the shared Mob pipeline (mob_spawn / mob_update_batch /
 // mob_hit / mob_kill / mob_despawn) and are simulated only by the mob's authority (mob.spawner).
 // Ranged attacks travel as synced projectiles that every client checks against its own player;
@@ -10,25 +10,25 @@
 
 const MOB_EVOLUTION_TIERS = [
     {
-        // Level 2 (score past 100): one easier mob per world archetype.
+        // Level 2 (score past 500): one easier mob per world archetype.
         level: 2,
-        minScore: 100,
+        minScore: 500,
         introduces: ["bone_archer", "dust_vulture", "crater_hopper", "ember_drifter", "moss_brute", "timber_wolf"],
         retires: []
     },
     {
-        // Level 3 (score past 200): crawleys retire and the heavy hitters arrive. These only turn
+        // Level 3 (score past 1500): crawleys retire and the heavy hitters arrive. These only turn
         // hostile toward players holding a laser gun or players who attack them first.
         level: 3,
-        minScore: 200,
+        minScore: 1500,
         introduces: ["sentinel_drone", "brick_golem", "magma_wyrm", "tomb_crawler", "deep_warden"],
         retires: ["crawley"]
     },
     {
-        // Level 4 (score past 300): one rare titan per world, inspired by famous boss fights.
+        // Level 4 (score past 3000): one rare titan per world, inspired by famous boss fights.
         // Titans ignore players until attacked; at most one roams the loaded map at a time.
         level: 4,
-        minScore: 300,
+        minScore: 3000,
         introduces: ["ancient_guardian", "lunar_overlord", "fire_giant", "sand_tyrant", "stone_colossus"],
         retires: []
     }
@@ -53,7 +53,7 @@ const ARMED_ITEM_IDS = new Set([121, 126, 133]);
 const ELITE_PROVOKE_MS = 30000;
 
 const ELITE_MOB_TYPES = {
-    // ---- level 2 (score 100+) ----
+    // ---- level 2 (score 500+) ----
     bone_archer: {
         name: "Bone Archer",
         inspiredBy: "Minecraft (Skeleton)",
@@ -116,7 +116,7 @@ const ELITE_MOB_TYPES = {
         hitCenterY: 0.6, hitRadius: 1.1,
         drop: { id: 176, count: 2, chance: 0.6 }
     },
-    // ---- level 3 (score 200+) — only hostile to armed or attacking players ----
+    // ---- level 3 (score 1500+) — only hostile to armed or attacking players ----
     sentinel_drone: {
         name: "Sentinel Drone",
         burstColor: 0xb8bcc4,
@@ -167,7 +167,7 @@ const ELITE_MOB_TYPES = {
         hitCenterY: 2, hitRadius: 2.4, heavy: true,
         drop: { id: 176, count: 4, chance: 1 }
     },
-    // ---- level 4 (score 300+) — rare titans, passive until attacked ----
+    // ---- level 4 (score 3000+) — rare titans, passive until attacked ----
     ancient_guardian: {
         name: "Ancient Guardian",
         burstColor: 0xc8a070,

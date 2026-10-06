@@ -1,3 +1,32 @@
+// Mob glows use additive sprites instead of PointLights: every scene light added or removed when
+// manageMobs spawns or despawns a mob changes the light count and forces three.js to recompile
+// every lit material, which stalls rendering for a frame each management tick.
+let mobGlowTexture = null;
+
+function createMobGlowSprite(color, size, opacity = 1) {
+    if (!mobGlowTexture) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 64;
+        const ctx = canvas.getContext("2d"),
+            gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, "rgba(255,255,255,1)");
+        gradient.addColorStop(0.35, "rgba(255,255,255,0.45)");
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gradient, ctx.fillRect(0, 0, 64, 64);
+        mobGlowTexture = new THREE.CanvasTexture(canvas);
+    }
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: mobGlowTexture,
+        color: color,
+        transparent: !0,
+        opacity: opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: !1
+    }));
+    sprite.scale.set(size, size, size);
+    return sprite;
+}
+
 function isAquaticMobType(type) {
     return type === "fish_rare" || type === "fish_school" || type === "whale";
 }
@@ -312,7 +341,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         n.position.set(-.25, .2, -.45), this.mesh.add(n);
         const r = new THREE.Mesh(a, i);
         r.position.set(.25, .2, -.45), this.mesh.add(r);
-        const l = new THREE.PointLight(16711680, 1, 5);
+        const l = createMobGlowSprite(16711680, .9, .8);
         l.position.set(0, .2, -.5), this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
         const p = new THREE.BoxGeometry(.1, .6, .1);
         for (let e = 0; e < 6; e++) {
@@ -413,7 +442,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         u.position.set(.4 * t, -.2 * t, .5 * t), u.rotation.z = -Math.PI / 6, r.add(u), this.pinchers.push(u);
         const M = makeSeededRandom(worldSeed + "_grub_glow_" + this.id),
             w = (new THREE.Color).setHSL(M(), .7 + .3 * M(), .5 + .2 * M());
-        this.glowLight = new THREE.PointLight(w, 0, 10 * t), this.mesh.add(this.glowLight);
+        this.glowLight = createMobGlowSprite(w, 2.2 * t, 0), this.glowLight.position.set(0, .2 * t, -1.05 * t), this.mesh.add(this.glowLight);
         const T = new THREE.MeshLambertMaterial({
             color: 16711680
         });
@@ -499,15 +528,18 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
 
         // Engines at the rear (z = length/2 rotated by PI, so effectively -length/2 in mesh space)
         const rearZ = length/2 - voxelSize;
-        const engineLight1 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight1 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight1.userData.engineGlow = true;
         engineLight1.position.set(-width*0.2, 0, rearZ);
         this.mesh.add(engineLight1);
 
-        const engineLight2 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight2 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight2.userData.engineGlow = true;
         engineLight2.position.set(width*0.2, 0, rearZ);
         this.mesh.add(engineLight2);
 
-        const engineLight3 = new THREE.PointLight(0x00ffff, 5, 100);
+        const engineLight3 = createMobGlowSprite(0x00ffff, voxelSize * 4);
+        engineLight3.userData.engineGlow = true;
         engineLight3.position.set(0, height*0.3, rearZ);
         this.mesh.add(engineLight3);
 
@@ -1138,7 +1170,7 @@ Mob.prototype.update = function (t) {
     if (!isLocalSpawner) {
     if ("crawley" === this.type && this.mesh.eyeLight) this.mesh.eyeLight.visible = isNight;
     if ("grub" === this.type && this.glowLight) {
-        this.glowLight.intensity = isNight ? (Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4 : 0;
+        this.glowLight.material.opacity = isNight ? ((Math.sin(.002 * Date.now()) + 1) / 2 * .8 + .4) / 1.2 * .7 : 0;
     }
     if (this.lastUpdateTime > 0) {
         const now = performance.now();
@@ -1159,10 +1191,10 @@ Mob.prototype.update = function (t) {
     } else if ("ufo_saucer" === this.type) {
         this.lingerTime += t * 1000;
 
-        const lights = this.mesh.children.filter(c => c.isPointLight);
+        const lights = this.mesh.children.filter(c => c.userData.engineGlow);
         if (lights.length > 0) {
-            const intensity = 5 + Math.sin(Date.now() * 0.01) * 5;
-            lights.forEach(l => l.intensity = intensity);
+            const intensity = 0.5 + Math.sin(Date.now() * 0.01) * 0.5;
+            lights.forEach(l => l.material.opacity = intensity);
         }
 
         if (!this.engineAudio) {

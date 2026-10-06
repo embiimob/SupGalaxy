@@ -16,12 +16,14 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 
 - **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
 - **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
-- **👹 Level 2 mobs (score ≥ 100)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Timber Wolves, Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
-- **🐉 Level 3 mobs (score ≥ 200)** — crawleys retire. The Sentinel Drone, Brick Golem, Magma Wyrm, Tomb Crawler and Deep Warden arrive, but they **only fight players who are holding a laser gun or who attack them first**.
-- **🗿 Level 4 titans (score ≥ 300)** — the toughest mobs yet: Ancient Guardian, Lunar Overlord, Fire Giant, Sand Tyrant and Stone Colossus. Only one per world, and they stay **peaceful until you attack them**.
+- **👹 Level 2 mobs (score ≥ 500)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Timber Wolves, Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
+- **🐉 Level 3 mobs (score ≥ 1500)** — crawleys retire. The Sentinel Drone, Brick Golem, Magma Wyrm, Tomb Crawler and Deep Warden arrive, but they **only fight players who are holding a laser gun or who attack them first**.
+- **🗿 Level 4 titans (score ≥ 3000)** — the toughest mobs yet: Ancient Guardian, Lunar Overlord, Fire Giant, Sand Tyrant and Stone Colossus. Only one per world, and they stay **peaceful until you attack them**.
 - **👀 Longer player view** — other players' avatars are now drawn up to 64 blocks away (was 32).
 - **🦴 Bones** — scattered under Dust Vulture roosts. Pick them up and keep them as a crafting item.
 - **🔵 Blue laser rework** — one blue blast breaks any breakable block (castle bricks included). Obsidian resists and takes 4 blasts.
+- **🎒 Lean starter kit** — new players start with **7 torches and a red Laser Gun**. If it's night when you spawn, the torch is in your hand; by day your hands are empty.
+- **🎞 No more 5-second FPS stutter** — crawley eyes, grub glows and UFO engines now glow with additive sprites instead of real lights, so mobs spawning or despawning no longer recompile every shader.
 - **🧊 No more freeze when mobs shoot** — laser lights now come from fixed pools, and mob projectiles carry no lights, so firing no longer forces every material's shaders to recompile.
 - **🔗 Sturdier multiplayer mob sync** — mobs owned by any player (not just the host) now stream their updates, shots damage mobs exactly once, and removed mobs no longer reappear from late packets.
 
@@ -136,14 +138,14 @@ The galaxy fights back as you get stronger. Mob tiers unlock from the **highest 
 
 | Tier | Score | Effect |
 |------|-------|--------|
-| 1 | 0 – 99 | Classic mobs: bees, crawlers, spiders, grubs, fish, whales, UFOs |
-| 2 | 100+ | One **level-2 mob** per world type joins the existing spawns (always hostile, moderate difficulty) |
-| 3 | 200+ | Crawleys retire. **Level-3 heavy hitters** arrive, but they stay passive unless you are holding a laser gun (red, green or blue) or you hit them first (they hold a grudge for 30 s). |
-| 4 | 300+ | **Level-4 titans** arrive: one per world, never aggressive unless you attack them (they hold a grudge for 60 s). |
+| 1 | 0 – 499 | Classic mobs: bees, crawlers, spiders, grubs, fish, whales, UFOs |
+| 2 | 500+ | One **level-2 mob** per world type joins the existing spawns (always hostile, moderate difficulty) |
+| 3 | 1500+ | Crawleys retire. **Level-3 heavy hitters** arrive, but they stay passive unless you are holding a laser gun (red, green or blue) or you hit them first (they hold a grudge for 30 s). |
+| 4 | 3000+ | **Level-4 titans** arrive: one per world, never aggressive unless you attack them (they hold a grudge for 60 s). |
 
 Every world type has its own mobs at each tier:
 
-| World | Level 2 (100+) | Level 3 (200+) | Level 4 (300+) |
+| World | Level 2 (500+) | Level 3 (1500+) | Level 4 (3000+) |
 |-------|----------------|----------------|----------------|
 | 🌍 Earth | Timber Wolf · Bone Archer (night) · Crater Hopper (swamps) | Deep Warden | Ancient Guardian |
 | 🌙 Moon | Crater Hopper | Sentinel Drone | Lunar Overlord |
@@ -153,7 +155,7 @@ Every world type has its own mobs at each tier:
 
 You get a warning message whenever your score crosses into a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
 
-### Level 2 (score 100+)
+### Level 2 (score 500+)
 
 Each mob is based on a different voxel game and borrows that game's way of fighting.
 
@@ -166,7 +168,7 @@ Each mob is based on a different voxel game and borrows that game's way of fight
 | 🌋 Vulcan | **Ember Drifter** | *Vintage Story* Drifter | A hunched, ash-grey shambler with a smouldering chest. It's rare, and only **notices you within 11 blocks** (it keeps chasing out to 22 once engaged). It **lobs glowing cinders** and **claws** you up close. | 14 | 25 | 2 Torches (60%) |
 | 🗿 Massive | **Moss Brute** | *Hytale* Trork | A tusked, club-carrying brute. It **roars (0.85 s warning), then charges** in a straight line. Dodge sideways and it **stumbles, dazed**, for about 1.7 s. Up close it **swings its club**. | 22 | 30 | 3 Leaves (60%) |
 
-### Level 3 (score 200+) — only hostile to armed or aggressive players
+### Level 3 (score 1500+) — only hostile to armed or aggressive players
 
 | World | Mob | Inspired by | How it fights | HP | Score | Drop |
 |-------|-----|-------------|---------------|----|-------|------|
@@ -176,7 +178,7 @@ Each mob is based on a different voxel game and borrows that game's way of fight
 | 🌍 Earth | **Deep Warden** | *Minecraft* Warden | **Blind**: its head tendrils sense **vibrations** instead. It hears armed players (or anyone who hit it) only while they **move** within 28 blocks. **Stand still and it loses you**, then sniffs toward where it last heard you; it can still smell you within 3 blocks. Up close it **pummels** you (8 damage). At 6–20 blocks it charges its glowing chest for 1.7 s and fires a **sonic boom that goes through walls**. Get more than 22 blocks away before it fires. | 70 | 90 | 3 Obsidian |
 | 🏜 Desert | **Tomb Crawler** *(burrowing)* | *Terraria* Tomb Crawler | Travels **under the sand** as a moving mound and can't be hit while buried. Carry a laser near it and it **erupts beneath you** in a tall arc (knock-up + damage), then dives back down. Even when calm it breaches every 6–15 s, so you can spot it. | 40 | 60 | 4 Bones |
 
-### Level 4 (score 300+) — titans, passive until attacked
+### Level 4 (score 3000+) — titans, passive until attacked
 
 The toughest mobs yet. Each world has **at most one titan** in the whole loaded map. It spawns 40–80 blocks away (visible in third person) and ignores you until **you hit it**. Then it fights you (and only you) for 60 s.
 
@@ -211,7 +213,7 @@ Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's 
 ### Adding the Next Tier
 
 1. Add a definition to `ELITE_MOB_TYPES` and its builder/`think`/animation code in `js/mob-evolution.js`. Fields include `archetypes`, day/night, HP, score, drop, hitbox, and the optional `provoke: "armed" | "attacked"`, `grudgeMs`, `worldMax`, `wideRange`, `biomes`, per-world `drops`, `roost` and `burrows`.
-2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 5, minScore: 400, introduces: [...], retires: [...] }`).
+2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 5, minScore: 5000, introduces: [...], retires: [...] }`).
 
 ---
 
