@@ -761,6 +761,9 @@ function initThree() {
             clearPointerHold();
             pointerHoldTimeout = setTimeout(() => {
                 pointerHoldInterval = setInterval(() => {
+                    // Holding the trigger keeps the gun on target between cooldown-gated shots.
+                    if (isLaserGunId(selectedBlockId) && getLaserGunAimWeight(avatarGroup, performance.now()) > 0)
+                        markLaserGunAim(avatarGroup, performance.now(), false);
                     onPointerDown(e);
                 }, 200);
             }, 500);
@@ -1008,9 +1011,23 @@ function laserGunGripMatrix(toolId, w, skinned, out) {
     return out.compose(laserGunTmpVec, laserGunTmpQuat, laserGunTmpScale);
 }
 
+function getLaserGunAimWeight(avatar, now) {
+    const data = avatar?.userData;
+    if (!data) return 0;
+    return laserGunAimWeight(now - data.laserAimStart, now - data.laserAimTime);
+}
+
 function getLaserGunAim(avatar) {
     if (!avatar?.heldLaserGun) return 0;
-    return laserGunAimWeight(performance.now() - avatar.userData.laserFireTime);
+    return getLaserGunAimWeight(avatar, performance.now());
+}
+
+// Keeps the gun on target; only a fully lowered gun restarts the raise, so repeat fire never bobs.
+function markLaserGunAim(avatar, now, fired) {
+    if (!avatar) return;
+    if (!(getLaserGunAimWeight(avatar, now) > 0)) avatar.userData.laserAimStart = now;
+    avatar.userData.laserAimTime = now;
+    if (fired) avatar.userData.laserFireTime = now;
 }
 
 // Called after the box arm's absolute per-frame rotation so the aim never compounds.
@@ -1065,9 +1082,10 @@ function poseFirstPersonLaserGun(w, recoil) {
     const gun = firstPersonLaserGun;
     const widen = Math.max(1, camera.aspect / (16 / 9));
     // The bulkier cannon sits farther out so it frames the shot instead of filling the view.
+    // Both sit roughly one gun-width right of the old spot to keep the crosshair area clear.
     const cannon = gun.userData.toolId === 133;
-    const rest = laserGunTmpVec.set((cannon ? .42 : .34) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
-    const aimX = (cannon ? .26 : .2) * widen, aimY = cannon ? -.27 : -.2, aimZ = cannon ? -.8 : -.5;
+    const rest = laserGunTmpVec.set((cannon ? .62 : .48) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
+    const aimX = (cannon ? .44 : .33) * widen, aimY = cannon ? -.27 : -.2, aimZ = cannon ? -.8 : -.5;
     gun.position.set(rest.x + (aimX - rest.x) * w, rest.y + (aimY - rest.y) * w, rest.z + (aimZ - rest.z) * w + .07 * recoil);
     // Rest tips the barrel up and inward; aiming points it from the grip at the crosshair target.
     const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(1.05, .25, .15));
@@ -1104,13 +1122,13 @@ function updateFirstPersonLaserGun(now) {
     firstPersonLaserGun.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
         player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
     const elapsed = now - avatarGroup?.userData.laserFireTime;
-    poseFirstPersonLaserGun(laserGunAimWeight(elapsed), elapsed >= 0 && elapsed < 140 ? 1 - elapsed / 140 : 0);
+    poseFirstPersonLaserGun(getLaserGunAimWeight(avatarGroup, now), elapsed >= 0 && elapsed < 140 ? 1 - elapsed / 140 : 0);
 }
 
 // Lasers leave the first-person muzzle locally and the avatar muzzle for peers, converging on the crosshair.
 function prepareLaserShot(toolId) {
     const now = performance.now();
-    if (avatarGroup) avatarGroup.userData.laserFireTime = now;
+    markLaserGunAim(avatarGroup, now, true);
     camera.updateMatrixWorld();
     const camPos = camera.getWorldPosition(new THREE.Vector3());
     const camDir = camera.getWorldDirection(new THREE.Vector3());

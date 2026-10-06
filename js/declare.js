@@ -18,12 +18,14 @@ function pickaxeArmAttackSwing(progress) {
     return .15 * (1 - pickaxeSwingEase((progress - .55) / .45));
 }
 
-// Laser guns snap from barrel-up rest to on-target, hold through follow-up shots, then lower.
-function laserGunAimWeight(elapsedMs) {
-    if (!(elapsedMs >= 0) || elapsedMs >= 1100) return 0;
-    if (elapsedMs < 90) return pickaxeSwingEase(elapsedMs / 90);
-    if (elapsedMs < 700) return 1;
-    return 1 - pickaxeSwingEase((elapsedMs - 700) / 400);
+// Laser guns snap from barrel-up rest to on-target, stay aimed while shots keep coming, then lower.
+// sinceAimStart times the raise; sinceAimRefresh (last shot or held trigger) times the hold and lowering.
+function laserGunAimWeight(sinceAimStart, sinceAimRefresh) {
+    if (!(sinceAimStart >= 0) || !(sinceAimRefresh >= 0) || sinceAimRefresh >= 1700) return 0;
+    const raise = sinceAimStart < 90 ? pickaxeSwingEase(sinceAimStart / 90) : 1;
+    // The hold outlasts the slowest auto-fire gap (1s red cooldown + 200ms repeat) so bursts never dip.
+    const lower = sinceAimRefresh < 1300 ? 1 : 1 - pickaxeSwingEase((sinceAimRefresh - 1300) / 400);
+    return Math.min(raise, lower);
 }
 
 // Shoulder angle that points a hanging arm (default box, VOX or skeletal) along the view pitch.
