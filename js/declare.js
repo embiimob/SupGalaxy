@@ -1490,7 +1490,9 @@ function getMiningDamage(blockId, toolId = null, laserColor = null) {
     if (blockId === 110) return toolId === 175 ? block.strength / 4 : 0;
     const tool = BLOCKS[toolId];
     if (block.requiresPick && !(tool && tool.pickaxe)) return 0;
-    return toolId === 175 ? 2 : 1;
+    if (toolId === 174) return 2;
+    if (toolId === 175) return 4;
+    return 1;
 }
 
 var effectiveLocalIpfsRoot = null;
