@@ -2467,7 +2467,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -2818,6 +2818,133 @@ function openUsersModal() {
             } else addMessage("Cannot connect to yourself", 3e3);
         else addMessage("Please enter a friend’s handle", 3e3)
     }
+    t.querySelector("#connectDedicatedServer").onclick = openDedicatedServerModal;
+}
+
+function openDedicatedServerModal() {
+    document.getElementById("dedicatedServerModal")?.remove();
+    const modal = document.createElement("div");
+    modal.id = "dedicatedServerModal";
+    Object.assign(modal.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "230",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.65)"
+    });
+    modal.innerHTML = `
+        <div role="dialog" aria-modal="true" aria-labelledby="dedicatedServerTitle"
+            style="background:var(--panel);padding:16px;border-radius:10px;width:min(400px,calc(100vw - 32px));box-sizing:border-box;">
+            <h3 id="dedicatedServerTitle" style="margin-top:0;">Connect to Server</h3>
+            <label for="dedicatedServerAddress">Server address</label>
+            <input id="dedicatedServerAddress" type="url" value="https://fakeufo.org:55555"
+                style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;"
+                autocomplete="url" spellcheck="false">
+            <div id="dedicatedServerStatus" role="status" aria-live="polite" style="min-height:1.4em;margin-bottom:12px;">Checking server status…</div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:8px 12px;">Refresh status</button>
+                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:8px 12px;">Close</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    isPromptOpen = !0;
+
+    const addressInput = modal.querySelector("#dedicatedServerAddress");
+    const status = modal.querySelector("#dedicatedServerStatus");
+    let statusController = null;
+    let requestId = 0;
+    let addressChangeTimeout;
+    let statusInterval;
+    try {
+        const savedAddress = localStorage.getItem("supgalaxy-dedicated-server-address");
+        if (savedAddress) addressInput.value = savedAddress;
+    } catch (error) {
+        console.warn("[WEBRTC] Could not read the saved server address:", error);
+    }
+
+    const refreshStatus = async () => {
+        const currentRequest = ++requestId;
+        if (statusController) statusController.abort();
+        statusController = new AbortController();
+        const controller = statusController;
+        let timeout;
+        try {
+            const enteredAddress = addressInput.value.trim();
+            const serverUrl = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(enteredAddress)
+                ? enteredAddress
+                : `https://${enteredAddress}`);
+            if (!["http:", "https:"].includes(serverUrl.protocol) || serverUrl.username || serverUrl.password) {
+                throw new Error("Enter a valid HTTP or HTTPS server address.");
+            }
+            serverUrl.pathname = "/";
+            serverUrl.search = "";
+            serverUrl.hash = "";
+            try {
+                localStorage.setItem("supgalaxy-dedicated-server-address", enteredAddress);
+            } catch (error) {
+                console.warn("[WEBRTC] Could not save the server address:", error);
+            }
+            status.textContent = "Checking server status…";
+            timeout = setTimeout(() => controller.abort(), 6000);
+            const response = await fetch(new URL("/info", serverUrl), { signal: controller.signal });
+            if (!response.ok) throw new Error(`Server returned HTTP ${response.status}.`);
+            const serverInfo = await response.json();
+            if (currentRequest !== requestId || !modal.isConnected) return;
+            const playerCount = Number(serverInfo.players);
+            const maxPlayers = Number(serverInfo.maxPlayers);
+            if (!Number.isFinite(playerCount) || !Number.isFinite(maxPlayers)) {
+                throw new Error("Server returned an invalid status response.");
+            }
+            const name = typeof serverInfo.name === "string" && serverInfo.name.trim()
+                ? ` · ${serverInfo.name.trim()}`
+                : "";
+            status.textContent = `Online · ${playerCount}/${maxPlayers} players${name}`;
+        } catch (error) {
+            if (currentRequest !== requestId || !modal.isConnected) return;
+            status.textContent = error.name === "AbortError"
+                ? "Server did not respond."
+                : error.message || "Server is unreachable.";
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
+
+    const closeModal = () => {
+        clearInterval(statusInterval);
+        clearTimeout(addressChangeTimeout);
+        if (statusController) statusController.abort();
+        modal.remove();
+        isPromptOpen = Boolean(document.getElementById("usersModal")?.isConnected);
+    };
+    addressInput.addEventListener("input", () => {
+        clearTimeout(addressChangeTimeout);
+        addressChangeTimeout = setTimeout(refreshStatus, 500);
+    });
+    addressInput.addEventListener("keydown", event => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+            event.preventDefault();
+            refreshStatus();
+        } else if (event.key === "Escape") {
+            closeModal();
+        }
+    });
+    modal.querySelector("#refreshDedicatedServerStatus").onclick = refreshStatus;
+    modal.querySelector("#closeDedicatedServerModal").onclick = closeModal;
+    modal.addEventListener("click", event => {
+        if (event.target === modal) closeModal();
+    });
+    modal.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            event.stopPropagation();
+            closeModal();
+        }
+    });
+    statusInterval = setInterval(refreshStatus, 15000);
+    refreshStatus();
+    addressInput.focus();
 }
 
 function cleanupPeer(e) {
