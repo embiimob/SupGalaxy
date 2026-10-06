@@ -50,6 +50,7 @@ function installDataChannelSendQueue(channel) {
                 nativeSend(queue.shift());
             } catch (error) {
                 console.error("[WEBRTC] Failed to send queued data-channel message:", error);
+                if (channel.readyState === "open") continue;
                 break;
             }
         }
@@ -63,7 +64,7 @@ function installDataChannelSendQueue(channel) {
         drain();
     };
     try {
-        channel.bufferedAmountLowThreshold = DATA_CHANNEL_SEND_HIGH_WATER_MARK;
+        channel.bufferedAmountLowThreshold = DATA_CHANNEL_SEND_HIGH_WATER_MARK / 2;
         channel.addEventListener("bufferedamountlow", drain);
         channel.addEventListener("open", drain);
         channel.addEventListener("close", () => { queue.length = 0; });
@@ -73,6 +74,44 @@ function installDataChannelSendQueue(channel) {
     } catch (error) {
         console.error("[WEBRTC] Could not install the data-channel send queue:", error);
     }
+}
+
+function getDataChannelSendQueueDepth(channel) {
+    return dataChannelSendQueues.get(channel)?.length || 0;
+}
+
+function sendDedicatedServerImportChunks(entry, channel) {
+    let index = 0;
+    const sendNext = () => {
+        if (!pendingServerImports.has(entry.transactionId) || entry.state !== "sending") return;
+        if (channel.readyState !== "open" || peers.get(SERVER_PEER)?.dc !== channel) {
+            retryDedicatedServerImport(entry, "connection closed");
+            return;
+        }
+        if (channel.bufferedAmount >= DATA_CHANNEL_SEND_HIGH_WATER_MARK || getDataChannelSendQueueDepth(channel) >= 8) {
+            setTimeout(sendNext, 25);
+            return;
+        }
+        if (index >= entry.chunks.length) {
+            entry.timeout = setTimeout(() => retryDedicatedServerImport(entry, "timeout"), 60000);
+            return;
+        }
+        try {
+            channel.send(JSON.stringify({
+                type: "ipfs_chunk_from_client_chunk",
+                transactionId: entry.transactionId,
+                index,
+                chunk: entry.chunks[index],
+                total: entry.chunks.length
+            }));
+            index++;
+            setTimeout(sendNext, 0);
+        } catch (error) {
+            console.error(`[WEBRTC] Failed to send dedicated-server import ${entry.transactionId}:`, error);
+            retryDedicatedServerImport(entry, "send failure");
+        }
+    };
+    sendNext();
 }
 
 function pumpDedicatedServerImports() {
@@ -86,7 +125,6 @@ function pumpDedicatedServerImports() {
         }
         entry.state = "sending";
         activeServerImports++;
-        entry.timeout = setTimeout(() => retryDedicatedServerImport(entry, "timeout"), 30000);
         try {
             peer.dc.send(JSON.stringify({
                 type: "ipfs_chunk_from_client_start",
@@ -96,15 +134,7 @@ function pumpDedicatedServerImports() {
                 world: entry.world,
                 transactionId: entry.transactionId
             }));
-            entry.chunks.forEach((chunk, index) => {
-                peer.dc.send(JSON.stringify({
-                    type: "ipfs_chunk_from_client_chunk",
-                    transactionId: entry.transactionId,
-                    index,
-                    chunk,
-                    total: entry.chunks.length
-                }));
-            });
+            sendDedicatedServerImportChunks(entry, peer.dc);
         } catch (error) {
             console.error(`[WEBRTC] Failed to send dedicated-server import ${entry.transactionId}:`, error);
             retryDedicatedServerImport(entry, "send failure");
@@ -612,16 +642,27 @@ async function sendWorldStateAsync(peer, worldState, username, targetWorld = wor
         transactionId: transactionId
     }));
 
-    chunks.forEach((chunk, index) => {
+    let index = 0;
+    const sendChunk = () => {
+        if (!peer.dc || peer.dc.readyState !== "open" || index >= chunks.length) {
+            if (index >= chunks.length) console.log(`[WebRTC] Finished queueing world state for ${username}.`);
+            return;
+        }
+        if (peer.dc.bufferedAmount >= DATA_CHANNEL_SEND_HIGH_WATER_MARK || getDataChannelSendQueueDepth(peer.dc) >= 8) {
+            setTimeout(sendChunk, 25);
+            return;
+        }
         peer.dc.send(JSON.stringify({
             type: 'world_sync_chunk',
             transactionId,
             index,
-            chunk,
+            chunk: chunks[index],
             total: chunks.length
         }));
-    });
-    console.log(`[WebRTC] Finished queueing world state for ${username}.`);
+        index++;
+        setTimeout(sendChunk, 0);
+    };
+    sendChunk();
 }
 
 function applyWorldStructureSync(data) {

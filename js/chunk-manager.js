@@ -1278,6 +1278,10 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
             function sendChunk() {
                 if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) return;
+                if (peer.dc.bufferedAmount >= 1024 * 1024 || getDataChannelSendQueueDepth(peer.dc) >= 8) {
+                    setTimeout(sendChunk, 25);
+                    return;
+                }
 
                 peer.dc.send(JSON.stringify({
                     type: messageType,
