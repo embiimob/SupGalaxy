@@ -287,8 +287,8 @@ function wasMobRecentlyRemoved(id) {
 }
 
 function isMobAuthority(mob) {
-    // The host also takes over mobs whose spawner has disconnected.
-    return (mob.spawner === userName) || (isHost && (!mob.spawner || !peers.has(mob.spawner))) || peers.size === 0;
+    return (typeof isAuthority === "function" && isAuthority(mob.world || worldName)) ||
+        (mob.spawner === userName) || (isHost && (!mob.spawner || !peers.has(mob.spawner))) || peers.size === 0;
 }
 
 function getKnownPlayerScore(name) {
@@ -3002,9 +3002,6 @@ function onEliteMobDeath(mob, killer) {
         addToInventory(drop.id, drop.count, worldSeed);
         addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
     } else {
-        const peer = peers.get(killer);
-        if (peer && peer.dc && peer.dc.readyState === "open") {
-            peer.dc.send(JSON.stringify({ type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed }));
-        }
+        sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
     }
 }
