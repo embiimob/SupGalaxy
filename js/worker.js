@@ -1086,7 +1086,6 @@ self.onmessage = async function(e) {
         }
         if (type === "poll") {
             var updatesByTransaction = new Map();
-            var ownershipByChunk = new Map();
             var chestsUpdates = [];
             if (runChunkPolling) for (var chunkKey of chunkKeys) {
                 try {
@@ -1196,7 +1195,9 @@ self.onmessage = async function(e) {
                                                     y: chest.y,
                                                     z: (chest.z % 16 + 16) % 16,
                                                     b: 131
-                                                }]
+                                                }],
+                                                // Chests are re-serialized by every saver; they must not claim chunk ownership
+                                                ownershipNeutral: true
                                             };
                                             normalizedDeltas.push(newDelta);
                                         }
@@ -1213,20 +1214,6 @@ self.onmessage = async function(e) {
                                     chests: processData.chests || null,
                                     foreignBlockOrigins: processData.foreignBlockOrigins || null
                                 });
-                                for (var delta of normalizedDeltas) {
-                                    var chunk = delta.chunk;
-                                    if (!ownershipByChunk.has(chunk)) {
-                                        var fromProfile = await getProfileByAddress(msg.FromAddress);
-                                        if (fromProfile && fromProfile.URN) {
-                                        var username = fromProfile.URN.replace(/^"|"$/g, "").trim();
-                                            ownershipByChunk.set(chunk, {
-                                                chunkKey: chunk,
-                                                username: username,
-                                                timestamp: new Date(msg.BlockDate).getTime()
-                                            });
-                                        }
-                                    }
-                                }
                             } else {
                                 console.log('[Worker] No valid deltas in IPFS data for chunk message:', hash, 'txId:', msg.TransactionId);
                             }
@@ -1247,11 +1234,6 @@ self.onmessage = async function(e) {
             if (chestsUpdates.length > 0) {
                 for (var update of chestsUpdates) {
                     self.postMessage({ type: 'chests_update', chests: update.chests, transactionId: update.transactionId });
-                }
-            }
-            if (ownershipByChunk.size > 0) {
-                for (var ownership of ownershipByChunk.values()) {
-                    self.postMessage({ type: "chunk_ownership", chunkKey: ownership.chunkKey, username: ownership.username, timestamp: ownership.timestamp });
                 }
             }
             if (runWorldsUsersPolling) try {
@@ -2048,8 +2030,6 @@ self.onmessage = async function(e) {
                     // sourceUsername is undefined to indicate this is from local worker (IPFS fetch)
                     applyChunkUpdates(fullData, update.address, update.timestamp, update.transactionId, undefined);
                 }
-            } else if (data.type === "chunk_ownership") {
-               updateChunkOwnership(data.chunkKey, data.username, data.timestamp, 'ipfs', data.timestamp);
             } else if (data.type === "user_update") {
                 console.log('[Worker] Received user_update:', data.transactionId);
                 if (data.data.profile) {
