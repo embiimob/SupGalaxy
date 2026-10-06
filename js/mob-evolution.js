@@ -1645,7 +1645,8 @@ function queueEliteMobUpdate(mob) {
     const moved = mob.pos.distanceTo(mob.lastSentPos) > 0.1;
     const rotated = mob.mesh.quaternion.angleTo(mob.lastSentQuaternion) > 0.01;
     if (!moved && !rotated && mob.lastSentState === mob.aiState && mob.lastSentHp === mob.hp &&
-        mob.lastSentPetOwner === mob.petOwner) return;
+        mob.lastSentPetOwner === mob.petOwner && mob.lastSentMaxHp === mob.maxHp &&
+        mob.lastSentFeedRevision === (mob.feedRevision || 0)) return;
     if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
     window.mobUpdateQueue.push({
         id: mob.id,
@@ -1657,6 +1658,8 @@ function queueEliteMobUpdate(mob) {
         aiState: mob.aiState,
         type: mob.type,
         hp: mob.hp,
+        maxHp: mob.maxHp,
+        feedRevision: mob.feedRevision || 0,
         isAggressive: mob.isAggressive,
         originSeed: mob.originSeed,
         petOwner: mob.petOwner || null,
@@ -1666,6 +1669,8 @@ function queueEliteMobUpdate(mob) {
     mob.lastSentQuaternion.copy(mob.mesh.quaternion);
     mob.lastSentState = mob.aiState;
     mob.lastSentHp = mob.hp;
+    mob.lastSentMaxHp = mob.maxHp;
+    mob.lastSentFeedRevision = mob.feedRevision || 0;
     mob.lastSentPetOwner = mob.petOwner;
 }
 
@@ -2464,9 +2469,9 @@ function thinkTimberWolf(mob, dt, now) {
         return;
     }
     settleEliteOnGround(mob, dt);
-    const target = findEliteTarget(mob, 22, 8);
+    const target = findEliteTarget(mob, mob.petOwner ? 32 : 22, 8);
     let move = null;
-    if (mob.hp <= mob.maxHp * 0.3 && target) {
+    if (!mob.petOwner && mob.hp <= mob.maxHp * 0.3 && target) {
         setEliteState(mob, "FLEE", now);
         move = { x: mob.pos.x - target.x, z: mob.pos.z - target.z, speed: mob.speed * 1.15 };
         faceEliteMob(mob, move.x, move.z, 8, dt);

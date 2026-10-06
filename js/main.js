@@ -5865,6 +5865,8 @@ function switchWorld(newWorldName, targetSpawn) {
                 o.prevPos.copy(o.pos);
                 o.targetPos.copy(o.pos);
                 o.hp = m.hp !== undefined ? m.hp : o.hp;
+                if (Number.isFinite(m.maxHp)) o.maxHp = m.maxHp;
+                if (Number.isSafeInteger(m.feedRevision)) o.feedRevision = m.feedRevision;
                 o.petOwner = o.type === "timber_wolf" && typeof m.petOwner === "string" ? m.petOwner : null;
                 o.spawner = o.petOwner || m.spawner || m.username;
                 o.isAggressive = m.isAggressive;

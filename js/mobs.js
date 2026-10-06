@@ -4,6 +4,8 @@
 let mobGlowTexture = null;
 const wolfTameRequests = new Map();
 const wolfTamePending = new Map();
+const wolfTameUnacknowledged = new Map();
+const combatRemovedPetIds = new Set();
 const wolfTameSession = Math.random().toString(36).slice(2);
 let wolfTameSequence = 0;
 
@@ -13,9 +15,12 @@ function sanitizePetData(data) {
     for (const pet of data) {
         if (!pet || !((typeof pet.id === "string" && pet.id.length > 0 && pet.id.length <= 160) ||
             (typeof pet.id === "number" && Number.isFinite(pet.id)))) continue;
+        if (combatRemovedPetIds.has(pet.id)) continue;
         if (result.some(entry => entry.id === pet.id)) continue;
         if (!Number.isFinite(pet.hp) || pet.hp <= 0) continue;
-        result.push({ id: pet.id, hp: Math.min(12, pet.hp),
+        result.push({ id: pet.id, hp: pet.hp,
+            maxHp: Math.max(pet.hp, Number.isFinite(pet.maxHp) ? pet.maxHp : 12),
+            feedRevision: Number.isSafeInteger(pet.feedRevision) && pet.feedRevision >= 0 ? pet.feedRevision : 0,
             originSeed: typeof pet.originSeed === "string" ? pet.originSeed.slice(0, 200) : worldSeed });
         if (result.length === 3) break;
     }
@@ -26,19 +31,26 @@ function getPetSaveData() {
     player.pets = sanitizePetData(player.pets);
     for (const pet of player.pets) {
         const mob = mobs.find(mob => mob.id === pet.id && mob.petOwner === userName);
-        if (mob && mob.hp > 0) pet.hp = Math.min(12, mob.hp);
+        if (mob && mob.hp > 0) {
+            pet.hp = mob.hp;
+            pet.maxHp = Math.max(mob.hp, Number.isFinite(mob.maxHp) ? mob.maxHp : pet.maxHp);
+            pet.feedRevision = mob.feedRevision || 0;
+        }
     }
     return player.pets.map(pet => ({ ...pet }));
 }
 
 function restorePetSaveData(data) {
     player.pets = sanitizePetData(data);
+    for (const [id, pending] of wolfTamePending) wolfTameUnacknowledged.set(id, pending);
     wolfTamePending.clear();
     mobs = mobs.filter(mob => {
         if (mob.petOwner !== userName) return true;
         const pet = player.pets.find(pet => pet.id === mob.id);
         if (pet) {
             mob.hp = pet.hp;
+            mob.maxHp = pet.maxHp;
+            mob.feedRevision = pet.feedRevision;
             mob.originSeed = pet.originSeed;
             return true;
         }
@@ -49,6 +61,7 @@ function restorePetSaveData(data) {
 }
 
 function removePlayerPet(id) {
+    combatRemovedPetIds.add(id);
     player.pets = sanitizePetData(player.pets).filter(pet => pet.id !== id);
 }
 
@@ -86,6 +99,8 @@ function clearWorldPetsForOwner(owner, broadcast = false) {
 
 function clearPlayerPetsForWorldSwitch() {
     getPetSaveData();
+    for (const [id, pending] of wolfTamePending) wolfTameUnacknowledged.set(id, pending);
+    wolfTamePending.clear();
     clearWorldPetsForOwner(userName, true);
 }
 
@@ -129,10 +144,6 @@ function tryTameWolf(mob) {
         addMessage("Waiting for the wolf to eat its bone…", 1200);
         return true;
     }
-    if (mob.petOwner || getPetSaveData().length >= 3) {
-        addMessage(mob.petOwner ? "This wolf already has an owner." : "You can have up to three wolves.", 1800);
-        return true;
-    }
     const bone = INVENTORY[selectedHotIndex];
     if (!bone || bone.id !== 176 || !(bone.count > 0) || selectedBlockId !== 176) return true;
     if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
@@ -142,26 +153,32 @@ function tryTameWolf(mob) {
     bone.count--;
     if (bone.count <= 0) INVENTORY[selectedHotIndex] = null;
     updateHotbarUI();
-    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isHost ? userName : peers.keys().next().value), sentAt: Date.now() });
+    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isHost ? userName : peers.keys().next().value),
+        startedAt: Date.now(), sentAt: Date.now() });
     if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId);
     return true;
 }
 
 function handleWolfTameRequest(mob, owner, requestId) {
-    if (!mob || !isMobAuthority(mob) || typeof owner !== "string" ||
+    if (typeof owner !== "string" ||
         typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`)) return;
     const key = `${owner}|${requestId}`;
     let result = wolfTameRequests.get(key);
     if (!result) {
+        if (!mob || !isMobAuthority(mob)) return;
         const position = owner === userName ? player : userPositions[owner];
         const x = owner === userName ? position?.x : position?.targetX;
         const y = owner === userName ? position?.y : position?.targetY;
         const z = owner === userName ? position?.z : position?.targetZ;
-        const eligible = mob.type === "timber_wolf" && mob.hp > 0 && !mob.petOwner &&
+        const fed = mob.type === "timber_wolf" && mob.hp > 0 &&
             position && (owner === userName || position.world === worldName) &&
-            Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) <= 6 &&
-            getPlayerPetIds(owner).size < 3;
-        const success = !!eligible && Math.random() < 1 / 3;
+            Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) <= 6;
+        if (fed) {
+            mob.hp += 10;
+            mob.maxHp = Math.max(Number.isFinite(mob.maxHp) ? mob.maxHp : 12, mob.hp);
+            mob.feedRevision = (mob.feedRevision || 0) + 1;
+        }
+        const success = !!fed && !mob.petOwner && getPlayerPetIds(owner).size < 3 && Math.random() < 1 / 3;
         if (success) {
             mob.petOwner = owner;
             mob.spawner = owner;
@@ -172,10 +189,11 @@ function handleWolfTameRequest(mob, owner, requestId) {
                 userPositions[owner].petIds = [...getPlayerPetIds(owner)].slice(0, 3);
             }
         }
-        result = { type: "wolf_tame_result", id: mob.id, owner, requestId, success,
-            petOwner: mob.petOwner || null, hp: mob.hp, originSeed: mob.originSeed,
+        result = { type: "wolf_tame_result", id: mob.id, owner, requestId, success, tamed: success, fed: !!fed,
+            petOwner: mob.petOwner || null, hp: mob.hp, maxHp: mob.maxHp, feedRevision: mob.feedRevision || 0, originSeed: mob.originSeed,
             world: worldName, authority: userName };
         wolfTameRequests.set(key, result);
+        if (fed) queueEliteMobUpdate(mob);
     }
     handleWolfTameResult(result);
     const message = JSON.stringify(result);
@@ -184,37 +202,81 @@ function handleWolfTameRequest(mob, owner, requestId) {
 
 function handleWolfTameResult(message) {
     if (!message || typeof message.owner !== "string") return;
-    const pending = wolfTamePending.get(message.requestId);
+    const pending = wolfTamePending.get(message.requestId) || wolfTameUnacknowledged.get(message.requestId);
     const mob = mobs.find(mob => mob.id === message.id);
     if (!mob && pending && message.authority !== pending.authority) return;
     if (mob && message.authority !== mob.spawner && message.authority !== mob.petOwner &&
         !(message.success === true && mob.petOwner === message.owner)) return;
+    if (mob && message.world === worldName && message.fed === true && Number.isFinite(message.hp) && message.hp > 0 &&
+        Number.isFinite(message.feedRevision) && message.feedRevision > (mob.feedRevision || 0)) {
+        mob.hp = message.hp;
+        mob.maxHp = Math.max(message.hp, Number.isFinite(message.maxHp) ? message.maxHp : 12);
+        mob.feedRevision = message.feedRevision;
+    }
     if (message.owner === userName && pending && pending.request.id === message.id) {
         wolfTamePending.delete(message.requestId);
-        if (message.success === true && message.petOwner === userName) {
-            player.pets = sanitizePetData([...getPetSaveData(), message]);
-            addMessage("The Timber Wolf is now your pet!", 2000);
-        } else addMessage("The wolf ate the bone. Try again!", 1800);
+        wolfTameUnacknowledged.delete(message.requestId);
+        if (message.fed === true && message.petOwner === userName && !combatRemovedPetIds.has(message.id)) {
+            const pet = mob && mob.hp > 0 ? {
+                id: message.id, hp: mob.hp, maxHp: mob.maxHp, feedRevision: mob.feedRevision, originSeed: mob.originSeed
+            } : message;
+            player.pets = sanitizePetData([...getPetSaveData(), pet]);
+            addMessage(message.tamed ? "The Timber Wolf is now your pet! +10 HP" : "Fed your wolf! +10 HP", 2000);
+        } else addMessage(combatRemovedPetIds.has(message.id) ? "This wolf was lost to combat." :
+            message.fed ? "Fed the wolf! +10 HP" : "The wolf is no longer close enough to feed.", 1800);
     }
-    if (mob && message.world === worldName && message.success === true && message.petOwner === message.owner) {
+    if (mob && message.world === worldName && message.success === true && message.petOwner === message.owner &&
+        !(message.owner === userName && combatRemovedPetIds.has(message.id))) {
         mob.petOwner = message.owner;
         mob.spawner = message.owner;
         mob.aiState = "FOLLOW";
     }
 }
 
+function findPlayerPetPosition(petId, index = 0) {
+    const centerX = player.x + (player.width || 0.8) / 2;
+    const centerZ = player.z + (player.depth || 0.8) / 2;
+    let fallback = null;
+    for (const radius of [2, 3, 1, 4, 0]) {
+        const steps = radius ? 8 : 1;
+        for (let step = 0; step < steps; step++) {
+            const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
+            const x = modWrap(Math.floor(centerX + Math.cos(angle) * radius) + 0.5, MAP_SIZE);
+            const z = modWrap(Math.floor(centerZ + Math.sin(angle) * radius) + 0.5, MAP_SIZE);
+            if (![[-0.45, -0.45], [-0.45, 0.45], [0.45, -0.45], [0.45, 0.45]]
+                .every(([dx, dz]) => isPositionInLoadedSpace(x + dx, z + dz))) continue;
+            for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+                const y = player.y + dy;
+                if (y < 1 || checkCollisionWithBlock(x, y, z) || checkCollisionWithBlock(x, y + 0.4, z)) continue;
+                if (mobs.some(mob => mob.id !== petId && mob.petOwner === userName &&
+                    Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) < 1.5)) continue;
+                const position = { x, y, z };
+                const block = getBlockAt(x, y, z);
+                if (isSolid(getBlockAt(x, y - 0.2, z)) || block === 6 || block === 136) return position;
+                if (!fallback) fallback = position;
+            }
+        }
+    }
+    return fallback;
+}
+
 function maintainPlayerPets() {
     if (!chunkManager || !worldArchetype || !Number.isFinite(player.x) || !Number.isFinite(player.y)) return;
-    for (const pet of getPetSaveData()) {
+    for (const [index, pet] of getPetSaveData().entries()) {
         let mob = mobs.find(mob => mob.id === pet.id);
         if (!mob) {
-            mob = spawnMobAndBroadcast("timber_wolf", player.x + 2, player.z + 2, player.y,
-                { id: pet.id, petOwner: userName, hp: pet.hp, originSeed: pet.originSeed });
+            const position = findPlayerPetPosition(pet.id, index);
+            if (!position) continue;
+            mob = spawnMobAndBroadcast("timber_wolf", position.x, position.z, position.y,
+                { id: pet.id, petOwner: userName, hp: pet.hp, maxHp: pet.maxHp,
+                    feedRevision: pet.feedRevision, originSeed: pet.originSeed });
         }
         mob.petOwner = userName;
         mob.spawner = userName;
         if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
-            mob.pos.set(player.x + 2, player.y, player.z + 2);
+            const position = findPlayerPetPosition(pet.id, index);
+            if (!position) continue;
+            mob.pos.set(position.x, position.y, position.z);
             mob.prevPos.copy(mob.pos);
             mob.targetPos.copy(mob.pos);
             mob.vx = mob.vz = 0;
@@ -223,7 +285,13 @@ function maintainPlayerPets() {
             queueEliteMobUpdate(mob);
         }
     }
-    for (const pending of wolfTamePending.values()) {
+    for (const [id, pending] of wolfTamePending) {
+        if (Date.now() - pending.startedAt >= 15000) {
+            wolfTameUnacknowledged.set(id, pending);
+            wolfTamePending.delete(id);
+            addMessage("No response from the wolf. You can try feeding again.", 1800);
+            continue;
+        }
         if (pending.request.world !== worldName || Date.now() - pending.sentAt < 3000) continue;
         const mob = mobs.find(mob => mob.id === pending.request.id);
         if (mob) sendWolfAuthorityMessage(mob, pending.request);
@@ -232,9 +300,17 @@ function maintainPlayerPets() {
 }
 
 function handleMobDamageFromMob(target, source, damage) {
-    if (!target || !source || target === source || !(damage > 0) || !isMobAuthority(target)) return;
+    if (!target || !source || target === source || !(target.hp > 0) || !(source.hp > 0) ||
+        !(damage > 0) || !Number.isFinite(damage) || !isMobAuthority(target)) return;
     if (source.type === "timber_wolf" && target.type === "timber_wolf") return;
-    target.hurt(damage, `${source.type === "timber_wolf" ? "wolf" : "mob"}:${source.id}`);
+    if (!target.pos || !source.pos) return;
+    // Wolves bite at close range; projectile mobs also shoot from high above the terrain.
+    const reach = source.type === "timber_wolf" ? 4 :
+        isEliteMobType(source.type) || source.type === "ufo_saucer" ? 350 : 6;
+    const distance = Math.hypot(target.pos.x - source.pos.x, target.pos.y - source.pos.y, target.pos.z - source.pos.z);
+    if (!Number.isFinite(distance) || distance > reach) return;
+    target.hurt(Math.min(source.type === "timber_wolf" ? 2 : 50, damage),
+        `${source.type === "timber_wolf" ? "wolf" : "mob"}:${source.id}`);
 }
 
 function sendMobDamageFromMob(target, source, damage) {
@@ -1105,7 +1181,11 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
     const newMob = new Mob(x, z, pet ? pet.id : Date.now() + Math.random(), type, y, pet?.originSeed);
     newMob.petOwner = pet?.petOwner || null;
     newMob.spawner = newMob.petOwner || userName;
-    if (pet) newMob.hp = pet.hp;
+    if (pet) {
+        newMob.hp = pet.hp;
+        newMob.maxHp = pet.maxHp;
+        newMob.feedRevision = pet.feedRevision || 0;
+    }
     mobs.push(newMob);
 
     if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
@@ -1119,6 +1199,8 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
         aiState: newMob.aiState,
         type: newMob.type,
         hp: newMob.hp,
+        maxHp: newMob.maxHp,
+        feedRevision: newMob.feedRevision || 0,
         isAggressive: newMob.isAggressive,
         originSeed: newMob.originSeed,
         petOwner: newMob.petOwner,
@@ -1132,6 +1214,8 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
         y: newMob.pos.y,
         z: newMob.pos.z,
         hp: newMob.hp,
+        maxHp: newMob.maxHp,
+        feedRevision: newMob.feedRevision || 0,
         mobType: newMob.type,
         isAggressive: newMob.isAggressive,
         originSeed: newMob.originSeed,
@@ -1243,7 +1327,7 @@ function updateAquaticMob(t, delta) {
                     target = meal.pos;
                     if (t.pos.distanceTo(meal.pos) < (meal.type === "crawley" ? 4.5 : 1.8) && now - (t.lastMealTime || 0) > 3000) {
                         t.lastMealTime = now;
-                        meal.die("whale");
+                        sendMobDamageFromMob(meal, t, Math.max(1, meal.hp));
                     }
                 }
             }
@@ -2439,11 +2523,6 @@ Mob.prototype.update = function (t) {
     const isLocalSpawner = isMobAuthority(this);
     if (!isLocalSpawner) return;
     if (!(t > 0) || !Number.isFinite(t)) return;
-    if (this.petOwner) {
-        this.hp = 0;
-        this.die(e);
-        return;
-    }
     if (this.type === "whale") {
         this.wasAttacked = true;
         this.isAggressive = true;
@@ -2469,6 +2548,8 @@ Mob.prototype.update = function (t) {
             y: this.pos.y,
             z: this.pos.z,
             hp: this.hp,
+            maxHp: this.maxHp,
+            feedRevision: this.feedRevision || 0,
             flash: !0,
             type: this.type,
             isMoving: this.isMoving,
@@ -2483,6 +2564,10 @@ Mob.prototype.update = function (t) {
 }, Mob.prototype.die = function (t) {
     const isLocalSpawner = isMobAuthority(this);
     if (!isLocalSpawner) return;
+    if (typeof t === "string" && t.startsWith("wolf:")) {
+        const wolf = mobs.find(mob => mob.type === "timber_wolf" && `wolf:${mob.id}` === t);
+        t = wolf?.petOwner || null;
+    }
     if (this.petOwner === userName) removePlayerPet(this.id);
     else if (this.petOwner && userPositions[this.petOwner]) {
         const ids = userPositions[this.petOwner].petIds;
@@ -2581,19 +2666,30 @@ Mob.prototype.update = function (t) {
                 }
             }
         }
-    } else {
+    } else if (typeof t === "string" && t.length > 0 &&
+        (peers.has(t) || userPositions[t] || mobs.some(mob => mob.type === "timber_wolf" && mob.petOwner === t))) {
         const s = peers.get(t);
+        const message = JSON.stringify({
+            type: "add_score",
+            target: t,
+            amount: e
+        });
         if (s && s.dc && "open" === s.dc.readyState) {
-            s.dc.send(JSON.stringify({
-                type: "add_score",
-                amount: e
-            }));
+            s.dc.send(message);
+        } else {
+            for (const [, peer] of peers) {
+                if (peer.dc?.readyState === "open") {
+                    peer.dc.send(message);
+                    break;
+                }
+            }
         }
     }
     const s = JSON.stringify({
         type: "mob_kill",
         id: this.id,
         petOwner: this.petOwner || null,
+        petRemoved: !!this.petOwner,
         world: worldName
     });
     for (const [t, e] of peers.entries()) t !== userName && e.dc && "open" === e.dc.readyState && e.dc.send(s)

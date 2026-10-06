@@ -444,6 +444,8 @@ function setupDataChannel(e, t) {
                 y: t.pos.y,
                 z: t.pos.z,
                 hp: t.hp,
+                maxHp: t.maxHp,
+                feedRevision: t.feedRevision,
                 type: t.type,
                 petOwner: t.petOwner || null,
                 spawner: t.spawner
@@ -774,6 +776,8 @@ function setupDataChannel(e, t) {
                         e.petOwner = e.type === "timber_wolf" && typeof s.petOwner === "string" ? s.petOwner : null;
                         e.spawner = e.petOwner || s.spawner || s.username || n;
                         if (Number.isFinite(s.hp)) e.hp = s.hp;
+                        if (Number.isFinite(s.maxHp)) e.maxHp = s.maxHp;
+                        if (Number.isSafeInteger(s.feedRevision)) e.feedRevision = s.feedRevision;
                         e.isAggressive = s.isAggressive, e.wasAttacked = s.wasAttacked, mobs.push(e)
 
                         // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
@@ -790,6 +794,10 @@ function setupDataChannel(e, t) {
                     break;
                 case "wolf_tame_request": {
                     if (s.owner !== n || (isHost && n !== t)) break;
+                    if (wolfTameRequests.has(`${n}|${s.requestId}`)) {
+                        handleWolfTameRequest(null, n, s.requestId);
+                        break;
+                    }
                     if (s.world !== worldName) {
                         if (isHost && userPositions[n]?.world === s.world) {
                             const cached = window.mobsByWorld?.[s.world]?.find(mob => mob.id === s.id);
@@ -867,6 +875,8 @@ function setupDataChannel(e, t) {
                             o.prevPos.copy(o.pos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
+                            if (Number.isFinite(t.maxHp)) o.maxHp = t.maxHp;
+                            if (Number.isSafeInteger(t.feedRevision)) o.feedRevision = t.feedRevision;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
                             if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
@@ -932,6 +942,8 @@ function setupDataChannel(e, t) {
                             o.prevPos.copy(o.pos);
                             o.targetPos.set(t.x, t.y, t.z);
                             o.hp = t.hp;
+                            if (Number.isFinite(t.maxHp)) o.maxHp = t.maxHp;
+                            if (Number.isSafeInteger(t.feedRevision)) o.feedRevision = t.feedRevision;
                             if (t.isAggressive !== undefined) o.isAggressive = t.isAggressive;
                             if (t.wasAttacked !== undefined) o.wasAttacked = t.wasAttacked;
                             if (t.isMoving !== undefined) o.isMoving = t.isMoving;
@@ -973,6 +985,8 @@ function setupDataChannel(e, t) {
                     d.prevPos.copy(d.pos);
                     d.targetPos.set(s.x, s.y, s.z);
                     d.hp = s.hp;
+                    if (Number.isFinite(s.maxHp)) d.maxHp = s.maxHp;
+                    if (Number.isSafeInteger(s.feedRevision)) d.feedRevision = s.feedRevision;
                     d.lastUpdateTime = updateTime;
                     if (s.originSeed) d.originSeed = s.originSeed;
                     if (s.spawnCommandKey) d.spawnCommandKey = s.spawnCommandKey;
@@ -1116,6 +1130,13 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "add_score":
+                    if (s.target && s.target !== userName) {
+                        if (isHost) {
+                            const recipient = peers.get(s.target);
+                            if (recipient?.dc?.readyState === "open") recipient.dc.send(JSON.stringify(s));
+                        }
+                        break;
+                    }
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
                     // Broadcast new score to host so it updates all clients
                     if (!isHost) {
@@ -1709,6 +1730,8 @@ function setupDataChannel(e, t) {
                                         aiState: m.aiState,
                                         type: m.type,
                                         hp: m.hp,
+                                        maxHp: m.maxHp,
+                                        feedRevision: m.feedRevision,
                                         isAggressive: m.isAggressive,
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
@@ -1729,6 +1752,8 @@ function setupDataChannel(e, t) {
                                         z: m.z,
                                         type: m.mobType || m.type,
                                         hp: m.hp,
+                                        maxHp: m.maxHp,
+                                        feedRevision: m.feedRevision,
                                         isAggressive: m.isAggressive,
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
