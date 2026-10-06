@@ -424,9 +424,7 @@ function onEliteMobSpawned(mob, spawn) {
 function hasEliteWorldCapacity(type) {
     const def = getEliteMobDef(type);
     if (!def || !def.worldMax) return true;
-    let count = 0;
-    for (const mob of mobs) if (mob.type === type) count++;
-    return count < def.worldMax;
+    return countMobsOfType(type) < def.worldMax;
 }
 
 // Wide-ranging mobs (grubs, vultures, sentinels, level-4 titans) are capped across the whole loaded map
@@ -2593,7 +2591,8 @@ function animateEliteMob(mob, dt, now) {
             const side = i === 0 ? -1 : 1;
             wing.rotation.z = side * (roaring ? 0.6 : charging ? -0.2 : Math.sin(t * 1.5) * 0.08);
         });
-        mob.body.rotation.y = mob.aiState === "TAIL" ? Math.min(1, stateAge / 900) * Math.PI * 2 : 0;
+        // Full spin peaks at 500 ms, matching when the sweep's hit resolves.
+        mob.body.rotation.y = mob.aiState === "TAIL" ? Math.min(1, stateAge / 500) * Math.PI * 2 : 0;
         mob.tail.rotation.y = Math.sin(t * 1.6) * 0.25;
     } else if (mob.type === "stone_colossus") {
         const walk = mob.isMoving ? Math.sin(t * 1.8) * 0.3 : 0;

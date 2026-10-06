@@ -257,7 +257,7 @@ Spawn, explore, build, fight, survive.
 
 **Tips:**  
 - 2 sand → 4 glass  
-- +10 score per mob defeated (elite mobs: +30 to +80)  
+- +10 score per mob defeated (elite mobs: +25 to +220)  
 - Players & mobs spawn in loaded chunks  
 - TURN server recommended for multiplayer  
 - Press `/` to open chat and talk with other players in your world  
