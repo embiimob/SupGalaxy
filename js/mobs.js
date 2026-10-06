@@ -41,9 +41,10 @@ function getPetSaveData() {
 }
 
 function restorePetSaveData(data) {
-    player.pets = sanitizePetData(data);
-    for (const [id, pending] of wolfTamePending) wolfTameUnacknowledged.set(id, pending);
+    combatRemovedPetIds.clear();
     wolfTamePending.clear();
+    wolfTameUnacknowledged.clear();
+    player.pets = sanitizePetData(data);
     mobs = mobs.filter(mob => {
         if (mob.petOwner !== userName) return true;
         const pet = player.pets.find(pet => pet.id === mob.id);
@@ -203,6 +204,7 @@ function handleWolfTameRequest(mob, owner, requestId) {
 function handleWolfTameResult(message) {
     if (!message || typeof message.owner !== "string") return;
     const pending = wolfTamePending.get(message.requestId) || wolfTameUnacknowledged.get(message.requestId);
+    if (message.owner === userName && !pending) return;
     const mob = mobs.find(mob => mob.id === message.id);
     if (!mob && pending && message.authority !== pending.authority) return;
     if (mob && message.authority !== mob.spawner && message.authority !== mob.petOwner &&
