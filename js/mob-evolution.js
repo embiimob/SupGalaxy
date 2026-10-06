@@ -13,7 +13,7 @@ const MOB_EVOLUTION_TIERS = [
         // Level 2 (score past 100): one easier mob per world archetype.
         level: 2,
         minScore: 100,
-        introduces: ["bone_archer", "dust_vulture", "crater_hopper", "ember_drifter", "moss_brute"],
+        introduces: ["bone_archer", "dust_vulture", "crater_hopper", "ember_drifter", "moss_brute", "timber_wolf"],
         retires: []
     },
     {
@@ -21,7 +21,7 @@ const MOB_EVOLUTION_TIERS = [
         // hostile toward players holding a laser gun or players who attack them first.
         level: 3,
         minScore: 200,
-        introduces: ["sentinel_drone", "brick_golem", "magma_wyrm", "tomb_crawler"],
+        introduces: ["sentinel_drone", "brick_golem", "magma_wyrm", "tomb_crawler", "deep_warden"],
         retires: ["crawley"]
     },
     {
@@ -106,6 +106,16 @@ const ELITE_MOB_TYPES = {
         hitCenterY: 1.2, hitRadius: 1.4,
         drop: { id: 8, count: 3, chance: 0.6 }
     },
+    timber_wolf: {
+        name: "Timber Wolf",
+        burstColor: 0x8a8278,
+        inspiredBy: "Veloren (Wolf)",
+        archetypes: ["Earth"],
+        day: true, night: true,
+        hp: 12, score: 25, maxCount: 3, spawnChance: 0.35,
+        hitCenterY: 0.6, hitRadius: 1.1,
+        drop: { id: 176, count: 2, chance: 0.6 }
+    },
     // ---- level 3 (score 200+) — only hostile to armed or attacking players ----
     sentinel_drone: {
         name: "Sentinel Drone",
@@ -136,6 +146,16 @@ const ELITE_MOB_TYPES = {
         hp: 45, score: 70, maxCount: 1, spawnChance: 0.25,
         hitCenterY: 0, hitRadius: 2.6, heavy: true,
         drop: { id: 125, count: 2, chance: 1 }
+    },
+    deep_warden: {
+        name: "Deep Warden",
+        burstColor: 0x1d4a52,
+        inspiredBy: "Minecraft (Warden)",
+        archetypes: ["Earth"],
+        day: true, night: true, provoke: "armed",
+        hp: 70, score: 90, maxCount: 1, spawnChance: 0.25,
+        hitCenterY: 1.6, hitRadius: 1.8, heavy: true,
+        drop: { id: 110, count: 3, chance: 1 }
     },
     tomb_crawler: {
         name: "Tomb Crawler",
@@ -703,6 +723,12 @@ function applyEliteAttackLocally(attack) {
     const radius = Math.max(0.5, Math.min(12, Number(attack.radius) || 2.5));
     const label = typeof attack.label === "string" ? attack.label.slice(0, 60) : "Hit by an elite mob";
     if (attack.fx === "shockwave") spawnEliteShockwave(new THREE.Vector3(x, y, z), radius);
+    if (attack.fx === "sonic") {
+        const fromX = Number(attack.fromX), fromY = Number(attack.fromY), fromZ = Number(attack.fromZ);
+        if (Number.isFinite(fromX) && Number.isFinite(fromY) && Number.isFinite(fromZ)) {
+            spawnEliteSonicBoom(new THREE.Vector3(fromX, fromY, fromZ), new THREE.Vector3(x, y, z));
+        }
+    }
     if (player.health <= 0) return;
     const cx = player.x + player.width / 2;
     const cz = player.z + player.depth / 2;
@@ -734,6 +760,27 @@ function spawnEliteShockwave(position, radius) {
     ring.position.set(position.x, position.y + 0.15, position.z);
     scene.add(ring);
     eliteMobEffects.push({ mesh: ring, start: performance.now(), duration: 650, radius, kind: "ring" });
+}
+
+// Warden sonic boom: a line of expanding rings from the mob to its victim (passes through walls).
+function spawnEliteSonicBoom(from, to) {
+    if (typeof scene === "undefined" || !scene) return;
+    const delta = to.clone().sub(from);
+    const length = delta.length();
+    if (!(length > 0.5) || length > 40) return;
+    const direction = delta.clone().normalize();
+    const facing = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+    const count = Math.min(12, Math.ceil(length / 2));
+    for (let i = 1; i <= count; i++) {
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.35, 0.6, 24),
+            new THREE.MeshBasicMaterial({ color: 0x7ff8f0, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })
+        );
+        ring.quaternion.copy(facing);
+        ring.position.copy(from).addScaledVector(direction, length * i / count);
+        scene.add(ring);
+        eliteMobEffects.push({ mesh: ring, start: performance.now() + i * 25, duration: 600, radius: 2.2, kind: "ring" });
+    }
 }
 
 function spawnEliteBurst(position, color, count = 14) {
@@ -856,6 +903,8 @@ function buildEliteMob(mob) {
     else if (mob.type === "fire_giant") buildFireGiant(mob, variant);
     else if (mob.type === "sand_tyrant") buildSandTyrant(mob, variant);
     else if (mob.type === "stone_colossus") buildStoneColossus(mob, variant);
+    else if (mob.type === "timber_wolf") buildTimberWolf(mob, variant);
+    else if (mob.type === "deep_warden") buildDeepWarden(mob, variant);
 }
 
 function buildBoneArcher(mob) {
@@ -1423,6 +1472,86 @@ function buildStoneColossus(mob, variant) {
     mob.torso = torso;
 }
 
+function buildTimberWolf(mob, variant) {
+    mob.speed = 5.5;
+    const fur = eliteMaterial(mob, variant < 0.33 ? 0x8a8278 : variant < 0.66 ? 0x6b6258 : 0xb0a898);
+    const furDark = eliteMaterial(mob, 0x4a443e);
+    const eye = new THREE.MeshBasicMaterial({ color: 0xffc040 });
+    const rig = mob.rig;
+    const body = new THREE.Group();
+    body.position.y = 0.75;
+    body.add(eliteBox(0.6, 0.55, 1.3, fur));
+    body.add(eliteBox(0.7, 0.62, 0.5, furDark, 0, 0.04, 0.4));
+    const head = new THREE.Group();
+    head.position.set(0, 0.25, 0.75);
+    head.add(eliteBox(0.5, 0.45, 0.45, fur));
+    head.add(eliteBox(0.28, 0.24, 0.35, furDark, 0, -0.08, 0.36));
+    for (const side of [-1, 1]) {
+        head.add(eliteBox(0.12, 0.2, 0.08, furDark, side * 0.16, 0.3, -0.08));
+        head.add(eliteBox(0.08, 0.06, 0.04, eye, side * 0.13, 0.07, 0.23));
+    }
+    body.add(head);
+    mob.head = head;
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.15, -0.65);
+    tail.add(eliteBox(0.16, 0.16, 0.6, furDark, 0, 0, -0.3));
+    body.add(tail);
+    mob.tail = tail;
+    rig.add(body);
+    mob.body = body;
+    mob.legs = [];
+    for (const [x, z] of [[-0.2, 0.45], [0.2, 0.45], [-0.2, -0.45], [0.2, -0.45]]) {
+        const leg = makeLimb(fur, 0.16, 0.55, 0.16, x, 0.55, z);
+        rig.add(leg);
+        mob.legs.push(leg);
+    }
+    mob.circleSide = variant < 0.5 ? -1 : 1;
+}
+
+function buildDeepWarden(mob, variant) {
+    mob.speed = 2.2;
+    const skin = eliteMaterial(mob, variant < 0.5 ? 0x0f2a33 : 0x12303a);
+    const skinDark = eliteMaterial(mob, 0x08161c);
+    const ribs = eliteMaterial(mob, 0x2d5a5a);
+    mob.soulMaterial = new THREE.MeshBasicMaterial({ color: 0x3ff0e0 });
+    const rig = mob.rig;
+    mob.legs = [makeLimb(skinDark, 0.55, 1.2, 0.55, -0.4, 1.2, 0), makeLimb(skinDark, 0.55, 1.2, 0.55, 0.4, 1.2, 0)];
+    mob.legs.forEach(leg => rig.add(leg));
+    const torso = new THREE.Group();
+    torso.position.y = 1.2;
+    torso.add(eliteBox(1.6, 1.4, 0.9, skin, 0, 0.7, 0));
+    for (let i = 0; i < 3; i++) torso.add(eliteBox(1.2, 0.1, 0.06, ribs, 0, 0.35 + i * 0.32, 0.46));
+    const soul = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), mob.soulMaterial);
+    soul.position.set(0, 0.85, 0.42);
+    torso.add(soul);
+    mob.soul = soul;
+    const head = new THREE.Group();
+    head.position.set(0, 1.4, 0.05);
+    // The Warden is eyeless; it hunts with the twin tendrils on its head.
+    head.add(eliteBox(1.1, 0.85, 0.85, skin, 0, 0.42, 0));
+    head.add(eliteBox(0.7, 0.12, 0.05, skinDark, 0, 0.18, 0.44));
+    mob.tendrils = [];
+    for (const side of [-1, 1]) {
+        const tendril = new THREE.Group();
+        tendril.position.set(side * 0.55, 0.75, 0);
+        tendril.add(eliteBox(0.6, 0.45, 0.08, ribs, side * 0.3, 0.15, 0));
+        head.add(tendril);
+        mob.tendrils.push(tendril);
+    }
+    torso.add(head);
+    mob.head = head;
+    mob.arms = [];
+    for (const side of [-1, 1]) {
+        const arm = new THREE.Group();
+        arm.position.set(side * 1.0, 1.3, 0);
+        arm.add(eliteBox(0.45, 1.6, 0.45, skin, 0, -0.8, 0));
+        torso.add(arm);
+        mob.arms.push(arm);
+    }
+    rig.add(torso);
+    mob.torso = torso;
+}
+
 // ---------- per-frame update ----------
 
 function updateEliteMob(mob, dt) {
@@ -1445,6 +1574,8 @@ function updateEliteMob(mob, dt) {
         else if (mob.type === "fire_giant") thinkFireGiant(mob, dt, now);
         else if (mob.type === "sand_tyrant") thinkSandTyrant(mob, dt, now);
         else if (mob.type === "stone_colossus") thinkStoneColossus(mob, dt, now);
+        else if (mob.type === "timber_wolf") thinkTimberWolf(mob, dt, now);
+        else if (mob.type === "deep_warden") thinkDeepWarden(mob, dt, now);
         queueEliteMobUpdate(mob);
     } else {
         if (mob.lastUpdateTime > 0) {
@@ -2268,6 +2399,159 @@ function thinkStoneColossus(mob, dt, now) {
     mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
 }
 
+// Veloren wolf: runs in loose packs, circles its prey to find an opening, then lunges in for a bite
+// and darts back out. A badly wounded wolf breaks off and flees.
+function thinkTimberWolf(mob, dt, now) {
+    if (mob.aiState === "LUNGE") {
+        const step = stepEliteOnGround(mob, mob.lungeDir.x, mob.lungeDir.z, 11 * dt);
+        mob.pos.y += mob.lungeVy * dt;
+        mob.lungeVy -= 22 * dt;
+        if (mob.lungeVy < 0) settleEliteOnGround(mob, dt);
+        const target = findEliteTarget(mob, 6, 4);
+        if (target && !mob.bit && Math.hypot(target.x - mob.pos.x, target.z - mob.pos.z) < 1.5) {
+            mob.bit = true;
+            dispatchEliteAttack(mob, {
+                mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 2.5, damage: 2, knockback: 4, label: "Bitten by a Timber Wolf"
+            });
+        }
+        if (!step || now - mob.stateSince > 550) {
+            mob.lungeReadyAt = now + 2200 + Math.random() * 1600;
+            setEliteState(mob, "CIRCLE", now);
+        }
+        mob.isMoving = true;
+        return;
+    }
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 22, 8);
+    let move = null;
+    if (mob.hp <= mob.maxHp * 0.3 && target) {
+        setEliteState(mob, "FLEE", now);
+        move = { x: mob.pos.x - target.x, z: mob.pos.z - target.z, speed: mob.speed * 1.15 };
+        faceEliteMob(mob, move.x, move.z, 8, dt);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        if (!mob.circleSwapAt || now > mob.circleSwapAt) {
+            mob.circleSwapAt = now + 2500 + Math.random() * 2500;
+            if (Math.random() < 0.4) mob.circleSide = -(mob.circleSide || 1);
+        }
+        if (target.distance < 5 && now >= (mob.lungeReadyAt || 0)) {
+            faceEliteMob(mob, dx, dz, 20, dt);
+            const length = Math.max(0.001, Math.hypot(dx, dz));
+            mob.lungeDir = { x: dx / length, z: dz / length };
+            mob.lungeVy = 5;
+            mob.bit = false;
+            setEliteState(mob, "LUNGE", now);
+            return;
+        }
+        if (target.distance > 7) {
+            setEliteState(mob, "CHASE", now);
+            move = { x: dx, z: dz, speed: mob.speed };
+        } else {
+            // Orbit at ~4–6 blocks: tangent plus a correction toward the ring.
+            setEliteState(mob, "CIRCLE", now);
+            const side = mob.circleSide || 1;
+            const radial = (target.distance - 4.5) / Math.max(0.5, target.distance);
+            move = { x: -dz * side + dx * radial, z: dx * side + dz * radial, speed: mob.speed * 0.8 };
+        }
+        faceEliteMob(mob, move.x, move.z, 8, dt);
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.35, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 3, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Minecraft Warden: blind. It only senses vibrations, so it tracks armed players (or anyone who hit it)
+// while they are moving, sniffs toward their last known position when they stand still, smashes
+// anyone in reach and fires a sonic boom that passes straight through walls.
+function senseWardenVibrations(mob, now) {
+    if (!mob.vibrations) mob.vibrations = {};
+    let best = null;
+    for (const p of getEliteTargetablePlayers()) {
+        const memory = mob.vibrations[p.name] || (mob.vibrations[p.name] = { x: p.x, y: p.y, z: p.z, movedAt: 0 });
+        // Compare against the last anchor (not the previous frame) so slow per-frame steps still add up.
+        if (Math.hypot(p.x - memory.x, p.y - memory.y, p.z - memory.z) > 0.3) {
+            memory.movedAt = now;
+            memory.x = p.x;
+            memory.y = p.y;
+            memory.z = p.z;
+        }
+        if (!isEliteTargetHostile(mob, p) || Math.abs(p.y - mob.pos.y) > 16) continue;
+        const distance = Math.hypot(p.x - mob.pos.x, p.z - mob.pos.z);
+        const heard = now - memory.movedAt < 1200 && distance < 28;
+        // Standing still hides you unless you are close enough for it to smell you.
+        if (!heard && distance > 3) continue;
+        if (!best || distance < best.distance) best = Object.assign({}, p, { distance });
+    }
+    return best;
+}
+
+function thinkDeepWarden(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const heard = senseWardenVibrations(mob, now);
+    if (heard) mob.lastHeard = { name: heard.name, x: heard.x, y: heard.y, z: heard.z, at: now };
+    let move = null;
+    if (mob.aiState === "CHARGE_BOOM") {
+        const lock = mob.boomTarget;
+        if (lock) faceEliteMob(mob, lock.x - mob.pos.x, lock.z - mob.pos.z, 4, dt);
+        if (now - mob.stateSince > 1700) {
+            const victim = getEliteTargetablePlayers().find(p => lock && p.name === lock.name);
+            if (victim && Math.hypot(victim.x - mob.pos.x, victim.z - mob.pos.z) < 22) {
+                dispatchEliteAttack(mob, {
+                    mode: "target", target: victim.name, x: victim.x, y: victim.y + 0.9, z: victim.z,
+                    radius: 3, damage: 7, knockback: 9, lift: 4, fx: "sonic",
+                    fromX: mob.pos.x, fromY: mob.pos.y + 2.2, fromZ: mob.pos.z,
+                    label: "Shattered by a Deep Warden's sonic boom"
+                });
+            }
+            mob.boomReadyAt = now + 5500 + Math.random() * 2000;
+            setEliteState(mob, "HUNT", now);
+        }
+    } else if (mob.aiState === "SMASH") {
+        if (!mob.smashed && now - mob.stateSince > 450) {
+            mob.smashed = true;
+            const victim = heard && heard.distance < 3.2 ? heard : null;
+            if (victim) {
+                dispatchEliteAttack(mob, {
+                    mode: "target", target: victim.name, x: mob.pos.x, y: mob.pos.y + 1, z: mob.pos.z,
+                    radius: 3.6, damage: 8, knockback: 8, lift: 3, label: "Pummelled by a Deep Warden"
+                });
+            }
+        }
+        if (now - mob.stateSince > 1000) setEliteState(mob, "HUNT", now);
+    } else if (heard) {
+        const dx = heard.x - mob.pos.x;
+        const dz = heard.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 3, dt);
+        if (heard.distance < 2.6 && now >= (mob.smashReadyAt || 0)) {
+            mob.smashed = false;
+            mob.smashReadyAt = now + 1600;
+            setEliteState(mob, "SMASH", now);
+        } else if (heard.distance > 6 && heard.distance < 20 && now >= (mob.boomReadyAt || 0)) {
+            mob.boomTarget = { name: heard.name, x: heard.x, z: heard.z };
+            setEliteState(mob, "CHARGE_BOOM", now);
+        } else {
+            setEliteState(mob, "HUNT", now);
+            if (heard.distance > 1.8) move = { x: dx, z: dz, speed: mob.speed * 1.6 };
+        }
+    } else if (mob.lastHeard && now - mob.lastHeard.at < 8000) {
+        // Lost the vibration: sniff toward where it was last heard.
+        setEliteState(mob, "SNIFF", now);
+        const dx = mob.lastHeard.x - mob.pos.x;
+        const dz = mob.lastHeard.z - mob.pos.z;
+        if (Math.hypot(dx, dz) > 1.5) move = { x: dx, z: dz, speed: mob.speed * 0.6 };
+        if (move) faceEliteMob(mob, move.x, move.z, 2, dt);
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.4, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 1.5, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
 function findWaterSurfaceY(x, y, z) {
     let top = Math.floor(y);
     if (!isWaterBlock(getBlockAt(x, top, z))) return null;
@@ -2607,6 +2891,40 @@ function animateEliteMob(mob, dt, now) {
         mob.arms[1].rotation.x += (swordArm - mob.arms[1].rotation.x) * Math.min(1, dt * (mob.aiState === "SLAM" ? 18 : 5));
         mob.torso.rotation.x += ((mob.aiState === "SLAM" ? 0.2 : 0) - mob.torso.rotation.x) * Math.min(1, dt * 6);
         mob.sigil.rotation.z += dt * (mob.aiState === "IDLE" ? 0.5 : 2.5);
+    } else if (mob.type === "timber_wolf") {
+        const fast = mob.aiState === "CHASE" || mob.aiState === "FLEE" || mob.aiState === "CIRCLE";
+        const gait = mob.isMoving ? Math.sin(t * (fast ? 14 : 8)) * (fast ? 0.7 : 0.4) : 0;
+        mob.legs.forEach((leg, i) => { leg.rotation.x = (i === 0 || i === 3) ? gait : -gait; });
+        const lunging = mob.aiState === "LUNGE";
+        mob.body.rotation.x += ((lunging ? -0.3 : 0) - mob.body.rotation.x) * Math.min(1, dt * 10);
+        mob.head.rotation.x = lunging ? 0.3 : mob.aiState === "CIRCLE" ? 0.2 : Math.sin(t * 1.2) * 0.08;
+        mob.tail.rotation.x = mob.aiState === "FLEE" ? 0.7 : -0.35;
+        mob.tail.rotation.y = Math.sin(t * (fast ? 10 : 3)) * 0.35;
+    } else if (mob.type === "deep_warden") {
+        const walk = mob.isMoving ? Math.sin(t * (mob.aiState === "HUNT" ? 5 : 3)) * 0.4 : 0;
+        mob.legs[0].rotation.x = walk;
+        mob.legs[1].rotation.x = -walk;
+        let armX = [-walk * 0.6, walk * 0.6];
+        let lean = 0;
+        if (mob.aiState === "SMASH") {
+            armX = stateAge < 450 ? [-2.3, -2.3] : [0.6, 0.6];
+            lean = stateAge < 450 ? -0.2 : 0.3;
+        } else if (mob.aiState === "CHARGE_BOOM") {
+            lean = -0.25;
+            armX = [-0.4, -0.4];
+        } else if (mob.aiState === "SNIFF") {
+            lean = 0.35;
+        }
+        mob.arms[0].rotation.x += (armX[0] - mob.arms[0].rotation.x) * Math.min(1, dt * 10);
+        mob.arms[1].rotation.x += (armX[1] - mob.arms[1].rotation.x) * Math.min(1, dt * 10);
+        mob.torso.rotation.x += (lean - mob.torso.rotation.x) * Math.min(1, dt * 6);
+        const alert = mob.aiState !== "IDLE";
+        mob.tendrils.forEach((tendril, i) => {
+            tendril.rotation.z = (i === 0 ? 1 : -1) * Math.sin(t * (alert ? 18 : 2)) * (alert ? 0.35 : 0.1);
+        });
+        const charging = mob.aiState === "CHARGE_BOOM";
+        mob.soul.scale.setScalar(charging ? 1 + Math.min(1, stateAge / 1700) * 1.4 : 1 + Math.sin(t * 2.5) * 0.15);
+        mob.soulMaterial.color.setHex(charging ? 0xb0fff8 : 0x3ff0e0);
     }
 }
 
