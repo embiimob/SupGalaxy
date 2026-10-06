@@ -744,6 +744,7 @@ function initThree() {
         antialias: !0
     })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     scene.add(camera);
+    warmLaserLightPools();
     scene.add(new THREE.AmbientLight(16777215, .2));
     const t = new THREE.HemisphereLight(16777147, 526368, .6);
     scene.add(t), console.log("[initThree] Lights added"), emberTexture = createEmberTexture(worldSeed), meshGroup = new THREE.Group, scene.add(meshGroup), console.log("[initThree] Mesh group created"), scene.add(crackMeshes), lightManager.init(), initSky(), console.log("[initThree] Sky initialized");
@@ -1677,21 +1678,37 @@ function createInventorySlot(e) {
 }
 
 
-function getProjectileLight(colorHex) {
-    for (let i = 0; i < projectileLightPool.length; i++) {
-        if (!projectileLightPool[i].inUse) {
-            projectileLightPool[i].inUse = true;
-            projectileLightPool[i].color.setHex(colorHex);
-            projectileLightPool[i].intensity = 2.5;
-            projectileLightPool[i].distance = 24;
-            scene.add(projectileLightPool[i]);
-            return projectileLightPool[i];
-        }
+// Laser lights live in fixed-size pools that stay in the scene. Adding or removing a light changes the
+// scene's light count, which makes three.js recompile every lit material and freezes the game for a moment.
+// Pooled lights are switched off by setting intensity to 0, and shots fired while the pool is busy get no light.
+const PROJECTILE_LIGHT_POOL_SIZE = 6;
+const LASER_IMPACT_LIGHT_POOL_SIZE = 6;
+
+function ensureLaserLightPool(pool, size, distance) {
+    if (typeof scene === "undefined" || !scene) return;
+    while (pool.length < size) {
+        const light = new THREE.PointLight(0xffffff, 0, distance);
+        light.inUse = false;
+        pool.push(light);
     }
-    const light = new THREE.PointLight(colorHex, 2.5, 24);
+    for (const light of pool) {
+        if (light.parent !== scene) scene.add(light);
+    }
+}
+
+function warmLaserLightPools() {
+    ensureLaserLightPool(projectileLightPool, PROJECTILE_LIGHT_POOL_SIZE, 24);
+    ensureLaserLightPool(laserImpactLightPool, LASER_IMPACT_LIGHT_POOL_SIZE, 18);
+}
+
+function getProjectileLight(colorHex) {
+    ensureLaserLightPool(projectileLightPool, PROJECTILE_LIGHT_POOL_SIZE, 24);
+    const light = projectileLightPool.find(candidate => !candidate.inUse);
+    if (!light) return null;
     light.inUse = true;
-    scene.add(light);
-    projectileLightPool.push(light);
+    light.color.setHex(colorHex);
+    light.intensity = 2.5;
+    light.distance = 24;
     return light;
 }
 
@@ -1699,24 +1716,17 @@ function releaseProjectileLight(light) {
     if (light) {
         light.inUse = false;
         light.intensity = 0;
-        scene.remove(light);
     }
 }
 
 function createLaserImpactLight(position, colorHex) {
-    const maxActiveLights = 24;
-    if (laserImpactLights.length >= maxActiveLights) return;
-
-    let light = laserImpactLightPool.find(candidate => !candidate.inUse);
-    if (!light) {
-        light = new THREE.PointLight(colorHex, 0, 18);
-        laserImpactLightPool.push(light);
-    }
+    ensureLaserLightPool(laserImpactLightPool, LASER_IMPACT_LIGHT_POOL_SIZE, 18);
+    const light = laserImpactLightPool.find(candidate => !candidate.inUse);
+    if (!light) return;
     light.inUse = true;
     light.color.setHex(colorHex);
     light.position.copy(position);
     light.intensity = 4;
-    scene.add(light);
     laserImpactLights.push({
         light,
         startedAt: performance.now(),
@@ -1732,7 +1742,6 @@ function updateLaserImpactLights(now) {
         if (progress >= 1) {
             impact.light.intensity = 0;
             impact.light.inUse = false;
-            scene.remove(impact.light);
             laserImpactLights.splice(i, 1);
         } else {
             impact.light.intensity = impact.intensity * Math.pow(1 - progress, 2);

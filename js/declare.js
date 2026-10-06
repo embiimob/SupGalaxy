@@ -1484,7 +1484,8 @@ function getPickaxeMultiplier(toolId) {
 function getMiningDamage(blockId, toolId = null, laserColor = null) {
     const block = BLOCKS[blockId];
     if (!block || block.unbreakable || blockId === 6) return 0;
-    if (laserColor === "blue") return 1;
+    // Blue lasers blast through any breakable block in one hit; obsidian resists for four hits.
+    if (laserColor === "blue") return blockId === 110 ? block.strength / 4 : block.strength;
     if (laserColor === "green") return blockId === 110 ? 0 : 1;
     if (laserColor === "red") toolId = null;
     if (blockId === 110) return toolId === 175 ? block.strength / 4 : 0;
