@@ -338,11 +338,17 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.mesh.add(h);
         const a = new THREE.BoxGeometry(.2, .2, .1),
             n = new THREE.Mesh(a, i);
-        n.position.set(-.25, .2, -.45), this.mesh.add(n);
+        // The face sits on local +Z, the direction the mob is rotated to face (atan2(dx, dz)).
+        n.position.set(-.25, .2, .45), this.mesh.add(n);
         const r = new THREE.Mesh(a, i);
-        r.position.set(.25, .2, -.45), this.mesh.add(r);
-        const l = createMobGlowSprite(16711680, .9, .8);
-        l.position.set(0, .2, -.5), this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
+        r.position.set(.25, .2, .45), this.mesh.add(r);
+        // One glow sprite per eye, tinted to the eye colour (red, green or blue).
+        const l = new THREE.Group;
+        for (const eyeX of [-.25, .25]) {
+            const glow = createMobGlowSprite(s, .45, .9);
+            glow.position.set(eyeX, .2, .5), l.add(glow);
+        }
+        this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
         const p = new THREE.BoxGeometry(.1, .6, .1);
         for (let e = 0; e < 6; e++) {
             const s = new THREE.Mesh(p, t),
@@ -2115,8 +2121,8 @@ Mob.prototype.update = function (t) {
             const t = this.wanderDir.clone().normalize();
             const e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);
-        } else if (this.isMoving && "crawley" === this.type && i && typeof o !== 'undefined' && o > 0.01) {
-            // Point towards the target when seeking
+        } else if ("crawley" === this.type && i && typeof o !== 'undefined' && o > 0.01) {
+            // Face the target while seeking or attacking, even when blocked or standing still
             const targetVec = new THREE.Vector3(i.x - this.pos.x, 0, i.z - this.pos.z).normalize();
             if (targetVec.lengthSq() > 0) {
                  const e = Math.atan2(targetVec.x, targetVec.z);
