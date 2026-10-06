@@ -284,6 +284,8 @@ async function connectToDedicatedServer(address) {
             abortController: new AbortController(),
             requestTimeout: null,
             connectionTimeout: null,
+            features: new Set(),
+            worldSyncRequested: false,
             timedOut: false,
             kicked: false,
             connected: false
@@ -326,7 +328,8 @@ async function connectToDedicatedServer(address) {
                 world: worldName,
                 user: userName,
                 offer: pc.localDescription,
-                iceCandidates: candidates
+                iceCandidates: candidates,
+                features: ["http_world_sync"]
             }),
             signal: connection.abortController.signal
         });
@@ -346,6 +349,9 @@ async function connectToDedicatedServer(address) {
         if (!body.answer || dedicatedServer !== connection) {
             throw new Error("Server returned an incomplete connection response.");
         }
+        connection.features = new Set(Array.isArray(body.features)
+            ? body.features.filter(feature => typeof feature === "string")
+            : []);
 
         if (isHost) {
             isHost = false;
@@ -698,6 +704,94 @@ function applyWorldStructureSync(data) {
     }
 }
 
+function applyWorldSyncPayload(data) {
+    const worldState = getCurrentWorldState();
+    if (data.chunkDeltas) {
+        const deltas = new Map(data.chunkDeltas);
+        for (const [chunkKey, changes] of deltas.entries()) {
+            worldState.chunkDeltas.set(chunkKey, changes);
+            chunkManager.applyDeltasToChunk(chunkKey, changes);
+        }
+    }
+    if (data.foreignBlockOrigins) {
+        worldState.foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+    }
+    applyWorldStructureSync(data);
+    if (data.processedIds) {
+        for (const id of data.processedIds) processedMessages.add(id);
+        worker.postMessage({
+            type: "sync_processed",
+            ids: Array.from(processedMessages)
+        });
+    }
+}
+
+async function handleHttpWorldSync(message) {
+    const connection = dedicatedServer;
+    const channel = peers.get(SERVER_PEER)?.dc;
+    if (!connection || !connection.features?.has("http_world_sync") ||
+        typeof message.transactionId !== "string" || !message.transactionId) return;
+    const transactionId = message.transactionId;
+    const sendResult = (type, reason) => {
+        if (peers.get(SERVER_PEER)?.dc !== channel || channel?.readyState !== "open") return;
+        const result = { type, transactionId };
+        if (reason) result.reason = String(reason).slice(0, 300);
+        try {
+            channel.send(JSON.stringify(result));
+        } catch (error) {
+            console.error("[WEBRTC] Could not report HTTP world-sync result:", error);
+        }
+    };
+    let controller;
+    let timeout;
+    try {
+        if (typeof message.world !== "string" || message.world !== worldName) {
+            throw new Error("World mismatch");
+        }
+        const syncWorld = worldName;
+        if (typeof message.path !== "string" || !message.path) {
+            throw new Error("Missing world-sync path");
+        }
+        const base = new URL(connection.base);
+        const syncUrl = new URL(message.path, `${connection.base}/`);
+        if (syncUrl.origin !== base.origin || syncUrl.username || syncUrl.password) {
+            throw new Error("World-sync path must use the connected server origin");
+        }
+
+        const timeoutSeconds = Number(message.fetchTimeoutSeconds);
+        const fetchTimeoutMs = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
+            ? Math.min(timeoutSeconds, 120) * 1000
+            : 30000;
+        controller = new AbortController();
+        timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
+        const response = await fetch(syncUrl.href, { method: "GET", signal: controller.signal });
+        if (!response.ok) throw new Error(`World-sync request failed (HTTP ${response.status})`);
+        const data = await response.json();
+        if (!data || typeof data !== "object" || Array.isArray(data) ||
+            !Array.isArray(data.chunkDeltas) ||
+            !Array.isArray(data.foreignBlockOrigins) ||
+            !Array.isArray(data.processedIds) ||
+            [data.magicianStones, data.calligraphyStones, data.chests].some(value =>
+                value !== null && (typeof value !== "object" || Array.isArray(value)))) {
+            throw new Error("Invalid world-sync response");
+        }
+        if (dedicatedServer !== connection || worldName !== syncWorld ||
+            peers.get(SERVER_PEER)?.dc !== channel) {
+            throw new Error("World or server connection changed during sync");
+        }
+        applyWorldSyncPayload(data);
+        sendResult("world_sync_http_done");
+    } catch (error) {
+        const reason = error.name === "AbortError"
+            ? "HTTP world-sync fetch timed out"
+            : error.message || "HTTP world-sync failed";
+        console.error(`[WEBRTC] HTTP world sync failed (${transactionId}):`, error);
+        sendResult("world_sync_http_failed", reason);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 async function handleMinimapFile(e) {
     try {
         const t = await e.text(),
@@ -899,6 +993,14 @@ function setupDataChannel(e, t) {
                 }));
             }
         }
+        if (t === SERVER_PEER && dedicatedServer && !dedicatedServer.worldSyncRequested) {
+            e.send(JSON.stringify({
+                type: "request_world_sync",
+                world: worldName,
+                username: userName
+            }));
+            dedicatedServer.worldSyncRequested = true;
+        }
         const s = setInterval((() => {
             "open" === e.readyState && e.send(JSON.stringify({
                 type: "i_am_alive"
@@ -932,6 +1034,10 @@ function setupDataChannel(e, t) {
             }
             if (t === SERVER_PEER && s.type === "server_import_result") {
                 handleServerImportResult(s);
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "world_sync_http") {
+                void handleHttpWorldSync(s);
                 return;
             }
             if (t === SERVER_PEER && s.type === "server_authority") {
