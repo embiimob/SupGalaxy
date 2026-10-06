@@ -29,6 +29,147 @@ var userPositions = {},
     playerAvatars = new Map,
     partialIPFSUpdates = new Map,
     syncedWorlds = new Set;
+const DATA_CHANNEL_SEND_HIGH_WATER_MARK = 1024 * 1024;
+const dataChannelSendQueues = new WeakMap();
+const pendingServerImports = new Map();
+const queuedServerImports = [];
+const MAX_CONCURRENT_SERVER_IMPORTS = 3;
+let activeServerImports = 0;
+
+function installDataChannelSendQueue(channel) {
+    if (!channel || dataChannelSendQueues.has(channel)) return;
+    const nativeSend = channel.send.bind(channel);
+    const queue = [];
+    const drain = () => {
+        if (channel.readyState !== "open") {
+            queue.length = 0;
+            return;
+        }
+        while (queue.length && channel.bufferedAmount < DATA_CHANNEL_SEND_HIGH_WATER_MARK) {
+            try {
+                nativeSend(queue.shift());
+            } catch (error) {
+                console.error("[WEBRTC] Failed to send queued data-channel message:", error);
+                break;
+            }
+        }
+    };
+    const queuedSend = data => {
+        if (channel.readyState !== "open") {
+            nativeSend(data);
+            return;
+        }
+        queue.push(data);
+        drain();
+    };
+    try {
+        channel.bufferedAmountLowThreshold = DATA_CHANNEL_SEND_HIGH_WATER_MARK;
+        channel.addEventListener("bufferedamountlow", drain);
+        channel.addEventListener("open", drain);
+        channel.addEventListener("close", () => { queue.length = 0; });
+        Object.defineProperty(channel, "send", { configurable: true, value: queuedSend });
+        if (channel.send !== queuedSend) throw new Error("RTCDataChannel.send could not be wrapped");
+        dataChannelSendQueues.set(channel, queue);
+    } catch (error) {
+        console.error("[WEBRTC] Could not install the data-channel send queue:", error);
+    }
+}
+
+function pumpDedicatedServerImports() {
+    while (dedicatedServer?.connected && activeServerImports < MAX_CONCURRENT_SERVER_IMPORTS && queuedServerImports.length) {
+        const entry = queuedServerImports.shift();
+        if (!pendingServerImports.has(entry.transactionId) || entry.state !== "queued") continue;
+        const peer = peers.get(SERVER_PEER);
+        if (!peer?.dc || peer.dc.readyState !== "open") {
+            queuedServerImports.unshift(entry);
+            return;
+        }
+        entry.state = "sending";
+        activeServerImports++;
+        entry.timeout = setTimeout(() => retryDedicatedServerImport(entry, "timeout"), 30000);
+        try {
+            peer.dc.send(JSON.stringify({
+                type: "ipfs_chunk_from_client_start",
+                total: entry.chunks.length,
+                fromAddress: entry.fromAddress,
+                timestamp: entry.timestamp,
+                world: entry.world,
+                transactionId: entry.transactionId
+            }));
+            entry.chunks.forEach((chunk, index) => {
+                peer.dc.send(JSON.stringify({
+                    type: "ipfs_chunk_from_client_chunk",
+                    transactionId: entry.transactionId,
+                    index,
+                    chunk,
+                    total: entry.chunks.length
+                }));
+            });
+        } catch (error) {
+            console.error(`[WEBRTC] Failed to send dedicated-server import ${entry.transactionId}:`, error);
+            retryDedicatedServerImport(entry, "send failure");
+        }
+    }
+}
+
+function uploadDedicatedServerImport(transactionId, world, fromAddress, timestamp, chunks) {
+    const existing = pendingServerImports.get(transactionId);
+    if (existing) return;
+    const entry = {
+        transactionId,
+        world,
+        fromAddress,
+        timestamp,
+        chunks,
+        retries: 0,
+        state: "queued",
+        timeout: null
+    };
+    pendingServerImports.set(transactionId, entry);
+    queuedServerImports.push(entry);
+    pumpDedicatedServerImports();
+}
+
+function retryDedicatedServerImport(entry, reason) {
+    if (!pendingServerImports.has(entry.transactionId)) return;
+    if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+    clearTimeout(entry.timeout);
+    entry.retries++;
+    entry.state = "waiting";
+    const delay = Math.min(30000, 1000 * (2 ** Math.min(entry.retries - 1, 5)));
+    console.warn(`[WEBRTC] Retrying dedicated-server import ${entry.transactionId} after ${reason}.`);
+    entry.timeout = setTimeout(() => {
+        if (!pendingServerImports.has(entry.transactionId)) return;
+        entry.state = "queued";
+        queuedServerImports.push(entry);
+        pumpDedicatedServerImports();
+    }, delay);
+    pumpDedicatedServerImports();
+}
+
+function handleServerImportResult(message) {
+    const entry = pendingServerImports.get(message.transactionId);
+    if (!entry || message.world !== entry.world) return;
+    if (message.ok === true) {
+        clearTimeout(entry.timeout);
+        if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+        pendingServerImports.delete(entry.transactionId);
+        processedMessages.add(entry.transactionId);
+        worker.postMessage({ type: "update_processed", transactionIds: [entry.transactionId] });
+        pumpDedicatedServerImports();
+        return;
+    }
+    if (message.retry === true) {
+        retryDedicatedServerImport(entry, message.reason || "server requested retry");
+        return;
+    }
+    clearTimeout(entry.timeout);
+    if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+    pendingServerImports.delete(entry.transactionId);
+    console.error(`[WEBRTC] Server rejected import ${entry.transactionId}:`, message.reason || "unknown error");
+    addMessage(`Server rejected a world import: ${message.reason || "invalid data"}`, 5000);
+    pumpDedicatedServerImports();
+}
 
 function isAuthority(world = worldName) {
     return dedicatedServer
@@ -471,38 +612,16 @@ async function sendWorldStateAsync(peer, worldState, username, targetWorld = wor
         transactionId: transactionId
     }));
 
-    let i = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-
-    function sendChunk() {
-        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
-            if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
-            }
-            return;
-        }
-
-        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-        if (peer.dc.bufferedAmount > highWaterMark) {
-            peer.dc.onbufferedamountlow = () => {
-                peer.dc.onbufferedamountlow = null;
-                setTimeout(sendChunk, 0);
-            };
-            return;
-        }
-
+    chunks.forEach((chunk, index) => {
         peer.dc.send(JSON.stringify({
             type: 'world_sync_chunk',
-            transactionId: transactionId,
-            index: i,
-            chunk: chunks[i],
+            transactionId,
+            index,
+            chunk,
             total: chunks.length
         }));
-        i++;
-        setTimeout(sendChunk, 0);
-    }
-
-    sendChunk();
+    });
+    console.log(`[WebRTC] Finished queueing world state for ${username}.`);
 }
 
 function applyWorldStructureSync(data) {
@@ -613,6 +732,7 @@ async function handleMinimapFile(e) {
 }
 
 function setupDataChannel(e, t) {
+    installDataChannelSendQueue(e);
     console.log(`[FIXED] Setting up data channel for: ${t}`), e.onopen = () => {
         // As per user request, when a client connects, they drop their world mappings
         // and perform a switch to the same world, effectively syncing with the host.
@@ -637,6 +757,7 @@ function setupDataChannel(e, t) {
             }
             if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
             updateDedicatedServerDialog();
+            pumpDedicatedServerImports();
             dedicatedServerDialogCloser?.();
         }
         if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`),
@@ -763,8 +884,13 @@ function setupDataChannel(e, t) {
                     }
                     if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
                     updateDedicatedServerDialog();
+                    pumpDedicatedServerImports();
                     dedicatedServerDialogCloser?.();
                 }
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "server_import_result") {
+                handleServerImportResult(s);
                 return;
             }
             if (t === SERVER_PEER && s.type === "server_authority") {
@@ -1660,13 +1786,13 @@ function setupDataChannel(e, t) {
                                 }
                             }
                         }
-                    } else {
+                    } else if (!dedicatedServer) {
                         // if a client happens to get this, just add it.
                         processedMessages.add(s.transactionId);
                     }
                     break;
                 case "sync_processed_transaction":
-                    if (!isHost) {
+                    if (!isHost && !dedicatedServer) {
                         const transactionId = s.transactionId;
                         if (!processedMessages.has(transactionId)) {
                             processedMessages.add(transactionId);
