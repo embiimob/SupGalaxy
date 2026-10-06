@@ -1,4 +1,7 @@
-# 🌌 SupGalaxy v1.2.0
+# 🌌 SupGalaxy v1.3.0
+
+![SupGalaxy v1.3.0](SupGalaxy.jpg)
+
 **SupGalaxy** is an open-source, serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
 Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **ChatGPT** and **github CoPilot**.
@@ -6,6 +9,16 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 > **License: CC0 (Public Domain)**  
 > Use, modify, remix, or commercialize freely.  
 > **Demo: https://supgalaxy.org**
+
+---
+
+## 🆕 What's New in v1.3.0
+
+- **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
+- **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
+- **👹 Elite mobs (score ≥ 100)** — every world type now has a higher-class mob modelled on a different classic voxel game, including the first **flying** mobs and a deep-water leviathan (see [Mob Evolution](#-mob-evolution--elite-mobs)).
+- **📈 Mob evolution tiers** — a score-driven tier system ready for level-2 mobs past 200 points.
+- **🔗 Sturdier multiplayer mob sync** — mobs owned by any player (not just the host) now stream their updates, shots damage mobs exactly once, and removed mobs no longer reappear from late packets.
 
 ---
 
@@ -90,6 +103,67 @@ Other blocks retain their existing strengths; the Blue Iron Pick halves their re
 - Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
 - **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** retain their existing area mining behavior and can damage Obsidian. Bedrock and chunk ownership protections remain in effect.
 
+### 🏰 Building Blocks: Stairs, Doors & Castles
+
+Directional blocks (doors, stairs, portcullis) face the way your camera is looking when you place them.
+
+| Block | Recipe | Notes |
+|-------|--------|-------|
+| Oak Door | 5 Wooden Planks + 1 Iron Ore → 1 | Two blocks tall. **Right-click** to open/close; it won't close on top of a player. Toggles sync in multiplayer and respect chunk ownership. |
+| Oak Stairs | 6 Wooden Planks → 4 | Walk up them without jumping. |
+| Castle Stone Stairs | 6 Castle Stone Bricks → 4 | Stone variant of stairs. |
+| Portcullis | 4 Iron Ore + 1 Coal → 1 | See-through iron gate grid. |
+| Castle Stone Bricks | 3 Stone + 1 Brick → 4 | Core castle wall block. |
+| Mossy Castle Bricks | 3 Castle Stone Bricks + 1 Moss → 4 | Weathered walls. |
+| Battlement Stone | 3 Castle Stone Bricks + 1 Smooth Stone → 4 | Crenellated wall tops. |
+| Chiseled Limestone | 2 Marble + 1 Coal → 2 | Decorative trim. |
+| Polished Limestone | 3 Smooth Stone + 1 Sand → 4 | Clean pale stone. |
+| Red Roof Tile | 2 Brick + 1 Clay → 4 | Roofing. |
+| Slate Roof Tile | 2 Cobblestone + 1 Coal → 4 | Roofing. |
+| Oak Support Beam | 2 Wood + 2 Wooden Planks → 4 | Timber framing. |
+| Rose Stained Glass | 2 Glass + 1 Flower → 2 | Tinted castle windows. |
+
+---
+
+## 👹 Mob Evolution & Elite Mobs
+
+The galaxy fights back as you get stronger. Mob tiers unlock from the **highest score of any player in an area** (players within ~96 blocks of each other), so a veteran raises the danger for everyone nearby.
+
+| Tier | Score | Effect |
+|------|-------|--------|
+| 0 | 0 – 99 | Classic mobs: bees, crawlers, spiders, grubs, fish, whales, UFOs |
+| 1 | 100+ | One **elite mob** per world type joins the existing spawns |
+| 2 | 200+ | *(Coming soon)* Crawleys retire and level-2 mobs take over. The tier is scaffolded in `js/mob-evolution.js` and switches on once its roster ships. |
+
+You get a warning message the first time your score crosses a new tier. Dying resets your score, and elite mobs leave once no nearby player meets their tier.
+
+### Tier 1 Elites
+
+Each elite is based on a different voxel game and borrows that game's way of fighting.
+
+| World | Elite | Inspired by | How it fights | HP | Score | Drop |
+|-------|-------|-------------|---------------|----|-------|------|
+| 🌍 Earth | **Bone Archer** | *Minecraft* Skeleton | Keeps about 6–15 blocks away, strafes around you and backs off if you rush it. It then draws its bow and fires **arcing arrows**. Break line of sight or close in fast. | 20 | 40 | Iron Ore (50%) |
+| 🌙 Moon | **Sentinel Drone** *(flying)* | *No Man's Sky* Sentinels | Patrols the sky, then **scans you with a red beam** for 2 s. Once alerted it calls **one reinforcement**, circles you and fires **3-shot energy bursts**. At low HP it **pulls back to repair**. | 24 | 50 | Blue Calcite (60%) |
+| 🏜 Desert | **Dust Vulture** *(flying)* | *7 Days to Die* Vultures | Packs **circle high** above prey, then **dive-bomb** for a bite and climb away before the next pass. Shoot them on the climb. | 12 | 30 | 4 Sand (40%) |
+| 🗿 Massive | **Brick Golem** | *Dragon Quest Builders* Golem | A slow, heavy brick giant. Up close it raises its arms and **ground-slams** (radius 7, telegraphed for 1.2 s). **Jump to dodge** the shockwave. At range it **hurls boulders**. | 60 | 80 | 4 Castle Stone Bricks |
+| 🌋 Vulcan | **Magma Wyrm** *(aquatic)* | *Subnautica* Sea Dragon Leviathan | Lurks in **deep Vulcan water** (the only realm deep enough), **surfaces to spit fireballs**, dives, and **lunges** with a bite when you swim close. | 45 | 70 | 2 Emerald |
+
+Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not only voxel boxes. They have animated rigs (bow draw, rotor spin, wing flaps, slam windup, serpentine swim) and flash red when hit. Arrows, energy bolts, boulders and fireballs are real projectiles. Arrows and boulders arc under gravity, and energy bolts and fireballs glow. Elite projectiles never destroy blocks and can be blocked by walls.
+
+### Multiplayer Behaviour
+
+- Elites use the shared mob pipeline (`mob_spawn` / `mob_update_batch` / `mob_hit` / `mob_kill` / `mob_despawn`). Only the mob's **authority** runs its AI (the area spawner, or the host as fallback). Everyone else interpolates its position and aiState, so animations match on every screen.
+- Ranged attacks travel as `laser_fired_batch` projectiles. Each client checks hits **against its own player only**, so a dodge on your screen is a real dodge.
+- Melee and area attacks (vulture bite, wyrm lunge, golem slam) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
+- A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.
+- Player scores ride along with `player_move`, so every spawner knows the area's tier.
+
+### Adding the Next Tier
+
+1. Add a definition to `ELITE_MOB_TYPES` (archetype, HP, score, drop, hitbox) and its builder/`think` function in `js/mob-evolution.js`.
+2. List the new types in the tier's `introduces`, list any types to phase out in `retires` (e.g. `crawley`), and set `enabled: true`.
+
 ---
 
 # 🎮 How to Play
@@ -146,7 +220,7 @@ Spawn, explore, build, fight, survive.
 
 **Tips:**  
 - 2 sand → 4 glass  
-- +10 score per mob defeated  
+- +10 score per mob defeated (elite mobs: +30 to +80)  
 - Players & mobs spawn in loaded chunks  
 - TURN server recommended for multiplayer  
 - Press `/` to open chat and talk with other players in your world  
