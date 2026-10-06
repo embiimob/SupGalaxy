@@ -3170,7 +3170,7 @@ function openDedicatedServerModal() {
             style="background:var(--panel);padding:16px;border-radius:10px;width:min(400px,calc(100vw - 32px));box-sizing:border-box;">
             <h3 id="dedicatedServerTitle" style="margin-top:0;">Connect to Server</h3>
             <label for="dedicatedServerAddress">Server address</label>
-            <input id="dedicatedServerAddress" type="text" value="https://fakeufo.org:55555"
+            <input id="dedicatedServerAddress" type="text" value="https://play.supgalaxy.org:55555"
                 style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;"
                 autocomplete="url" spellcheck="false">
             <div id="dedicatedServerStatus" role="status" aria-live="polite" style="min-height:1.4em;margin-bottom:12px;">Checking server status…</div>
@@ -3191,7 +3191,11 @@ function openDedicatedServerModal() {
     let statusInterval;
     try {
         const savedAddress = localStorage.getItem("supgalaxy-dedicated-server-address");
-        if (savedAddress) addressInput.value = savedAddress;
+        if (savedAddress) {
+            addressInput.value = savedAddress === "https://fakeufo.org:55555"
+                ? "https://play.supgalaxy.org:55555"
+                : savedAddress;
+        }
     } catch (error) {
         console.warn("[WEBRTC] Could not read the saved server address:", error);
     }
