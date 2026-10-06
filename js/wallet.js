@@ -649,16 +649,16 @@ function renderWalletUI(container, balance=null){
         <div class="f-field"><label class="f-label">WIF private key (testnet3)</label><input class="f-input" id="wWif" type="password" placeholder="c… or 9… testnet3 WIF" autocomplete="off"></div>
         <div class="f-field"><label class="f-label">Encryption password (min ${WALLET_MIN_PASS} chars)</label><input class="f-input" id="wPass" type="password" autocomplete="new-password"></div>
         <div class="btn-row" style="margin-bottom:16px;">
-          <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
           <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
+          <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
         </div>
       </div>`;
     } else {
       html+=`<div class="f-field"><label class="f-label">WIF private key (testnet3)</label><input class="f-input" id="wWif" type="password" placeholder="c… or 9… testnet3 WIF" autocomplete="off"></div>
       <div class="f-field"><label class="f-label">Encryption password (min ${WALLET_MIN_PASS} chars)</label><input class="f-input" id="wPass" type="password" autocomplete="new-password"></div>
       <div class="btn-row" style="margin-bottom:16px;">
-        <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
         <button class="btn btn-acc btn-sm" onclick="importWallet()">Import + unlock</button>
+        <button class="btn btn-out btn-sm" onclick="generateKey()">Generate address</button>
       </div>`;
     }
   }
