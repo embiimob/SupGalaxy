@@ -634,6 +634,7 @@ function setupDataChannel(e, t) {
 
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
+                    if (Number.isFinite(s.score)) l.score = s.score;
 
                     s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
 
@@ -847,6 +848,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_update_batch":
+                    if (!Array.isArray(s.mobs)) break;
                     for (const t of s.mobs) {
                         // Store updates globally in case we need them when switching worlds
                         if (!window.mobsByWorld) window.mobsByWorld = {};
@@ -863,8 +865,12 @@ function setupDataChannel(e, t) {
                         // If the update is for the world we are currently in, update the 3D model
                         if (targetWorld === worldName) {
                             let o = mobs.find((e => e.id === t.id));
+                            // Ignore echoes for mobs we simulate and stale updates for mobs that were just removed.
+                            if (o && isMobAuthority(o)) continue;
+                            if (!o && wasMobRecentlyRemoved(t.id)) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
+                                o.spawner = s.username || n;
                                 mobs.push(o);
                                 o.pos.set(t.x, t.y, t.z);
                             }
@@ -895,7 +901,7 @@ function setupDataChannel(e, t) {
                         const batchMsg = JSON.stringify(s);
                         for (const [peerName, peer] of peers.entries()) {
                             const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
-                            if (peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === (s.world || worldName)) {
+                            if (peerName !== n && peerName !== s.username && peer.dc && peer.dc.readyState === "open" && peerWorld === (s.world || worldName)) {
                                 peer.dc.send(batchMsg);
                             }
                         }
@@ -903,6 +909,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_update":
                     let d = mobs.find((e => e.id === s.id));
+                    if ((d && isMobAuthority(d)) || (!d && wasMobRecentlyRemoved(s.id))) break;
                     if (!d) {
                         d = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
                         mobs.push(d);
@@ -931,8 +938,12 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_despawn":
                 case "mob_kill":
+                    markMobRecentlyRemoved(s.id);
                     const p = mobs.find((e => e.id === s.id));
                     if (p) {
+                        if (s.type === "mob_kill" && isEliteMobType(p.type)) {
+                            spawnEliteBurst(p.pos.clone().add(new THREE.Vector3(0, getEliteMobDef(p.type).hitCenterY, 0)), p.type === "magma_wyrm" ? 0xff6a00 : p.type === "sentinel_drone" ? 0xb8bcc4 : 0xd8d0c0);
+                        }
                         if (p.engineAudio) p.engineAudio.pause();
                         if (p.engineAudio2) p.engineAudio2.pause();
                         try {
@@ -950,7 +961,15 @@ function setupDataChannel(e, t) {
                         const mob = mobs.find(mob => mob.id === s.id);
                         if (!mob || (mob.spawnCommandKey && !canRemoveFishSpawnCommand(mob.spawnCommandKey, s.username))) break;
                         if (!("toolId" in s)) {
-                            if (isHost) mob.hurt(s.damage || 4, s.username);
+                            const projectileDamage = Math.max(0, Math.min(50, Number(s.damage) || 4));
+                            if (isMobAuthority(mob)) {
+                                mob.hurt(projectileDamage, s.username);
+                            } else if (isHost) {
+                                const spawnerPeer = peers.get(mob.spawner);
+                                if (spawnerPeer && spawnerPeer.dc && spawnerPeer.dc.readyState === "open") {
+                                    spawnerPeer.dc.send(JSON.stringify(s));
+                                }
+                            }
                             break;
                         }
                         const damage = 4 * getPickaxeMultiplier(s.toolId);
@@ -966,6 +985,9 @@ function setupDataChannel(e, t) {
                     break;
                 case "player_hit":
                     isHost && handlePlayerHit(s);
+                    break;
+                case "elite_mob_attack":
+                    handleEliteMobAttackMessage(s, n);
                     break;
                 case "player_damage":
                     {

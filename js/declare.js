@@ -70,7 +70,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     MAX_LOADED_CHUNKS = 420,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v1.0.7",
+    VERSION = "SupGalaxy v1.3.0",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 20,
     BLOCKS = {
@@ -1702,3 +1702,11 @@ function cleanupChest(chest, key) {
         disposeObject(chest.mesh);
     }
 }
+
+// Keep visible version labels in sync with the VERSION constant.
+(function applyVersionLabels() {
+    if (typeof document === "undefined") return;
+    const label = document.getElementById("versionLabel");
+    if (label) label.textContent = VERSION;
+    document.title = VERSION;
+})();
