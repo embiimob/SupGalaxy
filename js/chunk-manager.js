@@ -1326,6 +1326,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 total: chunks.length,
                 fromAddress: t,
                 timestamp: o,
+                world: worldName,
                 transactionId: a
             });
             for (const [, peer] of peers.entries()) {
