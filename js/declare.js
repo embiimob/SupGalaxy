@@ -715,6 +715,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             pickaxe: !0,
             breakChance: 1 / 100,
             meleeMultiplier: 3
+        },
+        176: {
+            name: "Bone",
+            color: "#ece4cf",
+            itemOnly: !0,
+            craftingItem: !0,
+            bone: !0
         }
     },
     BIOMES = [{

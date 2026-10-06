@@ -944,7 +944,7 @@ function setupDataChannel(e, t) {
                     const p = mobs.find((e => e.id === s.id));
                     if (p) {
                         if (s.type === "mob_kill" && isEliteMobType(p.type)) {
-                            spawnEliteBurst(p.pos.clone().add(new THREE.Vector3(0, getEliteMobDef(p.type).hitCenterY, 0)), p.type === "magma_wyrm" ? 0xff6a00 : p.type === "sentinel_drone" ? 0xb8bcc4 : 0xd8d0c0);
+                            spawnEliteBurst(p.pos.clone().add(new THREE.Vector3(0, getEliteMobDef(p.type).hitCenterY, 0)), getEliteBurstColor(p.type));
                         }
                         if (p.engineAudio) p.engineAudio.pause();
                         if (p.engineAudio2) p.engineAudio2.pause();

@@ -1825,7 +1825,7 @@ function createProjectile(e, t, o, a, n = "red") {
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
-    const l = r.pickaxe ? createPickaxeMesh(o) : new THREE.Mesh(
+    const l = r.pickaxe ? createPickaxeMesh(o) : r.bone ? createBoneMesh() : new THREE.Mesh(
         new THREE.SphereGeometry(.25, 16, 16),
         new THREE.MeshStandardMaterial({
             color: r.color,
@@ -3724,7 +3724,7 @@ function placeBlockAt(e, t, o, a) {
         const facing = getBuildFacing();
         const placedBlockId = getOrientedBuildBlockId(a, facing);
         if (!n || n.id !== a || n.count <= 0) addMessage("No item to place");
-        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(BLOCKS[a].pickaxe ? "Select the pick and left-click to use it." : `${BLOCKS[a].name} can only be released into water.`, 2000);
+        else if (BLOCKS[a] && BLOCKS[a].itemOnly) addMessage(BLOCKS[a].pickaxe ? "Select the pick and left-click to use it." : BLOCKS[a].craftingItem ? `${BLOCKS[a].name} is a crafting item and can't be placed.` : `${BLOCKS[a].name} can only be released into water.`, 2000);
         else if (Math.hypot(player.x - e, player.y - t, player.z - o) > 5) addMessage("Too far to place");
         else {
             var r = getBlockAt(e, t, o);
@@ -6327,8 +6327,9 @@ function gameLoop(e) {
             camera.position.copy(f)
         }
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
-            k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01;
-        if (e - lastUpdateTime > 50 && (I || k)) {
+            k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
+            heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
             if (I || isAttacking) {
@@ -6340,7 +6341,8 @@ function gameLoop(e) {
                 y: player.y,
                 z: player.z,
                 yaw: player.yaw,
-                pitch: player.pitch
+                pitch: player.pitch,
+                selectedBlockId: selectedBlockId
             };
             const t = {
                 type: "player_move",
@@ -6581,8 +6583,8 @@ function gameLoop(e) {
 
                 // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
                 if (isSolid(getBlockAt(a, n, r)) && o.mobStyle) {
-                    // Elite mob projectiles shatter on terrain without destroying blocks.
-                    createLaserImpactLight(stepPos, o.color);
+                    // Elite mob projectiles shatter on terrain without destroying blocks (light-free burst).
+                    spawnEliteBurst(stepPos, o.color, 5);
                     createBlockParticles(a, n, r, getBlockAt(a, n, r));
                     releaseProjectileMesh(o.mesh);
                     releaseProjectileLight(o.light);
@@ -6664,7 +6666,7 @@ function gameLoop(e) {
                     if (player.health > 0 && stepPos.distanceTo(localCenter) < o.hitRadius) {
                         const push = o.velocity.clone().setY(0).normalize().multiplyScalar(4);
                         applyEliteDamageToLocalPlayer(o.damage, o.label, push.x, push.z);
-                        createLaserImpactLight(stepPos, o.color);
+                        spawnEliteBurst(stepPos, o.color, 5);
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);

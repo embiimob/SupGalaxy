@@ -722,6 +722,7 @@ function manageMobs() {
             else if ("whale" === type) maxCount = 3;
             else if (isEliteMobType(type)) {
                 maxCount = getEliteMobDef(type).maxCount;
+                if (!hasEliteWorldCapacity(type)) continue;
                 if (Math.random() > getEliteMobDef(type).spawnChance) continue;
             }
             else if ("ufo_saucer" === type) {
@@ -759,6 +760,7 @@ function manageMobs() {
 
                 let spawnY = null;
                 let waterSurfaceY = null;
+                let eliteSpawn = null;
                 if (isAquaticMobType(type)) {
                     const spawnPlayer = area.players[Math.floor(Math.random() * area.players.length)];
                     const aquaticSpawn = nearestAquaticSpawnPosition(spawnPlayer.x, spawnPlayer.z, type);
@@ -768,7 +770,7 @@ function manageMobs() {
                     spawnY = aquaticSpawn.y;
                     waterSurfaceY = aquaticSpawn.surfaceY;
                 } else if (isEliteMobType(type)) {
-                    const eliteSpawn = getEliteSpawnPosition(type, area.players[Math.floor(Math.random() * area.players.length)]);
+                    eliteSpawn = getEliteSpawnPosition(type, area.players[Math.floor(Math.random() * area.players.length)]);
                     if (!eliteSpawn) continue;
                     spawnX = eliteSpawn.x;
                     spawnZ = eliteSpawn.z;
@@ -777,6 +779,7 @@ function manageMobs() {
                 }
                 const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
                 if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
+                if (eliteSpawn) onEliteMobSpawned(newMob, eliteSpawn);
             }
         }
     }
@@ -2129,6 +2132,7 @@ Mob.prototype.update = function (t) {
         this.wasAttacked = true;
         this.isAggressive = true;
     }
+    if (isEliteMobType(this.type)) markEliteMobProvoked(this, e);
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudioAt(soundHit, this.pos);
     const s = e === userName ? player : userPositions[e];
     if (s) {

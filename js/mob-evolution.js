@@ -2,79 +2,123 @@
 //
 // Each tier unlocks once any player in an active area reaches its score. Tiers are cumulative:
 // later tiers may introduce new mob types and retire older ones (for example crawleys).
-// Tier-1 "elite" mobs are defined in ELITE_MOB_TYPES, one per world archetype, each modelled on a
-// different voxel game. They reuse the shared Mob pipeline (mob_spawn / mob_update_batch /
+// Level-2 (score 100) and level-3 (score 200) "elite" mobs are defined in ELITE_MOB_TYPES, each modelled
+// on a different voxel game. They reuse the shared Mob pipeline (mob_spawn / mob_update_batch /
 // mob_hit / mob_kill / mob_despawn) and are simulated only by the mob's authority (mob.spawner).
 // Ranged attacks travel as synced projectiles that every client checks against its own player;
 // melee and area attacks are broadcast as "elite_mob_attack" messages evaluated by each client.
 
 const MOB_EVOLUTION_TIERS = [
     {
-        level: 1,
+        // Level 2 (score past 100): one easier mob per world archetype.
+        level: 2,
         minScore: 100,
-        introduces: ["bone_archer", "sentinel_drone", "dust_vulture", "brick_golem", "magma_wyrm"],
+        introduces: ["bone_archer", "dust_vulture", "crater_hopper", "ember_drifter", "moss_brute"],
         retires: []
     },
     {
-        // Level 2 (score past 200): crawleys retire and level-2 mobs arrive.
-        // Disabled until the level-2 roster ships; enable it and list the new types in `introduces`.
-        level: 2,
+        // Level 3 (score past 200): crawleys retire and the heavy hitters arrive. These only turn
+        // hostile toward players holding a laser gun or players who attack them first.
+        level: 3,
         minScore: 200,
-        introduces: [],
-        retires: ["crawley"],
-        enabled: false
+        introduces: ["sentinel_drone", "brick_golem", "magma_wyrm"],
+        retires: ["crawley"]
     }
+    // Future tiers (score 300+) slot in here: add a { level, minScore, introduces, retires } entry.
 ];
 
+// Mob projectiles never carry PointLights: adding or removing a scene light forces every lit
+// material to recompile, which froze the game whenever a Sentinel opened fire.
 const MOB_PROJECTILE_STYLES = {
     arrow: { color: 0xe6dcc0, speed: 24, gravity: 14, scale: [0.45, 0.45, 2.6], damage: 3, hitRadius: 1.2, label: "Shot by a Bone Archer" },
-    sentinel: { color: 0xffb020, speed: 30, gravity: 0, scale: [0.9, 0.9, 3.2], damage: 2, hitRadius: 1.3, light: true, label: "Zapped by a Sentinel" },
-    fireball: { color: 0xff5a00, speed: 16, gravity: 3, scale: [3, 3, 3], damage: 4, hitRadius: 1.6, light: true, label: "Scorched by a Magma Wyrm" },
-    boulder: { color: 0x7d6f60, speed: 17, gravity: 12, scale: [4, 4, 4], damage: 5, hitRadius: 1.7, label: "Crushed by a Brick Golem boulder" }
+    sentinel: { color: 0xffb020, speed: 30, gravity: 0, scale: [0.9, 0.9, 3.2], damage: 2, hitRadius: 1.3, label: "Zapped by a Sentinel" },
+    fireball: { color: 0xff5a00, speed: 16, gravity: 3, scale: [3, 3, 3], damage: 4, hitRadius: 1.6, label: "Scorched by a Magma Wyrm" },
+    boulder: { color: 0x7d6f60, speed: 17, gravity: 12, scale: [4, 4, 4], damage: 5, hitRadius: 1.7, label: "Crushed by a Brick Golem boulder" },
+    ember: { color: 0xff7a1a, speed: 13, gravity: 11, scale: [1.6, 1.6, 1.6], damage: 2, hitRadius: 1.2, label: "Hit by an Ember Drifter's cinder" }
 };
 
+// Laser guns: red, green and blue. Holding one counts as "armed" for provoke: "armed" mobs.
+const ARMED_ITEM_IDS = new Set([121, 126, 133]);
+const ELITE_PROVOKE_MS = 30000;
+
 const ELITE_MOB_TYPES = {
+    // ---- level 2 (score 100+) ----
     bone_archer: {
         name: "Bone Archer",
         inspiredBy: "Minecraft (Skeleton)",
-        archetype: "Earth",
-        day: true, night: true,
+        archetypes: ["Earth", "Massive"],
+        day: false, night: true,
         hp: 20, score: 40, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 1.1, hitRadius: 1.3,
         drop: { id: 124, count: 1, chance: 0.5 }
     },
-    sentinel_drone: {
-        name: "Sentinel Drone",
-        inspiredBy: "No Man's Sky (Sentinels)",
-        archetype: "Moon",
-        day: true, night: true, flying: true,
-        hp: 24, score: 50, maxCount: 2, spawnChance: 0.3, spawnAltitude: 9,
-        hitCenterY: 0, hitRadius: 1.4,
-        drop: { id: 134, count: 1, chance: 0.6 }
-    },
     dust_vulture: {
         name: "Dust Vulture",
         inspiredBy: "7 Days to Die (Vultures)",
-        archetype: "Desert",
+        archetypes: ["Desert"],
         day: true, night: true, flying: true,
-        hp: 12, score: 30, maxCount: 4, spawnChance: 0.4, spawnAltitude: 16,
+        hp: 12, score: 30, maxCount: 4, worldMax: 4, spawnChance: 0.4, spawnAltitude: 18,
+        roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
-        drop: { id: 5, count: 4, chance: 0.4 }
+        drop: { id: 176, count: 2, chance: 0.6 }
+    },
+    crater_hopper: {
+        name: "Crater Hopper",
+        burstColor: 0x9ad8ff,
+        inspiredBy: "Cube World (Slime)",
+        archetypes: ["Moon"],
+        day: true, night: true,
+        hp: 10, score: 25, maxCount: 3, spawnChance: 0.4,
+        hitCenterY: 0.6, hitRadius: 1.1,
+        drop: { id: 111, count: 1, chance: 0.5 }
+    },
+    ember_drifter: {
+        name: "Ember Drifter",
+        burstColor: 0xff7a1a,
+        inspiredBy: "Vintage Story (Drifter)",
+        archetypes: ["Vulcan"],
+        day: true, night: true,
+        hp: 14, score: 25, maxCount: 3, spawnChance: 0.35,
+        hitCenterY: 1, hitRadius: 1.2,
+        drop: { id: 120, count: 2, chance: 0.6 }
+    },
+    moss_brute: {
+        name: "Moss Brute",
+        burstColor: 0x6f8a52,
+        inspiredBy: "Hytale (Trork)",
+        archetypes: ["Massive"],
+        day: true, night: true,
+        hp: 22, score: 30, maxCount: 2, spawnChance: 0.3,
+        hitCenterY: 1.2, hitRadius: 1.4,
+        drop: { id: 8, count: 3, chance: 0.6 }
+    },
+    // ---- level 3 (score 200+) — only hostile to armed or attacking players ----
+    sentinel_drone: {
+        name: "Sentinel Drone",
+        burstColor: 0xb8bcc4,
+        inspiredBy: "No Man's Sky (Sentinels)",
+        archetypes: ["Moon"],
+        day: true, night: true, flying: true, provoke: "armed",
+        hp: 24, score: 50, maxCount: 1, worldMax: 2, spawnChance: 0.08, spawnAltitude: 9,
+        hitCenterY: 0, hitRadius: 1.4,
+        drop: { id: 134, count: 1, chance: 0.6 }
     },
     brick_golem: {
         name: "Brick Golem",
+        burstColor: 0x8d7b66,
         inspiredBy: "Dragon Quest Builders (Golem)",
-        archetype: "Massive",
-        day: true, night: true,
+        archetypes: ["Massive"],
+        day: true, night: true, provoke: "armed",
         hp: 60, score: 80, maxCount: 1, spawnChance: 0.2,
         hitCenterY: 2.4, hitRadius: 2.4, heavy: true,
         drop: { id: 139, count: 4, chance: 1 }
     },
     magma_wyrm: {
         name: "Magma Wyrm",
+        burstColor: 0xff6a00,
         inspiredBy: "Subnautica (Sea Dragon Leviathan)",
-        archetype: "Vulcan",
-        day: true, night: true, aquatic: true,
+        archetypes: ["Vulcan"],
+        day: true, night: true, aquatic: true, provoke: "armed",
         hp: 45, score: 70, maxCount: 1, spawnChance: 0.25,
         hitCenterY: 0, hitRadius: 2.6, heavy: true,
         drop: { id: 125, count: 2, chance: 1 }
@@ -82,9 +126,15 @@ const ELITE_MOB_TYPES = {
 };
 
 const ELITE_ATTACK_DAMAGE_CAP = 10;
+const BONE_ITEM_ID = 176;
 var eliteMobEffects = [];
 var recentEliteAttackIds = new Set();
-var lastMobEvolutionLevel = 0;
+var lastMobEvolutionLevel = 1;
+
+function getEliteBurstColor(type) {
+    const def = getEliteMobDef(type);
+    return def && def.burstColor !== undefined ? def.burstColor : 0xd8d0c0;
+}
 
 function isEliteMobType(type) {
     return Object.prototype.hasOwnProperty.call(ELITE_MOB_TYPES, type);
@@ -98,7 +148,7 @@ function getMobEvolution(score) {
     const value = Number(score) || 0;
     const active = new Set();
     const retired = new Set();
-    let level = 0;
+    let level = 1;
     for (const tier of MOB_EVOLUTION_TIERS) {
         if (tier.enabled === false || value < tier.minScore) continue;
         level = Math.max(level, tier.level);
@@ -161,7 +211,7 @@ function getMaxScoreNear(x, z, players, radius = 96) {
 
 function isEliteMobAllowedForWorld(type) {
     const def = getEliteMobDef(type);
-    if (!def || !worldArchetype || worldArchetype.name !== def.archetype) return false;
+    if (!def || !worldArchetype || !def.archetypes.includes(worldArchetype.name)) return false;
     return isNight ? def.night : def.day;
 }
 
@@ -183,10 +233,13 @@ function isMobTypeRetiredAt(type, x, z, players) {
 function announceMobEvolution(score) {
     const level = getMobEvolution(score).level;
     if (level > lastMobEvolutionLevel) {
-        const names = Object.values(ELITE_MOB_TYPES)
-            .filter(def => worldArchetype && def.archetype === worldArchetype.name)
+        const tier = MOB_EVOLUTION_TIERS.find(t => t.level === level);
+        const names = (tier ? tier.introduces : [])
+            .map(type => getEliteMobDef(type))
+            .filter(def => def && worldArchetype && def.archetypes.includes(worldArchetype.name))
             .map(def => def.name);
-        addMessage(`⚠ Mob evolution level ${level}! ${names.length ? names.join(", ") + " now hunt" : "Stronger mobs now roam"} this ${worldArchetype ? worldArchetype.name : ""} world.`, 5000);
+        const verb = level >= 3 ? " now roam (they only fight armed or hostile players)" : " now hunt";
+        addMessage(`⚠ Mob evolution level ${level}! ${names.length ? names.join(", ") + verb : "Stronger mobs now roam"} this ${worldArchetype ? worldArchetype.name : ""} world.`, 5000);
     }
     lastMobEvolutionLevel = level;
 }
@@ -197,6 +250,7 @@ function getEliteSpawnPosition(type, anchor) {
         const spot = nearestAquaticSpawnPosition(anchor.x, anchor.z, "whale");
         return spot ? { x: spot.x, y: spot.y, z: spot.z, waterSurfaceY: spot.surfaceY } : null;
     }
+    if (def.roost) return getEliteRoostSpawnPosition(type, def, anchor);
     const angle = Math.random() * Math.PI * 2;
     const distance = 28 + Math.random() * 24;
     const x = modWrap(anchor.x + Math.cos(angle) * distance, MAP_SIZE);
@@ -208,16 +262,121 @@ function getEliteSpawnPosition(type, anchor) {
     return { x, y: null, z };
 }
 
+// Roosting flyers (Dust Vultures) gather far out at the edge of the loaded map around a shared roost,
+// so players have to travel to find them. Bones are scattered on the ground under the roost.
+function getEliteRoostSpawnPosition(type, def, anchor) {
+    let roost = null;
+    for (const mob of mobs) {
+        if (mob.type === type && mob.home && Math.hypot(mob.home.x - anchor.x, mob.home.z - anchor.z) < def.roost.maxDistance + 24) {
+            roost = mob.home;
+            break;
+        }
+    }
+    let isNewRoost = false;
+    if (!roost) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = def.roost.minDistance + Math.random() * (def.roost.maxDistance - def.roost.minDistance);
+        const rx = modWrap(anchor.x + Math.cos(angle) * distance, MAP_SIZE);
+        const rz = modWrap(anchor.z + Math.sin(angle) * distance, MAP_SIZE);
+        roost = { x: rx, y: chunkManager.getSurfaceY(rx, rz), z: rz };
+        isNewRoost = true;
+    }
+    const angle = Math.random() * Math.PI * 2;
+    const x = modWrap(roost.x + Math.cos(angle) * def.roost.radius, MAP_SIZE);
+    const z = modWrap(roost.z + Math.sin(angle) * def.roost.radius, MAP_SIZE);
+    const y = Math.min(MAX_HEIGHT - 8, roost.y + def.spawnAltitude);
+    return { x, y, z, roost: { x: roost.x, y: roost.y, z: roost.z }, isNewRoost };
+}
+
+function countBonesNear(x, z, radius) {
+    if (typeof droppedItems === "undefined") return 0;
+    let count = 0;
+    for (const item of droppedItems) {
+        if (item.blockId === BONE_ITEM_ID && item.mesh && Math.hypot(item.mesh.position.x - x, item.mesh.position.z - z) < radius) count++;
+    }
+    return count;
+}
+
+// Called by the spawning authority: drops a few Bone pickups around the roost and tells peers.
+function scatterRoostBones(roost) {
+    if (typeof createDroppedItemOrb !== "function" || !roost) return;
+    const missing = 3 - countBonesNear(roost.x, roost.z, 20);
+    for (let i = 0; i < missing; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 2 + Math.random() * 9;
+        const bx = Math.floor(modWrap(roost.x + Math.cos(angle) * distance, MAP_SIZE)) + 0.5;
+        const bz = Math.floor(modWrap(roost.z + Math.sin(angle) * distance, MAP_SIZE)) + 0.5;
+        const by = chunkManager.getSurfaceY(bx, bz) + 0.3;
+        const dropId = `${userName}-bone-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const position = new THREE.Vector3(bx, by, bz);
+        createDroppedItemOrb(dropId, position, BONE_ITEM_ID, worldSeed, userName, 1);
+        const message = JSON.stringify({ type: "item_dropped", dropId, position: { x: bx, y: by, z: bz }, blockId: BONE_ITEM_ID, originSeed: worldSeed, dropper: userName, world: worldName });
+        for (const [peerName, peer] of peers.entries()) {
+            if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+        }
+    }
+}
+
+// Applies spawn metadata (vulture roosts) to a freshly spawned elite mob on its authority.
+function onEliteMobSpawned(mob, spawn) {
+    if (!mob || !spawn || !spawn.roost) return;
+    mob.home = new THREE.Vector3(spawn.roost.x, spawn.roost.y, spawn.roost.z);
+    scatterRoostBones(spawn.roost);
+}
+
+function hasEliteWorldCapacity(type) {
+    const def = getEliteMobDef(type);
+    if (!def || !def.worldMax) return true;
+    let count = 0;
+    for (const mob of mobs) if (mob.type === type) count++;
+    return count < def.worldMax;
+}
+
+function createBoneMesh() {
+    const group = new THREE.Group();
+    const material = new THREE.MeshLambertMaterial({ color: 0xece4cf, emissive: 0x2a2620 });
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.62), material);
+    group.add(shaft);
+    for (const end of [-0.33, 0.33]) {
+        for (const side of [-0.07, 0.07]) {
+            const knob = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), material);
+            knob.position.set(side * 1.4, 0, end);
+            group.add(knob);
+        }
+    }
+    group.rotation.y = Math.random() * Math.PI;
+    return group;
+}
+
 // ---------- shared helpers ----------
+
+function isEliteHeldItemArmed(id) {
+    return ARMED_ITEM_IDS.has(Number(id));
+}
+
+// Level-3 mobs (provoke: "armed") only attack players holding a laser gun or who recently hurt them.
+function markEliteMobProvoked(mob, attacker) {
+    if (!mob || !attacker || !isEliteMobType(mob.type)) return;
+    if (!mob.provokedBy) mob.provokedBy = {};
+    mob.provokedBy[attacker] = Date.now();
+}
+
+function isEliteTargetHostile(mob, target) {
+    const def = getEliteMobDef(mob.type);
+    if (!def || def.provoke !== "armed") return true;
+    if (target.armed) return true;
+    const provokedAt = mob.provokedBy && mob.provokedBy[target.name];
+    return !!provokedAt && Date.now() - provokedAt < ELITE_PROVOKE_MS;
+}
 
 function getEliteTargetablePlayers() {
     const list = [];
     if (player.health > 0) {
-        list.push({ name: userName, x: player.x + player.width / 2, y: player.y, z: player.z + player.depth / 2, local: true });
+        list.push({ name: userName, x: player.x + player.width / 2, y: player.y, z: player.z + player.depth / 2, local: true, armed: isEliteHeldItemArmed(selectedBlockId) });
     }
     for (const [name, pos] of Object.entries(userPositions)) {
         if (pos.world === worldName && !pos.isDying && Number.isFinite(pos.targetX) && Number.isFinite(pos.targetY) && Number.isFinite(pos.targetZ)) {
-            list.push({ name, x: pos.targetX + 0.4, y: pos.targetY, z: pos.targetZ + 0.4 });
+            list.push({ name, x: pos.targetX + 0.4, y: pos.targetY, z: pos.targetZ + 0.4, armed: isEliteHeldItemArmed(pos.selectedBlockId) });
         }
     }
     return list;
@@ -228,6 +387,7 @@ function findEliteTarget(mob, range, maxDy = 24) {
     let bestDistance = range;
     for (const p of getEliteTargetablePlayers()) {
         if (Math.abs(p.y - mob.pos.y) > maxDy) continue;
+        if (!isEliteTargetHostile(mob, p)) continue;
         const d = Math.hypot(p.x - mob.pos.x, p.z - mob.pos.z);
         if (d < bestDistance) {
             bestDistance = d;
@@ -520,7 +680,7 @@ function buildEliteMob(mob) {
     const def = getEliteMobDef(mob.type);
     mob.hp = def.hp;
     mob.maxHp = def.hp;
-    mob.isAggressive = true;
+    mob.isAggressive = !def.provoke;
     mob.aiState = def.flying ? "PATROL" : def.aquatic ? "PROWL" : "IDLE";
     mob.originalColor = null;
     mob.flashMaterials = [];
@@ -534,6 +694,9 @@ function buildEliteMob(mob) {
     else if (mob.type === "dust_vulture") buildDustVulture(mob, variant);
     else if (mob.type === "brick_golem") buildBrickGolem(mob, variant);
     else if (mob.type === "magma_wyrm") buildMagmaWyrm(mob, variant);
+    else if (mob.type === "crater_hopper") buildCraterHopper(mob, variant);
+    else if (mob.type === "ember_drifter") buildEmberDrifter(mob, variant);
+    else if (mob.type === "moss_brute") buildMossBrute(mob, variant);
 }
 
 function buildBoneArcher(mob) {
@@ -607,9 +770,6 @@ function buildSentinelDrone(mob) {
     beam.visible = false;
     rig.add(beam);
     mob.scanBeam = beam;
-    mob.light = new THREE.PointLight(0xffd040, 1.4, 9);
-    mob.light.position.set(0, 0, 0.9);
-    rig.add(mob.light);
 }
 
 function buildDustVulture(mob, variant) {
@@ -709,9 +869,6 @@ function buildBrickGolem(mob, variant) {
     mob.rock.position.set(0, -3.1, 0);
     mob.rock.visible = false;
     mob.arms[1].add(mob.rock);
-    mob.light = new THREE.PointLight(0x55f0ff, 1.2, 7);
-    mob.light.position.set(0, 2.9, 1.2);
-    rig.add(mob.light);
     mob.rig.scale.setScalar(0.95 + variant * 0.15);
 }
 
@@ -755,9 +912,98 @@ function buildMagmaWyrm(mob) {
         rig.add(segment);
         mob.segments.push(segment);
     }
-    mob.light = new THREE.PointLight(0xff6a00, 1.6, 10);
-    mob.light.position.set(0, 0.4, 1.4);
-    rig.add(mob.light);
+}
+
+function buildCraterHopper(mob, variant) {
+    mob.speed = 4;
+    const jelly = eliteMaterial(mob, variant < 0.5 ? 0x9ad8ff : 0xb8f0d8, { params: { transparent: true, opacity: 0.72 } });
+    const core = eliteMaterial(mob, 0x4a7ab0);
+    const eye = new THREE.MeshBasicMaterial({ color: 0x0b1a2a });
+    const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const body = new THREE.Group();
+    body.add(eliteBox(1.1, 1.1, 1.1, jelly, 0, 0.55, 0));
+    body.add(eliteBox(0.45, 0.45, 0.45, core, 0, 0.45, -0.05));
+    for (const side of [-1, 1]) {
+        body.add(eliteBox(0.16, 0.24, 0.04, eye, side * 0.24, 0.72, 0.56));
+        body.add(eliteBox(0.06, 0.06, 0.02, shine, side * 0.24 + 0.04, 0.8, 0.585));
+    }
+    body.add(eliteBox(0.3, 0.06, 0.04, eye, 0, 0.42, 0.56));
+    mob.rig.add(body);
+    mob.body = body;
+    mob.rig.scale.setScalar(0.9 + variant * 0.25);
+}
+
+function buildEmberDrifter(mob) {
+    mob.speed = 2.2;
+    const ash = eliteMaterial(mob, 0x4a4542);
+    const charred = eliteMaterial(mob, 0x2a2624);
+    const ember = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
+    mob.emberMaterial = ember;
+    const rig = mob.rig;
+    mob.legs = [makeLimb(charred, 0.16, 0.7, 0.16, -0.16, 0.7, 0), makeLimb(charred, 0.16, 0.7, 0.16, 0.16, 0.7, 0)];
+    mob.legs.forEach(leg => rig.add(leg));
+    const torso = new THREE.Group();
+    torso.position.set(0, 0.7, 0);
+    torso.rotation.x = 0.55;
+    torso.add(eliteBox(0.55, 0.85, 0.32, ash, 0, 0.42, 0));
+    for (let i = 0; i < 3; i++) torso.add(eliteBox(0.08, 0.3 - i * 0.06, 0.04, ember, (i - 1) * 0.14, 0.45 + (i % 2) * 0.08, 0.17));
+    const head = new THREE.Group();
+    head.position.set(0, 0.9, 0.08);
+    head.add(eliteBox(0.4, 0.42, 0.4, ash, 0, 0.2, 0));
+    for (const side of [-1, 1]) head.add(eliteBox(0.12, 0.05, 0.03, ember, side * 0.1, 0.24, 0.21));
+    head.add(eliteBox(0.22, 0.05, 0.03, charred, 0, 0.08, 0.21));
+    torso.add(head);
+    mob.head = head;
+    mob.arms = [makeLimb(ash, 0.12, 1.0, 0.12, -0.36, 0.8, 0), makeLimb(ash, 0.12, 1.0, 0.12, 0.36, 0.8, 0)];
+    mob.arms.forEach(arm => torso.add(arm));
+    mob.cinder = eliteBox(0.32, 0.32, 0.32, ember, 0, -1.05, 0);
+    mob.cinder.visible = false;
+    mob.arms[1].add(mob.cinder);
+    rig.add(torso);
+    mob.torso = torso;
+}
+
+function buildMossBrute(mob, variant) {
+    mob.speed = 2.4;
+    const skin = eliteMaterial(mob, variant < 0.5 ? 0x6f8a52 : 0x7d8a4a);
+    const hide = eliteMaterial(mob, 0x5a3f2a);
+    const moss = eliteMaterial(mob, 0x3f6b2e);
+    const tusk = eliteMaterial(mob, 0xf0ead8);
+    const wood = eliteMaterial(mob, 0x6b4423);
+    const eye = new THREE.MeshBasicMaterial({ color: 0xffd23a });
+    const rig = mob.rig;
+    mob.legs = [makeLimb(hide, 0.36, 0.75, 0.36, -0.3, 0.75, 0), makeLimb(hide, 0.36, 0.75, 0.36, 0.3, 0.75, 0)];
+    mob.legs.forEach(leg => rig.add(leg));
+    const body = new THREE.Group();
+    body.position.set(0, 0.75, 0);
+    body.add(eliteBox(1.1, 0.95, 0.75, skin, 0, 0.5, 0));
+    body.add(eliteBox(1.14, 0.3, 0.79, hide, 0, 0.12, 0));
+    body.add(eliteBox(0.9, 0.22, 0.6, moss, 0, 1.05, -0.08));
+    const head = new THREE.Group();
+    head.position.set(0, 0.95, 0.3);
+    head.add(eliteBox(0.6, 0.55, 0.55, skin, 0, 0.25, 0.05));
+    head.add(eliteBox(0.36, 0.26, 0.24, skin, 0, 0.12, 0.42));
+    head.add(eliteBox(0.16, 0.08, 0.02, hide, 0, 0.16, 0.55));
+    for (const side of [-1, 1]) {
+        head.add(eliteBox(0.1, 0.08, 0.03, eye, side * 0.17, 0.38, 0.33));
+        const t = eliteBox(0.07, 0.24, 0.07, tusk, side * 0.15, 0.1, 0.5);
+        t.rotation.x = -0.4;
+        head.add(t);
+        head.add(eliteBox(0.12, 0.2, 0.06, skin, side * 0.32, 0.48, 0));
+    }
+    body.add(head);
+    mob.head = head;
+    mob.arms = [makeLimb(skin, 0.3, 0.85, 0.3, -0.72, 0.85, 0), makeLimb(skin, 0.3, 0.85, 0.3, 0.72, 0.85, 0)];
+    mob.arms.forEach(arm => body.add(arm));
+    const club = new THREE.Group();
+    club.add(eliteBox(0.12, 0.9, 0.12, wood, 0, -0.3, 0));
+    club.add(eliteBox(0.3, 0.42, 0.3, wood, 0, -0.85, 0));
+    club.add(eliteBox(0.32, 0.1, 0.32, moss, 0, -0.66, 0));
+    club.position.set(0, -0.8, 0.12);
+    club.rotation.x = Math.PI / 2;
+    mob.arms[1].add(club);
+    rig.add(body);
+    mob.body = body;
 }
 
 // ---------- per-frame update ----------
@@ -773,6 +1019,9 @@ function updateEliteMob(mob, dt) {
         else if (mob.type === "dust_vulture") thinkDustVulture(mob, dt, now);
         else if (mob.type === "brick_golem") thinkBrickGolem(mob, dt, now);
         else if (mob.type === "magma_wyrm") thinkMagmaWyrm(mob, dt, now);
+        else if (mob.type === "crater_hopper") thinkCraterHopper(mob, dt, now);
+        else if (mob.type === "ember_drifter") thinkEmberDrifter(mob, dt, now);
+        else if (mob.type === "moss_brute") thinkMossBrute(mob, dt, now);
         queueEliteMobUpdate(mob);
     } else {
         if (mob.lastUpdateTime > 0) {
@@ -960,11 +1209,30 @@ function moveEliteFlyer(mob, goal, maxSpeed, clearance, response, dt) {
     return mob.flyVelocity.lengthSq() > 0.01;
 }
 
-// 7 Days to Die vulture: circles high above its prey, then dive-bombs for a bite and climbs away.
+// 7 Days to Die vulture: the flock circles a bone-strewn roost far from the player. Anyone who wanders
+// close to the roost gets circled, dive-bombed for a bite, and chased until they leave the leash.
+function findEliteTargetNearPoint(mob, center, range, maxDy) {
+    let best = null;
+    let bestDistance = range;
+    for (const p of getEliteTargetablePlayers()) {
+        if (Math.abs(p.y - center.y) > maxDy || !isEliteTargetHostile(mob, p)) continue;
+        const d = Math.hypot(p.x - center.x, p.z - center.z);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = p;
+        }
+    }
+    if (best) best.distance = Math.hypot(best.x - mob.pos.x, best.z - mob.pos.z);
+    return best;
+}
+
 function thinkDustVulture(mob, dt, now) {
-    if (!mob.home) mob.home = mob.pos.clone();
-    const target = findEliteTarget(mob, 40, 40);
+    const def = getEliteMobDef(mob.type);
+    if (!mob.home) mob.home = new THREE.Vector3(mob.pos.x, chunkManager.getSurfaceY(mob.pos.x, mob.pos.z), mob.pos.z);
+    const engaged = mob.aiState === "CIRCLING" || mob.aiState === "DIVING" || mob.aiState === "CLIMBING";
+    const target = findEliteTargetNearPoint(mob, mob.home, engaged ? def.roost.leash : def.roost.alertRange, 50);
     const phase = mob.animationTime * 0.6 + (mob.flockPhase || 0);
+    const cruiseY = Math.min(MAX_HEIGHT - 8, mob.home.y + def.spawnAltitude);
     let goal;
     let speed = mob.speed;
     if (mob.aiState === "DIVING" && target) {
@@ -996,8 +1264,10 @@ function thinkDustVulture(mob, dt, now) {
         goal = new THREE.Vector3(target.x + Math.cos(phase) * 12, Math.max(target.y + 11, chunkManager.getSurfaceY(target.x, target.z) + 10), target.z + Math.sin(phase) * 12);
         if (now >= (mob.nextDiveAt || 0) && target.distance < 30) setEliteState(mob, "DIVING", now);
     } else {
+        // Lazy thermal circles over the roost, high enough to be spotted from afar in third person.
         setEliteState(mob, "PATROL", now);
-        goal = new THREE.Vector3(mob.home.x + Math.cos(phase * 0.5) * 18, mob.home.y, mob.home.z + Math.sin(phase * 0.5) * 18);
+        const radius = def.roost.radius + Math.sin(phase * 0.3) * 3;
+        goal = new THREE.Vector3(mob.home.x + Math.cos(phase * 0.5) * radius, cruiseY + Math.sin(phase * 0.7) * 2, mob.home.z + Math.sin(phase * 0.5) * radius);
     }
     mob.isMoving = moveEliteFlyer(mob, goal, speed, mob.aiState === "DIVING" ? 0.4 : 2, mob.aiState === "DIVING" ? 5 : 2.2, dt);
     if (mob.flyVelocity) faceEliteMob(mob, mob.flyVelocity.x, mob.flyVelocity.z, 4, dt);
@@ -1047,6 +1317,188 @@ function thinkBrickGolem(mob, dt, now) {
         setEliteState(mob, "IDLE", now);
         move = eliteWander(mob, dt, mob.speed * 0.5, now);
         if (move) faceEliteMob(mob, move.x, move.z, 1.5, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Cube World slime: bounces toward prey in long low-gravity hops and squashes anyone it lands on.
+function thinkCraterHopper(mob, dt, now) {
+    const target = findEliteTarget(mob, 20, 12);
+    if (mob.aiState === "HOP") {
+        mob.hopVel.y -= 9 * dt;
+        const nx = modWrap(mob.pos.x + mob.hopVel.x * dt, MAP_SIZE);
+        const nz = modWrap(mob.pos.z + mob.hopVel.z * dt, MAP_SIZE);
+        if (checkCollisionWithBlock(nx, mob.pos.y, nz)) {
+            mob.hopVel.x *= -0.3;
+            mob.hopVel.z *= -0.3;
+        } else {
+            mob.pos.x = nx;
+            mob.pos.z = nz;
+        }
+        const ny = mob.pos.y + mob.hopVel.y * dt;
+        let landed = false;
+        if (mob.hopVel.y < 0 && checkCollisionWithBlock(mob.pos.x, ny, mob.pos.z)) {
+            mob.pos.y = Math.ceil(ny);
+            landed = true;
+        } else if (mob.hopVel.y > 0 && checkCollisionWithBlock(mob.pos.x, ny + 0.4, mob.pos.z)) {
+            mob.hopVel.y = 0;
+        } else {
+            mob.pos.y = ny;
+        }
+        faceEliteMob(mob, mob.hopVel.x, mob.hopVel.z, 6, dt);
+        if (target && !mob.hopHit && Math.hypot(target.x - mob.pos.x, target.y + 0.5 - mob.pos.y, target.z - mob.pos.z) < 1.4) {
+            mob.hopHit = true;
+            dispatchEliteAttack(mob, {
+                mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 2.5, damage: 2, knockback: 5, lift: 3, label: "Squashed by a Crater Hopper"
+            });
+        }
+        if (landed || now - mob.stateSince > 4000 || mob.pos.y < 1) {
+            if (mob.pos.y < 1) mob.pos.y = chunkManager.getSurfaceY(mob.pos.x, mob.pos.z) + 1;
+            setEliteState(mob, "IDLE", now);
+            mob.nextHopAt = now + (target ? 700 + Math.random() * 600 : 2500 + Math.random() * 2500);
+        }
+        mob.isMoving = true;
+        return;
+    }
+    settleEliteOnGround(mob, dt);
+    mob.isMoving = false;
+    if (mob.aiState === "CROUCH") {
+        if (now - mob.stateSince > 380) {
+            let dirX;
+            let dirZ;
+            let horizontal;
+            if (target) {
+                dirX = target.x - mob.pos.x;
+                dirZ = target.z - mob.pos.z;
+                horizontal = Math.min(5, target.distance / 1.4);
+            } else {
+                const angle = Math.random() * Math.PI * 2;
+                dirX = Math.cos(angle);
+                dirZ = Math.sin(angle);
+                horizontal = 1.8;
+            }
+            const length = Math.max(0.001, Math.hypot(dirX, dirZ));
+            mob.hopVel = new THREE.Vector3(dirX / length * horizontal, target ? 7 : 5, dirZ / length * horizontal);
+            mob.hopHit = false;
+            setEliteState(mob, "HOP", now);
+        }
+        return;
+    }
+    setEliteState(mob, "IDLE", now);
+    if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 4, dt);
+    if (now >= (mob.nextHopAt || 0)) setEliteState(mob, "CROUCH", now);
+}
+
+// Vintage Story drifter: a hunched shambler that lurches after you, lobs cinders from range and swipes up close.
+function thinkEmberDrifter(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 22, 12);
+    let move = null;
+    if (mob.aiState === "THROW") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 5, dt);
+        if (!mob.thrown && now - mob.stateSince > 750 && target) {
+            mob.thrown = true;
+            const style = MOB_PROJECTILE_STYLES.ember;
+            const origin = new THREE.Vector3(mob.pos.x, mob.pos.y + 1.6, mob.pos.z);
+            fireEliteProjectile(mob, "ember", origin, getBallisticDirection(origin, new THREE.Vector3(target.x, target.y + 0.8, target.z), style.speed, style.gravity, 0.12));
+        }
+        if (now - mob.stateSince > 1100) setEliteState(mob, "CHASE", now);
+    } else if (mob.aiState === "SWIPE") {
+        if (!mob.swiped && now - mob.stateSince > 500) {
+            mob.swiped = true;
+            if (target && target.distance < 2.6) {
+                dispatchEliteAttack(mob, {
+                    mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                    radius: 3, damage: 2, knockback: 4, label: "Clawed by an Ember Drifter"
+                });
+            }
+        }
+        if (now - mob.stateSince > 900) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 4, dt);
+        if (target.distance < 1.9 && now >= (mob.swipeReadyAt || 0)) {
+            mob.swiped = false;
+            mob.swipeReadyAt = now + 1500;
+            setEliteState(mob, "SWIPE", now);
+        } else if (target.distance > 5 && target.distance < 16 && now >= (mob.throwReadyAt || 0)) {
+            mob.thrown = false;
+            mob.throwReadyAt = now + 3800 + Math.random() * 2400;
+            setEliteState(mob, "THROW", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 1.4) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.5, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 2, dt);
+    }
+    mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
+}
+
+// Hytale trork: bellows a warning, then charges in a straight line. Dodge the charge and it stumbles, dazed.
+function thinkMossBrute(mob, dt, now) {
+    settleEliteOnGround(mob, dt);
+    const target = findEliteTarget(mob, 24, 10);
+    let move = null;
+    if (mob.aiState === "ROAR") {
+        if (target) faceEliteMob(mob, target.x - mob.pos.x, target.z - mob.pos.z, 5, dt);
+        if (now - mob.stateSince > 850) {
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(mob.mesh.quaternion);
+            mob.chargeDir = { x: forward.x, z: forward.z };
+            mob.chargeHit = false;
+            setEliteState(mob, "CHARGE", now);
+        }
+    } else if (mob.aiState === "CHARGE") {
+        const stepped = stepEliteOnGround(mob, mob.chargeDir.x, mob.chargeDir.z, 8.5 * dt);
+        mob.isMoving = stepped;
+        if (target && !mob.chargeHit && Math.hypot(target.x - mob.pos.x, target.z - mob.pos.z) < 1.7 && Math.abs(target.y - mob.pos.y) < 2) {
+            mob.chargeHit = true;
+            dispatchEliteAttack(mob, {
+                mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                radius: 3, damage: 3, knockback: 10, lift: 4, label: "Gored by a Moss Brute"
+            });
+            setEliteState(mob, "CHASE", now);
+            mob.chargeReadyAt = now + 4500;
+        } else if (!stepped || now - mob.stateSince > 1600) {
+            setEliteState(mob, "STUNNED", now);
+            mob.chargeReadyAt = now + 4500;
+        }
+        return;
+    } else if (mob.aiState === "STUNNED") {
+        if (now - mob.stateSince > 1700) setEliteState(mob, "CHASE", now);
+    } else if (mob.aiState === "SWING") {
+        if (!mob.swung && now - mob.stateSince > 600) {
+            mob.swung = true;
+            if (target && target.distance < 2.8) {
+                dispatchEliteAttack(mob, {
+                    mode: "target", target: target.name, x: mob.pos.x, y: mob.pos.y, z: mob.pos.z,
+                    radius: 3.2, damage: 3, knockback: 7, label: "Clubbed by a Moss Brute"
+                });
+            }
+        }
+        if (now - mob.stateSince > 1000) setEliteState(mob, "CHASE", now);
+    } else if (target) {
+        const dx = target.x - mob.pos.x;
+        const dz = target.z - mob.pos.z;
+        faceEliteMob(mob, dx, dz, 3, dt);
+        if (target.distance < 2.2 && now >= (mob.swingReadyAt || 0)) {
+            mob.swung = false;
+            mob.swingReadyAt = now + 1800;
+            setEliteState(mob, "SWING", now);
+        } else if (target.distance > 5 && target.distance < 15 && now >= (mob.chargeReadyAt || 0)) {
+            setEliteState(mob, "ROAR", now);
+        } else {
+            setEliteState(mob, "CHASE", now);
+            if (target.distance > 1.8) move = { x: dx, z: dz, speed: mob.speed };
+        }
+    } else {
+        setEliteState(mob, "IDLE", now);
+        move = eliteWander(mob, dt, mob.speed * 0.45, now);
+        if (move) faceEliteMob(mob, move.x, move.z, 2, dt);
     }
     mob.isMoving = !!(move && stepEliteOnGround(mob, move.x, move.z, move.speed * dt));
 }
@@ -1171,8 +1623,6 @@ function animateEliteMob(mob, dt, now) {
         const repairing = mob.aiState === "REPAIRING";
         const color = repairing ? 0x55aaff : alert ? 0xff3030 : 0xffd040;
         mob.eyeMaterial.color.setHex(color);
-        mob.light.color.setHex(color);
-        mob.light.intensity = alert ? 1.6 + Math.sin(t * 14) * 0.5 : 1.2;
         mob.scanBeam.visible = mob.aiState === "SCANNING";
         if (mob.scanBeam.visible) mob.scanBeam.material.opacity = 0.12 + (Math.sin(t * 10) + 1) * 0.06;
         mob.band.rotation.z += dt * (alert ? 6 : 1.5);
@@ -1191,7 +1641,7 @@ function animateEliteMob(mob, dt, now) {
         });
         mob.talons.forEach(talon => { talon.visible = diving; });
         const targetPitch = diving ? 0.55 : climbing ? -0.35 : 0;
-        const targetRoll = mob.aiState === "CIRCLING" ? -0.35 : 0;
+        const targetRoll = mob.aiState === "CIRCLING" ? -0.35 : mob.aiState === "PATROL" ? -0.22 : 0;
         mob.rig.rotation.x += (targetPitch - mob.rig.rotation.x) * Math.min(1, dt * 5);
         mob.rig.rotation.z += (targetRoll - mob.rig.rotation.z) * Math.min(1, dt * 3);
     } else if (mob.type === "brick_golem") {
@@ -1217,7 +1667,7 @@ function animateEliteMob(mob, dt, now) {
         mob.rig.rotation.x += (lean - mob.rig.rotation.x) * Math.min(1, dt * 8);
         mob.rig.position.y = mob.isMoving ? Math.abs(Math.sin(t * 3.2)) * 0.12 : 0;
         mob.core.rotation.y += dt * 2;
-        mob.light.intensity = mob.aiState === "WINDUP" ? 1.2 + stateAge / 400 : 1.2;
+        mob.core.scale.setScalar(mob.aiState === "WINDUP" ? 1 + Math.min(1, stateAge / 900) : 1);
     } else if (mob.type === "magma_wyrm") {
         const surfaced = mob.aiState === "SPITTING";
         const speed = mob.isMoving ? (mob.aiState === "LUNGE" ? 7 : 3.5) : 1.5;
@@ -1235,13 +1685,71 @@ function animateEliteMob(mob, dt, now) {
         const open = surfaced || mob.aiState === "LUNGE" ? 0.35 + Math.abs(Math.sin(t * 6)) * 0.25 : 0.05;
         mob.jaw.rotation.x += (open - mob.jaw.rotation.x) * Math.min(1, dt * 8);
         mob.mouthMaterial.color.setHex(surfaced ? 0xffa000 : 0x601800);
-        mob.light.intensity = surfaced ? 2.6 : 1.4 + Math.sin(t * 3) * 0.3;
+    } else if (mob.type === "crater_hopper") {
+        let sx = 1;
+        let sy = 1;
+        if (mob.aiState === "CROUCH") {
+            const squash = Math.min(1, stateAge / 380);
+            sx = 1 + squash * 0.3;
+            sy = 1 - squash * 0.4;
+        } else if (mob.aiState === "HOP") {
+            const stretch = Math.max(0, 1 - stateAge / 450);
+            sx = 1 - stretch * 0.15;
+            sy = 1 + stretch * 0.3;
+        } else {
+            sx = 1 + Math.sin(t * 5) * 0.04;
+            sy = 1 - Math.sin(t * 5) * 0.05;
+        }
+        mob.body.scale.x += (sx - mob.body.scale.x) * Math.min(1, dt * 14);
+        mob.body.scale.z += (sx - mob.body.scale.z) * Math.min(1, dt * 14);
+        mob.body.scale.y += (sy - mob.body.scale.y) * Math.min(1, dt * 14);
+    } else if (mob.type === "ember_drifter") {
+        const walk = mob.isMoving ? Math.sin(t * 5) * 0.5 : 0;
+        mob.legs[0].rotation.x = walk;
+        mob.legs[1].rotation.x = -walk;
+        let armX = [0.3 + walk * 0.3, 0.3 - walk * 0.3];
+        if (mob.aiState === "THROW") {
+            const progress = Math.min(1, stateAge / 750);
+            armX = [0.3, progress < 1 ? -Math.PI * 0.85 * progress : 0.6];
+        } else if (mob.aiState === "SWIPE") {
+            armX = stateAge < 500 ? [-1.6, -1.6] : [0.9, 0.9];
+        }
+        mob.arms[0].rotation.x += (armX[0] - mob.arms[0].rotation.x) * Math.min(1, dt * 10);
+        mob.arms[1].rotation.x += (armX[1] - mob.arms[1].rotation.x) * Math.min(1, dt * 10);
+        mob.cinder.visible = mob.aiState === "THROW" && stateAge < 750;
+        mob.torso.rotation.z = mob.isMoving ? Math.sin(t * 2.5) * 0.12 : 0;
+        mob.head.rotation.y = Math.sin(t * 1.3) * 0.3;
+        mob.emberMaterial.color.setHex(Math.sin(t * 4) > 0 ? 0xff7a1a : 0xff9a3a);
+    } else if (mob.type === "moss_brute") {
+        const charging = mob.aiState === "CHARGE";
+        const walk = mob.isMoving ? Math.sin(t * (charging ? 14 : 6)) * (charging ? 0.8 : 0.45) : 0;
+        mob.legs[0].rotation.x = walk;
+        mob.legs[1].rotation.x = -walk;
+        let armX = [-walk * 0.5, walk * 0.5];
+        let lean = 0;
+        if (mob.aiState === "ROAR") {
+            armX = [-2.4, -2.4];
+            lean = -0.25;
+        } else if (charging) {
+            armX = [0.6, 0.6];
+            lean = 0.45;
+        } else if (mob.aiState === "SWING") {
+            armX = [-0.2, stateAge < 600 ? -2.6 : 0.6];
+        } else if (mob.aiState === "STUNNED") {
+            lean = 0.2;
+            armX = [0.3, 0.3];
+        }
+        mob.arms[0].rotation.x += (armX[0] - mob.arms[0].rotation.x) * Math.min(1, dt * 10);
+        mob.arms[1].rotation.x += (armX[1] - mob.arms[1].rotation.x) * Math.min(1, dt * 12);
+        mob.body.rotation.x += (lean - mob.body.rotation.x) * Math.min(1, dt * 8);
+        mob.head.rotation.z = mob.aiState === "STUNNED" ? Math.sin(t * 9) * 0.3 : 0;
+        mob.head.rotation.x = mob.aiState === "ROAR" ? -0.4 : 0;
     }
 }
 
 function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
-    spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), mob.type === "magma_wyrm" ? 0xff6a00 : mob.type === "sentinel_drone" ? 0xb8bcc4 : 0xd8d0c0);
+    spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
     if (!def.drop || !killer || Math.random() > def.drop.chance || !BLOCKS[def.drop.id]) return;
     if (killer === userName) {
         addToInventory(def.drop.id, def.drop.count, worldSeed);
