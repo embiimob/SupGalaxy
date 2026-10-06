@@ -1013,8 +1013,10 @@ function laserGunGripMatrix(toolId, w, skinned, out) {
 
 function getLaserGunAimWeight(avatar, now) {
     const data = avatar?.userData;
-    if (!data) return 0;
-    return laserGunAimWeight(now - data.laserAimStart, now - data.laserAimTime);
+    if (!data || data.laserAimTime === undefined) return 0;
+    // Frame timestamps can trail the performance.now() stamp of a shot/hold refresh by a few ms;
+    // clamp so that never reads as "not aiming" and flashes the barrel-up rest pose.
+    return laserGunAimWeight(Math.max(0, now - data.laserAimStart), Math.max(0, now - data.laserAimTime));
 }
 
 function getLaserGunAim(avatar) {
@@ -1121,7 +1123,7 @@ function updateFirstPersonLaserGun(now) {
     if (!firstPersonLaserGun) return;
     firstPersonLaserGun.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
         player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
-    const elapsed = now - avatarGroup?.userData.laserFireTime;
+    const elapsed = Math.max(0, now - avatarGroup?.userData.laserFireTime);
     poseFirstPersonLaserGun(getLaserGunAimWeight(avatarGroup, now), elapsed >= 0 && elapsed < 140 ? 1 - elapsed / 140 : 0);
 }
 
