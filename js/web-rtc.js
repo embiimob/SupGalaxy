@@ -50,7 +50,7 @@ function normalizeDedicatedServerAddress(address) {
         throw new Error("Enter a valid HTTP or HTTPS server address.");
     }
     const isLocal = /^(?:127\.|localhost$|\[?::1\]?)$/i.test(serverUrl.hostname);
-    if (!serverUrl.port && !hasExplicitPort) serverUrl.port = isLocal ? "5555" : "55555";
+    if (!serverUrl.port && !hasExplicitPort) serverUrl.port = "55555";
     if (serverUrl.pathname !== "/" && serverUrl.pathname !== "" || serverUrl.search || serverUrl.hash) {
         throw new Error("Enter only the server host and optional port.");
     }
@@ -259,11 +259,14 @@ function disconnectDedicatedServer(message = "Disconnected from the dedicated se
 
 function updateDedicatedServerDialog() {
     const action = document.getElementById("dedicatedServerAction");
-    if (!action) return;
-    action.disabled = isConnecting && !dedicatedServer;
-    action.textContent = dedicatedServer
-        ? (isConnecting ? "Cancel connection" : "Disconnect")
-        : "Connect";
+    if (action) {
+        action.disabled = isConnecting && !dedicatedServer;
+        action.textContent = dedicatedServer
+            ? (isConnecting ? "Cancel connection" : "Disconnect")
+            : "Connect";
+    }
+    const connectButton = document.getElementById("connectDedicatedServer");
+    if (connectButton) connectButton.hidden = Boolean(dedicatedServer?.connected);
 }
 
 function sendToPlayer(username, message) {
@@ -2809,8 +2812,10 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
-    t.insertBefore(t.querySelector("#connectDedicatedServer"), t.querySelector("#switchWorldInput").parentElement);
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 8px;">Switch world</button>\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+    updateDedicatedServerDialog();
+    const friendControls = t.querySelector("#friendHandle").parentElement;
+    friendControls.insertBefore(t.querySelector("#connectFriend"), t.querySelector("#friendHandle"));
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -3198,7 +3203,7 @@ function openDedicatedServerModal() {
                 autocomplete="url" spellcheck="false">
             <label for="dedicatedServerLocalMode" style="display:flex;align-items:center;gap:9px;padding:10px 12px;margin-bottom:12px;border-radius:8px;background:rgba(66,200,255,.1);font-weight:700;cursor:pointer;">
                 <input id="dedicatedServerLocalMode" type="checkbox" style="width:18px;height:18px;accent-color:#42c8ff;">
-                Local mode <span style="font-weight:400;opacity:.8;">(http://127.0.0.1:5555)</span>
+                Local mode <span style="font-weight:400;opacity:.8;">(http://127.0.0.1:55555)</span>
             </label>
             <div id="dedicatedServerStatus" role="status" aria-live="polite" style="min-height:1.4em;margin-bottom:12px;">Checking server status…</div>
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
@@ -3222,9 +3227,11 @@ function openDedicatedServerModal() {
         if (savedAddress) {
             addressInput.value = savedAddress === "https://fakeufo.org:55555"
                 ? "https://play.supgalaxy.org:55555"
-                : savedAddress;
+                : savedAddress === "http://127.0.0.1:5555"
+                    ? "http://127.0.0.1:55555"
+                    : savedAddress;
         }
-        localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:5555";
+        localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:55555";
     } catch (error) {
         console.warn("[WEBRTC] Could not read the saved server address:", error);
     }
@@ -3283,7 +3290,7 @@ function openDedicatedServerModal() {
     dedicatedServerDialogCloser = closeModal;
     localMode.addEventListener("change", () => {
         addressInput.value = localMode.checked
-            ? "http://127.0.0.1:5555"
+            ? "http://127.0.0.1:55555"
             : "https://play.supgalaxy.org:55555";
         clearTimeout(addressChangeTimeout);
         refreshStatus();
