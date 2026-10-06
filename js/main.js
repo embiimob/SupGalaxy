@@ -4103,6 +4103,8 @@ function checkCollision(e, t, o) {
 
 function getCeilingLimitedY(x, y, z, targetY) {
     let safeY = y;
+    // Non-finite or out-of-range heights would never advance the 0.25 steps below and hang the page.
+    if (!Number.isFinite(y) || !Number.isFinite(targetY) || targetY - y > MAX_HEIGHT) return y;
     // Sprint jumps can cross an entire ceiling block in one frame.
     while (safeY < targetY) {
         const nextY = Math.min(safeY + .25, targetY);
@@ -5775,10 +5777,11 @@ function switchWorld(newWorldName, targetSpawn) {
     if (skyProps) {
         for (const body of [...skyProps.suns, ...skyProps.moons]) {
             scene.remove(body.mesh, body.light, body.light.target);
+            disposeObject(body.mesh);
             if (body.light.shadow.map) body.light.shadow.map.dispose();
         }
     }
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], stars && scene.remove(stars), clouds && scene.remove(clouds), document.getElementById("worldLabel").textContent = worldName;
+    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], stars && (scene.remove(stars), disposeObject(stars)), clouds && (scene.remove(clouds), clouds.children[0]?.material.map?.dispose(), disposeObject(clouds)), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
         claimed: !1
@@ -6042,7 +6045,43 @@ function initMinimap() {
 
 var fpsSampleStart = 0, fpsFrameCount = 0;
 
+// A frame that throws never reaches its trailing requestAnimationFrame, which used to freeze the
+// scene permanently while workers kept loading chunks. Log the error and keep the loop alive instead.
+let gameLoopErrorCount = 0;
+let lastGameLoopErrorLog = 0;
+
 function gameLoop(e) {
+    try {
+        runGameFrame(e);
+    } catch (err) {
+        gameLoopErrorCount++;
+        const now = Date.now();
+        if (now - lastGameLoopErrorLog > 2000) {
+            lastGameLoopErrorLog = now;
+            console.error(`[GameLoop] Frame error (#${gameLoopErrorCount}); continuing:`, err);
+        }
+        if (gameLoopErrorCount === 1) addMessage("A game error occurred; recovering (see console).", 3e3);
+        lastFrame = e;
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function updateMobSafely(mob, dt) {
+    try {
+        mob.update(dt);
+    } catch (err) {
+        console.error(`[Mobs] ${mob.type} ${mob.id} update failed; removing it:`, err);
+        if (mob.engineAudio) mob.engineAudio.pause();
+        if (mob.engineAudio2) mob.engineAudio2.pause();
+        if (mob.mesh) {
+            scene.remove(mob.mesh);
+            disposeObject(mob.mesh);
+        }
+        mobs = mobs.filter(other => other !== mob);
+    }
+}
+
+function runGameFrame(e) {
     restoreModelPerformancePlayer();
     if (!fpsSampleStart) fpsSampleStart = e;
     fpsFrameCount++;
@@ -6076,7 +6115,7 @@ function gameLoop(e) {
     window.globalWaterTime = window.globalWaterTime || { value: 0 };
     if (lastFrame = e, player.health <= 0 && !isDying && handlePlayerDeath(), deathScreenShown) {
         mobs.forEach((function (e) {
-            e.update(t)
+            updateMobSafely(e, t)
         })), updateSky(t), updateMinimap();
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
@@ -6267,7 +6306,7 @@ function gameLoop(e) {
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
-            e.update(t)
+            updateMobSafely(e, t)
         })), updateEliteMobEffects(t), maintainPlayerPets(), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
 
         // Update chest animations
