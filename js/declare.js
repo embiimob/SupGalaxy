@@ -93,7 +93,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         4: {
             name: "Stone",
             color: "#9aa0a6",
-            strength: 2,
+            strength: 4,
             requiresPick: !0
         },
         5: {
@@ -333,7 +333,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         125: {
             name: "Emerald",
             color: "#00ff7b",
-            strength: 4,
+            strength: 6,
             requiresPick: !0
         },
         134: {
