@@ -1207,7 +1207,7 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 }
 
                 // Set ownership based on BlockDate and owner
-                if (ownerUsername && blockDate) {
+                if (ownerUsername && blockDate && !n.ownershipNeutral) {
                     const normalized = r.replace(/^#/, "");
                     const existing = OWNED_CHUNKS.get(normalized);
                     const blockAge = now - blockDate;
