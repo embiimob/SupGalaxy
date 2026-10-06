@@ -280,7 +280,13 @@ async function handleMinimapFile(e) {
             await applySaveFile(o.playerData, "local", new Date().toISOString());
             return;
         }
-        if (o.deltas && o.profile) return console.log("[MINIMAP] Save session file detected, applying..."), await applySaveFile(o, userAddress, (new Date).toISOString()), void addMessage("Save session loaded successfully!", 3e3);
+        if (o.deltas && o.profile) {
+            console.log("[MINIMAP] Save session file detected, applying...");
+            await applySaveFile(o, userAddress, (new Date).toISOString());
+            if (o.user === userName) restorePetSaveData(o.profile.pets);
+            addMessage("Save session loaded successfully!", 3e3);
+            return;
+        }
         if (!o.world || o.world !== worldName) return addMessage("Invalid file: wrong world", 3e3), void console.log("[MINIMAP] Invalid file: world mismatch, expected:", worldName, "got:", o.world);
         if (o.offer) {
             const e = o.user || "anonymous";
@@ -438,7 +444,9 @@ function setupDataChannel(e, t) {
                 y: t.pos.y,
                 z: t.pos.z,
                 hp: t.hp,
-                type: t.type
+                type: t.type,
+                petOwner: t.petOwner || null,
+                spawner: t.spawner
             }));
             if (mobBatch.length > 0) {
                 e.send(JSON.stringify({
@@ -591,6 +599,7 @@ function setupDataChannel(e, t) {
                             if (t === userName) continue;
                             userPositions[t] || (userPositions[t] = { lastMoveTime: performance.now() }, createAndSetupAvatar(t, !1, e.yaw));
                             const o = userPositions[t];
+                            if (Array.isArray(e.petIds)) o.petIds = e.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
                             if (playerAvatars.has(t)) {
@@ -635,6 +644,7 @@ function setupDataChannel(e, t) {
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
                     if (Number.isFinite(s.score)) l.score = s.score;
+                    if (Array.isArray(s.petIds)) l.petIds = s.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
 
                     s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
 
@@ -761,7 +771,9 @@ function setupDataChannel(e, t) {
                     if (!mobs.some((e => e.id === s.id))) {
                         const e = new Mob(s.x, s.z, s.id, s.mobType || s.type, s.y, s.originSeed);
                         e.spawnCommandKey = s.spawnCommandKey || null;
-                        e.spawner = s.username || n;
+                        e.petOwner = e.type === "timber_wolf" && typeof s.petOwner === "string" ? s.petOwner : null;
+                        e.spawner = e.petOwner || s.spawner || s.username || n;
+                        if (Number.isFinite(s.hp)) e.hp = s.hp;
                         e.isAggressive = s.isAggressive, e.wasAttacked = s.wasAttacked, mobs.push(e)
 
                         // If host receives mob_spawn from a client, it should broadcast it to all other clients in the same world
@@ -776,6 +788,36 @@ function setupDataChannel(e, t) {
                         }
                     }
                     break;
+                case "wolf_tame_request": {
+                    if (s.owner !== n || (isHost && n !== t)) break;
+                    if (s.world !== worldName) {
+                        if (isHost && userPositions[n]?.world === s.world) {
+                            const cached = window.mobsByWorld?.[s.world]?.find(mob => mob.id === s.id);
+                            const authority = peers.get(cached?.petOwner || cached?.spawner || cached?.username);
+                            if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
+                        }
+                        break;
+                    }
+                    const wolf = mobs.find(mob => mob.id === s.id && mob.type === "timber_wolf");
+                    if (!wolf) break;
+                    if (isMobAuthority(wolf)) {
+                        handleWolfTameRequest(wolf, n, s.requestId);
+                    } else if (isHost) {
+                        const authority = peers.get(wolf.spawner);
+                        if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
+                    }
+                    break;
+                }
+                case "wolf_tame_result": {
+                    if (typeof s.authority !== "string" || (isHost && s.authority !== t)) break;
+                    handleWolfTameResult(s);
+                    if (isHost) {
+                        for (const [peerName, peer] of peers) {
+                            if (peerName !== t && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify(s));
+                        }
+                    }
+                    break;
+                }
                 case "fish_spawn_request":
                     if (isHost && s.world === worldName && (s.fishType === "fish_rare" || s.fishType === "fish_school")) {
                         const requester = userPositions[n];
@@ -803,11 +845,12 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_state_batch":
-                    if (!isHost || (isHost && s.world && s.world === worldName)) {
+                    if ((!s.world || s.world === worldName) && Array.isArray(s.mobs)) {
                         const e = new Set;
                         for (const t of s.mobs) {
                             e.add(t.id);
                             let o = mobs.find((e => e.id === t.id));
+                            if (o && o.petOwner === userName) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
                                 mobs.push(o);
@@ -815,6 +858,8 @@ function setupDataChannel(e, t) {
                             }
                             if (t.originSeed) o.originSeed = t.originSeed;
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
+                            if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
+                            o.spawner = o.petOwner || t.spawner || o.spawner || n;
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -837,7 +882,7 @@ function setupDataChannel(e, t) {
                         // Only despawn if we are NOT the host (host manages despawns naturally)
                         if (!isHost) {
                             mobs = mobs.filter((t => {
-                                if (e.has(t.id)) return true;
+                                if (e.has(t.id) || t.petOwner === userName) return true;
                                 if (t.engineAudio) t.engineAudio.pause();
                                 if (t.engineAudio2) t.engineAudio2.pause();
                                 scene.remove(t.mesh);
@@ -857,10 +902,11 @@ function setupDataChannel(e, t) {
                         if (!window.mobsByWorld[targetWorld]) window.mobsByWorld[targetWorld] = [];
 
                         let cachedMob = window.mobsByWorld[targetWorld].find(m => m.id === t.id);
+                        const updateSpawner = t.petOwner || t.spawner || s.username || n;
                         if (cachedMob) {
-                            Object.assign(cachedMob, t);
+                            Object.assign(cachedMob, t, { spawner: updateSpawner });
                         } else {
-                            window.mobsByWorld[targetWorld].push({...t, world: targetWorld});
+                            window.mobsByWorld[targetWorld].push({...t, world: targetWorld, spawner: updateSpawner});
                         }
 
                         // If the update is for the world we are currently in, update the 3D model
@@ -877,6 +923,8 @@ function setupDataChannel(e, t) {
                             }
                             if (t.originSeed) o.originSeed = t.originSeed;
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
+                            if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
+                            o.spawner = o.petOwner || updateSpawner;
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -928,6 +976,8 @@ function setupDataChannel(e, t) {
                     d.lastUpdateTime = updateTime;
                     if (s.originSeed) d.originSeed = s.originSeed;
                     if (s.spawnCommandKey) d.spawnCommandKey = s.spawnCommandKey;
+                    if (d.type === "timber_wolf" && "petOwner" in s) d.petOwner = typeof s.petOwner === "string" ? s.petOwner : null;
+                    if (d.petOwner) d.spawner = d.petOwner;
                     if (s.aiState) d.aiState = s.aiState;
                     if (s.isMoving !== undefined) d.isMoving = s.isMoving;
                     if (s.isAggressive !== undefined) d.isAggressive = s.isAggressive;
@@ -941,7 +991,26 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_despawn":
                 case "mob_kill":
-                    markMobRecentlyRemoved(s.id);
+                    if (s.type === "mob_kill" && s.petOwner && isHost && s.petOwner !== t) break;
+                    if (isHost) {
+                        for (const [peerName, peer] of peers) {
+                            if (peerName !== t && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify(s));
+                        }
+                    }
+                    if (s.type === "mob_kill" && s.petOwner) {
+                        if (s.petOwner === userName) removePlayerPet(s.id);
+                        const ownerPosition = userPositions[s.petOwner];
+                        if (Array.isArray(ownerPosition?.petIds)) {
+                            ownerPosition.petIds = ownerPosition.petIds.filter(id => id !== s.id);
+                        }
+                    }
+                    if (s.world && s.world !== worldName) {
+                        if (window.mobsByWorld?.[s.world]) {
+                            window.mobsByWorld[s.world] = window.mobsByWorld[s.world].filter(mob => mob.id !== s.id);
+                        }
+                        break;
+                    }
+                    if (!s.relocation) markMobRecentlyRemoved(s.id);
                     const p = mobs.find((e => e.id === s.id));
                     if (p) {
                         if (s.type === "mob_kill" && isEliteMobType(p.type)) {
@@ -961,8 +1030,36 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_hit":
                     {
+                        if (s.world && s.world !== worldName) {
+                            if (isHost && s.sourceMobId !== undefined && n === t && userPositions[n]?.world === s.world) {
+                                const cachedMobs = window.mobsByWorld?.[s.world] || [];
+                                const source = cachedMobs.find(mob => mob.id === s.sourceMobId);
+                                const target = cachedMobs.find(mob => mob.id === s.id);
+                                if (source && (source.petOwner || source.spawner || source.username) === n) {
+                                    const authority = peers.get(target?.petOwner || target?.spawner || target?.username);
+                                    if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
+                                }
+                            }
+                            break;
+                        }
                         const mob = mobs.find(mob => mob.id === s.id);
-                        if (!mob || (mob.spawnCommandKey && !canRemoveFishSpawnCommand(mob.spawnCommandKey, s.username))) break;
+                        if (!mob || (s.sourceMobId === undefined && mob.spawnCommandKey && !canRemoveFishSpawnCommand(mob.spawnCommandKey, s.username))) break;
+                        if (s.sourceMobId !== undefined) {
+                            if (isHost && n !== t) break;
+                            const source = mobs.find(source => source.id === s.sourceMobId);
+                            if (!source || source.hp <= 0) break;
+                            const senderOwnsSource = source.spawner === n ||
+                                (!isHost && n === t && !source.petOwner && !peers.has(source.spawner));
+                            if (!senderOwnsSource) break;
+                            const damage = Math.max(0, Math.min(50, Number(s.damage) || 0));
+                            if (isMobAuthority(mob)) {
+                                handleMobDamageFromMob(mob, source, damage);
+                            } else if (isHost) {
+                                const authority = peers.get(mob.spawner);
+                                if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
+                            }
+                            break;
+                        }
                         if (!("toolId" in s)) {
                             const projectileDamage = Math.max(0, Math.min(50, Number(s.damage) || 4));
                             if (isMobAuthority(mob)) {
@@ -1614,7 +1711,9 @@ function setupDataChannel(e, t) {
                                         hp: m.hp,
                                         isAggressive: m.isAggressive,
                                         originSeed: m.originSeed,
-                                        spawnCommandKey: m.spawnCommandKey
+                                        spawnCommandKey: m.spawnCommandKey,
+                                        petOwner: m.petOwner || null,
+                                        spawner: m.spawner
                                     }))
                                 });
                                 peer.dc.send(mobBatchMsg);
@@ -1632,7 +1731,9 @@ function setupDataChannel(e, t) {
                                         hp: m.hp,
                                         isAggressive: m.isAggressive,
                                         originSeed: m.originSeed,
-                                        spawnCommandKey: m.spawnCommandKey
+                                        spawnCommandKey: m.spawnCommandKey,
+                                        petOwner: m.petOwner || null,
+                                        spawner: m.spawner
                                     }))
                                 });
                                 peer.dc.send(mobBatchMsg);
@@ -2292,7 +2393,7 @@ function startAnswerPolling(e) {
         }), Date.now() - connectionAttempts.get(e) > 36e5) {
             console.log("[SYSTEM] Answer polling timeout for:", e), addMessage("Connection to " + e + " timed out after 60 minutes.", 5e3), clearInterval(answerPollingIntervals.get(t)), answerPollingIntervals.delete(t);
             var o = peers.get(e);
-            o && o.pc && o.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
+            clearDisconnectedPlayerPets(e), o && o.pc && o.pc.close(), peers.delete(e), playerAvatars.has(e) && (scene.remove(playerAvatars.get(e)), disposeObject(playerAvatars.get(e)), playerAvatars.delete(e)), delete userPositions[e], updateHudButtons()
         }
     }), 3e4)))
 }
@@ -2695,6 +2796,7 @@ function openUsersModal() {
 }
 
 function cleanupPeer(e) {
+    clearDisconnectedPlayerPets(e);
     const t = peers.get(e);
     if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
         const t = playerAvatars.get(e);

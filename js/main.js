@@ -425,6 +425,7 @@ async function applySaveFile(e, t, o) {
         player.health = t.profile.health;
         player.score = t.profile.score;
         INVENTORY = t.profile.inventory;
+        restorePetSaveData(t.profile.pets);
         restoreAvatarFromSave(t.profile.avatar);
         musicPlaylist = t.musicPlaylist || [];
         videoPlaylist = t.videoPlaylist || [];
@@ -697,6 +698,7 @@ async function applySaveFile(e, t, o) {
             }
         }
         restoreFishSpawnCommands();
+        if (e.profile && t === "local" && e.user === userName) restorePetSaveData(e.profile.pets);
         e.profile && t === userAddress && (lastSavedPosition = new THREE.Vector3(e.profile.x, e.profile.y, e.profile.z), updateHotbarUI())
     }
 }
@@ -2995,17 +2997,24 @@ function onPointerDown(e) {
     const o = mobs.map((e => e.mesh)).filter((e => e.visible)),
         a = raycaster.intersectObjects(o, !0);
     if (a.length > 0) {
-        let e, t = a[0].object;
+        let mobId, t = a[0].object;
         for (; t;) {
             if (t.userData.mobId) {
-                e = t.userData.mobId;
+                mobId = t.userData.mobId;
                 break
             }
             t = t.parent
         }
-        if (e) {
-            const t = mobs.find((t => t.id === e));
-            if (t) return animateAttack(), void handleMobHit(t, toolId)
+        if (mobId) {
+            const mob = mobs.find((t => t.id === mobId));
+            if (mob) {
+                if (e.button === 0 && INVENTORY[selectedHotIndex]?.id === 176 && mob.type === "timber_wolf") {
+                    animateAttack();
+                    tryTameWolf(mob);
+                    return;
+                }
+                return animateAttack(), void handleMobHit(mob, toolId);
+            }
         }
     }
     const n = Array.from(playerAvatars.entries()).filter((([e]) => e !== userName)).map((([e, t]) => ({
@@ -4561,6 +4570,7 @@ async function downloadHostSession() {
                 health: player.health,
                 score: player.score,
                 inventory: INVENTORY,
+                pets: getPetSaveData(),
                 avatar: getAvatarSaveData()
             },
             magicianStones: serializableMagicianStones,
@@ -4657,6 +4667,7 @@ async function publishToTestnet() {
         profile: {
             x: player.x, y: player.y, z: player.z,
             health: player.health, score: player.score, inventory: INVENTORY,
+            pets: getPetSaveData(),
             avatar: getAvatarSaveData()
         },
         musicPlaylist: musicPlaylist,
@@ -4846,6 +4857,7 @@ async function downloadSinglePlayerSession() {
             health: player.health,
             score: player.score,
             inventory: INVENTORY,
+            pets: getPetSaveData(),
             avatar: getAvatarSaveData()
         },
         musicPlaylist: musicPlaylist,
@@ -5441,7 +5453,7 @@ async function startGame() {
     } catch (e) {
         console.error("Failed to initialize audio:", e), addMessage("Could not initialize audio, continuing without it.", 3e3)
     }
-    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
+    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restorePetSaveData(null), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
         id: 120,
         count: 7
     }, INVENTORY[1] = {
@@ -5599,6 +5611,7 @@ function flashDamageEffect() {
 }
 
 function cleanupPeer(e) {
+    clearDisconnectedPlayerPets(e);
     const t = peers.get(e);
     if (t && (t.pc && t.pc.close(), peers.delete(e)), playerAvatars.has(e)) {
         const t = playerAvatars.get(e);
@@ -5695,6 +5708,7 @@ function switchWorld(newWorldName, targetSpawn) {
 
     // Store the old world name before updating
     const oldWorldName = worldName;
+    clearPlayerPetsForWorldSwitch();
 
     // --- SAVE CURRENT WORLD'S STONE DATA BEFORE SWITCHING ---
     // This preserves stone metadata (URLs, text, settings) so they can be restored when returning to this world.
@@ -5844,12 +5858,15 @@ function switchWorld(newWorldName, targetSpawn) {
     // If there are globally tracked mobs for this world, restore them to 3D instances
     if (window.mobsByWorld && window.mobsByWorld[worldName]) {
         for (const m of window.mobsByWorld[worldName]) {
+            if (m.petOwner && (m.petOwner === userName || userPositions[m.petOwner]?.world !== worldName)) continue;
             if (!mobs.find(existing => existing.id === m.id)) {
                 const o = new Mob(m.x, m.z, m.id, m.mobType || m.type);
                 o.pos.set(m.x, m.y, m.z);
                 o.prevPos.copy(o.pos);
                 o.targetPos.copy(o.pos);
                 o.hp = m.hp !== undefined ? m.hp : o.hp;
+                o.petOwner = o.type === "timber_wolf" && typeof m.petOwner === "string" ? m.petOwner : null;
+                o.spawner = o.petOwner || m.spawner || m.username;
                 o.isAggressive = m.isAggressive;
                 if (m.aiState) o.aiState = m.aiState;
                 if (m.isMoving !== undefined) o.isMoving = m.isMoving;
@@ -6249,7 +6266,7 @@ function gameLoop(e) {
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
             e.update(t)
-        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        })), updateEliteMobEffects(t), maintainPlayerPets(), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
 
         // Update chest animations
         for (const key in chests) {
@@ -6314,10 +6331,13 @@ function gameLoop(e) {
             var f = new THREE.Vector3(player.x + player.width / 2, player.y + 1.62, player.z + player.depth / 2);
             camera.position.copy(f)
         }
+        const petIds = getPetSaveData().map(pet => pet.id),
+            petIdsKey = JSON.stringify(petIds),
+            petsChanged = lastSentPosition.petIdsKey !== petIdsKey;
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged)) {
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
             if (I || isAttacking) {
@@ -6330,7 +6350,8 @@ function gameLoop(e) {
                 z: player.z,
                 yaw: player.yaw,
                 pitch: player.pitch,
-                selectedBlockId: selectedBlockId
+                selectedBlockId: selectedBlockId,
+                petIdsKey: petIdsKey
             };
             const t = {
                 type: "player_move",
@@ -6344,6 +6365,7 @@ function gameLoop(e) {
                 isMoving: o,
                 isAttacking: isAttacking,
                 selectedBlockId: selectedBlockId,
+                petIds: petIds,
                 score: Number(player.score) || 0,
                 timestamp: Date.now()
             };
@@ -6648,8 +6670,16 @@ function gameLoop(e) {
                     break; // break steps loop
                 }
 
-                // Elite mob projectiles: every client resolves hits against its own player only.
+                // Elite projectiles hit wolves on the shooter authority and players on their own client.
                 if (o.mobStyle) {
+                    if (handleEliteProjectileWolfHit(o, stepPos)) {
+                        spawnEliteBurst(stepPos, o.color, 5);
+                        releaseProjectileMesh(o.mesh);
+                        releaseProjectileLight(o.light);
+                        projectiles.splice(e, 1);
+                        s = !0;
+                        break;
+                    }
                     const localCenter = new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2);
                     if (player.health > 0 && stepPos.distanceTo(localCenter) < o.hitRadius) {
                         const push = o.velocity.clone().setY(0).normalize().multiplyScalar(4);
@@ -6676,7 +6706,10 @@ function gameLoop(e) {
                         const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
                         // Only the shooter reports the hit so damage is applied exactly once by the mob's authority.
                         if (o.user === userName) sendProjectileMobDamage(mob, damage, o.user);
-                        else if (mobs.some(shooterMob => shooterMob.id === o.user) && isMobAuthority(mob)) mob.hurt(damage, o.user);
+                        else {
+                            const shooterMob = mobs.find(shooterMob => shooterMob.id === o.user);
+                            if (shooterMob) sendMobDamageFromMob(mob, shooterMob, damage);
+                        }
                         createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
