@@ -15,15 +15,9 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 - **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
 - **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
 - **👹 Level 2 mobs (score ≥ 500)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Timber Wolves, Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
-- **❓ …and more beyond** — keep raising your score. Rumour has it that stranger, deadlier things wait at higher tiers, and that the crawleys won't be around forever.
+- **❓ …and more beyond** — keep raising your score. Rumour has it that stranger, deadlier things wait at higher tiers.
 - **👀 Longer player view** — other players' avatars are now drawn up to 64 blocks away (was 32).
 - **🦴 Bones** — scattered under Dust Vulture roosts. Pick them up and keep them as a crafting item.
-- **🔵 Blue laser rework** — one blue blast breaks any breakable block (castle bricks included). Obsidian resists and takes 4 blasts.
-- **🎒 Lean starter kit** — new players start with **7 torches and a red Laser Gun**. If it's night when you spawn, the torch is in your hand; by day your hands are empty.
-- **🎞 No more 5-second FPS stutter** — crawley eyes (red, green or blue per eye), grub glows and UFO engines now glow with additive sprites instead of real lights, so mobs spawning or despawning no longer recompile every shader.
-- **👁 Crawleys face their prey** — crawleys now turn their glowing eyes toward the player they are attacking.
-- **🧊 No more freeze when mobs shoot** — laser lights now come from fixed pools, and mob projectiles carry no lights, so firing no longer forces every material's shaders to recompile.
-- **🔗 Sturdier multiplayer mob sync** — mobs owned by any player (not just the host) now stream their updates, shots damage mobs exactly once, and removed mobs no longer reappear from late packets.
 
 ---
 
@@ -83,7 +77,6 @@ Real-time text chat with all connected players via WebRTC. Press `/` to open cha
 - **Torches** — repel night creatures with light  
 - **Red Laser Gun** — deals 5 damage per shot (no ammo needed)
 - **Green Laser Gun** — deals 10 damage per shot, fires two blasts at once (consumes Emerald)
-- **Blue Laser Gun** — deals 15 damage per shot, fires three blasts at once (consumes Blue Calcite, drops from UFOs)
 
 ### ⛏ Mining and Picks
 
@@ -184,7 +177,7 @@ Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's 
 - A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.
 - Player scores and the held item ride along with `player_move` (also sent when you switch hotbar slots while standing still), so every spawner knows the area's tier and what each player is holding.
 
-### Adding the Next Tier
+### Adding the Next Tiers
 
 1. Add a definition to `ELITE_MOB_TYPES` and its builder/`think`/animation code in `js/mob-evolution.js`. Fields include `archetypes`, day/night, HP, score, drop, hitbox, and the optional `provoke: "armed" | "attacked"`, `grudgeMs`, `worldMax`, `wideRange`, `biomes`, per-world `drops`, `roost` and `burrows`.
 2. Append a tier to `MOB_EVOLUTION_TIERS` (e.g. `{ level: 5, minScore: 5000, introduces: [...], retires: [...] }`).
@@ -346,91 +339,6 @@ SupGalaxy uses a **truncated unix date** system to ensure block updates from IPF
 - **Truncated Unix Date**: Seconds since 2025-09-21 00:00:00 UTC (custom epoch). This provides a compact integer for versioning.
 - **Monotonic Ordering**: Block updates are only accepted if they have a strictly newer (larger) truncated unix date than any existing update.
 - **Out-of-Order Protection**: If IPFS files arrive or are processed out of order, older updates are automatically skipped.
-
-Helper functions:
-```js
-// Compute truncated date from a BlockDate timestamp (in milliseconds)
-const truncated = computeIpfsTruncatedDate(blockTimestampMs);
-
-// Check if an IPFS update should be applied (returns true if incoming > existing)
-if (shouldApplyIpfsUpdate(existingTruncated, incomingTruncated)) {
-  // Apply the update
-}
-```
-
-Run tests in the browser console: `runIpfsVersioningTests()`
-
-### Large Magician’s Stone models
-
-Model dimensions and download size are not triangle counts. A 64 × 128 placement does not
-subdivide the artwork, but standing on a dense mesh previously triggered repeated full
-triangle scans and five ground raycasts every frame.
-
-- GLB/glTF stone collision is prepared as a triangle BVH in a dedicated Blob worker,
-  compatible with both opening `index.html` directly (`file://`) and HTTP(S) hosting.
-  Its self-contained builder loads before the collider script; no worker script fetch
-  from a file origin is required. Worker Blob URLs are released on success, failure
-  or cancellation. Geometry
-  extraction yields between batches; original rendering buffers are not transferred or
-  detached. Collision becomes active only when preparation is ready. Failed preparation
-  leaves collision disabled with a warning, never an expensive unindexed fallback.
-  GLTF parsing, image decoding and first GPU uploads still have browser/main-thread costs;
-  worker-built collision does not guarantee a stall-free import of arbitrary assets.
-- In **3D model performance**, an optional simplified collider URL accepts the same
-  IPFS/objkt/HTTPS sources as the visual model. Export it in the visual model’s original
-  coordinate system; the visual model’s scale, centering, offsets and orientation apply
-  to both. The collider is not rendered. Use real surface geometry for slopes, holes,
-  stairs and overhangs, not one bounding box.
-- **Frozen import-pose surface** explicitly snapshots collision geometry, including
-  skinned/morph geometry, at import. Animations do not move the collider. Use a separate
-  static collider or **No collision** where animated surfaces would be misleading.
-- Optional texture limits (512/1024/2048 pixels) reduce eligible image textures while
-  preserving aspect ratio. Data, compressed, cube and video textures remain unchanged.
-  **Original**, unlimited render distance and **Always** animation preserve existing
-  visual behavior. Nearby/view-only animation pauses rather than catching up offscreen.
-  View/distance policies use the visual model’s import-pose bounds.
-- For fewer rendered triangles, supply a lower-detail GLB in the main URL field. This
-  does not automatically simplify artwork or add LOD assets. Draco/Meshopt/KTX2 decoder
-  integration is not included; compression alone does not reduce rendered triangles.
-- Collider and quality settings survive world/session saves and multiplayer sync.
-
-#### Compare CPU collision and rendering cost
-
-In a safe, quiet world, use third-person view to include the imported avatar’s render
-cost. Keep the camera and player still, wait for collision preparation and texture uploads,
-then record Chrome DevTools **Performance** while running:
-
-```js
-const nearby = await compareModelPerformance({ label: 'nearby', seconds: 5 });
-// Stand on the model and repeat:
-const onTop = await compareModelPerformance({ label: 'on-top', seconds: 5 });
-```
-
-Each comparison collects eight local-only combinations of collision on/off, imported/default
-local avatar and stone animation on/off. Player pose is held between physics updates so
-collision-off samples do not fall through the model. Existing animation settings still
-apply; enable stone animation first for a meaningful animation comparison. Enable stone
-collision first as well: profiling does not override a saved no-collision setting. Remote avatars
-are unchanged. No diagnostic switches are persisted or sent to peers.
-
-Reports include mean/p95 frame time, FPS, body/ground query timings and counts, draw calls,
-triangles and renderer geometry/texture counts. The browser trace contains a named capture
-range. `renderCpuMs` measures CPU render submission, **not GPU time**; renderer memory counts
-are **not bytes**. Keep reports with the device/browser and model used; headless/synthetic
-measurements cannot establish FPS on the linked NFT and avatar.
-
-For one sample, use `await startModelPerformanceCapture({ label: 'on-top', seconds: 5,
-collision: false, avatar: 'default', animation: false })`.
-`stopModelPerformanceCapture()` stops early and restores overrides; world changes or
-player death abort the sample. Captures are capped at 60 seconds/3,600 sampled frames.
-The documented `runStoneCollisionTests()` console command checks the indexed collision
-implementation without requiring an external model, including multistory tower floors,
-walls, stairwell openings and step-up surfaces. Run it both from a directly opened
-`index.html` and from HTTP hosting to check worker-startup compatibility.
-`await runStoneCollisionTests({ benchmark: true })` also compares the old scans against
-the BVH on a synthetic 180,000-triangle terrain fixture, reporting separately measured
-triangle/node candidate counts and query timings. It deliberately runs expensive reference
-scans on the main thread; run it separately from gameplay FPS captures.
 
 ---
 
