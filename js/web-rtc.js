@@ -21,6 +21,7 @@ var knownServers = [],
 const SERVER_PEER = "@server";
 let dedicatedServer = null;
 let dedicatedConnectPending = false;
+let dedicatedServerDialogCloser = null;
 let proximityVideoUsers = [],
     currentProximityVideoIndex = 0,
     lastProximityVideoChangeTime = 0;
@@ -122,8 +123,6 @@ async function connectToDedicatedServer(address) {
                 disconnectDedicatedServer("Connection to the dedicated server was lost.");
             }
         };
-        const status = document.getElementById("dedicatedServerStatus");
-        if (status) status.textContent = `Connecting to ${connection.name}…`;
         updateDedicatedServerDialog();
         const dc = pc.createDataChannel("game");
         peers.set(SERVER_PEER, { pc, dc, address: null });
@@ -197,7 +196,6 @@ async function connectToDedicatedServer(address) {
                 }
             }, 20000);
         }
-        status && (status.textContent = `Finishing connection to ${connection.name}…`);
         addMessage(`Connecting to ${connection.name}…`, 3000);
         updateDedicatedServerDialog();
         return true;
@@ -227,8 +225,6 @@ async function connectToDedicatedServer(address) {
                 : error.code ? error.message : dedicatedServerErrorMessage(null, error.message);
             console.error("[WebRTC] Dedicated server connection failed:", error);
             addMessage(message, 6000);
-            const status = document.getElementById("dedicatedServerStatus");
-            if (status) status.textContent = message;
         }
         updateDedicatedServerDialog();
         return false;
@@ -257,8 +253,6 @@ function disconnectDedicatedServer(message = "Disconnected from the dedicated se
         peers.delete(SERVER_PEER);
     }
     if (message && !connection.kicked) addMessage(message, 5000);
-    const status = document.getElementById("dedicatedServerStatus");
-    if (status) status.textContent = connection.kicked ? "Disconnected by the server." : "Disconnected.";
     updateDedicatedServerDialog();
     updateHudButtons();
 }
@@ -282,6 +276,13 @@ function sendToPlayer(username, message) {
     const peer = peers.get(username);
     if (!peer?.dc || peer.dc.readyState !== "open") return false;
     peer.dc.send(JSON.stringify(message));
+    return true;
+}
+
+function sendToServer(message) {
+    const serverPeer = peers.get(SERVER_PEER);
+    if (!dedicatedServer || !serverPeer?.dc || serverPeer.dc.readyState !== "open") return false;
+    serverPeer.dc.send(JSON.stringify({ ...message, username: userName }));
     return true;
 }
 
@@ -625,16 +626,18 @@ function setupDataChannel(e, t) {
         }
         isConnecting = !1;
         if (t === SERVER_PEER && dedicatedServer) {
+            const wasConnected = dedicatedServer.connected;
             dedicatedServer.connected = true;
             if (dedicatedServer.connectionTimeout) {
                 clearTimeout(dedicatedServer.connectionTimeout);
                 dedicatedServer.connectionTimeout = null;
             }
-            const status = document.getElementById("dedicatedServerStatus");
-            if (status) status.textContent = `Connected to ${dedicatedServer.name}.`;
+            if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
             updateDedicatedServerDialog();
+            dedicatedServerDialogCloser?.();
         }
-        if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
+        if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`),
+            t !== SERVER_PEER && addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
             world: worldName,
@@ -745,6 +748,7 @@ function setupDataChannel(e, t) {
                 n = s.username || t;
             if (t === SERVER_PEER && s.type === "server_welcome") {
                 if (dedicatedServer) {
+                    const wasConnected = dedicatedServer.connected;
                     dedicatedServer.connected = true;
                     isConnecting = false;
                     if (dedicatedServer.connectionTimeout) {
@@ -754,14 +758,9 @@ function setupDataChannel(e, t) {
                     if (typeof s.serverName === "string" && s.serverName.trim()) {
                         dedicatedServer.name = s.serverName.trim();
                     }
-                    const status = document.getElementById("dedicatedServerStatus");
-                    if (status) {
-                        const count = Array.isArray(s.players) ? s.players.length : null;
-                        status.textContent = count === null
-                            ? `Connected to ${dedicatedServer.name}.`
-                            : `Connected · ${count} players · ${dedicatedServer.name}`;
-                    }
+                    if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
                     updateDedicatedServerDialog();
+                    dedicatedServerDialogCloser?.();
                 }
                 return;
             }
@@ -3159,31 +3158,43 @@ function openDedicatedServerModal() {
     Object.assign(modal.style, {
         position: "fixed",
         inset: "0",
-        zIndex: "230",
+        zIndex: "1000",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.65)"
+        background: "rgba(2,8,18,0.82)",
+        backdropFilter: "blur(5px)"
     });
     modal.innerHTML = `
         <div role="dialog" aria-modal="true" aria-labelledby="dedicatedServerTitle"
-            style="background:var(--panel);padding:16px;border-radius:10px;width:min(400px,calc(100vw - 32px));box-sizing:border-box;">
-            <h3 id="dedicatedServerTitle" style="margin-top:0;">Connect to Server</h3>
-            <label for="dedicatedServerAddress">Server address</label>
+            style="background:linear-gradient(145deg,#172a40,#101a29);border:2px solid #42c8ff;padding:24px;border-radius:16px;width:min(500px,calc(100vw - 32px));box-sizing:border-box;box-shadow:0 0 36px rgba(45,190,255,.35),0 24px 70px rgba(0,0,0,.7);">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+                <span aria-hidden="true" style="font-size:2.2rem;">🌐</span>
+                <div>
+                    <h2 id="dedicatedServerTitle" style="margin:0 0 4px;font-size:1.5rem;">Connect to Server</h2>
+                    <div style="opacity:.8;">Join the SupGalaxy multiplayer server</div>
+                </div>
+            </div>
+            <label for="dedicatedServerAddress" style="display:block;font-weight:700;margin-bottom:4px;">Server address</label>
             <input id="dedicatedServerAddress" type="text" value="https://play.supgalaxy.org:55555"
-                style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;"
+                style="width:100%;padding:12px;margin:4px 0 12px;box-sizing:border-box;border-radius:8px;border:1px solid #53718d;background:#0b1420;color:#fff;font-size:1rem;"
                 autocomplete="url" spellcheck="false">
+            <label for="dedicatedServerLocalMode" style="display:flex;align-items:center;gap:9px;padding:10px 12px;margin-bottom:12px;border-radius:8px;background:rgba(66,200,255,.1);font-weight:700;cursor:pointer;">
+                <input id="dedicatedServerLocalMode" type="checkbox" style="width:18px;height:18px;accent-color:#42c8ff;">
+                Local mode <span style="font-weight:400;opacity:.8;">(http://127.0.0.1:5555)</span>
+            </label>
             <div id="dedicatedServerStatus" role="status" aria-live="polite" style="min-height:1.4em;margin-bottom:12px;">Checking server status…</div>
-            <div style="display:flex;justify-content:flex-end;gap:8px;">
-                <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:8px 12px;">Refresh status</button>
-                <button id="dedicatedServerAction" class="uniform-action-btn" style="padding:8px 12px;">Connect</button>
-                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:8px 12px;">Close</button>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+                <button id="dedicatedServerAction" class="uniform-action-btn" style="order:-1;flex:1 0 100%;padding:13px 18px;background:#1599d0;color:#fff;font-size:1.1rem;box-shadow:0 0 18px rgba(21,153,208,.45);">Connect</button>
+                <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:10px 12px;">Refresh status</button>
+                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:10px 12px;">Close</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     isPromptOpen = !0;
 
     const addressInput = modal.querySelector("#dedicatedServerAddress");
+    const localMode = modal.querySelector("#dedicatedServerLocalMode");
     const status = modal.querySelector("#dedicatedServerStatus");
     let statusController = null;
     let requestId = 0;
@@ -3196,6 +3207,7 @@ function openDedicatedServerModal() {
                 ? "https://play.supgalaxy.org:55555"
                 : savedAddress;
         }
+        localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:5555";
     } catch (error) {
         console.warn("[WEBRTC] Could not read the saved server address:", error);
     }
@@ -3248,8 +3260,17 @@ function openDedicatedServerModal() {
         if (dedicatedServer && isConnecting) disconnectDedicatedServer("Connection cancelled.");
         else if (dedicatedConnectPending) isConnecting = false;
         modal.remove();
+        if (dedicatedServerDialogCloser === closeModal) dedicatedServerDialogCloser = null;
         isPromptOpen = Boolean(document.getElementById("usersModal")?.isConnected);
     };
+    dedicatedServerDialogCloser = closeModal;
+    localMode.addEventListener("change", () => {
+        addressInput.value = localMode.checked
+            ? "http://127.0.0.1:5555"
+            : "https://play.supgalaxy.org:55555";
+        clearTimeout(addressChangeTimeout);
+        refreshStatus();
+    });
     addressInput.addEventListener("input", () => {
         clearTimeout(addressChangeTimeout);
         addressChangeTimeout = setTimeout(refreshStatus, 500);

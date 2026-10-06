@@ -3497,7 +3497,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
     var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
     var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
     var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-    if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+    const serverAuthorityWillValidate = dedicatedServer && !isAuthority();
+    if (!serverAuthorityWillValidate && !checkChunkOwnership(chunkKey, breaker || userName)) {
         const owner = getChunkOwnerName(chunkKey) || 'another user';
         const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
         if (isAuthority() && breaker && breaker !== userName) {
@@ -3639,18 +3640,22 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
             }
         } else if (!breaker || breaker === userName) {
             // Client: send request to host (only for local player, not for other players' actions)
-            const requestMsg = JSON.stringify({
+            const requestMsg = {
                 type: 'request_block_break',
                 x: e,
                 y: t,
                 z: o,
                 username: userName,
                 world: worldName
-            });
-            for (const [peerName, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(requestMsg);
-                    break; // Send to first available peer (should be host)
+            };
+            if (dedicatedServer) {
+                sendToServer(requestMsg);
+            } else {
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(JSON.stringify(requestMsg));
+                        break; // Send to first available peer (should be host)
+                    }
                 }
             }
             addMessage("Breaking...", 500);
