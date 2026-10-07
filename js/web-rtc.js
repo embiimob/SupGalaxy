@@ -983,7 +983,13 @@ function setupDataChannel(e, t) {
                 feedRevision: t.feedRevision,
                 type: t.type,
                 petOwner: t.petOwner || null,
-                spawner: t.spawner
+                spawner: t.spawner,
+                originSeed: t.originSeed,
+                ufoTarget: t.ufoTarget,
+                lingerTime: t.lingerTime,
+                attackCooldown: t.attackCooldown,
+                aiState: t.aiState,
+                quaternion: t.mesh.quaternion.toArray()
             }));
             if (mobBatch.length > 0) {
                 e.send(JSON.stringify({
@@ -1457,7 +1463,7 @@ function setupDataChannel(e, t) {
                         for (const t of s.mobs) {
                             e.add(t.id);
                             let o = mobs.find((e => e.id === t.id));
-                            if (o && o.petOwner === userName) continue;
+                            if (o && (o.petOwner === userName || (o.type === "ufo_saucer" && isMobAuthority(o)))) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
                                 mobs.push(o);
@@ -1467,6 +1473,11 @@ function setupDataChannel(e, t) {
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
                             o.spawner = o.petOwner || t.spawner || o.spawner || n;
+                            if (o.type === "ufo_saucer") {
+                                o.ufoTarget = t.ufoTarget;
+                                if (Number.isFinite(t.lingerTime)) o.lingerTime = t.lingerTime;
+                                if (Number.isFinite(t.attackCooldown)) o.attackCooldown = t.attackCooldown;
+                            }
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -1491,7 +1502,7 @@ function setupDataChannel(e, t) {
                         // Only despawn if we are NOT the host (host manages despawns naturally)
                         if (!isAuthority(s.world || worldName)) {
                             mobs = mobs.filter((t => {
-                                if (e.has(t.id) || t.petOwner === userName) return true;
+                                if (e.has(t.id) || t.petOwner === userName || (t.type === "ufo_saucer" && isMobAuthority(t))) return true;
                                 if (t.engineAudio) t.engineAudio.pause();
                                 if (t.engineAudio2) t.engineAudio2.pause();
                                 scene.remove(t.mesh);
@@ -1730,7 +1741,7 @@ function setupDataChannel(e, t) {
                         }
 
                         if (player.health <= 0) {
-                            handlePlayerDeath();
+                            handlePlayerDeath(s.attacker);
                         }
                     }
                     break;

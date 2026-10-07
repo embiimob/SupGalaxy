@@ -169,6 +169,8 @@ Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not
 
 **UFO riding:** Land or teleport onto the large blue-laser UFO's hull to walk around and ride its existing flight animation. Riders cannot steer it. It carries you beyond the map boundary during departure; when it disappears, you fall. Surviving, destroying it, moving again, or changing planets does not grant another encounter until a new game session.
 
+**Idle logout:** Being killed by this UFO ends your game session, disconnects the dedicated server and all WebRTC peers, stops microphone/camera capture, and returns you to login. Ordinary deaths still offer normal respawning.
+
 ### 🦴 Bones
 
 Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's spawning authority keeps about 3 there and announces them to peers via `item_dropped`. Walk over a bone to pick it up. Bones are an **item-only crafting ingredient**: you can't place them, and their recipes are coming in a future update.

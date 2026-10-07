@@ -3928,7 +3928,36 @@ function getBlockAt(e, t, o) {
     return i.get(l, Math.floor(t), d)
 }
 
-function handlePlayerDeath() {
+let gameSessionEnded = false;
+
+function endIdleUfoSession() {
+    if (gameSessionEnded) return;
+    gameSessionEnded = true;
+    webRtcPollingEnabled = false;
+    stopAllPolling();
+    disconnectDedicatedServer(null);
+    for (const [name, peer] of Array.from(peers.entries())) {
+        peer.dc?.close();
+        if (peer.keepaliveInterval) clearInterval(peer.keepaliveInterval);
+        cleanupPeer(name);
+    }
+    for (const stream of [localAudioStream, localVideoStream]) {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+    }
+    if (typeof lockWallet === "function") lockWallet();
+    document.exitPointerLock?.();
+    const loginUrl = new URL(window.location.href);
+    loginUrl.searchParams.delete("user-name");
+    loginUrl.searchParams.delete("loc");
+    window.location.replace(loginUrl.href);
+}
+
+function handlePlayerDeath(attacker = null) {
+    if (idleUfoIds.has(attacker)) {
+        player.health = 0;
+        endIdleUfoSession();
+        return;
+    }
     if (deathScreenShown || isDying) return;
     if (lightManager.playerLight) lightManager.playerLight.intensity = 0;
     avatarGroup && (avatarGroup.visible = !0), isDying = !0, deathAnimationStart = performance.now(), INVENTORY = new Array(36).fill(null), player.score = 0, document.getElementById("score").innerText = player.score, player.health = 0, updateHealthBar(), updateHotbarUI(), addMessage("You died! All items and score lost.", 5e3);
@@ -4093,8 +4122,11 @@ function tryStepUpStairs(x, y, z) {
 
 function checkCollision(e, t, o) {
     if (checkBlockCollision(e, t, o)) return true;
-    const hull = getUfoGroundSupport(e, o, Infinity, -Infinity);
-    if (hull && t + player.height > hull.mob.pos.y - 3 && t + 2.05 < hull.y) return true;
+    for (const mob of mobs) {
+        if (mob.type !== "ufo_saucer") continue;
+        const hull = getUfoGroundSupport(e, o, Infinity, -Infinity, mob);
+        if (hull && t + player.height > mob.pos.y - 3 && t + 2.05 < hull.y) return true;
+    }
     return checkMeshCollision(e, t, o);
 }
 
@@ -4131,10 +4163,11 @@ const MESH_SNAP_DOWN = 0.3;
 const _meshPlayerBox = new THREE.Box3();
 let ufoRide = null;
 let ufoOffMap = false;
+const ufoCarrySinceLastMove = new THREE.Vector3();
 
-function getUfoGroundSupport(x, z, topY, minY) {
+function getUfoGroundSupport(x, z, topY, minY, onlyMob = null) {
     let support = null;
-    for (const mob of mobs) {
+    for (const mob of onlyMob ? [onlyMob] : mobs) {
         if (mob.type !== "ufo_saucer" || !mob.ufoHullColumns ||
             Math.hypot(x - mob.pos.x, z - mob.pos.z) > 65) continue;
         mob.mesh.updateMatrixWorld(true);
@@ -4162,6 +4195,7 @@ function carryUfoRider() {
     mob.mesh.updateMatrixWorld(true);
     const next = mob.mesh.localToWorld(local.clone());
     if (!checkCollision(next.x, next.y, next.z)) {
+        ufoCarrySinceLastMove.add(new THREE.Vector3(next.x - player.x, next.y - player.y, next.z - player.z));
         player.x = next.x;
         player.y = next.y;
         player.z = next.z;
@@ -6125,6 +6159,7 @@ function updateMobSafely(mob, dt) {
 }
 
 function runGameFrame(e) {
+    if (gameSessionEnded) return;
     restoreModelPerformancePlayer();
     if (!fpsSampleStart) fpsSampleStart = e;
     fpsFrameCount++;
@@ -6436,12 +6471,15 @@ function runGameFrame(e) {
             petIdsKey = JSON.stringify(petIds),
             petsChanged = lastSentPosition.petIdsKey !== petIdsKey;
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
+            activeMovement = Math.hypot(player.x - lastSentPosition.x - ufoCarrySinceLastMove.x,
+                player.y - lastSentPosition.y - ufoCarrySinceLastMove.y,
+                player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
         if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
-            // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
-            if (I || isAttacking) {
+            // Passive transport and looking around do not reset idle time.
+            if (activeMovement || isAttacking) {
                 lastMoveTime = e;
                 window.lastMoveTime = e;
             }
@@ -6454,6 +6492,7 @@ function runGameFrame(e) {
                 selectedBlockId: selectedBlockId,
                 petIdsKey: petIdsKey
             };
+            ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
                 type: "player_move",
                 username: userName,
@@ -6839,7 +6878,7 @@ function runGameFrame(e) {
                             addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
                             flashDamageEffect();
                             safePlayAudioAt(soundHit, stepPos);
-                            player.health <= 0 && handlePlayerDeath();
+                            player.health <= 0 && handlePlayerDeath(o.user);
 
                             hitPlayer = true;
                         }

@@ -8,6 +8,7 @@ const wolfTameUnacknowledged = new Map();
 const combatRemovedPetIds = new Set();
 const wolfTameSession = Math.random().toString(36).slice(2);
 let wolfTameSequence = 0;
+const idleUfoIds = new Set();
 
 function sanitizePetData(data) {
     const result = [];
@@ -796,6 +797,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
         this.hp = 3000;
+        idleUfoIds.add(this.id);
         // Double the ~45-second descent from spawn height 220 to hover height 108.
         this.attackCooldown = 90;
         this.mesh = new THREE.Group();
