@@ -18,6 +18,10 @@ var knownServers = [],
     userAudioStreams = new Map,
     localVideoStream = null,
     userVideoStreams = new Map;
+const SERVER_PEER = "@server";
+let dedicatedServer = null;
+let dedicatedConnectPending = false;
+let dedicatedServerDialogCloser = null;
 let proximityVideoUsers = [],
     currentProximityVideoIndex = 0,
     lastProximityVideoChangeTime = 0;
@@ -25,6 +29,442 @@ var userPositions = {},
     playerAvatars = new Map,
     partialIPFSUpdates = new Map,
     syncedWorlds = new Set;
+const DATA_CHANNEL_SEND_HIGH_WATER_MARK = 1024 * 1024;
+const dataChannelSendQueues = new WeakMap();
+const pendingServerImports = new Map();
+const queuedServerImports = [];
+const MAX_CONCURRENT_SERVER_IMPORTS = 3;
+let activeServerImports = 0;
+
+function installDataChannelSendQueue(channel) {
+    if (!channel || dataChannelSendQueues.has(channel)) return;
+    const nativeSend = channel.send.bind(channel);
+    const queue = [];
+    const drain = () => {
+        if (channel.readyState !== "open") {
+            queue.length = 0;
+            return;
+        }
+        while (queue.length && channel.bufferedAmount < DATA_CHANNEL_SEND_HIGH_WATER_MARK) {
+            try {
+                nativeSend(queue.shift());
+            } catch (error) {
+                console.error("[WEBRTC] Failed to send queued data-channel message:", error);
+                if (channel.readyState === "open") continue;
+                break;
+            }
+        }
+    };
+    const queuedSend = data => {
+        if (channel.readyState !== "open") {
+            nativeSend(data);
+            return;
+        }
+        queue.push(data);
+        drain();
+    };
+    try {
+        channel.bufferedAmountLowThreshold = DATA_CHANNEL_SEND_HIGH_WATER_MARK / 2;
+        channel.addEventListener("bufferedamountlow", drain);
+        channel.addEventListener("open", drain);
+        channel.addEventListener("close", () => { queue.length = 0; });
+        Object.defineProperty(channel, "send", { configurable: true, value: queuedSend });
+        if (channel.send !== queuedSend) throw new Error("RTCDataChannel.send could not be wrapped");
+        dataChannelSendQueues.set(channel, queue);
+    } catch (error) {
+        console.error("[WEBRTC] Could not install the data-channel send queue:", error);
+    }
+}
+
+function getDataChannelSendQueueDepth(channel) {
+    return dataChannelSendQueues.get(channel)?.length || 0;
+}
+
+function sendDedicatedServerImportChunks(entry, channel) {
+    let index = 0;
+    const sendNext = () => {
+        if (!pendingServerImports.has(entry.transactionId) || entry.state !== "sending") return;
+        if (channel.readyState !== "open" || peers.get(SERVER_PEER)?.dc !== channel) {
+            retryDedicatedServerImport(entry, "connection closed");
+            return;
+        }
+        if (channel.bufferedAmount >= DATA_CHANNEL_SEND_HIGH_WATER_MARK || getDataChannelSendQueueDepth(channel) >= 8) {
+            setTimeout(sendNext, 25);
+            return;
+        }
+        if (index >= entry.chunks.length) {
+            entry.timeout = setTimeout(() => retryDedicatedServerImport(entry, "timeout"), 60000);
+            return;
+        }
+        try {
+            channel.send(JSON.stringify({
+                type: "ipfs_chunk_from_client_chunk",
+                transactionId: entry.transactionId,
+                index,
+                chunk: entry.chunks[index],
+                total: entry.chunks.length
+            }));
+            index++;
+            setTimeout(sendNext, 0);
+        } catch (error) {
+            console.error(`[WEBRTC] Failed to send dedicated-server import ${entry.transactionId}:`, error);
+            retryDedicatedServerImport(entry, "send failure");
+        }
+    };
+    sendNext();
+}
+
+function pumpDedicatedServerImports() {
+    while (dedicatedServer?.connected && activeServerImports < MAX_CONCURRENT_SERVER_IMPORTS && queuedServerImports.length) {
+        const entry = queuedServerImports.shift();
+        if (!pendingServerImports.has(entry.transactionId) || entry.state !== "queued") continue;
+        const peer = peers.get(SERVER_PEER);
+        if (!peer?.dc || peer.dc.readyState !== "open") {
+            queuedServerImports.unshift(entry);
+            return;
+        }
+        entry.state = "sending";
+        activeServerImports++;
+        try {
+            peer.dc.send(JSON.stringify({
+                type: "ipfs_chunk_from_client_start",
+                total: entry.chunks.length,
+                fromAddress: entry.fromAddress,
+                timestamp: entry.timestamp,
+                world: entry.world,
+                transactionId: entry.transactionId
+            }));
+            sendDedicatedServerImportChunks(entry, peer.dc);
+        } catch (error) {
+            console.error(`[WEBRTC] Failed to send dedicated-server import ${entry.transactionId}:`, error);
+            retryDedicatedServerImport(entry, "send failure");
+        }
+    }
+}
+
+function uploadDedicatedServerImport(transactionId, world, fromAddress, timestamp, chunks) {
+    const existing = pendingServerImports.get(transactionId);
+    if (existing) return;
+    const entry = {
+        transactionId,
+        world,
+        fromAddress,
+        timestamp,
+        chunks,
+        retries: 0,
+        state: "queued",
+        timeout: null
+    };
+    pendingServerImports.set(transactionId, entry);
+    queuedServerImports.push(entry);
+    pumpDedicatedServerImports();
+}
+
+function retryDedicatedServerImport(entry, reason) {
+    if (!pendingServerImports.has(entry.transactionId)) return;
+    if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+    clearTimeout(entry.timeout);
+    entry.retries++;
+    entry.state = "waiting";
+    const delay = Math.min(30000, 1000 * (2 ** Math.min(entry.retries - 1, 5)));
+    console.warn(`[WEBRTC] Retrying dedicated-server import ${entry.transactionId} after ${reason}.`);
+    entry.timeout = setTimeout(() => {
+        if (!pendingServerImports.has(entry.transactionId)) return;
+        entry.state = "queued";
+        queuedServerImports.push(entry);
+        pumpDedicatedServerImports();
+    }, delay);
+    pumpDedicatedServerImports();
+}
+
+function handleServerImportResult(message) {
+    const entry = pendingServerImports.get(message.transactionId);
+    if (!entry || message.world !== entry.world) return;
+    if (message.ok === true) {
+        clearTimeout(entry.timeout);
+        if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+        pendingServerImports.delete(entry.transactionId);
+        processedMessages.add(entry.transactionId);
+        worker.postMessage({ type: "update_processed", transactionIds: [entry.transactionId] });
+        pumpDedicatedServerImports();
+        return;
+    }
+    if (message.retry === true) {
+        retryDedicatedServerImport(entry, message.reason || "server requested retry");
+        return;
+    }
+    clearTimeout(entry.timeout);
+    if (entry.state === "sending") activeServerImports = Math.max(0, activeServerImports - 1);
+    pendingServerImports.delete(entry.transactionId);
+    console.error(`[WEBRTC] Server rejected import ${entry.transactionId}:`, message.reason || "unknown error");
+    addMessage(`Server rejected a world import: ${message.reason || "invalid data"}`, 5000);
+    pumpDedicatedServerImports();
+}
+
+function isAuthority(world = worldName) {
+    return dedicatedServer
+        ? dedicatedServer.authorityWorlds.has(world)
+        : isHost;
+}
+
+function normalizeDedicatedServerAddress(address) {
+    const enteredAddress = String(address || "").trim();
+    if (!enteredAddress) throw new Error("Enter a server address.");
+    const hasScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(enteredAddress);
+    const authority = (hasScheme ? enteredAddress.replace(/^[a-z][a-z\d+.-]*:\/\//i, "") : enteredAddress)
+        .split(/[/?#]/, 1)[0];
+    const hasExplicitPort = /:\d+$/.test(authority);
+    const isLocalInput = /^(?:127\.|localhost(?::|$)|\[::1\](?::|$))/i.test(enteredAddress);
+    const input = hasScheme ? enteredAddress : `${isLocalInput ? "http" : "https"}://${enteredAddress}`;
+    const serverUrl = new URL(input);
+    if (!["http:", "https:"].includes(serverUrl.protocol) || serverUrl.username || serverUrl.password) {
+        throw new Error("Enter a valid HTTP or HTTPS server address.");
+    }
+    const isLocal = /^(?:127\.|localhost$|\[?::1\]?)$/i.test(serverUrl.hostname);
+    if (!serverUrl.port && !hasExplicitPort) serverUrl.port = "55555";
+    if (serverUrl.pathname !== "/" && serverUrl.pathname !== "" || serverUrl.search || serverUrl.hash) {
+        throw new Error("Enter only the server host and optional port.");
+    }
+    serverUrl.pathname = "";
+    return serverUrl.href.replace(/\/+$/, "");
+}
+
+function dedicatedServerErrorMessage(code, error, status) {
+    switch (code) {
+        case "name_in_use":
+            return "This username is already connected. Choose another username and try again.";
+        case "blocked":
+            return "This username is blocked by the server administrator. Contact the server admin.";
+        case "server_full":
+            return "The server is full. Try again later.";
+        case "bad_request":
+            return `The server rejected your username, world, or connection offer${error ? `: ${error}` : "."}`;
+        case "negotiation_failed":
+            return `The server could not negotiate the connection${error ? `: ${error}` : "."}`;
+        default:
+            return error || `Server connection failed${status ? ` (HTTP ${status})` : ""}.`;
+    }
+}
+
+async function connectToDedicatedServer(address) {
+    if (dedicatedServer || peers.has(SERVER_PEER) || dedicatedConnectPending) {
+        addMessage("Already connected to a dedicated server.", 3000);
+        return false;
+    }
+    if (Array.from(peers.keys()).some(peerName => peerName !== SERVER_PEER)) {
+        addMessage("Disconnect from existing players before connecting to a dedicated server.", 5000);
+        return false;
+    }
+    if (isConnecting) {
+        addMessage("A connection is already in progress.", 3000);
+        return false;
+    }
+    let pc;
+    let connection;
+    const wasHost = isHost;
+    dedicatedConnectPending = true;
+    isConnecting = true;
+    updateDedicatedServerDialog();
+    try {
+        try {
+            localStorage.setItem("supgalaxy-dedicated-server-address", String(address || "").trim());
+        } catch (error) {
+            console.warn("[WEBRTC] Could not save the server address:", error);
+        }
+        const base = normalizeDedicatedServerAddress(address);
+        stopAllPolling();
+        const iceServers = await getTurnCredentials();
+        if (!isConnecting) return false;
+
+        pc = new RTCPeerConnection({ iceServers });
+        connection = {
+            name: new URL(base).host,
+            base,
+            authorityWorlds: new Set(),
+            abortController: new AbortController(),
+            requestTimeout: null,
+            connectionTimeout: null,
+            features: new Set(),
+            worldSyncRequested: false,
+            timedOut: false,
+            kicked: false,
+            connected: false
+        };
+        dedicatedServer = connection;
+        pc.onconnectionstatechange = () => {
+            if (dedicatedServer === connection && ["failed", "closed"].includes(pc.connectionState)) {
+                disconnectDedicatedServer("Connection to the dedicated server was lost.");
+            }
+        };
+        updateDedicatedServerDialog();
+        const dc = pc.createDataChannel("game");
+        peers.set(SERVER_PEER, { pc, dc, address: null });
+        setupDataChannel(dc, SERVER_PEER);
+
+        const candidates = [];
+        pc.onicecandidate = event => {
+            if (event.candidate) candidates.push(event.candidate.toJSON());
+        };
+        await pc.setLocalDescription(await pc.createOffer());
+        await Promise.race([
+            new Promise(resolve => {
+                if (pc.iceGatheringState === "complete") return resolve();
+                pc.onicegatheringstatechange = () => {
+                    if (pc.iceGatheringState === "complete") resolve();
+                };
+            }),
+            new Promise(resolve => setTimeout(resolve, 1000))
+        ]);
+        if (dedicatedServer !== connection || connection.abortController.signal.aborted) return false;
+
+        connection.requestTimeout = setTimeout(() => {
+            connection.timedOut = true;
+            connection.abortController.abort();
+        }, 15000);
+        const response = await fetch(`${base}/connect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                world: worldName,
+                user: userName,
+                offer: pc.localDescription,
+                iceCandidates: candidates,
+                features: ["http_world_sync"]
+            }),
+            signal: connection.abortController.signal
+        });
+        clearTimeout(connection.requestTimeout);
+        connection.requestTimeout = null;
+        let body;
+        try {
+            body = await response.json();
+        } catch {
+            throw new Error(`Server returned an invalid response (HTTP ${response.status}).`);
+        }
+        if (!response.ok || !body.ok) {
+            const error = new Error(dedicatedServerErrorMessage(body.code, body.error, response.status));
+            error.code = body.code;
+            throw error;
+        }
+        if (!body.answer || dedicatedServer !== connection) {
+            throw new Error("Server returned an incomplete connection response.");
+        }
+        connection.features = new Set(Array.isArray(body.features)
+            ? body.features.filter(feature => typeof feature === "string")
+            : []);
+
+        if (isHost) {
+            isHost = false;
+            document.getElementById("usersBtn")?.classList.remove("hosting");
+        }
+        await pc.setRemoteDescription(body.answer);
+        for (const candidate of body.iceCandidates || []) {
+            try {
+                await pc.addIceCandidate(candidate);
+            } catch (error) {
+                console.warn("[WebRTC] Could not add a server ICE candidate:", error);
+            }
+        }
+        if (dedicatedServer !== connection) return false;
+        if (!connection.connected) {
+            connection.connectionTimeout = setTimeout(() => {
+                if (dedicatedServer === connection && !connection.connected) {
+                    disconnectDedicatedServer("The dedicated server connection timed out.");
+                }
+            }, 20000);
+        }
+        addMessage(`Connecting to ${connection.name}…`, 3000);
+        updateDedicatedServerDialog();
+        return true;
+    } catch (error) {
+        const wasCancelled = error.name === "AbortError" && !connection?.timedOut ||
+            dedicatedServer !== connection && connection;
+        if (connection?.requestTimeout) clearTimeout(connection.requestTimeout);
+        if (connection?.connectionTimeout) clearTimeout(connection.connectionTimeout);
+        if (connection && dedicatedServer === connection) {
+            connection.abortController.abort();
+            dedicatedServer = null;
+        }
+        if (pc) {
+            pc.onconnectionstatechange = null;
+            pc.close();
+        }
+        peers.delete(SERVER_PEER);
+        isConnecting = false;
+        if (!dedicatedServer && wasHost) {
+            isHost = true;
+            document.getElementById("usersBtn")?.classList.add("hosting");
+        }
+        if (!dedicatedServer && webRtcPollingEnabled) startOfferPolling();
+        if (!wasCancelled) {
+            const message = connection?.timedOut
+                ? "The server did not respond to the connection request. Check the address and try again."
+                : error.code ? error.message : dedicatedServerErrorMessage(null, error.message);
+            console.error("[WebRTC] Dedicated server connection failed:", error);
+            addMessage(message, 6000);
+        }
+        updateDedicatedServerDialog();
+        return false;
+    } finally {
+        dedicatedConnectPending = false;
+        if (!dedicatedServer && webRtcPollingEnabled) startOfferPolling();
+        updateDedicatedServerDialog();
+    }
+}
+
+function disconnectDedicatedServer(message = "Disconnected from the dedicated server.") {
+    const connection = dedicatedServer;
+    if (!connection) return;
+    for (const peerName of peers.keys()) {
+        if (peerName !== SERVER_PEER) cleanupPeer(peerName);
+    }
+    dedicatedServer = null;
+    isConnecting = false;
+    connection.abortController?.abort();
+    if (connection.requestTimeout) clearTimeout(connection.requestTimeout);
+    if (connection.connectionTimeout) clearTimeout(connection.connectionTimeout);
+    const peer = peers.get(SERVER_PEER);
+    if (peer) {
+        if (peer.keepaliveInterval) clearInterval(peer.keepaliveInterval);
+        peer.pc?.close();
+        peers.delete(SERVER_PEER);
+    }
+    if (message && !connection.kicked) addMessage(message, 5000);
+    updateDedicatedServerDialog();
+    updateHudButtons();
+}
+
+function updateDedicatedServerDialog() {
+    const action = document.getElementById("dedicatedServerAction");
+    if (action) {
+        action.disabled = isConnecting && !dedicatedServer;
+        action.textContent = dedicatedServer
+            ? (isConnecting ? "Cancel connection" : "Disconnect")
+            : "Connect";
+    }
+    const connectButton = document.getElementById("connectDedicatedServer");
+    if (connectButton) connectButton.hidden = Boolean(dedicatedServer?.connected);
+}
+
+function sendToPlayer(username, message) {
+    if (dedicatedServer) {
+        const serverPeer = peers.get(SERVER_PEER);
+        if (!serverPeer?.dc || serverPeer.dc.readyState !== "open") return false;
+        serverPeer.dc.send(JSON.stringify({ ...message, username: userName, to: username }));
+        return true;
+    }
+    const peer = peers.get(username);
+    if (!peer?.dc || peer.dc.readyState !== "open") return false;
+    peer.dc.send(JSON.stringify(message));
+    return true;
+}
+
+function sendToServer(message) {
+    const serverPeer = peers.get(SERVER_PEER);
+    if (!dedicatedServer || !serverPeer?.dc || serverPeer.dc.readyState !== "open") return false;
+    serverPeer.dc.send(JSON.stringify({ ...message, username: userName }));
+    return true;
+}
 
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
@@ -37,6 +477,10 @@ async function getTurnCredentials() {
     }]
 }
 async function connectToServer(e, t, o) {
+    if (dedicatedServer || peers.has(SERVER_PEER) || dedicatedConnectPending) {
+        addMessage("Disconnect from the dedicated server before connecting to a friend.", 4000);
+        return;
+    }
     if (peers.size >= MAX_PEERS) return addMessage("Cannot connect: too many peers.", 3e3), void console.log("[WebRTC] Connection failed: max peers reached");
     if (!knownServers.find((function (t) {
         return t.hostUser === e
@@ -204,37 +648,26 @@ async function sendWorldStateAsync(peer, worldState, username, targetWorld = wor
         transactionId: transactionId
     }));
 
-    let i = 0;
-    const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-
-    function sendChunk() {
-        if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) {
-            if (i >= chunks.length) {
-                console.log(`[WebRTC] Finished sending world state to ${username}.`);
-            }
+    let index = 0;
+    const sendChunk = () => {
+        if (!peer.dc || peer.dc.readyState !== "open" || index >= chunks.length) {
+            if (index >= chunks.length) console.log(`[WebRTC] Finished queueing world state for ${username}.`);
             return;
         }
-
-        const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
-        if (peer.dc.bufferedAmount > highWaterMark) {
-            peer.dc.onbufferedamountlow = () => {
-                peer.dc.onbufferedamountlow = null;
-                setTimeout(sendChunk, 0);
-            };
+        if (peer.dc.bufferedAmount >= DATA_CHANNEL_SEND_HIGH_WATER_MARK || getDataChannelSendQueueDepth(peer.dc) >= 8) {
+            setTimeout(sendChunk, 25);
             return;
         }
-
         peer.dc.send(JSON.stringify({
             type: 'world_sync_chunk',
-            transactionId: transactionId,
-            index: i,
-            chunk: chunks[i],
+            transactionId,
+            index,
+            chunk: chunks[index],
             total: chunks.length
         }));
-        i++;
+        index++;
         setTimeout(sendChunk, 0);
-    }
-
+    };
     sendChunk();
 }
 
@@ -268,6 +701,94 @@ function applyWorldStructureSync(data) {
                 isOpen: false
             };
         }
+    }
+}
+
+function applyWorldSyncPayload(data) {
+    const worldState = getCurrentWorldState();
+    if (data.chunkDeltas) {
+        const deltas = new Map(data.chunkDeltas);
+        for (const [chunkKey, changes] of deltas.entries()) {
+            worldState.chunkDeltas.set(chunkKey, changes);
+            chunkManager.applyDeltasToChunk(chunkKey, changes);
+        }
+    }
+    if (data.foreignBlockOrigins) {
+        worldState.foreignBlockOrigins = new Map(data.foreignBlockOrigins);
+    }
+    applyWorldStructureSync(data);
+    if (data.processedIds) {
+        for (const id of data.processedIds) processedMessages.add(id);
+        worker.postMessage({
+            type: "sync_processed",
+            ids: Array.from(processedMessages)
+        });
+    }
+}
+
+async function handleHttpWorldSync(message) {
+    const connection = dedicatedServer;
+    const channel = peers.get(SERVER_PEER)?.dc;
+    if (!connection || !connection.features?.has("http_world_sync") ||
+        typeof message.transactionId !== "string" || !message.transactionId) return;
+    const transactionId = message.transactionId;
+    const sendResult = (type, reason) => {
+        if (peers.get(SERVER_PEER)?.dc !== channel || channel?.readyState !== "open") return;
+        const result = { type, transactionId };
+        if (reason) result.reason = String(reason).slice(0, 300);
+        try {
+            channel.send(JSON.stringify(result));
+        } catch (error) {
+            console.error("[WEBRTC] Could not report HTTP world-sync result:", error);
+        }
+    };
+    let controller;
+    let timeout;
+    try {
+        if (typeof message.world !== "string" || message.world !== worldName) {
+            throw new Error("World mismatch");
+        }
+        const syncWorld = worldName;
+        if (typeof message.path !== "string" || !message.path) {
+            throw new Error("Missing world-sync path");
+        }
+        const base = new URL(connection.base);
+        const syncUrl = new URL(message.path, `${connection.base}/`);
+        if (syncUrl.origin !== base.origin || syncUrl.username || syncUrl.password) {
+            throw new Error("World-sync path must use the connected server origin");
+        }
+
+        const timeoutSeconds = Number(message.fetchTimeoutSeconds);
+        const fetchTimeoutMs = Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
+            ? Math.min(timeoutSeconds, 120) * 1000
+            : 30000;
+        controller = new AbortController();
+        timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
+        const response = await fetch(syncUrl.href, { method: "GET", signal: controller.signal });
+        if (!response.ok) throw new Error(`World-sync request failed (HTTP ${response.status})`);
+        const data = await response.json();
+        if (!data || typeof data !== "object" || Array.isArray(data) ||
+            !Array.isArray(data.chunkDeltas) ||
+            !Array.isArray(data.foreignBlockOrigins) ||
+            !Array.isArray(data.processedIds) ||
+            [data.magicianStones, data.calligraphyStones, data.chests].some(value =>
+                value !== null && (typeof value !== "object" || Array.isArray(value)))) {
+            throw new Error("Invalid world-sync response");
+        }
+        if (dedicatedServer !== connection || worldName !== syncWorld ||
+            peers.get(SERVER_PEER)?.dc !== channel) {
+            throw new Error("World or server connection changed during sync");
+        }
+        applyWorldSyncPayload(data);
+        sendResult("world_sync_http_done");
+    } catch (error) {
+        const reason = error.name === "AbortError"
+            ? "HTTP world-sync fetch timed out"
+            : error.message || "HTTP world-sync failed";
+        console.error(`[WEBRTC] HTTP world sync failed (${transactionId}):`, error);
+        sendResult("world_sync_http_failed", reason);
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -346,10 +867,11 @@ async function handleMinimapFile(e) {
 }
 
 function setupDataChannel(e, t) {
+    installDataChannelSendQueue(e);
     console.log(`[FIXED] Setting up data channel for: ${t}`), e.onopen = () => {
         // As per user request, when a client connects, they drop their world mappings
         // and perform a switch to the same world, effectively syncing with the host.
-        if (!isHost) {
+        if (!isHost || t === SERVER_PEER) {
             WORLD_STATES.clear();
             processedMessages.clear();
             worker.postMessage({ type: "clear_processed" });
@@ -361,7 +883,20 @@ function setupDataChannel(e, t) {
             console.log(`[WebRTC] Client stopped offer polling after connecting to host.`);
         }
         isConnecting = !1;
-        if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`), addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
+        if (t === SERVER_PEER && dedicatedServer) {
+            const wasConnected = dedicatedServer.connected;
+            dedicatedServer.connected = true;
+            if (dedicatedServer.connectionTimeout) {
+                clearTimeout(dedicatedServer.connectionTimeout);
+                dedicatedServer.connectionTimeout = null;
+            }
+            if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
+            updateDedicatedServerDialog();
+            pumpDedicatedServerImports();
+            dedicatedServerDialogCloser?.();
+        }
+        if (console.log(`[WEBRTC] Data channel open with: ${t}. State: ${e.readyState}`),
+            t !== SERVER_PEER && addMessage(`Connection established with ${t}`, 3e3), e.send(JSON.stringify({
             type: "player_move",
             username: userName,
             world: worldName,
@@ -373,7 +908,7 @@ function setupDataChannel(e, t) {
             isMoving: !1,
             isAttacking: !1,
             timestamp: Date.now()
-        })), typeof sendAvatarsToPeer === "function" && sendAvatarsToPeer(e, t), isHost) {
+        })), typeof sendAvatarsToPeer === "function" && sendAvatarsToPeer(e, t), isHost && t !== SERVER_PEER) {
             for (const [e, o] of peers.entries()) e !== t && e !== userName && o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
                 type: "new_player",
                 username: t
@@ -458,6 +993,14 @@ function setupDataChannel(e, t) {
                 }));
             }
         }
+        if (t === SERVER_PEER && dedicatedServer && !dedicatedServer.worldSyncRequested) {
+            e.send(JSON.stringify({
+                type: "request_world_sync",
+                world: worldName,
+                username: userName
+            }));
+            dedicatedServer.worldSyncRequested = true;
+        }
         const s = setInterval((() => {
             "open" === e.readyState && e.send(JSON.stringify({
                 type: "i_am_alive"
@@ -470,6 +1013,51 @@ function setupDataChannel(e, t) {
         try {
             const s = JSON.parse(e.data),
                 n = s.username || t;
+            if (t === SERVER_PEER && s.type === "server_welcome") {
+                if (dedicatedServer) {
+                    const wasConnected = dedicatedServer.connected;
+                    dedicatedServer.connected = true;
+                    isConnecting = false;
+                    if (dedicatedServer.connectionTimeout) {
+                        clearTimeout(dedicatedServer.connectionTimeout);
+                        dedicatedServer.connectionTimeout = null;
+                    }
+                    if (typeof s.serverName === "string" && s.serverName.trim()) {
+                        dedicatedServer.name = s.serverName.trim();
+                    }
+                    if (!wasConnected) addMessage(`Connected to ${dedicatedServer.name}.`, 4000);
+                    updateDedicatedServerDialog();
+                    pumpDedicatedServerImports();
+                    dedicatedServerDialogCloser?.();
+                }
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "server_import_result") {
+                handleServerImportResult(s);
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "world_sync_http") {
+                void handleHttpWorldSync(s);
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "server_authority") {
+                if (dedicatedServer && typeof s.world === "string" && typeof s.username === "string") {
+                    if (s.username === userName) dedicatedServer.authorityWorlds.add(s.world);
+                    else dedicatedServer.authorityWorlds.delete(s.world);
+                }
+                return;
+            }
+            if (t === SERVER_PEER && s.type === "server_kick") {
+                if (dedicatedServer) {
+                    dedicatedServer.kicked = true;
+                    const reason = typeof s.reason === "string" && s.reason.trim()
+                        ? s.reason.trim()
+                        : "The server disconnected you.";
+                    addMessage(`Disconnected by the server: ${reason}`, 7000);
+                    disconnectDedicatedServer(null);
+                }
+                return;
+            }
             if (n === userName) return;
             switch (s.type) {
                 case "i_am_alive":
@@ -497,7 +1085,7 @@ function setupDataChannel(e, t) {
                     }
 
                     // If host, calculate and store new player's spawn point
-                    if (isHost) {
+                    if (isAuthority(worldName)) {
                         const playerSpawn = calculateSpawnPoint(i + "@" + worldName);
                         const spawnCx = Math.floor(playerSpawn.x / CHUNK_SIZE);
                         const spawnCz = Math.floor(playerSpawn.z / CHUNK_SIZE);
@@ -521,7 +1109,7 @@ function setupDataChannel(e, t) {
                     updateHudButtons();
                     break;
                 case "world_sync":
-                    if (!isHost) {
+                    if (!isHost || dedicatedServer) {
                         console.log("[WEBRTC] Received world_sync");
                         const worldState = getCurrentWorldState();
                         if (s.chunkDeltas) {
@@ -539,7 +1127,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_sync_start':
-                    if (!isHost) {
+                    if (!isHost || dedicatedServer) {
                         partialIPFSUpdates.set(s.transactionId, {
                             chunks: new Array(s.total),
                             total: s.total,
@@ -549,7 +1137,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_sync_chunk':
-                    if (!isHost) {
+                    if (!isHost || dedicatedServer) {
                         const update = partialIPFSUpdates.get(s.transactionId);
                         if (update && !update.chunks[s.index]) {
                             update.chunks[s.index] = s.chunk;
@@ -616,14 +1204,16 @@ function setupDataChannel(e, t) {
                     createAndSetupAvatar(c, !1).position.set(s.x, s.y, s.z);
                     break;
                 case "player_move":
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         if (userPositions[n]) {
                             userPositions[n].world = s.world;
                         }
-                        for (const [t, o] of peers.entries()) {
-                            const peerWorld = userPositions[t] ? userPositions[t].world : null;
-                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
-                                o.dc.send(e.data);
+                        if (!dedicatedServer) {
+                            for (const [t, o] of peers.entries()) {
+                                const peerWorld = userPositions[t] ? userPositions[t].world : null;
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && peerWorld === s.world) {
+                                    o.dc.send(e.data);
+                                }
                             }
                         }
                     }
@@ -656,7 +1246,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "block_change":
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         console.log(`[WEBRTC] Host processing block change from ${n} for world ${s.world}`);
 
                         if (!WORLD_STATES.has(s.world)) {
@@ -682,9 +1272,11 @@ function setupDataChannel(e, t) {
                             worldState.foreignBlockOrigins.set(blockKey, s.originSeed);
                         }
 
-                        for (const [t, o] of peers.entries()) {
-                            if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.syncedWorlds && o.syncedWorlds.has(s.world)) {
-                                o.dc.send(e.data);
+                        if (!dedicatedServer) {
+                            for (const [t, o] of peers.entries()) {
+                                if (t !== n && t !== userName && o.dc && "open" === o.dc.readyState && o.syncedWorlds && o.syncedWorlds.has(s.world)) {
+                                    o.dc.send(e.data);
+                                }
                             }
                         }
                     }
@@ -714,7 +1306,7 @@ function setupDataChannel(e, t) {
                 case "batch_block_change":
                     if (s.messages && Array.isArray(s.messages)) {
                         for (const msg of s.messages) {
-                            if (isHost) {
+                            if (isAuthority(msg.world || worldName)) {
                                 if (!WORLD_STATES.has(msg.world)) {
                                     WORLD_STATES.set(msg.world, { chunkDeltas: new Map(), foreignBlockOrigins: new Map(), ipfsTruncatedDates: new Map() });
                                 }
@@ -817,7 +1409,9 @@ function setupDataChannel(e, t) {
                     break;
                 }
                 case "wolf_tame_result": {
-                    if (typeof s.authority !== "string" || (isHost && s.authority !== t)) break;
+                    if (typeof s.authority !== "string" ||
+                        (isHost && s.authority !== t) ||
+                        (dedicatedServer && s.authority !== n)) break;
                     handleWolfTameResult(s);
                     if (isHost) {
                         for (const [peerName, peer] of peers) {
@@ -827,7 +1421,7 @@ function setupDataChannel(e, t) {
                     break;
                 }
                 case "fish_spawn_request":
-                    if (isHost && s.world === worldName && (s.fishType === "fish_rare" || s.fishType === "fish_school")) {
+                    if (isAuthority(s.world || worldName) && s.world === worldName && (s.fishType === "fish_rare" || s.fishType === "fish_school")) {
                         const requester = userPositions[n];
                         const chunkKey = makeChunkKey(worldName, Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE), Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE));
                         const waterBlock = getBlockAt(s.x, s.y, s.z);
@@ -848,7 +1442,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "fish_spawn_remove":
                     if (s.world === worldName && typeof removeFishSpawnCommandByKey === "function") {
-                        if (isHost && !canRemoveFishSpawnCommand(s.key, n)) break;
+                        if (isAuthority(s.world || worldName) && !canRemoveFishSpawnCommand(s.key, n)) break;
                         removeFishSpawnCommandByKey(s.key, false);
                     }
                     break;
@@ -890,7 +1484,7 @@ function setupDataChannel(e, t) {
                             o.lastUpdateTime = updateTime;
                         }
                         // Only despawn if we are NOT the host (host manages despawns naturally)
-                        if (!isHost) {
+                        if (!isAuthority(s.world || worldName)) {
                             mobs = mobs.filter((t => {
                                 if (e.has(t.id) || t.petOwner === userName) return true;
                                 if (t.engineAudio) t.engineAudio.pause();
@@ -1005,7 +1599,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_despawn":
                 case "mob_kill":
-                    if (s.type === "mob_kill" && s.petOwner && isHost && s.petOwner !== t) break;
+                    if (s.type === "mob_kill" && s.petOwner && isAuthority(s.world || worldName) && !dedicatedServer && s.petOwner !== t) break;
                     if (isHost) {
                         for (const [peerName, peer] of peers) {
                             if (peerName !== t && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify(s));
@@ -1063,7 +1657,7 @@ function setupDataChannel(e, t) {
                             const source = mobs.find(source => source.id === s.sourceMobId);
                             if (!source || source.hp <= 0) break;
                             const senderOwnsSource = source.spawner === n ||
-                                (!isHost && n === t && !source.petOwner && !peers.has(source.spawner));
+                                (!isAuthority(s.world || worldName) && n === t && !source.petOwner && !peers.has(source.spawner));
                             if (!senderOwnsSource) break;
                             const damage = Math.max(0, Math.min(50, Number(s.damage) || 0));
                             if (isMobAuthority(mob)) {
@@ -1087,7 +1681,8 @@ function setupDataChannel(e, t) {
                             break;
                         }
                         const damage = 4 * getPickaxeMultiplier(s.toolId);
-                        if (mob.spawner === userName || (isHost && !mob.spawner) || peers.size === 0) {
+                        if (isAuthority(s.world || worldName) || mob.spawner === userName ||
+                            (isHost && !mob.spawner) || peers.size === 0) {
                             mob.hurt(damage, s.username);
                         } else if (isHost) {
                             const spawnerPeer = peers.get(mob.spawner);
@@ -1098,7 +1693,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "player_hit":
-                    isHost && handlePlayerHit(s);
+                    isAuthority(s.world || worldName) && handlePlayerHit(s);
                     break;
                 case "elite_mob_attack":
                     handleEliteMobAttackMessage(s, n);
@@ -1131,9 +1726,8 @@ function setupDataChannel(e, t) {
                     break;
                 case "add_score":
                     if (s.target && s.target !== userName) {
-                        if (isHost) {
-                            const recipient = peers.get(s.target);
-                            if (recipient?.dc?.readyState === "open") recipient.dc.send(JSON.stringify(s));
+                        if (isHost || (dedicatedServer && isAuthority(s.world || worldName))) {
+                            sendToPlayer(s.target, s);
                         }
                         break;
                     }
@@ -1177,7 +1771,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "player_attack":
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         const e = userPositions[n];
                         if (e) {
                             e.isAttacking = !0;
@@ -1214,7 +1808,7 @@ function setupDataChannel(e, t) {
                     break;
                 }
                 case "health_update":
-                    isHost && userPositions[s.username] && (userPositions[s.username].health = s.health);
+                    isAuthority(s.world || worldName) && userPositions[s.username] && (userPositions[s.username].health = s.health);
                     break;
                 case "chat":
                     // Handle incoming chat message
@@ -1272,7 +1866,7 @@ function setupDataChannel(e, t) {
                     handleVolcanoEvent(s);
                     break;
                 case "boulder_update":
-                    if (!isHost)
+                    if (!isAuthority(s.world || worldName))
                         for (const e of s.boulders) {
                             let t = eruptedBlocks.find((t => t.id === e.id));
                             if (t) {
@@ -1339,13 +1933,13 @@ function setupDataChannel(e, t) {
                                 }
                             }
                         }
-                    } else {
+                    } else if (!dedicatedServer) {
                         // if a client happens to get this, just add it.
                         processedMessages.add(s.transactionId);
                     }
                     break;
                 case "sync_processed_transaction":
-                    if (!isHost) {
+                    if (!isHost && !dedicatedServer) {
                         const transactionId = s.transactionId;
                         if (!processedMessages.has(transactionId)) {
                             processedMessages.add(transactionId);
@@ -1358,7 +1952,8 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "ipfs_chunk_from_client_start":
-                    if (isHost) {
+                    if (isHost || dedicatedServer) {
+                        if (dedicatedServer && s.world && s.world !== worldName) break;
                         if (processedMessages.has(s.transactionId)) {
                             console.log(`[WebRTC] Host skipping already processed IPFS update: ${s.transactionId}`);
                             return;
@@ -1377,45 +1972,60 @@ function setupDataChannel(e, t) {
                             sourceUsername: n
                         });
 
-                        // Relay to other peers as ipfs_chunk_update_start
-                        const relayMessage = JSON.stringify({
-                            type: 'ipfs_chunk_update_start',
-                            total: s.total,
-                            fromAddress: s.fromAddress,
-                            timestamp: s.timestamp,
-                            transactionId: s.transactionId
-                        });
-                        for (const [peerUsername, peer] of peers.entries()) {
-                            if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(relayMessage);
-                            }
-                        }
-                    }
-                    break;
-                case "ipfs_chunk_from_client_chunk":
-                    if (isHost) {
-                        const update = partialIPFSUpdates.get(s.transactionId);
-                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
-                            update.chunks[s.index] = s.chunk;
-                            update.received++;
-
-                            // Relay to other peers as ipfs_chunk_update_chunk
+                        if (isHost && !dedicatedServer) {
+                            // Relay to other peers as ipfs_chunk_update_start
                             const relayMessage = JSON.stringify({
-                                type: 'ipfs_chunk_update_chunk',
-                                transactionId: s.transactionId,
-                                index: s.index,
-                                chunk: s.chunk,
-                                total: s.total
+                                type: 'ipfs_chunk_update_start',
+                                total: s.total,
+                                fromAddress: s.fromAddress,
+                                timestamp: s.timestamp,
+                                transactionId: s.transactionId
                             });
                             for (const [peerUsername, peer] of peers.entries()) {
                                 if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(relayMessage);
                                 }
                             }
+                        }
+                    }
+                    break;
+                case "ipfs_chunk_from_client_chunk":
+                    if (isHost || dedicatedServer) {
+                        const update = partialIPFSUpdates.get(s.transactionId);
+                        if (update && !update.chunks[s.index]) { // Prevent processing duplicates
+                            update.chunks[s.index] = s.chunk;
+                            update.received++;
+
+                            if (isHost && !dedicatedServer) {
+                                // Relay to other peers as ipfs_chunk_update_chunk
+                                const relayMessage = JSON.stringify({
+                                    type: 'ipfs_chunk_update_chunk',
+                                    transactionId: s.transactionId,
+                                    index: s.index,
+                                    chunk: s.chunk,
+                                    total: s.total
+                                });
+                                for (const [peerUsername, peer] of peers.entries()) {
+                                    if (peerUsername !== n && peer.dc && peer.dc.readyState === 'open') {
+                                        peer.dc.send(relayMessage);
+                                    }
+                                }
+                            }
 
                             if (update.received === update.total) {
                                 const fullData = JSON.parse(update.chunks.join(''));
-                                applyChunkUpdates(fullData, update.fromAddress, update.timestamp, s.transactionId, update.sourceUsername);
+                                const applyUpdate = () => applyChunkUpdates(
+                                    fullData,
+                                    update.fromAddress,
+                                    update.timestamp,
+                                    s.transactionId,
+                                    update.sourceUsername
+                                );
+                                if (dedicatedServer) {
+                                    setTimeout(applyUpdate, 0);
+                                } else {
+                                    applyUpdate();
+                                }
                                 partialIPFSUpdates.delete(s.transactionId);
                             }
                         }
@@ -1426,7 +2036,7 @@ function setupDataChannel(e, t) {
                     break;
                 case 'request_block_break':
                 case "block_hit":
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         const originalWorldName = worldName;
                         const originalWorldSeed = worldSeed;
 
@@ -1581,11 +2191,11 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "request_world_sync":
-                    if (isHost) {
+                    if (isHost && !dedicatedServer) {
                         const worldState = WORLD_STATES.get(s.world);
                         if (worldState) {
                             const peer = peers.get(s.username);
-                            if (peer) {
+                            if (peer?.dc?.readyState === "open") {
                                 sendWorldStateAsync(peer, worldState, s.username, s.world);
                             }
                         }
@@ -1632,7 +2242,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_switch':
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         const peer = peers.get(s.username);
                         if (peer) {
                             const clientWorld = s.world;
@@ -1641,7 +2251,7 @@ function setupDataChannel(e, t) {
                             }
                             if (!peer.syncedWorlds.has(clientWorld)) {
                                 const worldState = WORLD_STATES.get(clientWorld);
-                                if (worldState) {
+                                if (worldState && !dedicatedServer && peer.dc?.readyState === "open") {
                                     sendWorldStateAsync(peer, worldState, s.username, clientWorld);
                                 }
                                 peer.syncedWorlds.add(clientWorld);
@@ -1739,7 +2349,7 @@ function setupDataChannel(e, t) {
                                         spawner: m.spawner
                                     }))
                                 });
-                                peer.dc.send(mobBatchMsg);
+                                if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);
                             } else if (window.mobsByWorld && window.mobsByWorld[targetWorld] && window.mobsByWorld[targetWorld].length > 0) {
                                 // If host isn't in that world but has tracked mobs for it
                                 const mobBatchMsg = JSON.stringify({
@@ -1761,12 +2371,12 @@ function setupDataChannel(e, t) {
                                         spawner: m.spawner
                                     }))
                                 });
-                                peer.dc.send(mobBatchMsg);
+                                if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);
                             }
                             const commandState = WORLD_STATES.get(targetWorld);
                             if (commandState && commandState.spawnCommands) {
                                 for (const command of commandState.spawnCommands.values()) {
-                                    peer.dc.send(JSON.stringify({
+                                    if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify({
                                         type: "fish_spawn_command",
                                         world: targetWorld,
                                         command,
@@ -1779,7 +2389,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'request_block_place':
-                    if (isHost) {
+                    if (isAuthority(s.world || worldName)) {
                         console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
                         const blockDefinition = BLOCKS[s.blockId];
                         const placementHasClearance = blockDefinition && blockDefinition.model === "door_closed"
@@ -1842,14 +2452,12 @@ function setupDataChannel(e, t) {
 
                             // Bug fix: Send inventory decrement message to the peer who placed the block
                             // This ensures peer inventory is decremented under host authority
-                            const requestingPeer = peers.get(s.username);
-                            if (requestingPeer && requestingPeer.dc && requestingPeer.dc.readyState === 'open') {
-                                requestingPeer.dc.send(JSON.stringify({
-                                    type: 'remove_from_inventory',
-                                    blockId: s.inventoryBlockId || s.blockId,
-                                    count: 1,
-                                    originSeed: s.originSeed
-                                }));
+                            if (sendToPlayer(s.username, {
+                                type: 'remove_from_inventory',
+                                blockId: s.inventoryBlockId || s.blockId,
+                                count: 1,
+                                originSeed: s.originSeed
+                            })) {
                                 console.log(`[Inventory] Host sent remove_from_inventory to ${s.username} for block ${s.blockId}`);
                             }
 
@@ -1876,23 +2484,20 @@ function setupDataChannel(e, t) {
                             const ownerName = getChunkOwnerName(placeChunkKey);
                             const reason = ownerName ? `Chunk owned by ${ownerName}` : 'Unknown ownership';
 
-                            const peer = peers.get(s.username);
-                            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({
-                                    type: 'block_action_denied',
-                                    x: s.x,
-                                    y: s.y,
-                                    z: s.z,
-                                    reason: reason,
-                                    chunkKey: placeChunkKey
-                                }));
-                            }
+                            sendToPlayer(s.username, {
+                                type: 'block_action_denied',
+                                x: s.x,
+                                y: s.y,
+                                z: s.z,
+                                reason: reason,
+                                chunkKey: placeChunkKey
+                            });
                             console.log(`[Ownership] Block place denied for ${s.username} at chunk ${placeChunkKey}: ${reason}`);
                         }
                     }
                     break;
                 case 'request_block_toggle':
-                    if (isHost && s.world === worldName) {
+                    if (isAuthority(s.world || worldName) && s.world === worldName) {
                         const currentBlockId = getBlockAt(s.x, s.y, s.z);
                         const currentDoor = BLOCKS[currentBlockId];
                         const isDoorToggle = currentDoor && (currentDoor.openId === s.blockId || currentDoor.closedId === s.blockId);
@@ -1906,7 +2511,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'block_place':
-                    if (!isHost) {
+                    if (!isAuthority(s.world || worldName)) {
                         // Client receives authoritative block place from host
                         console.log(`[WebRTC] Client received block place from host: (${s.x}, ${s.y}, ${s.z}) blockId: ${s.blockId}`);
                         chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, false, s.originSeed, 'network');
@@ -1935,7 +2540,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'block_break':
-                    if (!isHost) {
+                    if (!isAuthority(s.world || worldName)) {
                         // Client receives authoritative block break from host
                         console.log(`[WebRTC] Client received block break from host: (${s.x}, ${s.y}, ${s.z})`);
                         const blockId = s.blockId === undefined ? getBlockAt(s.x, s.y, s.z) : s.blockId;
@@ -1970,7 +2575,7 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'block_action_denied':
-                    if (!isHost) {
+                    if (!isAuthority(s.world || worldName) || dedicatedServer) {
                         // Client receives denial from host
                         addMessage(s.reason === 'Cannot break that block' ? s.reason : `Cannot edit: ${s.reason}`, 3000);
                         console.log(`[Ownership] Action denied at (${s.x}, ${s.y}, ${s.z}): ${s.reason}`);
@@ -2007,6 +2612,10 @@ function updatePendingModal() {
 }
 
 function activateHost() {
+    if (dedicatedServer) {
+        addMessage("You cannot host while connected to a dedicated server.", 4000);
+        return;
+    }
     if (!isHost) {
         isHost = !0, console.log("[SYSTEM] Hosting activated."), addMessage("Host mode activated!", 3e3), startOfferPolling();
         const e = document.getElementById("usersBtn");
@@ -2027,6 +2636,10 @@ function activateHost() {
     }
 }
 async function acceptPendingOffers() {
+    if (dedicatedServer || dedicatedConnectPending) {
+        addMessage("Disconnect from the dedicated server before accepting player offers.", 4000);
+        return;
+    }
     activateHost();
     const e = document.querySelectorAll(".selectOffer:checked");
     if (0 === e.length) return void addMessage("No offers selected", 3e3);
@@ -2336,6 +2949,7 @@ function setupPendingModal() {
 }
 
 function startOfferPolling() {
+    if (dedicatedServer) return;
     // All players should poll for offers at their own world@username thread
     // (not just hosts). This enables IPFS-based signaling where anyone can receive offers.
     if (!webRtcPollingEnabled) return void console.log("[SYSTEM] Skipping offer polling until Online Players is opened");
@@ -2348,7 +2962,10 @@ function startOfferPolling() {
     }
     var t = setInterval((async function () {
         try {
-            await new Promise((e => setTimeout(e, 350))), console.log("[SYSTEM] Polling offers for:", e), worker.postMessage({
+            await new Promise((e => setTimeout(e, 350)));
+            if (dedicatedConnectPending || dedicatedServer || !offerPollingIntervals.has(e)) return;
+            console.log("[SYSTEM] Polling offers for:", e);
+            worker.postMessage({
                 type: "poll",
                 chunkKeys: [],
                 masterKey: MASTER_WORLD_KEY,
@@ -2395,6 +3012,7 @@ function enableWebRtcPolling() {
 }
 
 function startAnswerPolling(e) {
+    if (dedicatedServer) return;
     // Use uniform keyword format: world@username (monitoring own thread for answers)
     var t = worldName + "@" + userName;
     if (!webRtcPollingEnabled) return void console.log("[SYSTEM] Skipping answer polling until Online Players is opened");
@@ -2467,7 +3085,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 8px;">Switch world</button>\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -2541,6 +3159,8 @@ function openUsersModal() {
     }
 
     o.appendChild(t.querySelector("#friendHandle").parentElement);
+    o.appendChild(t.querySelector("#connectDedicatedServer"));
+    updateDedicatedServerDialog();
 
     // Known Worlds Section
     var c = document.createElement("h4");
@@ -2799,6 +3419,10 @@ function openUsersModal() {
         e.stopPropagation()
     }));
     t.querySelector("#connectFriend").onclick = function () {
+        if (dedicatedServer || dedicatedConnectPending) {
+            addMessage("Disconnect from the dedicated server before connecting to a friend.", 4000);
+            return;
+        }
         isConnecting = !0;
         var e = document.getElementById("friendHandle").value.trim().slice(0, 20);
         if (e)
@@ -2818,9 +3442,178 @@ function openUsersModal() {
             } else addMessage("Cannot connect to yourself", 3e3);
         else addMessage("Please enter a friend’s handle", 3e3)
     }
+    t.querySelector("#connectDedicatedServer").onclick = openDedicatedServerModal;
+}
+
+function openDedicatedServerModal() {
+    document.getElementById("dedicatedServerModal")?.remove();
+    const modal = document.createElement("div");
+    modal.id = "dedicatedServerModal";
+    Object.assign(modal.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "1000",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(2,8,18,0.82)",
+        backdropFilter: "blur(5px)"
+    });
+    modal.innerHTML = `
+        <div role="dialog" aria-modal="true" aria-labelledby="dedicatedServerTitle"
+            style="background:linear-gradient(145deg,#172a40,#101a29);border:2px solid #42c8ff;padding:24px;border-radius:16px;width:min(500px,calc(100vw - 32px));box-sizing:border-box;box-shadow:0 0 36px rgba(45,190,255,.35),0 24px 70px rgba(0,0,0,.7);">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+                <span aria-hidden="true" style="font-size:2.2rem;">🌐</span>
+                <div>
+                    <h2 id="dedicatedServerTitle" style="margin:0 0 4px;font-size:1.5rem;">Connect to Server</h2>
+                    <div style="opacity:.8;">Join the SupGalaxy multiplayer server</div>
+                </div>
+            </div>
+            <label for="dedicatedServerAddress" style="display:block;font-weight:700;margin-bottom:4px;">Server address</label>
+            <input id="dedicatedServerAddress" type="text" value="https://play.supgalaxy.org:55555"
+                style="width:100%;padding:12px;margin:4px 0 12px;box-sizing:border-box;border-radius:8px;border:1px solid #53718d;background:#0b1420;color:#fff;font-size:1rem;"
+                autocomplete="url" spellcheck="false">
+            <label for="dedicatedServerLocalMode" style="display:flex;align-items:center;gap:9px;padding:10px 12px;margin-bottom:12px;border-radius:8px;background:rgba(66,200,255,.1);font-weight:700;cursor:pointer;">
+                <input id="dedicatedServerLocalMode" type="checkbox" style="width:18px;height:18px;accent-color:#42c8ff;">
+                Local mode <span style="font-weight:400;opacity:.8;">(http://127.0.0.1:55555)</span>
+            </label>
+            <div id="dedicatedServerStatus" role="status" aria-live="polite" style="min-height:1.4em;margin-bottom:12px;">Checking server status…</div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+                <button id="dedicatedServerAction" class="uniform-action-btn" style="order:-1;flex:1 0 100%;padding:13px 18px;background:#1599d0;color:#fff;font-size:1.1rem;box-shadow:0 0 18px rgba(21,153,208,.45);">Connect</button>
+                <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:10px 12px;">Refresh status</button>
+                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:10px 12px;">Close</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    isPromptOpen = !0;
+
+    const addressInput = modal.querySelector("#dedicatedServerAddress");
+    const localMode = modal.querySelector("#dedicatedServerLocalMode");
+    const status = modal.querySelector("#dedicatedServerStatus");
+    let statusController = null;
+    let requestId = 0;
+    let addressChangeTimeout;
+    let statusInterval;
+    try {
+        const savedAddress = localStorage.getItem("supgalaxy-dedicated-server-address");
+        if (savedAddress) {
+            addressInput.value = savedAddress === "https://fakeufo.org:55555"
+                ? "https://play.supgalaxy.org:55555"
+                : savedAddress === "http://127.0.0.1:5555"
+                    ? "http://127.0.0.1:55555"
+                    : savedAddress;
+        }
+        localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:55555";
+    } catch (error) {
+        console.warn("[WEBRTC] Could not read the saved server address:", error);
+    }
+
+    const refreshStatus = async () => {
+        const currentRequest = ++requestId;
+        if (statusController) statusController.abort();
+        statusController = new AbortController();
+        const controller = statusController;
+        let timeout;
+        try {
+            const enteredAddress = addressInput.value.trim();
+            const serverBase = normalizeDedicatedServerAddress(enteredAddress);
+            try {
+                localStorage.setItem("supgalaxy-dedicated-server-address", enteredAddress);
+            } catch (error) {
+                console.warn("[WEBRTC] Could not save the server address:", error);
+            }
+            status.textContent = "Checking server status…";
+            timeout = setTimeout(() => controller.abort(), 6000);
+            const response = await fetch(`${serverBase}/info`, { signal: controller.signal });
+            if (!response.ok) throw new Error(`Server returned HTTP ${response.status}.`);
+            const serverInfo = await response.json();
+            if (currentRequest !== requestId || !modal.isConnected) return;
+            const playerCount = Number(serverInfo.players);
+            const maxPlayers = Number(serverInfo.maxPlayers);
+            if (!Number.isFinite(playerCount) || !Number.isFinite(maxPlayers)) {
+                throw new Error("Server returned an invalid status response.");
+            }
+            const name = typeof serverInfo.name === "string" && serverInfo.name.trim()
+                ? ` · ${serverInfo.name.trim()}`
+                : "";
+            status.textContent = dedicatedServer?.connected
+                ? `Connected · ${playerCount}/${maxPlayers} players${name}`
+                : `Online · ${playerCount}/${maxPlayers} players${name}`;
+        } catch (error) {
+            if (currentRequest !== requestId || !modal.isConnected) return;
+            status.textContent = error.name === "AbortError"
+                ? "Server did not respond."
+                : error.message || "Server is unreachable.";
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
+
+    const closeModal = () => {
+        clearInterval(statusInterval);
+        clearTimeout(addressChangeTimeout);
+        if (statusController) statusController.abort();
+        if (dedicatedServer && isConnecting) disconnectDedicatedServer("Connection cancelled.");
+        else if (dedicatedConnectPending) isConnecting = false;
+        modal.remove();
+        if (dedicatedServerDialogCloser === closeModal) dedicatedServerDialogCloser = null;
+        isPromptOpen = Boolean(document.getElementById("usersModal")?.isConnected);
+    };
+    dedicatedServerDialogCloser = closeModal;
+    localMode.addEventListener("change", () => {
+        addressInput.value = localMode.checked
+            ? "http://127.0.0.1:55555"
+            : "https://play.supgalaxy.org:55555";
+        clearTimeout(addressChangeTimeout);
+        refreshStatus();
+    });
+    addressInput.addEventListener("input", () => {
+        clearTimeout(addressChangeTimeout);
+        addressChangeTimeout = setTimeout(refreshStatus, 500);
+    });
+    addressInput.addEventListener("keydown", event => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+            event.preventDefault();
+            refreshStatus();
+        } else if (event.key === "Escape") {
+            closeModal();
+        }
+    });
+    modal.querySelector("#refreshDedicatedServerStatus").onclick = refreshStatus;
+    modal.querySelector("#dedicatedServerAction").onclick = () => {
+        if (dedicatedServer) {
+            disconnectDedicatedServer(isConnecting ? "Connection cancelled." : undefined);
+        } else {
+            clearTimeout(addressChangeTimeout);
+            if (statusController) {
+                requestId++;
+                statusController.abort();
+            }
+            connectToDedicatedServer(addressInput.value);
+        }
+    };
+    modal.querySelector("#closeDedicatedServerModal").onclick = closeModal;
+    modal.addEventListener("click", event => {
+        if (event.target === modal) closeModal();
+    });
+    modal.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            event.stopPropagation();
+            closeModal();
+        }
+    });
+    statusInterval = setInterval(refreshStatus, 15000);
+    updateDedicatedServerDialog();
+    refreshStatus();
+    addressInput.focus();
 }
 
 function cleanupPeer(e) {
+    if (e === SERVER_PEER) {
+        if (dedicatedServer) disconnectDedicatedServer("Dedicated server connection closed.");
+        return;
+    }
     clearDisconnectedPlayerPets(e);
     const t = peers.get(e);
     if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
@@ -2846,6 +3639,7 @@ async function toggleCamera() {
     if (localVideoStream) {
         localVideoStream.getTracks().forEach((e => e.stop())), localVideoStream = null;
         for (const [e, t] of peers.entries()) {
+            if (e === SERVER_PEER) continue;
             if (t.pc) {
                 t.pc.getSenders().filter((e => e.track && "video" === e.track.kind)).forEach((e => t.pc.removeTrack(e)));
                 const e = await t.pc.createOffer();
@@ -2865,6 +3659,7 @@ async function toggleCamera() {
             video: !0
         });
         for (const [e, t] of peers.entries()) {
+            if (e === SERVER_PEER) continue;
             if (t.pc) {
                 localVideoStream.getTracks().forEach((e => t.pc.addTrack(e, localVideoStream)));
                 const e = await t.pc.createOffer();

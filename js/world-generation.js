@@ -1029,7 +1029,7 @@ function getAudioPositionForPlayer(username) {
 }
 
 function manageTreeSeeds() {
-    if (isHost || 0 === peers.size) {
+    if (isAuthority() || 0 === peers.size) {
         const now = Date.now();
         const state = typeof getCurrentWorldState !== "undefined" ? getCurrentWorldState() : null;
         if (!state || !state.treeSeeds) return;
@@ -1090,7 +1090,7 @@ function manageTreeSeeds() {
 }
 
 function manageVolcanoes() {
-    if (isHost || 0 === peers.size) {
+    if (isAuthority() || 0 === peers.size) {
         if (Date.now() - lastVolcanoManagement < 1e4) return;
         lastVolcanoManagement = Date.now();
         const e = [{

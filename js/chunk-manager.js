@@ -1275,21 +1275,14 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
 
         function sendChunksAsync(peer, messageType, chunks, transactionId) {
             let i = 0;
-            const highWaterMark = 1024 * 1024; // 1 MB buffer threshold
 
             function sendChunk() {
                 if (!peer.dc || peer.dc.readyState !== 'open' || i >= chunks.length) return;
-
-                // Check if buffer is full and wait if necessary
-                if (peer.dc.bufferedAmount > highWaterMark) {
-                    peer.dc.onbufferedamountlow = () => {
-                        peer.dc.onbufferedamountlow = null;
-                        setTimeout(sendChunk, 0); // Yield before sending next chunk
-                    };
+                if (peer.dc.bufferedAmount >= 1024 * 1024 || getDataChannelSendQueueDepth(peer.dc) >= 8) {
+                    setTimeout(sendChunk, 25);
                     return;
                 }
 
-                // Send one chunk
                 peer.dc.send(JSON.stringify({
                     type: messageType,
                     transactionId: transactionId,
@@ -1321,40 +1314,52 @@ async function applyChunkUpdates(e, t, o, a, sourceUsername) {
                 }
             }
         } else if (sourceUsername === undefined) {
-            const startMessage = JSON.stringify({
-                type: 'ipfs_chunk_from_client_start',
-                total: chunks.length,
-                fromAddress: t,
-                timestamp: o,
-                transactionId: a
-            });
-            for (const [, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(startMessage);
-                    sendChunksAsync(peer, 'ipfs_chunk_from_client_chunk', chunks, a);
+            if (dedicatedServer) {
+                uploadDedicatedServerImport(a, worldName, t, o, chunks);
+            } else {
+                const startMessage = JSON.stringify({
+                    type: 'ipfs_chunk_from_client_start',
+                    total: chunks.length,
+                    fromAddress: t,
+                    timestamp: o,
+                    world: worldName,
+                    transactionId: a
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(startMessage);
+                        sendChunksAsync(peer, 'ipfs_chunk_from_client_chunk', chunks, a);
+                    }
                 }
             }
         }
 
-        worker.postMessage({
-            type: "update_processed",
-            transactionIds: [a]
-        });
+        if (!dedicatedServer || sourceUsername !== undefined) {
+            worker.postMessage({
+                type: "update_processed",
+                transactionIds: [a]
+            });
 
-        if (typeof processedMessages !== 'undefined') {
-            processedMessages.add(a);
-        }
+            if (typeof processedMessages !== 'undefined') {
+                processedMessages.add(a);
+            }
 
-        const message = JSON.stringify({
-            type: 'processed_transaction_id',
-            transactionId: a
-        });
-        for (const [, peer] of peers.entries()) {
-            if (peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(message);
+            if (!dedicatedServer) {
+                const message = JSON.stringify({
+                    type: 'processed_transaction_id',
+                    transactionId: a
+                });
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(message);
+                    }
+                }
             }
         }
     } catch (e) {
+        if (a && typeof worker !== "undefined") {
+            worker.postMessage({ type: "clear_pending", transactionIds: [a] });
+        }
         console.error("[ChunkManager] Failed to apply chunk updates:", e)
     }
 }

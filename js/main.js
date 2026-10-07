@@ -101,7 +101,7 @@ function applyFishSpawnCommand(command) {
     if (!mobs.some(mob => mob.id === mobId)) {
         const mob = new Mob(storedCommand.x + 0.5, storedCommand.z + 0.5, mobId, storedCommand.type, storedCommand.y + 0.5, storedCommand.originSeed);
         mob.spawnCommandKey = key;
-        mob.spawner = isHost || peers.size === 0 ? userName : storedCommand.spawner;
+        mob.spawner = isAuthority() || peers.size === 0 ? userName : storedCommand.spawner;
         mobs.push(mob);
     }
     return true;
@@ -169,7 +169,7 @@ function placeFishFromInventory(item, x, y, z) {
         addMessage(`You cannot spawn a fish here. Chunk is owned by ${getChunkOwnerName(chunkKey) || "another player"}.`, 3000);
         return false;
     }
-    if (isHost || peers.size === 0) {
+    if (isAuthority() || peers.size === 0) {
         if (!addFishSpawnCommand(x, y, z, type, item.originSeed, userName)) return false;
         consumeFishInventoryItem(type, item.originSeed);
     } else {
@@ -3030,7 +3030,7 @@ function onPointerDown(e) {
             username: userName,
             toolId: toolId
         });
-        if (isHost) handlePlayerHit(JSON.parse(t));
+        if (isAuthority()) handlePlayerHit(JSON.parse(t));
         else {
             const o = JSON.stringify({
                 type: "player_attack",
@@ -3079,7 +3079,7 @@ function onPointerDown(e) {
             } else if (e.button === 0) {
                 // Left click: Break
                 animateAttack();
-                if (isHost || peers.size === 0) {
+                if (isAuthority() || peers.size === 0) {
                     removeBlockAt(cx, cy, cz, userName, 1, false, toolId);
                 } else {
                     const requestMsg = JSON.stringify({
@@ -3179,7 +3179,7 @@ function onPointerDown(e) {
         const y = Math.floor(i.y - .5 * l.y);
         const z = Math.floor(i.z - .5 * l.z);
 
-        if (isHost || peers.size === 0) {
+        if (isAuthority() || peers.size === 0) {
             removeBlockAt(x, y, z, userName, 1, false, toolId);
         } else {
             const blockId = getBlockAt(x, y, z);
@@ -3237,7 +3237,7 @@ function toggleCastleDoor(anchor) {
         addMessage("Move clear of the doorway before closing it.", 2000);
         return;
     }
-    if (isHost || peers.size === 0) {
+    if (isAuthority() || peers.size === 0) {
         chunkManager.setBlockGlobal(x, y, z, nextBlockId, true, null, "local");
         addMessage(BLOCKS[nextBlockId].doorOpen ? "Door opened" : "Door closed", 1200);
     } else {
@@ -3344,14 +3344,13 @@ function handlePlayerHit(e) {
             let u = 0,
                 p = 0;
             s > 0 && (u = a / s * d, p = n / s * d);
-            const m = peers.get(e.target);
-            m && m.dc && "open" === m.dc.readyState ? m.dc.send(JSON.stringify({
+            e.target !== userName ? sendToPlayer(e.target, {
                 type: "player_damage",
                 damage: damage,
                 attacker: e.username,
                 kx: u,
                 kz: p
-            })) : e.target === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - damage), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudioAt(soundHit, getAudioPositionForPlayer(e.username) || player), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
+            }) : Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - damage), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by " + e.username + "! HP: " + player.health, 1e3), flashDamageEffect(), safePlayAudioAt(soundHit, getAudioPositionForPlayer(e.username) || player), player.vx += u, player.vz += p, player.health <= 0 && handlePlayerDeath())
         } else t === userName && addMessage("Miss! Target is out of range.", 800)
     }
 }
@@ -3458,7 +3457,7 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
         }
         updateSaveChangesButton();
 
-        if (batchedMessages.length > 0 && isHost) {
+        if (batchedMessages.length > 0 && isAuthority()) {
             const batchSize = 25;
             for (let i = 0; i < batchedMessages.length; i += batchSize) {
                 const batch = batchedMessages.slice(i, i + batchSize);
@@ -3486,11 +3485,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
     const miningDamage = isUfo ? 1 : getMiningDamage(a, toolId, laserColor);
     if (!miningDamage) {
         const message = "Cannot break that block";
-        if (isHost && breaker && breaker !== userName) {
-            const peer = peers.get(breaker);
-            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(JSON.stringify({ type: 'alert', message }));
-            }
+        if (isAuthority() && breaker && breaker !== userName) {
+            sendToPlayer(breaker, { type: 'alert', message });
         } else {
             addMessage(message);
         }
@@ -3501,15 +3497,13 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
     var chunkX = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE);
     var chunkZ = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE);
     var chunkKey = makeChunkKey(worldName, chunkX, chunkZ);
-    if (!checkChunkOwnership(chunkKey, breaker || userName)) {
+    const serverAuthorityWillValidate = dedicatedServer && !isAuthority();
+    if (!serverAuthorityWillValidate && !checkChunkOwnership(chunkKey, breaker || userName)) {
         const owner = getChunkOwnerName(chunkKey) || 'another user';
         const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
-        if (isHost && breaker && breaker !== userName) {
+        if (isAuthority() && breaker && breaker !== userName) {
             // If the breaker is a peer and we are host, send an alert to them
-            const peer = peers.get(breaker);
-            if (peer && peer.dc && peer.dc.readyState === 'open') {
-                peer.dc.send(JSON.stringify({ type: 'alert', message: alertMsg }));
-            }
+            sendToPlayer(breaker, { type: 'alert', message: alertMsg });
         } else if (!breaker || breaker === userName) {
             addMessage(alertMsg, 3000);
         }
@@ -3560,7 +3554,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
             const u = document.getElementById(c);
             safePlayAudioAt(u, { x: e, y: t, z: o });
 
-            if (isHost) {
+            if (isAuthority()) {
                 const blockDamagedMsg = JSON.stringify({
                     type: 'block_damaged',
                     x: e,
@@ -3583,7 +3577,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
         }
 
         // Host-authoritative: only host mutates directly, clients send requests
-        if (isHost || peers.size === 0) {
+        if (isAuthority() || peers.size === 0) {
             // Host or solo: break immediately (ownership already checked at top)
             const worldState = getCurrentWorldState();
             const l = worldState.foreignBlockOrigins.get(r);
@@ -3605,16 +3599,13 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
                     }
 
                     safePlayAudioAt(soundBreak, { x: e, y: t, z: o });
-                } else if (isHost) {
-                    const peer = peers.get(breaker);
-                    if (peer && peer.dc && peer.dc.readyState === 'open') {
-                        peer.dc.send(JSON.stringify({
-                            type: 'add_to_inventory',
-                            blockId: n.dropId || a,
-                            count: 1,
-                            originSeed: l
-                        }));
-                    }
+                } else if (isAuthority()) {
+                    sendToPlayer(breaker, {
+                        type: 'add_to_inventory',
+                        blockId: n.dropId || a,
+                        count: 1,
+                        originSeed: l
+                    });
                 }
                 createBlockParticles(e, t, o, a);
             }
@@ -3629,7 +3620,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
             }
 
             // Broadcast to clients
-            if (isHost) {
+            if (isAuthority()) {
                 const breakMsg = JSON.stringify({
                     type: 'block_break',
                     x: e,
@@ -3649,18 +3640,22 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
             }
         } else if (!breaker || breaker === userName) {
             // Client: send request to host (only for local player, not for other players' actions)
-            const requestMsg = JSON.stringify({
+            const requestMsg = {
                 type: 'request_block_break',
                 x: e,
                 y: t,
                 z: o,
                 username: userName,
                 world: worldName
-            });
-            for (const [peerName, peer] of peers.entries()) {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(requestMsg);
-                    break; // Send to first available peer (should be host)
+            };
+            if (dedicatedServer) {
+                sendToServer(requestMsg);
+            } else {
+                for (const [, peer] of peers.entries()) {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(JSON.stringify(requestMsg));
+                        break; // Send to first available peer (should be host)
+                    }
                 }
             }
             addMessage("Breaking...", 500);
@@ -3821,7 +3816,7 @@ function placeBlockAt(e, t, o, a) {
                     }
 
                     // Host-authoritative: only host mutates directly, clients send requests
-                    if (isHost || peers.size === 0) {
+                    if (isAuthority() || peers.size === 0) {
                         if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
@@ -3850,7 +3845,7 @@ function placeBlockAt(e, t, o, a) {
                         }
 
                         // Broadcast to clients
-                        if (isHost) {
+                        if (isAuthority()) {
                             const placeMsg = JSON.stringify({
                                 type: 'block_place',
                                 x: e,
@@ -5538,7 +5533,7 @@ async function startGame() {
 }
 
 function scanExpiredOwnership() {
-    if (!isHost) return; // Only host scans for expired ownership
+    if (!isAuthority()) return; // Only the world authority scans for expired ownership
 
     const now = Date.now();
     const expired = [];
@@ -6237,12 +6232,12 @@ function runGameFrame(e) {
                 const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
                     o = (new THREE.Box3).setFromObject(e.mesh);
                 t.intersectsBox(o) && (player.health = Math.max(0, player.health - 2), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a Grub! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
-            } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isHost || 0 === peers.size) {
+            } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isAuthority() || 0 === peers.size) {
                 16 === getBlockAt(player.x, player.y + .5, player.z) && Date.now() - lastDamageTime > 500 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Burning in lava! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             }
         
         // Check for damage from magician stones
-        if (isHost || 0 === peers.size) {
+        if (isAuthority() || 0 === peers.size) {
             const playerBox = new THREE.Box3().setFromCenterAndSize(
                 new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
                 new THREE.Vector3(player.width, player.height, player.depth)
@@ -6283,15 +6278,15 @@ function runGameFrame(e) {
                 }
             }
         }
-        if (isHost)
+        if (isAuthority())
             for (const [t, o] of peers.entries())
                 if (userPositions[t]) {
                     const a = userPositions[t];
-                    16 === getBlockAt(a.targetX, a.targetY + .5, a.targetZ) && (!o.lastLavaDamageTime || e - o.lastLavaDamageTime > 500) && (o.lastLavaDamageTime = e, o.dc && "open" === o.dc.readyState && o.dc.send(JSON.stringify({
+                    16 === getBlockAt(a.targetX, a.targetY + .5, a.targetZ) && (!o.lastLavaDamageTime || e - o.lastLavaDamageTime > 500) && (o.lastLavaDamageTime = e, sendToPlayer(t, {
                         type: "player_damage",
                         damage: 1,
                         attacker: "lava"
-                    })))
+                    }))
                 }
         for (const mob of mobs) {
             if (mob.type === "grub" && Date.now() - mob.lastDamageTime > 30000 && Date.now() - mob.lastRegenTime > 10000 && mob.hp < 40) {
@@ -6484,7 +6479,7 @@ function runGameFrame(e) {
         updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
         for (let o = eruptedBlocks.length - 1; o >= 0; o--) {
             const a = eruptedBlocks[o];
-            if (isHost || 0 === peers.size)
+            if (isAuthority() || 0 === peers.size)
                 if ("boulder" === a.type) {
                     updateBoulder(a, t)
                 } else a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t));
@@ -6500,7 +6495,7 @@ function runGameFrame(e) {
             }
             (a.mesh.position.y < -10 || Date.now() - a.createdAt > ("boulder" === a.type ? 45e3 : 15e3)) && (scene.remove(a.mesh), disposeObject(a.mesh), eruptedBlocks.splice(o, 1))
         }
-        if ((isHost || 0 === peers.size) && e - (lastStateUpdateTime || 0) > 100) {
+        if ((isAuthority() || 0 === peers.size) && e - (lastStateUpdateTime || 0) > 100) {
             const e = eruptedBlocks.filter((e => "boulder" === e.type)).map((e => ({
                 id: e.id,
                 position: e.mesh.position.toArray(),
@@ -6531,7 +6526,7 @@ function runGameFrame(e) {
                 });
                 for (const [peerName, peer] of peers.entries()) {
                     const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && (!isHost || peerWorld === worldName)) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && (!isAuthority(peerWorld) || peerWorld === worldName)) {
                         peer.dc.send(mobBatchMsg);
                     }
                 }
@@ -6644,7 +6639,7 @@ function runGameFrame(e) {
                     break;
                 }
                 if (isSolid(getBlockAt(a, n, r))) {
-                    if (isHost || peers.size === 0) {
+                    if (isAuthority() || peers.size === 0) {
                         if (o.isBlue) {
                             applyBlueLaserDamage(a, n, r, o.user);
 
@@ -6763,7 +6758,7 @@ function runGameFrame(e) {
                 if (s) break; // break steps loop
 
                 // 3. PLAYER COLLISION LOGIC
-                if (isHost || peers.size === 0) {
+                if (isAuthority() || peers.size === 0) {
                     let hitPlayer = false;
 
                     // First, check for collision with the host player itself
@@ -6801,14 +6796,11 @@ function runGameFrame(e) {
                             const hitThreshold = o.isBlue ? 2.5 : 1.5;
                             if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
                                 const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
-                                const peer = peers.get(username);
-                                if (peer && peer.dc && peer.dc.readyState === 'open') {
-                                    peer.dc.send(JSON.stringify({
-                                        type: 'player_damage',
-                                        damage: damage,
-                                        attacker: o.user
-                                    }));
-                                }
+                                sendToPlayer(username, {
+                                    type: 'player_damage',
+                                    damage: damage,
+                                    attacker: o.user
+                                });
                                 hitPlayer = true;
                                 break; // break player loop
                             }

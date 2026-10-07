@@ -107,7 +107,7 @@ function clearPlayerPetsForWorldSwitch() {
 
 function clearDisconnectedPlayerPets(owner) {
     if (!owner || owner === userName) return;
-    clearWorldPetsForOwner(owner, isHost);
+    clearWorldPetsForOwner(owner, isAuthority());
 }
 
 function getPlayerPetIds(owner) {
@@ -154,7 +154,7 @@ function tryTameWolf(mob) {
     bone.count--;
     if (bone.count <= 0) INVENTORY[selectedHotIndex] = null;
     updateHotbarUI();
-    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isHost ? userName : peers.keys().next().value),
+    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isAuthority() ? userName : peers.keys().next().value),
         startedAt: Date.now(), sentAt: Date.now() });
     if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId);
     return true;
@@ -197,8 +197,12 @@ function handleWolfTameRequest(mob, owner, requestId) {
         if (fed) queueEliteMobUpdate(mob);
     }
     handleWolfTameResult(result);
-    const message = JSON.stringify(result);
-    for (const [, peer] of peers) if (peer.dc?.readyState === "open") peer.dc.send(message);
+    if (dedicatedServer) {
+        sendToPlayer(owner, result);
+    } else {
+        const message = JSON.stringify(result);
+        for (const [, peer] of peers) if (peer.dc?.readyState === "open") peer.dc.send(message);
+    }
 }
 
 function handleWolfTameResult(message) {
@@ -938,11 +942,11 @@ function manageMobs() {
         // Host overrides lowest alphabetical name if present in the area
         let hostInArea = false;
         for (const p of area.players) {
-            if (isHost && p.name === userName) {
+            if (isAuthority() && p.name === userName) {
                 hostInArea = true;
                 break;
             }
-            if (!isHost && peers.has(p.name)) {
+            if (!isAuthority() && peers.has(p.name)) {
                 // There is a host in this area
                 hostInArea = true;
                 spawner = p.name;
@@ -1227,7 +1231,7 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
         username: userName
     });
 
-    if (isHost || peers.size === 0) {
+    if (isAuthority() || peers.size === 0) {
         for (const [peerName, peer] of peers.entries()) {
             const peerWorld = userPositions[peerName] ? userPositions[peerName].world : worldName;
             if (peerName !== userName && peer.dc && peer.dc.readyState === "open" && peerWorld === worldName) {
@@ -1248,7 +1252,7 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
 
 function handleMobHit(t, toolId = null) {
     const damage = 4 * getPickaxeMultiplier(toolId);
-    const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
     if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
         addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
         return;
@@ -1277,7 +1281,7 @@ function handleMobHit(t, toolId = null) {
     safePlayAudioAt(soundHit, t.pos), addMessage("Hit mob!", 800)
 }
 function updateAquaticMob(t, delta) {
-    const isLocalSpawner = (t.spawner === userName) || (isHost && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
     const now = Date.now();
     t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
     t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
@@ -1306,11 +1310,10 @@ function updateAquaticMob(t, delta) {
                 target = candidates[0] || null;
                 if (target && Math.hypot(target.x - t.pos.x, target.y - t.pos.y, target.z - t.pos.z) < 3 && now - t.attackCooldown > 1400) {
                     t.attackCooldown = now;
-                    const peer = peers.get(target.name);
                     if (target.mob) {
                         sendMobDamageFromMob(target.mob, t, 2);
-                    } else if (target.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
-                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 2, attacker: "whale" }));
+                    } else if (target.name !== userName) {
+                        sendToPlayer(target.name, { type: "player_damage", damage: 2, attacker: "whale" });
                     } else if (target.name === userName) {
                         player.health = Math.max(0, player.health - 2);
                         lastDamageTime = now;
@@ -1359,11 +1362,10 @@ function updateAquaticMob(t, delta) {
                 target = nearestPlayer;
                 if (playerDistance < 1.6 && now - t.attackCooldown > 1600) {
                     t.attackCooldown = now;
-                    const peer = peers.get(nearestPlayer.name);
                     if (nearestPlayer.mob) {
                         sendMobDamageFromMob(nearestPlayer.mob, t, 1);
-                    } else if (nearestPlayer.name !== userName && peer && peer.dc && peer.dc.readyState === "open") {
-                        peer.dc.send(JSON.stringify({ type: "player_damage", damage: 1, attacker: "fish" }));
+                    } else if (nearestPlayer.name !== userName) {
+                        sendToPlayer(nearestPlayer.name, { type: "player_damage", damage: 1, attacker: "fish" });
                     } else if (nearestPlayer.name === userName) {
                         player.health = Math.max(0, player.health - 1);
                         lastDamageTime = now;
@@ -1706,7 +1708,7 @@ Mob.prototype.update = function (t) {
 
             this.attackCooldown -= t;
             if (this.attackCooldown <= 0 && dist < 60) { // Closer distance required to shoot
-                if (typeof createProjectile === "function" && (typeof isHost === "undefined" || isHost || peers.size === 0)) {
+                if (typeof createProjectile === "function" && (typeof isAuthority !== "function" || isAuthority() || peers.size === 0)) {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
                         new THREE.Vector3(8, 0, 0),
@@ -1780,10 +1782,9 @@ Mob.prototype.update = function (t) {
                             if (Date.now() - this.lastEatTime > 1000) {
                                 if (spiderTarget.mob) sendMobDamageFromMob(spiderTarget.mob, this, 2);
                                 else if (spiderTarget.username !== userName) {
-                                    const peer = peers.get(spiderTarget.username);
-                                    if (peer?.dc?.readyState === "open") peer.dc.send(JSON.stringify({
+                                    sendToPlayer(spiderTarget.username, {
                                         type: "player_damage", damage: 2, attacker: "spider"
-                                    }));
+                                    });
                                 } else {
                                 player.health = Math.max(0, player.health - 2);
                                 document.getElementById("health").innerText = player.health;
@@ -2166,12 +2167,11 @@ Mob.prototype.update = function (t) {
                 }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 if (t.mob) sendMobDamageFromMob(t.mob, this, 1);
-                const e = peers.get(t.username);
-                e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
+                t.username !== userName ? sendToPlayer(t.username, {
                     type: "player_damage",
                     damage: 1,
                     attacker: "mob"
-                })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+                }) : Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
             }
         }
         if ("crawley" === this.type) {
@@ -2394,12 +2394,11 @@ Mob.prototype.update = function (t) {
                 }, o = e, e < 2.5 && Date.now() - this.attackCooldown > 800)) {
                 this.attackCooldown = Date.now();
                 if (t.mob) sendMobDamageFromMob(t.mob, this, 1);
-                const e = peers.get(t.username);
-                e && e.dc && "open" === e.dc.readyState ? e.dc.send(JSON.stringify({
+                t.username !== userName ? sendToPlayer(t.username, {
                     type: "player_damage",
                     damage: 1,
                     attacker: "mob"
-                })) : t.username === userName && Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
+                }) : Date.now() - lastDamageTime > 800 && (player.health = Math.max(0, player.health - 1), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit! HP: " + player.health, 1e3), player.health <= 0 && handlePlayerDeath())
             }
         }
         let h = !1;
@@ -2615,15 +2614,12 @@ Mob.prototype.update = function (t) {
             addToInventory(fishItemId, 1, this.originSeed);
             addMessage(`Caught ${BLOCKS[fishItemId].name} from ${this.originSeed}!`, 2500);
         } else if (t) {
-            const peer = peers.get(t);
-            if (peer && peer.dc && peer.dc.readyState === "open") {
-                peer.dc.send(JSON.stringify({
-                    type: "add_to_inventory",
-                    blockId: fishItemId,
-                    count: 1,
-                    originSeed: this.originSeed
-                }));
-            }
+            sendToPlayer(t, {
+                type: "add_to_inventory",
+                blockId: fishItemId,
+                count: 1,
+                originSeed: this.originSeed
+            });
         }
     }
     let e = 10;
@@ -2670,19 +2666,24 @@ Mob.prototype.update = function (t) {
         }
     } else if (typeof t === "string" && t.length > 0 &&
         (peers.has(t) || userPositions[t] || mobs.some(mob => mob.type === "timber_wolf" && mob.petOwner === t))) {
-        const s = peers.get(t);
-        const message = JSON.stringify({
+        const message = {
             type: "add_score",
             target: t,
-            amount: e
-        });
-        if (s && s.dc && "open" === s.dc.readyState) {
-            s.dc.send(message);
+            amount: e,
+            world: worldName
+        };
+        if (dedicatedServer) {
+            sendToPlayer(t, message);
         } else {
-            for (const [, peer] of peers) {
-                if (peer.dc?.readyState === "open") {
-                    peer.dc.send(message);
-                    break;
+            const peer = peers.get(t);
+            if (peer?.dc?.readyState === "open") {
+                peer.dc.send(JSON.stringify(message));
+            } else {
+                for (const [, peer] of peers) {
+                    if (peer.dc?.readyState === "open") {
+                        peer.dc.send(JSON.stringify(message));
+                        break;
+                    }
                 }
             }
         }
