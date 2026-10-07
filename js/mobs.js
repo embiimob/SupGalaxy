@@ -251,6 +251,7 @@ function restorePetSaveData(data) {
         if (mob.petOwner !== userName) return true;
         const pet = player.pets.find(pet => pet.id === mob.id);
         if (pet) {
+            delete mob.petTransport;
             mob.hp = pet.hp;
             mob.maxHp = pet.maxHp;
             mob.feedRevision = pet.feedRevision;
@@ -449,8 +450,21 @@ function findPlayerPetPosition(petId, index = 0) {
         const steps = radius ? 8 : 1;
         for (let step = 0; step < steps; step++) {
             const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
-            const x = modWrap(Math.floor(centerX + Math.cos(angle) * radius) + 0.5, MAP_SIZE);
-            const z = modWrap(Math.floor(centerZ + Math.sin(angle) * radius) + 0.5, MAP_SIZE);
+            let x = Math.floor(centerX + Math.cos(angle) * radius) + 0.5;
+            let z = Math.floor(centerZ + Math.sin(angle) * radius) + 0.5;
+            if (ufoRide && player.onGround && mobs.includes(ufoRide.mob)) {
+                const support = getUfoGroundSupport(x, z, player.y + 2.05, player.y - 2.05, ufoRide.mob, 0, 0);
+                if (support && !petPositionBlocked(x, support.y, z) &&
+                    !mobs.some(mob => mob.id !== petId && mob.petOwner === userName &&
+                        Math.hypot(mob.pos.x - x, mob.pos.y - support.y, mob.pos.z - z) < 1.5)) {
+                    return { x, y: support.y, z };
+                }
+                continue;
+            }
+            if (!ufoOffMap) {
+                x = modWrap(x, MAP_SIZE);
+                z = modWrap(z, MAP_SIZE);
+            }
             if (![[-0.45, -0.45], [-0.45, 0.45], [0.45, -0.45], [0.45, 0.45]]
                 .every(([dx, dz]) => isPositionInLoadedSpace(x + dx, z + dz))) continue;
             for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
@@ -468,6 +482,140 @@ function findPlayerPetPosition(petId, index = 0) {
     return fallback;
 }
 
+function petPositionBlocked(x, y, z) {
+    return [[-.45, -.45], [-.45, .45], [.45, -.45], [.45, .45], [0, 0]]
+        .some(([dx, dz]) => checkCollisionWithBlock(x + dx, y, z + dz) ||
+            checkCollisionWithBlock(x + dx, y + .4, z + dz));
+}
+
+function resetPetMotion(mob) {
+    mob.vx = mob.vz = mob.vy = mob.lungeVy = 0;
+    mob.aiState = "FOLLOW";
+    mob.isMoving = false;
+}
+
+function boardPlayerPet(mob, hull) {
+    hull.mesh.updateMatrixWorld(true);
+    resetPetMotion(mob);
+    mob.petTransport = {
+        hull, local: hull.mesh.worldToLocal(mob.pos.clone()),
+        rotation: hull.mesh.quaternion.clone(),
+        owner: new THREE.Vector3(player.x, player.y, player.z), world: worldName, vy: 0
+    };
+}
+
+// Only the pet's owner simulates transport; observers receive the usual mob position updates.
+function updatePlayerPetTransport(mob, dt) {
+    if (mob.petOwner !== userName || !(mob.hp > 0)) return false;
+    let ride = mob.petTransport;
+    if (player.health <= 0 || (ride && ride.world !== worldName)) {
+        delete mob.petTransport;
+        resetPetMotion(mob);
+        return false;
+    }
+    const hull = player.onGround && ufoRide && mobs.includes(ufoRide.mob) && !ufoRide.mob.deathProcessed
+        ? ufoRide.mob : null;
+    if (!ride && hull) {
+        const support = getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + 2.05, mob.pos.y - .3, hull, 0, 0);
+        if (support) {
+            mob.pos.y = support.y;
+            boardPlayerPet(mob, hull);
+            ride = mob.petTransport;
+        }
+    }
+    if (!ride) return false;
+    if (ride.hull && ride.hull === hull) {
+        hull.mesh.updateMatrixWorld(true);
+        mob.pos.copy(hull.mesh.localToWorld(ride.local.clone()));
+        const rotation = hull.mesh.quaternion.clone().multiply(ride.rotation.clone().invert());
+        mob.mesh.quaternion.premultiply(rotation);
+        ride.rotation.copy(hull.mesh.quaternion);
+    } else if (ride.hull) {
+        ride.hull = null;
+        ride.vy = player.vy;
+        resetPetMotion(mob);
+    }
+    let dx = player.x + (player.width || .8) / 2 - mob.pos.x;
+    let dz = player.z + (player.depth || .8) / 2 - mob.pos.z;
+    if (!ufoOffMap) {
+        dx = modWrap(dx + MAP_SIZE / 2, MAP_SIZE) - MAP_SIZE / 2;
+        dz = modWrap(dz + MAP_SIZE / 2, MAP_SIZE) - MAP_SIZE / 2;
+    }
+    const distance = Math.hypot(dx, dz);
+    const step = Math.min(Math.max(0, distance - 2.5), mob.speed * 1.2 * dt);
+    let nx = mob.pos.x + (distance ? dx / distance * step : 0) + (mob.vx || 0) * dt;
+    let nz = mob.pos.z + (distance ? dz / distance * step : 0) + (mob.vz || 0) * dt;
+    if (!ufoOffMap && !ride.hull) {
+        nx = modWrap(nx, MAP_SIZE);
+        nz = modWrap(nz, MAP_SIZE);
+    }
+    mob.isMoving = false;
+    if (ride.hull) {
+        const support = getUfoGroundSupport(nx, nz, mob.pos.y + 2.05, mob.pos.y - 2.05, hull, 0, 0);
+        if (support && !petPositionBlocked(nx, support.y, nz)) {
+            mob.isMoving = step > 0 || Math.abs(mob.vx) + Math.abs(mob.vz) > .01;
+            mob.pos.set(nx, support.y, nz);
+        } else if (Math.abs(mob.vx) + Math.abs(mob.vz) > .01 && !petPositionBlocked(nx, mob.pos.y, nz)) {
+            mob.pos.x = nx;
+            mob.pos.z = nz;
+            ride.hull = null;
+            ride.vy = 0;
+        }
+        if (ride.hull) ride.local.copy(hull.mesh.worldToLocal(mob.pos.clone()));
+    } else {
+        if (!petPositionBlocked(nx, mob.pos.y, nz)) {
+            mob.pos.x = nx;
+            mob.pos.z = nz;
+            mob.isMoving = step > 0;
+        }
+        // Share the owner's actual gravity displacement, including terrain-generation pauses.
+        // Once the owner lands, finish any remaining height difference with normal gravity.
+        let targetY;
+        if (!player.onGround || player.y < ride.owner.y) {
+            targetY = mob.pos.y + player.y - ride.owner.y;
+            ride.vy = player.vy;
+        } else {
+            ride.vy = Math.min(0, ride.vy) - gravity * dt;
+            targetY = mob.pos.y + ride.vy * dt;
+        }
+        const support = hull && targetY <= mob.pos.y
+            ? getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + .001, targetY - .3, hull, 0, 0) : null;
+        if (support && !petPositionBlocked(mob.pos.x, support.y, mob.pos.z)) {
+            mob.pos.y = support.y;
+            boardPlayerPet(mob, hull);
+            return true;
+        }
+        const loaded = [[-.45, -.45], [-.45, .45], [.45, -.45], [.45, .45]]
+            .every(([ox, oz]) => isPositionInLoadedSpace(mob.pos.x + ox, mob.pos.z + oz));
+        let landed = false;
+        if (targetY >= MAX_HEIGHT || loaded) {
+            let safeY = mob.pos.y;
+            while (safeY > targetY) {
+                const nextY = Math.max(targetY, safeY - .25);
+                if (nextY < MAX_HEIGHT && petPositionBlocked(mob.pos.x, nextY, mob.pos.z)) {
+                    landed = true;
+                    break;
+                }
+                safeY = nextY;
+            }
+            if (targetY > safeY && !petPositionBlocked(mob.pos.x, targetY, mob.pos.z)) safeY = targetY;
+            mob.pos.y = safeY;
+        } else if (mob.pos.y > MAX_HEIGHT) {
+            mob.pos.y = MAX_HEIGHT;
+        }
+        if (landed) {
+            resetPetMotion(mob);
+            delete mob.petTransport;
+        }
+    }
+    if (step > 0) faceEliteMob(mob, dx, dz, 8, dt);
+    mob.vx *= Math.max(0, 1 - 4 * dt);
+    mob.vz *= Math.max(0, 1 - 4 * dt);
+    ride.owner.set(player.x, player.y, player.z);
+    mob.aiState = "FOLLOW";
+    return true;
+}
+
 function maintainPlayerPets() {
     if (!chunkManager || !worldArchetype || !Number.isFinite(player.x) || !Number.isFinite(player.y)) return;
     for (const [index, pet] of getPetSaveData().entries()) {
@@ -481,16 +629,19 @@ function maintainPlayerPets() {
         }
         mob.petOwner = userName;
         mob.spawner = userName;
-        if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
+        if (!mob.petTransport && Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
             const position = findPlayerPetPosition(pet.id, index);
             if (!position) continue;
             mob.pos.set(position.x, position.y, position.z);
             mob.prevPos.copy(mob.pos);
             mob.targetPos.copy(mob.pos);
-            mob.vx = mob.vz = 0;
-            mob.aiState = "FOLLOW";
+            resetPetMotion(mob);
             mob.mesh.position.copy(mob.pos);
             queueEliteMobUpdate(mob);
+        }
+        if (!mob.petTransport && ufoRide && player.onGround && mobs.includes(ufoRide.mob)) {
+            const support = getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + .3, mob.pos.y - .3, ufoRide.mob, 0, 0);
+            if (support) boardPlayerPet(mob, support.mob);
         }
     }
     for (const [id, pending] of wolfTamePending) {

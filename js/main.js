@@ -4219,17 +4219,18 @@ let ufoRide = null;
 let ufoOffMap = false;
 const ufoCarrySinceLastMove = new THREE.Vector3();
 
-function getUfoGroundSupport(x, z, topY, minY, onlyMob = null) {
+function getUfoGroundSupport(x, z, topY, minY, onlyMob = null, offsetX = player.width / 2, offsetZ = player.depth / 2) {
     let support = null;
     for (const mob of onlyMob ? [onlyMob] : mobs) {
-        if (mob.type !== "ufo_saucer" || !mob.ufoHullColumns ||
+        if (mob.type !== "ufo_saucer" || mob.deathProcessed || !mob.ufoHullColumns ||
             Math.hypot(x - mob.pos.x, z - mob.pos.z) > 65) continue;
         mob.mesh.updateMatrixWorld(true);
-        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + player.width/2, 0, z + player.depth/2));
+        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + offsetX, mob.pos.y, z + offsetZ));
         let hullTop = null;
         for (const column of mob.ufoHullColumns.values()) {
             if (Math.abs(local.x - column.x) <= 1 && Math.abs(local.z - column.z) <= 1) {
-                hullTop = Math.max(hullTop ?? -Infinity, column.top + mob.pos.y);
+                const top = mob.mesh.localToWorld(new THREE.Vector3(column.x, column.top, column.z)).y;
+                hullTop = Math.max(hullTop ?? -Infinity, top);
             }
         }
         if (hullTop !== null && hullTop <= topY && hullTop >= minY &&
@@ -6252,6 +6253,10 @@ function runGameFrame(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
+        // Flight transforms must be current before either the owner or their pets ride them.
+        for (const mob of [...mobs]) {
+            if (mob.type === "ufo_saucer") updateMobSafely(mob, t);
+        }
         carryUfoRider();
         if (enforceAltitudeLimit()) {
             renderer.render(scene, camera);
@@ -6477,9 +6482,9 @@ function runGameFrame(e) {
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
-        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
-            updateMobSafely(e, t)
-        })), updateEliteMobEffects(t), maintainPlayerPets(), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
+            if (e.type !== "ufo_saucer") updateMobSafely(e, t)
+        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
         meshGroup.visible = player.y < 3000;
 
         // Update chest animations
