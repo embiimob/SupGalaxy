@@ -9,6 +9,207 @@ const combatRemovedPetIds = new Set();
 const wolfTameSession = Math.random().toString(36).slice(2);
 let wolfTameSequence = 0;
 const idleUfoIds = new Set();
+const pendingUfoRewards = new Map();
+const receivedUfoRewards = new Map();
+const ufoRewardRoutes = new Map();
+const ufoRewardAuthorities = new Map();
+
+function adoptUfoRewardFallback(id, world, authority) {
+    const issuer = ufoRewardAuthorities.get(`${world}:${id}`);
+    if (!issuer || issuer.authority === authority) return issuer;
+    const ownerHere = (issuer.authority === userName && world === worldName) ||
+        userPositions[issuer.authority]?.world === world;
+    if (!ownerHere && typeof authority === "string" && authority.length > 0 && authority.length <= 200) {
+        issuer.authority = authority;
+    }
+    return issuer;
+}
+
+function rememberUfoRewardAuthority(id, world, authority, position) {
+    if (typeof id === "number" && Number.isFinite(id)) id = String(id);
+    if (typeof id !== "string" || !id.length || id.length > 160 ||
+        typeof world !== "string" || !world.length || world.length > 200 ||
+        typeof authority !== "string" || !authority.length || authority.length > 200) return false;
+    const key = `${world}:${id}`, existing = ufoRewardAuthorities.get(key);
+    if (existing && existing.authority !== authority) return false;
+    if (!existing && ufoRewardAuthorities.size >= 1024) {
+        const completed = [...ufoRewardAuthorities].find(([, entry]) => entry.completed);
+        if (!completed) return false;
+        ufoRewardAuthorities.delete(completed[0]);
+    }
+    const entry = existing || { authority, completed: false };
+    if (position && [position.x, position.y, position.z].every(Number.isFinite)) {
+        entry.position = { x: position.x, y: position.y, z: position.z };
+    }
+    ufoRewardAuthorities.set(key, entry);
+    return true;
+}
+
+function isValidUfoReward(message) {
+    const bounded = (value, max) => typeof value === "string" && value.length > 0 && value.length <= max;
+    return message.blockId === 177 && message.count === 1 &&
+        bounded(message.world, 200) && bounded(message.originSeed, 200) &&
+        bounded(message.target, 200) && bounded(message.mobId, 160) &&
+        bounded(message.ufoRewardId, 768) &&
+        message.ufoRewardId === `${message.world}:${message.mobId}:${message.target}`;
+}
+
+function authorizeUfoReward(message, authority, trustedRelay = false) {
+    if (!isValidUfoReward(message) || typeof authority !== "string" || !authority.length || authority.length > 200) return false;
+    const existing = ufoRewardRoutes.get(message.ufoRewardId);
+    if (existing) return existing.authority === authority && existing.world === message.world &&
+        existing.target === message.target && existing.originSeed === message.originSeed;
+    if (!trustedRelay) {
+        const issuer = ufoRewardAuthorities.get(`${message.world}:${message.mobId}`);
+        if (!issuer || issuer.authority !== authority) return false;
+        const mob = message.world === worldName ? mobs.find(mob => String(mob.id) === message.mobId)
+            : window.mobsByWorld?.[message.world]?.find(mob => String(mob.id) === message.mobId);
+        const position = mob?.pos || mob || issuer.position;
+        if (!position) return false;
+        const target = message.target === userName
+            ? { x: player.x, y: player.y, z: player.z, world: worldName, health: player.health, isDying }
+            : userPositions[message.target];
+        if (!target) return false;
+        // The issuer's eligible-player snapshot may precede our world switch or death.
+        if (message.target !== userName &&
+            (target.world !== message.world || target.isDying || target.health <= 0)) return false;
+        const x = target.targetX ?? target.x, y = target.targetY ?? target.y, z = target.targetZ ?? target.z;
+        if (![position.x, position.y, position.z].every(Number.isFinite) || position.y < 7900) return false;
+        if (message.target !== userName && (![x, y, z].every(Number.isFinite) ||
+            Math.hypot(x - position.x, y - position.y, z - position.z) > 100)) return false;
+    }
+    if (ufoRewardRoutes.size >= 1024) {
+        const completed = [...ufoRewardRoutes].find(([, route]) => route.acknowledged);
+        if (!completed) return false;
+        ufoRewardRoutes.delete(completed[0]);
+    }
+    ufoRewardRoutes.set(message.ufoRewardId, { authority, world: message.world,
+        target: message.target, originSeed: message.originSeed, acknowledged: false });
+    return true;
+}
+
+function spawnUfoExplosion(position, id) {
+    if (!window.activeExplosions) window.activeExplosions = [];
+    const random = makeSeededRandom(String(id) + "_explosion");
+    const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    for (let i = 0; i < 60; i++) {
+        const particle = new THREE.Mesh(geom, mat);
+        particle.position.set(position.x + (random() - .5) * 16,
+            position.y + (random() - .5) * 16, position.z + (random() - .5) * 16);
+        scene.add(particle);
+        window.activeExplosions.push({
+            mesh: particle,
+            velocity: new THREE.Vector3((random() - .5) * .25, random() * .2, (random() - .5) * .25),
+            createdAt: performance.now()
+        });
+    }
+}
+
+function sendUfoRewardMessage(target, message) {
+    const routed = { ...message, target, username: userName };
+    try {
+        if (sendToPlayer(target, routed)) return;
+        // A peer may only be connected to the host, rather than to the recipient.
+        if (!dedicatedServer && !isHost) {
+            for (const [, peer] of peers) {
+                if (peer.ufoTrustedHost && peer.dc?.readyState === "open") {
+                    peer.dc.send(JSON.stringify(routed));
+                    break;
+                }
+            }
+        }
+    } catch (error) { }
+}
+
+function receiveUfoReward(message, authority) {
+    if (message.target !== userName || !isValidUfoReward(message)) return;
+    let reward = receivedUfoRewards.get(message.ufoRewardId);
+    if (!reward) {
+        if (receivedUfoRewards.size >= 1024) {
+            const completed = [...receivedUfoRewards].find(([, reward]) => reward.granted);
+            if (!completed) return;
+            receivedUfoRewards.delete(completed[0]);
+        }
+        if ([...receivedUfoRewards.values()].filter(reward => !reward.granted).length >= 256) return;
+        reward = { message, authority, granted: false };
+        receivedUfoRewards.set(message.ufoRewardId, reward);
+    }
+    if (!reward.granted) {
+        if (reward.message.world !== worldName) return;
+        const hasRoom = INVENTORY.some(slot => !slot || slot.count === 0 ||
+            (slot.id === 177 && slot.originSeed === reward.message.originSeed && slot.count < 64));
+        if (!hasRoom || player.health <= 0 || isDying || deathScreenShown) return;
+        addToInventory(177, 1, reward.message.originSeed);
+        reward.granted = true;
+        const route = ufoRewardRoutes.get(message.ufoRewardId);
+        if (route) route.acknowledged = true;
+        addMessage("Received a Fusion Reactor!", 3000);
+    }
+    if (authority === userName) pendingUfoRewards.delete(message.ufoRewardId);
+    else sendUfoRewardMessage(authority, { type: "ufo_reward_ack", ufoRewardId: message.ufoRewardId,
+        world: reward.message.world });
+}
+
+function retryUfoRewards() {
+    for (const reward of receivedUfoRewards.values()) {
+        if (!reward.granted) receiveUfoReward(reward.message, reward.authority);
+    }
+    for (const [id, reward] of pendingUfoRewards) {
+        if (Date.now() - reward.sentAt < 2000) continue;
+        reward.sentAt = Date.now();
+        if (reward.target === userName) receiveUfoReward(reward.message, userName);
+        else sendUfoRewardMessage(reward.target, reward.message);
+    }
+}
+
+function awardUfoAltitudeRewards(mob) {
+    const candidates = [{ name: userName, x: player.x, y: player.y, z: player.z,
+        alive: player.health > 0 && !isDying && !deathScreenShown, world: worldName }];
+    for (const [name, state] of Object.entries(userPositions)) {
+        if (name === userName) continue;
+        candidates.push({ name, x: state.targetX, y: state.targetY, z: state.targetZ,
+            alive: !state.isDying && (state.health === undefined || state.health > 0), world: state.world });
+    }
+    for (const candidate of candidates) {
+        if (!candidate.alive || candidate.world !== worldName ||
+            ![candidate.x, candidate.y, candidate.z].every(Number.isFinite) ||
+            Math.hypot(candidate.x - mob.pos.x, candidate.y - mob.pos.y, candidate.z - mob.pos.z) > 100 ||
+            Math.random() >= 1 / 3) continue;
+        const id = `${worldName}:${mob.id}:${candidate.name}`;
+        const message = { type: "add_to_inventory", target: candidate.name, blockId: 177,
+            count: 1, originSeed: mob.originSeed || worldSeed, world: worldName, mobId: String(mob.id), ufoRewardId: id };
+        if (!authorizeUfoReward(message, userName, true)) continue;
+        pendingUfoRewards.set(id, { target: candidate.name, message, sentAt: 0 });
+    }
+    retryUfoRewards();
+}
+
+function hasUfoAltitudeRider(mob) {
+    if (mob.pos.y < 7900) return false;
+    if (typeof ufoRide !== "undefined" && ufoRide?.mob === mob &&
+        player.health > 0 && !isDying && !deathScreenShown &&
+        mob.pos.y + ufoRide.local.y >= 8000) return true;
+    const ascent = Math.max(0, mob.pos.y - mob.mesh.position.y);
+    const candidates = [{ x: player.x, y: player.y, z: player.z,
+        alive: player.health > 0 && !isDying && !deathScreenShown, world: worldName }];
+    for (const [name, state] of Object.entries(userPositions)) {
+        if (name === userName) continue;
+        candidates.push({ x: state.targetX, y: state.targetY, z: state.targetZ,
+            alive: !state.isDying && (state.health === undefined || state.health > 0), world: state.world });
+    }
+    for (const candidate of candidates) {
+        if (!candidate.alive || candidate.world !== worldName || candidate.y + ascent < 8000 ||
+            ![candidate.x, candidate.y, candidate.z].every(Number.isFinite) ||
+            Math.hypot(candidate.x - mob.pos.x, candidate.y - mob.pos.y, candidate.z - mob.pos.z) > 100) continue;
+        if (typeof getUfoGroundSupport === "function" &&
+            getUfoGroundSupport(candidate.x, candidate.z, candidate.y + ascent + .5,
+                candidate.y + ascent - 1, mob)) return true;
+    }
+    return false;
+}
+
+setInterval(retryUfoRewards, 2000);
 
 function sanitizePetData(data) {
     const result = [];
@@ -50,6 +251,7 @@ function restorePetSaveData(data) {
         if (mob.petOwner !== userName) return true;
         const pet = player.pets.find(pet => pet.id === mob.id);
         if (pet) {
+            delete mob.petTransport;
             mob.hp = pet.hp;
             mob.maxHp = pet.maxHp;
             mob.feedRevision = pet.feedRevision;
@@ -248,8 +450,21 @@ function findPlayerPetPosition(petId, index = 0) {
         const steps = radius ? 8 : 1;
         for (let step = 0; step < steps; step++) {
             const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
-            const x = modWrap(Math.floor(centerX + Math.cos(angle) * radius) + 0.5, MAP_SIZE);
-            const z = modWrap(Math.floor(centerZ + Math.sin(angle) * radius) + 0.5, MAP_SIZE);
+            let x = Math.floor(centerX + Math.cos(angle) * radius) + 0.5;
+            let z = Math.floor(centerZ + Math.sin(angle) * radius) + 0.5;
+            if (ufoRide && player.onGround && mobs.includes(ufoRide.mob)) {
+                const support = getUfoGroundSupport(x, z, player.y + 2.05, player.y - 2.05, ufoRide.mob, 0, 0);
+                if (support && !petPositionBlocked(x, support.y, z) &&
+                    !mobs.some(mob => mob.id !== petId && mob.petOwner === userName &&
+                        Math.hypot(mob.pos.x - x, mob.pos.y - support.y, mob.pos.z - z) < 1.5)) {
+                    return { x, y: support.y, z };
+                }
+                continue;
+            }
+            if (!ufoOffMap) {
+                x = modWrap(x, MAP_SIZE);
+                z = modWrap(z, MAP_SIZE);
+            }
             if (![[-0.45, -0.45], [-0.45, 0.45], [0.45, -0.45], [0.45, 0.45]]
                 .every(([dx, dz]) => isPositionInLoadedSpace(x + dx, z + dz))) continue;
             for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
@@ -267,6 +482,140 @@ function findPlayerPetPosition(petId, index = 0) {
     return fallback;
 }
 
+function petPositionBlocked(x, y, z) {
+    return [[-.45, -.45], [-.45, .45], [.45, -.45], [.45, .45], [0, 0]]
+        .some(([dx, dz]) => checkCollisionWithBlock(x + dx, y, z + dz) ||
+            checkCollisionWithBlock(x + dx, y + .4, z + dz));
+}
+
+function resetPetMotion(mob) {
+    mob.vx = mob.vz = mob.vy = mob.lungeVy = 0;
+    mob.aiState = "FOLLOW";
+    mob.isMoving = false;
+}
+
+function boardPlayerPet(mob, hull) {
+    hull.mesh.updateMatrixWorld(true);
+    resetPetMotion(mob);
+    mob.petTransport = {
+        hull, local: hull.mesh.worldToLocal(mob.pos.clone()),
+        rotation: hull.mesh.quaternion.clone(),
+        owner: new THREE.Vector3(player.x, player.y, player.z), world: worldName, vy: 0
+    };
+}
+
+// Only the pet's owner simulates transport; observers receive the usual mob position updates.
+function updatePlayerPetTransport(mob, dt) {
+    if (mob.petOwner !== userName || !(mob.hp > 0)) return false;
+    let ride = mob.petTransport;
+    if (player.health <= 0 || (ride && ride.world !== worldName)) {
+        delete mob.petTransport;
+        resetPetMotion(mob);
+        return false;
+    }
+    const hull = player.onGround && ufoRide && mobs.includes(ufoRide.mob) && !ufoRide.mob.deathProcessed
+        ? ufoRide.mob : null;
+    if (!ride && hull) {
+        const support = getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + 2.05, mob.pos.y - .3, hull, 0, 0);
+        if (support) {
+            mob.pos.y = support.y;
+            boardPlayerPet(mob, hull);
+            ride = mob.petTransport;
+        }
+    }
+    if (!ride) return false;
+    if (ride.hull && ride.hull === hull) {
+        hull.mesh.updateMatrixWorld(true);
+        mob.pos.copy(hull.mesh.localToWorld(ride.local.clone()));
+        const rotation = hull.mesh.quaternion.clone().multiply(ride.rotation.clone().invert());
+        mob.mesh.quaternion.premultiply(rotation);
+        ride.rotation.copy(hull.mesh.quaternion);
+    } else if (ride.hull) {
+        ride.hull = null;
+        ride.vy = player.vy;
+        resetPetMotion(mob);
+    }
+    let dx = player.x + (player.width || .8) / 2 - mob.pos.x;
+    let dz = player.z + (player.depth || .8) / 2 - mob.pos.z;
+    if (!ufoOffMap) {
+        dx = modWrap(dx + MAP_SIZE / 2, MAP_SIZE) - MAP_SIZE / 2;
+        dz = modWrap(dz + MAP_SIZE / 2, MAP_SIZE) - MAP_SIZE / 2;
+    }
+    const distance = Math.hypot(dx, dz);
+    const step = Math.min(Math.max(0, distance - 2.5), mob.speed * 1.2 * dt);
+    let nx = mob.pos.x + (distance ? dx / distance * step : 0) + (mob.vx || 0) * dt;
+    let nz = mob.pos.z + (distance ? dz / distance * step : 0) + (mob.vz || 0) * dt;
+    if (!ufoOffMap && !ride.hull) {
+        nx = modWrap(nx, MAP_SIZE);
+        nz = modWrap(nz, MAP_SIZE);
+    }
+    mob.isMoving = false;
+    if (ride.hull) {
+        const support = getUfoGroundSupport(nx, nz, mob.pos.y + 2.05, mob.pos.y - 2.05, hull, 0, 0);
+        if (support && !petPositionBlocked(nx, support.y, nz)) {
+            mob.isMoving = step > 0 || Math.abs(mob.vx) + Math.abs(mob.vz) > .01;
+            mob.pos.set(nx, support.y, nz);
+        } else if (Math.abs(mob.vx) + Math.abs(mob.vz) > .01 && !petPositionBlocked(nx, mob.pos.y, nz)) {
+            mob.pos.x = nx;
+            mob.pos.z = nz;
+            ride.hull = null;
+            ride.vy = 0;
+        }
+        if (ride.hull) ride.local.copy(hull.mesh.worldToLocal(mob.pos.clone()));
+    } else {
+        if (!petPositionBlocked(nx, mob.pos.y, nz)) {
+            mob.pos.x = nx;
+            mob.pos.z = nz;
+            mob.isMoving = step > 0;
+        }
+        // Share the owner's actual gravity displacement, including terrain-generation pauses.
+        // Once the owner lands, finish any remaining height difference with normal gravity.
+        let targetY;
+        if (!player.onGround || player.y < ride.owner.y) {
+            targetY = mob.pos.y + player.y - ride.owner.y;
+            ride.vy = player.vy;
+        } else {
+            ride.vy = Math.min(0, ride.vy) - gravity * dt;
+            targetY = mob.pos.y + ride.vy * dt;
+        }
+        const support = hull && targetY <= mob.pos.y
+            ? getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + .001, targetY - .3, hull, 0, 0) : null;
+        if (support && !petPositionBlocked(mob.pos.x, support.y, mob.pos.z)) {
+            mob.pos.y = support.y;
+            boardPlayerPet(mob, hull);
+            return true;
+        }
+        const loaded = [[-.45, -.45], [-.45, .45], [.45, -.45], [.45, .45]]
+            .every(([ox, oz]) => isPositionInLoadedSpace(mob.pos.x + ox, mob.pos.z + oz));
+        let landed = false;
+        if (targetY >= MAX_HEIGHT || loaded) {
+            let safeY = mob.pos.y;
+            while (safeY > targetY) {
+                const nextY = Math.max(targetY, safeY - .25);
+                if (nextY < MAX_HEIGHT && petPositionBlocked(mob.pos.x, nextY, mob.pos.z)) {
+                    landed = true;
+                    break;
+                }
+                safeY = nextY;
+            }
+            if (targetY > safeY && !petPositionBlocked(mob.pos.x, targetY, mob.pos.z)) safeY = targetY;
+            mob.pos.y = safeY;
+        } else if (mob.pos.y > MAX_HEIGHT) {
+            mob.pos.y = MAX_HEIGHT;
+        }
+        if (landed) {
+            resetPetMotion(mob);
+            delete mob.petTransport;
+        }
+    }
+    if (step > 0) faceEliteMob(mob, dx, dz, 8, dt);
+    mob.vx *= Math.max(0, 1 - 4 * dt);
+    mob.vz *= Math.max(0, 1 - 4 * dt);
+    ride.owner.set(player.x, player.y, player.z);
+    mob.aiState = "FOLLOW";
+    return true;
+}
+
 function maintainPlayerPets() {
     if (!chunkManager || !worldArchetype || !Number.isFinite(player.x) || !Number.isFinite(player.y)) return;
     for (const [index, pet] of getPetSaveData().entries()) {
@@ -280,16 +629,19 @@ function maintainPlayerPets() {
         }
         mob.petOwner = userName;
         mob.spawner = userName;
-        if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
+        if (!mob.petTransport && Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
             const position = findPlayerPetPosition(pet.id, index);
             if (!position) continue;
             mob.pos.set(position.x, position.y, position.z);
             mob.prevPos.copy(mob.pos);
             mob.targetPos.copy(mob.pos);
-            mob.vx = mob.vz = 0;
-            mob.aiState = "FOLLOW";
+            resetPetMotion(mob);
             mob.mesh.position.copy(mob.pos);
             queueEliteMobUpdate(mob);
+        }
+        if (!mob.petTransport && ufoRide && player.onGround && mobs.includes(ufoRide.mob)) {
+            const support = getUfoGroundSupport(mob.pos.x, mob.pos.z, mob.pos.y + .3, mob.pos.y - .3, ufoRide.mob, 0, 0);
+            if (support) boardPlayerPet(mob, support.mob);
         }
     }
     for (const [id, pending] of wolfTamePending) {
@@ -1165,6 +1517,7 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null, ufoTarget = null
     const newMob = new Mob(x, z, pet ? pet.id : Date.now() + Math.random(), type, y, pet?.originSeed);
     newMob.petOwner = pet?.petOwner || null;
     newMob.spawner = newMob.petOwner || userName;
+    if (type === "ufo_saucer") rememberUfoRewardAuthority(String(newMob.id), worldName, userName, newMob.pos);
     newMob.ufoTarget = ufoTarget;
     if (pet) {
         newMob.hp = pet.hp;
@@ -1548,6 +1901,14 @@ Mob.prototype.update = function (t) {
             e && (t.material = e)
         })) : this.originalColor && (this.mesh.material ? this.mesh.material.color.copy(this.originalColor) : this.mesh.children[0].material.color.copy(this.originalColor))
     } else if ("ufo_saucer" === this.type) {
+        if (isAuthority(worldName) || peers.size === 0) {
+            const issuer = adoptUfoRewardFallback(this.id, worldName, userName);
+            if (issuer?.authority === userName) this.spawner = userName;
+        }
+        if (this.pos.y >= 8000 || hasUfoAltitudeRider(this)) {
+            this.die(null, "altitude");
+            return;
+        }
         this.lingerTime += t * 1000;
 
         const lights = this.mesh.children.filter(c => c.userData.engineGlow);
@@ -1612,23 +1973,6 @@ Mob.prototype.update = function (t) {
             this.pos.y += 10 * t;
             this.pos.x += Math.cos(this.mesh.rotation.y) * 10 * t;
             this.pos.z -= Math.sin(this.mesh.rotation.y) * 10 * t;
-            const beyondMap = this.pos.x < -65 || this.pos.x > MAP_SIZE + 65 ||
-                this.pos.z < -65 || this.pos.z > MAP_SIZE + 65;
-            if (this.pos.y > 800 && beyondMap) {
-                try {
-                    scene.remove(this.mesh);
-                    disposeObject(this.mesh);
-                } catch (e) {}
-                mobs = mobs.filter((t => t.id !== this.id));
-                markMobRecentlyRemoved(this.id);
-                const s = JSON.stringify({ type: "mob_despawn", id: this.id, world: worldName });
-                for (const [peerName, peer] of peers.entries()) {
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") {
-                        peer.dc.send(s);
-                    }
-                }
-                return;
-            }
         } else {
             const targetPos = new THREE.Vector3(
                 target.targetX ?? target.x ?? target.prevX,
@@ -1704,6 +2048,11 @@ Mob.prototype.update = function (t) {
                 }
                 this.attackCooldown = 1.0;
             }
+        }
+        if (this.pos.y >= 8000 || hasUfoAltitudeRider(this)) {
+            this.pos.y = Math.min(this.pos.y, 8000);
+            this.die(null, "altitude");
+            return;
         }
         this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
         if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
@@ -2532,9 +2881,19 @@ Mob.prototype.update = function (t) {
             quaternion: this.mesh.quaternion.toArray()
         });
     }
-}, Mob.prototype.die = function (t) {
+}, Mob.prototype.die = function (t, reason = "combat") {
     const isLocalSpawner = isMobAuthority(this);
-    if (!isLocalSpawner) return;
+    if (!isLocalSpawner || this.deathProcessed) return;
+    this.deathProcessed = true;
+    const altitudeExplosion = this.type === "ufo_saucer" && reason === "altitude";
+    if (this.type === "ufo_saucer") {
+        if (isAuthority(worldName) || peers.size === 0) adoptUfoRewardFallback(this.id, worldName, userName);
+        const issuer = ufoRewardAuthorities.get(`${worldName}:${this.id}`);
+        if (issuer) {
+            issuer.completed = true;
+            issuer.position = { x: this.pos.x, y: this.pos.y, z: this.pos.z };
+        }
+    }
     if (typeof t === "string" && t.startsWith("wolf:")) {
         const wolf = mobs.find(mob => mob.type === "timber_wolf" && `wolf:${mob.id}` === t);
         t = wolf?.petOwner || null;
@@ -2546,22 +2905,8 @@ Mob.prototype.update = function (t) {
     }
 
     if (this.type === "ufo_saucer") {
-        if (!window.activeExplosions) window.activeExplosions = [];
-        const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-        const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        for (let i = 0; i < 60; i++) {
-            const particle = new THREE.Mesh(geom, mat);
-            particle.position.copy(this.pos);
-            particle.position.x += (Math.random() - 0.5) * 16;
-            particle.position.y += (Math.random() - 0.5) * 16;
-            particle.position.z += (Math.random() - 0.5) * 16;
-            scene.add(particle);
-            window.activeExplosions.push({
-                mesh: particle,
-                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.25, Math.random() * 0.2, (Math.random() - 0.5) * 0.25),
-                createdAt: performance.now()
-            });
-        }
+        spawnUfoExplosion(this.pos, this.id);
+        if (altitudeExplosion) awardUfoAltitudeRewards(this);
     }
 
     try {
@@ -2576,7 +2921,20 @@ Mob.prototype.update = function (t) {
     if (this.spawnCommandKey && typeof removeFishSpawnCommandByKey === "function") {
         removeFishSpawnCommandByKey(this.spawnCommandKey);
     }
-    mobs = mobs.filter((t => t.id !== this.id)), markMobRecentlyRemoved(this.id), addMessage("Mob defeated!");
+    mobs = mobs.filter((t => t.id !== this.id)), markMobRecentlyRemoved(this.id),
+        addMessage(altitudeExplosion ? "UFO reactor exploded!" : "Mob defeated!");
+    if (window.mobUpdateQueue) window.mobUpdateQueue = window.mobUpdateQueue.filter(update => update.id !== this.id);
+    if (window.mobsByWorld?.[worldName]) {
+        window.mobsByWorld[worldName] = window.mobsByWorld[worldName].filter(mob => mob.id !== this.id);
+    }
+    if (altitudeExplosion) {
+        const message = JSON.stringify({ type: "mob_kill", id: this.id, mobType: this.type,
+            reason, position: { x: this.pos.x, y: this.pos.y, z: this.pos.z }, world: worldName });
+        for (const [, peer] of peers) {
+            if (peer.dc?.readyState === "open") peer.dc.send(message);
+        }
+        return;
+    }
     const isFish = this.type === "fish_rare" || this.type === "fish_school";
     if (isFish && t !== "whale") {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
@@ -2661,6 +3019,8 @@ Mob.prototype.update = function (t) {
     const s = JSON.stringify({
         type: "mob_kill",
         id: this.id,
+        mobType: this.type,
+        position: { x: this.pos.x, y: this.pos.y, z: this.pos.z },
         petOwner: this.petOwner || null,
         petRemoved: !!this.petOwner,
         world: worldName

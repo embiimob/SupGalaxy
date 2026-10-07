@@ -4172,6 +4172,42 @@ function getCeilingLimitedY(x, y, z, targetY) {
     return safeY;
 }
 
+function getGroundLimitedY(x, y, z, targetY) {
+    if (targetY >= y || targetY >= MAX_HEIGHT) return targetY;
+    // Wait above the terrain until every chunk under the player's footprint is ready.
+    for (let bx = Math.floor(x); bx <= Math.floor(x + player.width); bx++) {
+        for (let bz = Math.floor(z); bz <= Math.floor(z + player.depth); bz++) {
+            const chunk = chunkManager.getChunk(
+                Math.floor(modWrap(bx, MAP_SIZE) / CHUNK_SIZE),
+                Math.floor(modWrap(bz, MAP_SIZE) / CHUNK_SIZE));
+            if (!chunk.generated) {
+                chunkManager.generateChunk(chunk);
+                return y;
+            }
+        }
+    }
+    // Sweep only the voxel-height range so a long fall cannot skip over the ground.
+    let safeY = Math.min(y, MAX_HEIGHT);
+    const bottomY = Math.max(targetY, -1);
+    while (safeY > bottomY) {
+        const nextY = Math.max(safeY - .25, bottomY);
+        if (checkBlockCollision(x, nextY, z)) {
+            const stairY = getStairLandingHeight(x, safeY, z, nextY);
+            return stairY === null ? Math.ceil(nextY - .001) : stairY;
+        }
+        safeY = nextY;
+    }
+    return targetY;
+}
+
+function enforceAltitudeLimit() {
+    if (player.y <= 5000 + Math.max(0, Number(player.score) || 0)) return false;
+    ufoRide = null;
+    player.health = 0;
+    handlePlayerDeath();
+    return true;
+}
+
 // Mesh (magician stone GLB) collision tuning.
 // The lowest MESH_STEP_HEIGHT of the player's body is handled by ground snapping
 // instead of solid collision, so uneven/sloped model surfaces are walkable
@@ -4183,17 +4219,18 @@ let ufoRide = null;
 let ufoOffMap = false;
 const ufoCarrySinceLastMove = new THREE.Vector3();
 
-function getUfoGroundSupport(x, z, topY, minY, onlyMob = null) {
+function getUfoGroundSupport(x, z, topY, minY, onlyMob = null, offsetX = player.width / 2, offsetZ = player.depth / 2) {
     let support = null;
     for (const mob of onlyMob ? [onlyMob] : mobs) {
-        if (mob.type !== "ufo_saucer" || !mob.ufoHullColumns ||
+        if (mob.type !== "ufo_saucer" || mob.deathProcessed || !mob.ufoHullColumns ||
             Math.hypot(x - mob.pos.x, z - mob.pos.z) > 65) continue;
         mob.mesh.updateMatrixWorld(true);
-        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + player.width/2, 0, z + player.depth/2));
+        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + offsetX, mob.pos.y, z + offsetZ));
         let hullTop = null;
         for (const column of mob.ufoHullColumns.values()) {
             if (Math.abs(local.x - column.x) <= 1 && Math.abs(local.z - column.z) <= 1) {
-                hullTop = Math.max(hullTop ?? -Infinity, column.top + mob.pos.y);
+                const top = mob.mesh.localToWorld(new THREE.Vector3(column.x, column.top, column.z)).y;
+                hullTop = Math.max(hullTop ?? -Infinity, top);
             }
         }
         if (hullTop !== null && hullTop <= topY && hullTop >= minY &&
@@ -6216,7 +6253,16 @@ function runGameFrame(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
+        // Flight transforms must be current before either the owner or their pets ride them.
+        for (const mob of [...mobs]) {
+            if (mob.type === "ufo_saucer") updateMobSafely(mob, t);
+        }
         carryUfoRider();
+        if (enforceAltitudeLimit()) {
+            renderer.render(scene, camera);
+            requestAnimationFrame(gameLoop);
+            return;
+        }
         const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
         const waterOverlay = document.getElementById("waterOverlay");
@@ -6287,6 +6333,7 @@ function runGameFrame(e) {
             player.z = S;
         }
 
+        if (ufoOffMap && !ufoRide && player.y < 3000) ufoOffMap = false;
         if (!ufoOffMap) {
             player.x = modWrap(player.x, MAP_SIZE);
             player.z = modWrap(player.z, MAP_SIZE);
@@ -6299,6 +6346,18 @@ function runGameFrame(e) {
             p = player.y + u;
         const wasOnGround = player.onGround,
             previousY = player.y;
+        let terrainLanding = false;
+        if (u < 0) {
+            const safeY = getGroundLimitedY(player.x, player.y, player.z, p);
+            if (safeY > p) {
+                p = safeY;
+                // Preserve fall speed while waiting for asynchronous terrain generation.
+                if (safeY < MAX_HEIGHT && checkBlockCollision(player.x, safeY - .001, player.z)) {
+                    player.vy = 0;
+                    terrainLanding = true;
+                }
+            }
+        }
         if (u > 0) {
             const safeY = getCeilingLimitedY(player.x, player.y, player.z, p);
             if (safeY < p) player.vy = 0;
@@ -6315,7 +6374,7 @@ function runGameFrame(e) {
             }
         } else {
             player.y = p;
-            player.onGround = !1;
+            player.onGround = terrainLanding;
         }
         if (player.vy <= 0) {
             // Rest on / step up onto magician stone model surfaces; stick to them when walking downhill.
@@ -6344,6 +6403,11 @@ function runGameFrame(e) {
             }
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
+        if (enforceAltitudeLimit()) {
+            renderer.render(scene, camera);
+            requestAnimationFrame(gameLoop);
+            return;
+        }
         restoreModelPerformancePlayer();
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
@@ -6418,9 +6482,10 @@ function runGameFrame(e) {
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
-        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), mobs.forEach((function (e) {
-            updateMobSafely(e, t)
-        })), updateEliteMobEffects(t), maintainPlayerPets(), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
+            if (e.type !== "ufo_saucer") updateMobSafely(e, t)
+        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        meshGroup.visible = player.y < 3000;
 
         // Update chest animations
         for (const key in chests) {

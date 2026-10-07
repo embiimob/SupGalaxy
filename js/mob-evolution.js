@@ -1602,7 +1602,8 @@ function updateEliteMob(mob, dt) {
     mob.animationTime += dt;
     if (isMobAuthority(mob)) {
         if (!mob.stateSince) mob.stateSince = now;
-        applyEliteKnockback(mob, dt);
+        const petTransport = mob.type === "timber_wolf" && updatePlayerPetTransport(mob, dt);
+        if (!petTransport) applyEliteKnockback(mob, dt);
         if (mob.type === "bone_archer") thinkBoneArcher(mob, dt, now);
         else if (mob.type === "sentinel_drone") thinkSentinelDrone(mob, dt, now);
         else if (mob.type === "dust_vulture") thinkDustVulture(mob, dt, now);
@@ -1617,7 +1618,7 @@ function updateEliteMob(mob, dt) {
         else if (mob.type === "fire_giant") thinkFireGiant(mob, dt, now);
         else if (mob.type === "sand_tyrant") thinkSandTyrant(mob, dt, now);
         else if (mob.type === "stone_colossus") thinkStoneColossus(mob, dt, now);
-        else if (mob.type === "timber_wolf") thinkTimberWolf(mob, dt, now);
+        else if (mob.type === "timber_wolf" && !petTransport) thinkTimberWolf(mob, dt, now);
         else if (mob.type === "deep_warden") thinkDeepWarden(mob, dt, now);
         queueEliteMobUpdate(mob);
     } else {

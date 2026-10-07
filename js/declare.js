@@ -367,6 +367,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             itemOnly: true,
             strength: 1
         },
+        177: {
+            name: "Fusion Reactor",
+            color: "#42e8ff",
+            strength: 4,
+            fusionReactor: true
+        },
         126: {
             name: "Green Laser Gun",
             color: "#00ff00",

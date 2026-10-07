@@ -620,6 +620,7 @@ function computeIsNightNow() {
 
 function updateSky(e) {
     const t = new Date;
+    const inSpace = player.y >= 5000;
     const o = (t.getHours() + t.getMinutes() / 60) / 24 * Math.PI * 2,
         n = computePrimarySunSine();
     isNight = n < -.1, skyProps.suns.forEach((e => {
@@ -638,9 +639,10 @@ function updateSky(e) {
         e.light.target.position.copy(camera.position);
         e.light.target.updateMatrixWorld();
         e.baseIntensity = 0.12 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.moons.length);
-    })), stars.visible = isNight, stars.rotation.y += .005 * e, clouds.children.forEach((t => {
+    })), stars.visible = isNight || inSpace, stars.rotation.y += .005 * e, clouds.children.forEach((t => {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
+    clouds.visible = !inSpace;
     const r = Math.max(0, n);
 
     let targetTransition = 0;
@@ -666,9 +668,10 @@ function updateSky(e) {
     }
 
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
-    scene.background = currentBgColor.lerp(new THREE.Color(0x000000), ug);
+    scene.background = inSpace ? new THREE.Color(0x000000) : currentBgColor.lerp(new THREE.Color(0x000000), ug);
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
+    if (inSpace) s = 0;
     const i = scene.getObjectByProperty("type", "AmbientLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
     if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), d) {

@@ -146,6 +146,8 @@ You get a warning message whenever your score crosses into a new tier. Dying res
 | **Fish & Whales** | Water (every world but the Moon) | Schools of fish, rare fish and whales that feed on them. |
 | **UFO** | Once per player per game session, after one hour idle | Approaches for 90 seconds before firing blue lasers for up to 150 seconds, then leaves. Drops Blue Calcite for the Blue Laser Gun. |
 
+**High-altitude UFO rides:** Above **5,000 + your current score** blocks, you die (score 1,100 permits height 6,100). At **5,000**, the colored sky and clouds disappear, leaving stars and celestial bodies; the sky returns below that height. UFOs explode at **8,000**: each living player within 100 blocks has an independent **1 in 3** chance to receive a **Fusion Reactor**, a mysterious pulsating decorative block with no function yet. Survivors fall under normal gravity; terrain reappears below **3,000**, with ground collision protected against fast falls and pending chunk loads.
+
 ### Level 2 (score 500+)
 
 Each mob is based on a different voxel game and borrows that game's way of fighting.
