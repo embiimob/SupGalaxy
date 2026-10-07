@@ -2073,9 +2073,9 @@ function setupDataChannel(e, t) {
                             }
 
                             if (s.isBlue && typeof applyBlueLaserDamage === 'function') {
-                                applyBlueLaserDamage(s.x, s.y, s.z, s.username);
+                                applyBlueLaserDamage(s.x, s.y, s.z, s.username, getBlockDamageSource(s.username, s.damageSource));
                             } else {
-                                removeBlockAt(s.x, s.y, s.z, s.username, 1, false, s.toolId, s.laserColor);
+                                removeBlockAt(s.x, s.y, s.z, s.username, 1, false, s.toolId, s.laserColor, getBlockDamageSource(s.username, s.damageSource));
                             }
 
                         } catch (error) {
@@ -2514,6 +2514,9 @@ function setupDataChannel(e, t) {
 
                             sendToPlayer(s.username, {
                                 type: 'block_action_denied',
+                                to: s.username,
+                                world: s.world,
+                                damageSource: "player",
                                 x: s.x,
                                 y: s.y,
                                 z: s.z,
@@ -2603,6 +2606,8 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'block_action_denied':
+                    if ((s.to && s.to !== userName) || (dedicatedServer && s.to !== userName) ||
+                        (s.world && s.world !== worldName) || (s.damageSource && s.damageSource !== "player")) break;
                     if (!isAuthority(s.world || worldName) || dedicatedServer) {
                         // Client receives denial from host
                         addMessage(s.reason === 'Cannot break that block' ? s.reason : `Cannot edit: ${s.reason}`, 3000);
@@ -2610,6 +2615,8 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'alert':
+                    if ((s.to && s.to !== userName) || (dedicatedServer && s.to !== userName) ||
+                        (s.damageSource && s.damageSource !== "player")) break;
                     if (!isHost && s.message) {
                         addMessage(s.message, 3000);
                     }

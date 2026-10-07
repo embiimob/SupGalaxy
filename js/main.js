@@ -1778,7 +1778,8 @@ function releaseProjectileMesh(mesh) {
     }
 }
 
-function createProjectile(e, t, o, a, n = "red") {
+function createProjectile(e, t, o, a, n = "red", damageSource = null) {
+    damageSource = getBlockDamageSource(t, damageSource);
     const mobStyle = typeof MOB_PROJECTILE_STYLES !== "undefined" && Object.prototype.hasOwnProperty.call(MOB_PROJECTILE_STYLES, n) ? MOB_PROJECTILE_STYLES[n] : null;
     if (mobStyle) {
         const mesh = getProjectileMesh(mobStyle.color),
@@ -1790,6 +1791,7 @@ function createProjectile(e, t, o, a, n = "red") {
         projectiles.push({
             id: e,
             user: t,
+            damageSource,
             mesh,
             velocity: a.clone().normalize().multiplyScalar(mobStyle.speed),
             createdAt: Date.now(),
@@ -1815,6 +1817,7 @@ function createProjectile(e, t, o, a, n = "red") {
     p && p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
         user: t,
+        damageSource,
         mesh: c,
         velocity: a.multiplyScalar(s),
         createdAt: Date.now(),
@@ -3392,7 +3395,30 @@ function checkAndDeactivateHive(e, t, o) {
 }
 
 
-function applyBlueLaserDamage(cx, cy, cz, user) {
+function getBlockDamageSource(actor, source = null) {
+    if (source === "mob" || source === "environment") return source;
+    if (typeof actor === "number" || mobs.some(mob => mob.id === actor) ||
+        idleUfoIds.has(actor) || (typeof actor === "string" && actor.startsWith("ufo_saucer"))) return "mob";
+    return typeof actor === "string" && actor.length > 0 ? "player" : "environment";
+}
+
+function notifyBlockActionDenied(requester, reason, x, y, z, damageSource) {
+    if (getBlockDamageSource(requester, damageSource) !== "player") return;
+    if (requester === userName) {
+        addMessage(reason, 3000);
+    } else if (isAuthority()) {
+        sendToPlayer(requester, {
+            type: "block_action_denied",
+            to: requester,
+            world: worldName,
+            x, y, z, reason,
+            damageSource: "player"
+        });
+    }
+}
+
+function applyBlueLaserDamage(cx, cy, cz, user, damageSource = null) {
+    damageSource = getBlockDamageSource(user, damageSource);
     let batchedMessages = [];
     const modifiedChunks = new Set();
 
@@ -3446,7 +3472,7 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
         for (let dx = -1; dx <= 1; dx++) {
             for (let dz = -1; dz <= 1; dz++) {
                 for (let dy = 0; dy < 2; dy++) {
-                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true, null, "blue");
+                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true, null, "blue", damageSource);
                 }
             }
         }
@@ -3475,21 +3501,17 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
     }
 }
 
-function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolId = null, laserColor = null) {
+function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = false, toolId = null, laserColor = null, damageSource = null) {
+    damageSource = getBlockDamageSource(breaker, damageSource);
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 6) return;
 
     const n = BLOCKS[a] || { strength: 1 };
     const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
-    if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
+    if (damageSource === "player" && breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     const miningDamage = isUfo ? 1 : getMiningDamage(a, toolId, laserColor);
     if (!miningDamage) {
-        const message = "Cannot break that block";
-        if (isAuthority() && breaker && breaker !== userName) {
-            sendToPlayer(breaker, { type: 'alert', message });
-        } else {
-            addMessage(message);
-        }
+        notifyBlockActionDenied(breaker, "Cannot break that block", e, t, o, damageSource);
         return;
     }
 
@@ -3501,12 +3523,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
     if (!serverAuthorityWillValidate && !checkChunkOwnership(chunkKey, breaker || userName)) {
         const owner = getChunkOwnerName(chunkKey) || 'another user';
         const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
-        if (isAuthority() && breaker && breaker !== userName) {
-            // If the breaker is a peer and we are host, send an alert to them
-            sendToPlayer(breaker, { type: 'alert', message: alertMsg });
-        } else if (!breaker || breaker === userName) {
-            addMessage(alertMsg, 3000);
-        }
+        notifyBlockActionDenied(breaker, alertMsg, e, t, o, damageSource);
         console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
         return;
     }
@@ -3646,7 +3663,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
                 y: t,
                 z: o,
                 username: userName,
-                world: worldName
+                world: worldName,
+                damageSource
             };
             if (dedicatedServer) {
                 sendToServer(requestMsg);
@@ -6685,7 +6703,7 @@ function runGameFrame(e) {
                     if (t.user !== userName) {
                         const shooter = playerAvatars.get(t.user);
                         if (shooter) shooter.userData.laserFireTime = performance.now();
-                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color, t.damageSource);
                         if (t.color === "blue" && !playedBlueSoundThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
                             if (fireAudioTemplate) {
@@ -6698,7 +6716,7 @@ function runGameFrame(e) {
             } else if (e.user !== userName) {
                 const shooter = playerAvatars.get(e.user);
                 if (shooter) shooter.userData.laserFireTime = performance.now();
-                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color, e.damageSource);
                 if (e.color === "blue" && !playedBlueSoundThisFrame) {
                     const fireAudioTemplate = document.getElementById('ufoCannonFire');
                     if (fireAudioTemplate) {
@@ -6745,10 +6763,10 @@ function runGameFrame(e) {
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isAuthority() || peers.size === 0) {
                         if (o.isBlue) {
-                            applyBlueLaserDamage(a, n, r, o.user);
+                            applyBlueLaserDamage(a, n, r, o.user, o.damageSource);
 
                         } else {
-                            removeBlockAt(a, n, r, o.user, 1, false, null, o.isGreen ? "green" : "red");
+                            removeBlockAt(a, n, r, o.user, 1, false, null, o.isGreen ? "green" : "red", o.damageSource);
                         }
                     } else {
                         // Clients only broadcast block hit if they own the projectile
@@ -6761,6 +6779,7 @@ function runGameFrame(e) {
                                     y: n,
                                     z: r,
                                     username: o.user,
+                                    damageSource: o.damageSource,
                                     world: worldName,
                                     blockId: getBlockAt(a, n, r),
                                     isBlue: true
@@ -6780,6 +6799,7 @@ function runGameFrame(e) {
                                         y: n,
                                         z: r,
                                         username: o.user,
+                                        damageSource: o.damageSource,
                                         world: worldName,
                                         blockId: blockId,
                                         laserColor: o.isGreen ? "green" : "red"

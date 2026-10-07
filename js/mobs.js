@@ -1673,7 +1673,7 @@ Mob.prototype.update = function (t) {
                         const pPos = this.pos.clone().add(offsets[i]);
                         const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
 
-                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
+                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue", "mob");
 
                         if (!playedAudioThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
@@ -1687,6 +1687,7 @@ Mob.prototype.update = function (t) {
                             window.laserFireQueue.push({
                                 id: pid,
                                 user: this.id, // Ensure this identifies the mob
+                                damageSource: "mob",
                                 world: typeof window.worldName !== "undefined" ? window.worldName : "",
                                 position: { x: pPos.x, y: pPos.y, z: pPos.z },
                                 direction: { x: laserDir.x, y: laserDir.y, z: laserDir.z },
