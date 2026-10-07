@@ -254,7 +254,17 @@ Spawn, explore, build, fight, survive.
 
 # ⚔️ Multiplayer: WebRTC Signaling
 
-There are two ways to connect with other players via WebRTC: **Automated On-Chain Signaling (Testnet3)** and **Manual Drag-and-Drop**.
+There are three ways to connect with other players via WebRTC: **Dedicated Server**, **Automated On-Chain Signaling (Testnet3)**, and **Manual Drag-and-Drop**.
+
+## Dedicated Server Mode
+Instead of connecting directly to peers, you can connect through a central dedicated server. This allows for instant, always-on connections without exchanging files or using a wallet.
+- **Default Server**: `https://play.supgalaxy.org:55555`
+- **Host Your Own**: You can run your own instance. Check out the project site at [https://github.com/embiimob/SupGalaxy-Server](https://github.com/embiimob/SupGalaxy-Server).
+
+**To join a server:**
+1. Open 🌐 **Switch world** → click **Connect to Server**.
+2. Enter the server address (e.g., `https://play.supgalaxy.org:55555`).
+3. Click **Connect**.
 
 ## Automated On-Chain Signaling (Recommended)
 When your Testnet3 wallet is unlocked, WebRTC connection files are automatically negotiated over the Bitcoin testnet3 network using IPFS and P2FK.
