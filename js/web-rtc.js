@@ -446,6 +446,31 @@ function updateDedicatedServerDialog() {
     if (connectButton) connectButton.hidden = Boolean(dedicatedServer?.connected);
 }
 
+function isTrustedUfoRelay(peerName) {
+    return Boolean((dedicatedServer && peerName === SERVER_PEER) ||
+        (!isHost && peers.get(peerName)?.ufoTrustedHost === true));
+}
+
+function validateUfoRewardUpdate(message, world, peerName, senderName) {
+    if (typeof message.id !== "string" && !(typeof message.id === "number" && Number.isFinite(message.id))) return false;
+    const key = `${world}:${message.id}`;
+    let issuer = ufoRewardAuthorities.get(key);
+    if (!issuer) {
+        if (!isTrustedUfoRelay(peerName) ||
+            !rememberUfoRewardAuthority(message.id, world,
+                message.spawner || senderName, message)) return false;
+        issuer = ufoRewardAuthorities.get(key);
+    }
+    if (isTrustedUfoRelay(peerName)) {
+        issuer = adoptUfoRewardFallback(message.id, world,
+            dedicatedServer && peerName === SERVER_PEER ? senderName : peerName);
+    }
+    if (!isTrustedUfoRelay(peerName) && issuer.authority !== peerName) return false;
+    message.spawner = issuer.authority;
+    rememberUfoRewardAuthority(message.id, world, issuer.authority, message);
+    return true;
+}
+
 function sendToPlayer(username, message) {
     if (dedicatedServer) {
         const serverPeer = peers.get(SERVER_PEER);
@@ -544,7 +569,8 @@ async function connectToServer(e, t, o) {
         peers.set(e, {
             pc: r,
             dc: s,
-            address: null
+            address: null,
+            ufoTrustedHost: true
         });
 
         if (window.S && window.S.priv) {
@@ -867,6 +893,7 @@ async function handleMinimapFile(e) {
 }
 
 function setupDataChannel(e, t) {
+    const ufoChannelPeer = t;
     installDataChannelSendQueue(e);
     console.log(`[FIXED] Setting up data channel for: ${t}`), e.onopen = () => {
         // As per user request, when a client connects, they drop their world mappings
@@ -1201,6 +1228,8 @@ function setupDataChannel(e, t) {
                             if (t === userName) continue;
                             userPositions[t] || (userPositions[t] = { lastMoveTime: performance.now() }, createAndSetupAvatar(t, !1, e.yaw));
                             const o = userPositions[t];
+                            if (typeof e.world === "string") o.world = e.world;
+                            if (Number.isFinite(e.health)) o.health = e.health;
                             if (Array.isArray(e.petIds)) o.petIds = e.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
@@ -1212,7 +1241,12 @@ function setupDataChannel(e, t) {
                     break;
                 case "player_respawn":
                     const c = s.username;
-                    userPositions[c] && (userPositions[c].isDying = !1);
+                    if (isHost) {
+                        for (const [name, peer] of peers) {
+                            if (name !== t && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify(s));
+                        }
+                    }
+                    userPositions[c] && (userPositions[c].isDying = !1, userPositions[c].health = 20);
                     createAndSetupAvatar(c, !1).position.set(s.x, s.y, s.z);
                     break;
                 case "player_move":
@@ -1248,6 +1282,7 @@ function setupDataChannel(e, t) {
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
                     if (Number.isFinite(s.score)) l.score = s.score;
+                    if (Number.isFinite(s.health)) l.health = s.health;
                     if (Array.isArray(s.petIds)) l.petIds = s.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
 
                     s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
@@ -1349,6 +1384,12 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_spawn":
+                    if (s.mobType === "ufo_saucer") {
+                        const issuer = isTrustedUfoRelay(t) ? (s.spawner || s.username) : t;
+                        if (!rememberUfoRewardAuthority(s.id, s.world || worldName, issuer, s)) break;
+                        s.spawner = issuer;
+                        s.username = issuer;
+                    }
                     // Keep a global dictionary of mobs by world to manage them properly if players switch worlds
                     if (!window.mobsByWorld) window.mobsByWorld = {};
                     const mobWorld = s.world || worldName;
@@ -1522,6 +1563,10 @@ function setupDataChannel(e, t) {
                     if (!Array.isArray(s.mobs)) break;
                     const relayMobs = [];
                     for (const t of s.mobs) {
+                        if (wasMobRecentlyRemoved(t.id)) continue;
+                        if ((t.type === "ufo_saucer" ||
+                            ufoRewardAuthorities.has(`${s.world || worldName}:${t.id}`)) &&
+                            !validateUfoRewardUpdate(t, s.world || worldName, ufoChannelPeer, n)) continue;
                         // Store updates globally in case we need them when switching worlds
                         if (!window.mobsByWorld) window.mobsByWorld = {};
                         const targetWorld = s.world || worldName;
@@ -1591,6 +1636,9 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "mob_update":
+                    if ((s.mobType === "ufo_saucer" ||
+                        ufoRewardAuthorities.has(`${s.world || worldName}:${s.id}`)) &&
+                        !validateUfoRewardUpdate(s, s.world || worldName, t, n)) break;
                     let d = mobs.find((e => e.id === s.id));
                     if ((d && isMobAuthority(d)) || (!d && wasMobRecentlyRemoved(s.id))) break;
                     if (!d) {
@@ -1626,6 +1674,21 @@ function setupDataChannel(e, t) {
                     break;
                 case "mob_despawn":
                 case "mob_kill":
+                    if (s.mobType === "ufo_saucer" || ufoRewardAuthorities.has(`${s.world || worldName}:${s.id}`)) {
+                        if (!ufoRewardAuthorities.has(`${s.world || worldName}:${s.id}`) && isTrustedUfoRelay(t)) {
+                            rememberUfoRewardAuthority(s.id, s.world || worldName, s.username || t, s.position);
+                        }
+                        const issuer = isTrustedUfoRelay(t)
+                            ? adoptUfoRewardFallback(s.id, s.world || worldName,
+                                dedicatedServer && t === SERVER_PEER ? n : t)
+                            : ufoRewardAuthorities.get(`${s.world || worldName}:${s.id}`);
+                        if (!issuer || (!isTrustedUfoRelay(t) && issuer.authority !== t)) break;
+                        issuer.completed = true;
+                        if (s.position && [s.position.x, s.position.y, s.position.z].every(Number.isFinite)) {
+                            issuer.position = { x: s.position.x, y: s.position.y, z: s.position.z };
+                        }
+                        s.username = issuer.authority;
+                    }
                     if (s.type === "mob_kill" && s.petOwner && isAuthority(s.world || worldName) && !dedicatedServer && s.petOwner !== t) break;
                     if (isHost) {
                         for (const [peerName, peer] of peers) {
@@ -1645,8 +1708,16 @@ function setupDataChannel(e, t) {
                         }
                         break;
                     }
+                    const alreadyRemoved = wasMobRecentlyRemoved(s.id);
                     if (!s.relocation) markMobRecentlyRemoved(s.id);
                     const p = mobs.find((e => e.id === s.id));
+                    if (s.type === "mob_kill" && !alreadyRemoved &&
+                        (p?.type === "ufo_saucer" || s.mobType === "ufo_saucer")) {
+                        const position = s.position;
+                        const explosionPosition = position && [position.x, position.y, position.z].every(Number.isFinite)
+                            ? position : p?.pos;
+                        if (explosionPosition) spawnUfoExplosion(explosionPosition, s.id);
+                    }
                     if (p) {
                         if (s.type === "mob_kill" && isEliteMobType(p.type)) {
                             spawnEliteBurst(p.pos.clone().add(new THREE.Vector3(0, getEliteMobDef(p.type).hitCenterY, 0)), getEliteBurstColor(p.type));
@@ -1809,7 +1880,13 @@ function setupDataChannel(e, t) {
                     break;
                 case "player_death":
                     const m = s.username;
+                    if (isHost) {
+                        for (const [name, peer] of peers) {
+                            if (name !== t && peer.dc?.readyState === "open") peer.dc.send(JSON.stringify(s));
+                        }
+                    }
                     if (userPositions[m]) {
+                        userPositions[m].health = 0;
                         userPositions[m].isDying = !0, userPositions[m].deathAnimationStart = performance.now();
                         const e = playerAvatars.get(m);
                         if (e) {
@@ -2097,8 +2174,38 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case "add_to_inventory":
+                    if (s.ufoRewardId !== undefined) {
+                        const trustedRelay = isTrustedUfoRelay(t);
+                        const rewardSender = trustedRelay ? s.username : t;
+                        if (!authorizeUfoReward(s, rewardSender, trustedRelay)) break;
+                        if (s.target !== userName) {
+                            if (isHost) sendToPlayer(s.target, { ...s, username: rewardSender });
+                        } else {
+                            receiveUfoReward(s, rewardSender);
+                        }
+                        break;
+                    }
                     addToInventory(s.blockId, s.count, s.originSeed);
                     break;
+                case "ufo_reward_ack": {
+                    const trustedRelay = isTrustedUfoRelay(t);
+                    const ackSender = trustedRelay ? s.username : t;
+                    const route = ufoRewardRoutes.get(s.ufoRewardId);
+                    if (!route || route.target !== ackSender || route.authority !== s.target ||
+                        route.world !== s.world) break;
+                    if (s.target !== userName) {
+                        if (isHost) {
+                            if (sendToPlayer(route.authority, { ...s, username: ackSender })) route.acknowledged = true;
+                        }
+                        break;
+                    }
+                    const reward = pendingUfoRewards.get(s.ufoRewardId);
+                    if (reward && reward.target === ackSender && reward.message.world === s.world) {
+                        pendingUfoRewards.delete(s.ufoRewardId);
+                        route.acknowledged = true;
+                    }
+                    break;
+                }
                 case "remove_from_inventory":
                     // Host-authoritative inventory decrement for peers
                     // Bug fix: This message is sent by the host to ensure peer inventory

@@ -218,6 +218,7 @@ const BLOCKS = {
         174: { name: 'Iron Pick', color: '#a8a8a8', itemOnly: true, hand_attachable: true },
         175: { name: 'Blue Iron Pick', color: '#4da6ff', itemOnly: true, hand_attachable: true },
         176: { name: 'Bone', color: '#ece4cf', itemOnly: true },
+        177: { name: 'Fusion Reactor', color: '#42e8ff', strength: 4, fusionReactor: true },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
         139: { name: 'Castle Stone Bricks', color: '#72777d' },
         140: { name: 'Mossy Castle Bricks', color: '#63745d' },

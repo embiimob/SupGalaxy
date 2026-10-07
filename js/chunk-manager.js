@@ -7,6 +7,43 @@ function ChunkManager(e) {
     console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
 }
 
+function createFusionReactorMaterial(seed, blockId) {
+    const material = new THREE.MeshStandardMaterial({
+        map: createBlockTexture(seed, blockId),
+        emissive: new THREE.Color(BLOCKS[blockId].color),
+        metalness: .65,
+        roughness: .3
+    });
+    material.onBeforeCompile = shader => {
+        window.globalWaterTime = window.globalWaterTime || { value: 0 };
+        shader.uniforms.reactorTime = window.globalWaterTime;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>',
+            `#include <common>
+            uniform float reactorTime;
+            float reactorGlow;
+            vec3 reactorColor;`);
+        // Repeat procedural rings across merged voxel faces without adding scene lights.
+        shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
+            `#include <map_fragment>
+            vec2 reactorUv = fract(vUv) - 0.5;
+            float reactorRadius = length(reactorUv);
+            float reactorCore = 1.0 - smoothstep(0.13, 0.18, reactorRadius);
+            float reactorRing = 1.0 - smoothstep(0.018, 0.04, abs(reactorRadius - 0.3));
+            float reactorConduit = 1.0 - smoothstep(0.015, 0.035, min(abs(reactorUv.x), abs(reactorUv.y)));
+            float reactorPulse = 0.55 + 0.45 * sin(reactorTime * 3.0);
+            float reactorFlow = 0.5 + 0.5 * sin(reactorRadius * 45.0 - reactorTime * 5.0);
+            reactorGlow = reactorCore * reactorPulse + reactorRing * (0.4 + 0.6 * reactorPulse)
+                + reactorConduit * reactorFlow * 0.35;
+            reactorColor = mix(vec3(0.05, 0.13, 0.18), vec3(0.25, 0.9, 1.0), clamp(reactorGlow, 0.0, 1.0));
+            diffuseColor.rgb = reactorColor;`);
+        shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
+            `#include <emissivemap_fragment>
+            totalEmissiveRadiance *= reactorGlow * 1.8;`);
+    };
+    material.customProgramCacheKey = () => "fusion-reactor-v1";
+    return material;
+}
+
 function buildGreedyMesh(e, t, o) {
     const a = {},
         n = e.data,
@@ -190,6 +227,7 @@ function buildGreedyMesh(e, t, o) {
                     );
                 };
             }
+            else if (o.fusionReactor) a = createFusionReactorMaterial(t.seed, t.blockId);
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -619,6 +657,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     );
                 };
             }
+            else if (K.fusionReactor) D = createFusionReactorMaterial(b, w);
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
