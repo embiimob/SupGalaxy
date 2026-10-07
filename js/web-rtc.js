@@ -1702,8 +1702,7 @@ function setupDataChannel(e, t) {
                             break;
                         }
                         const damage = 4 * getPickaxeMultiplier(s.toolId);
-                        if (isAuthority(s.world || worldName) || mob.spawner === userName ||
-                            (isHost && !mob.spawner) || peers.size === 0) {
+                        if (isMobAuthority(mob)) {
                             mob.hurt(damage, s.username);
                         } else if (isHost) {
                             const spawnerPeer = peers.get(mob.spawner);
@@ -1721,6 +1720,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "player_damage":
                     {
+                        if (player.health <= 0 || isDying || deathScreenShown || gameSessionEnded) break;
                         const damage = s.damage || 1;
                         player.health = Math.max(0, player.health - damage);
                         lastDamageTime = Date.now();

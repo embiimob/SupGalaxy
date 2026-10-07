@@ -1606,7 +1606,9 @@ Mob.prototype.update = function (t) {
             this.pos.y += 10 * t;
             this.pos.x += Math.cos(this.mesh.rotation.y) * 10 * t;
             this.pos.z -= Math.sin(this.mesh.rotation.y) * 10 * t;
-            if (this.pos.y > 800) {
+            const beyondMap = this.pos.x < -65 || this.pos.x > MAP_SIZE + 65 ||
+                this.pos.z < -65 || this.pos.z > MAP_SIZE + 65;
+            if (this.pos.y > 800 && beyondMap) {
                 try {
                     scene.remove(this.mesh);
                     disposeObject(this.mesh);

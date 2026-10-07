@@ -3953,12 +3953,12 @@ function endIdleUfoSession() {
 }
 
 function handlePlayerDeath(attacker = null) {
+    if (deathScreenShown || isDying || gameSessionEnded) return;
     if (idleUfoIds.has(attacker)) {
         player.health = 0;
         endIdleUfoSession();
         return;
     }
-    if (deathScreenShown || isDying) return;
     if (lightManager.playerLight) lightManager.playerLight.intensity = 0;
     avatarGroup && (avatarGroup.visible = !0), isDying = !0, deathAnimationStart = performance.now(), INVENTORY = new Array(36).fill(null), player.score = 0, document.getElementById("score").innerText = player.score, player.health = 0, updateHealthBar(), updateHotbarUI(), addMessage("You died! All items and score lost.", 5e3);
     const e = JSON.stringify({
