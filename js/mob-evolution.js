@@ -287,10 +287,12 @@ function wasMobRecentlyRemoved(id) {
 }
 
 function isMobAuthority(mob) {
+    if (mob.petOwner) return mob.petOwner === userName;
     if (mob.type === "ufo_saucer") {
         const ownerHere = mob.spawner === userName || userPositions[mob.spawner]?.world === worldName;
         return mob.spawner === userName || (!ownerHere && (isAuthority(mob.world || worldName) || peers.size === 0));
     }
+    if (dedicatedServer) return isAuthority(mob.world || worldName);
     return (typeof isAuthority === "function" && isAuthority(mob.world || worldName)) ||
         (mob.spawner === userName) || (isHost && (!mob.spawner || !peers.has(mob.spawner))) || peers.size === 0;
 }
@@ -1650,7 +1652,7 @@ function queueEliteMobUpdate(mob) {
     const rotated = mob.mesh.quaternion.angleTo(mob.lastSentQuaternion) > 0.01;
     if (!moved && !rotated && mob.lastSentState === mob.aiState && mob.lastSentHp === mob.hp &&
         mob.lastSentPetOwner === mob.petOwner && mob.lastSentMaxHp === mob.maxHp &&
-        mob.lastSentFeedRevision === (mob.feedRevision || 0)) return;
+        mob.lastSentFeedRevision === (mob.feedRevision || 0) && mob.lastSentSpawner === mob.spawner) return;
     if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
     window.mobUpdateQueue.push({
         id: mob.id,
@@ -1676,6 +1678,7 @@ function queueEliteMobUpdate(mob) {
     mob.lastSentMaxHp = mob.maxHp;
     mob.lastSentFeedRevision = mob.feedRevision || 0;
     mob.lastSentPetOwner = mob.petOwner;
+    mob.lastSentSpawner = mob.spawner;
 }
 
 // Minecraft skeleton: keeps its distance, strafes, draws its bow and looses arcing arrows.

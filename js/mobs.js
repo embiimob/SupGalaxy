@@ -973,6 +973,7 @@ function manageMobs() {
             }
         }
 
+        if (dedicatedServer) spawner = isAuthority() ? userName : null;
         if (spawner === userName) {
             mySpawningAreas.push(area);
             window.isSpawnerForCurrentWorld = true;
@@ -991,6 +992,10 @@ function manageMobs() {
         }
         if (mob.petOwner) {
             mob.spawner = mob.petOwner;
+            continue;
+        }
+        if (dedicatedServer) {
+            if (isAuthority()) mob.spawner = userName;
             continue;
         }
         let nearestArea = null;
@@ -1038,7 +1043,8 @@ function manageMobs() {
         // Wide-ranging mobs stay until their chunk leaves the authority's loaded map; other clients wait for
         // the authority's mob_despawn instead of culling them by distance.
         const isNearAnyPlayer = isWideRange
-            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) : true)
+            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) ||
+                (dedicatedServer && playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) : true)
             : playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = isEliteMobType(mob.type)
             ? !isAuthority || isEliteMobAllowedAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld)
@@ -1231,7 +1237,7 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null, ufoTarget = null
 
 function handleMobHit(t, toolId = null) {
     const damage = 4 * getPickaxeMultiplier(toolId);
-    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(t);
     if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
         addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
         return;
@@ -1260,7 +1266,7 @@ function handleMobHit(t, toolId = null) {
     safePlayAudioAt(soundHit, t.pos), addMessage("Hit mob!", 800)
 }
 function updateAquaticMob(t, delta) {
-    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(t);
     const now = Date.now();
     t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
     t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
@@ -2440,7 +2446,8 @@ Mob.prototype.update = function (t) {
         this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
             n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
-        if (a || n) {
+        if (a || n || this.lastSentState !== this.aiState || this.lastSentHp !== this.hp ||
+            this.lastSentSpawner !== this.spawner) {
             if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
             window.mobUpdateQueue.push({
                 id: this.id,
@@ -2452,9 +2459,14 @@ Mob.prototype.update = function (t) {
                 aiState: this.aiState,
                 type: this.type,
                 hp: this.hp,
-                isAggressive: this.isAggressive
+                isAggressive: this.isAggressive,
+                spawner: this.spawner,
+                originSeed: this.originSeed
             });
             this.lastSentPos.copy(this.pos), this.lastSentQuaternion.copy(this.mesh.quaternion)
+            this.lastSentState = this.aiState;
+            this.lastSentHp = this.hp;
+            this.lastSentSpawner = this.spawner;
         }
     }
     if ("grub" === this.type) {

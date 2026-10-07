@@ -178,6 +178,7 @@ Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's 
 ### Multiplayer Behaviour
 
 - Elites use the shared mob pipeline (`mob_spawn` / `mob_update_batch` / `mob_hit` / `mob_kill` / `mob_despawn`). Only the mob's **authority** runs its AI (the area spawner, or the host as fallback). Everyone else interpolates its position and aiState, so animations match on every screen.
+- In dedicated-server mode, the elected **world authority** spawns and simulates wild mobs, including grubs. **Pet wolves are simulated only by their owner**, including pets restored from session saves; other clients, even the world authority, interpolate the owner's updates.
 - Ranged attacks travel as `laser_fired_batch` projectiles. Each client checks hits **against its own player only**, so a dodge on your screen is a real dodge.
 - Melee and area attacks (vulture bite, hopper squash, drifter claw, brute charge/club, wolf bite and more) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
 - A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.

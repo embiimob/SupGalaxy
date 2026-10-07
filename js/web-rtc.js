@@ -1050,6 +1050,12 @@ function setupDataChannel(e, t) {
                 if (dedicatedServer && typeof s.world === "string" && typeof s.username === "string") {
                     if (s.username === userName) dedicatedServer.authorityWorlds.add(s.world);
                     else dedicatedServer.authorityWorlds.delete(s.world);
+                    if (s.world === worldName) {
+                        for (const mob of mobs) {
+                            if (!mob.petOwner && mob.type !== "ufo_saucer") mob.spawner = s.username;
+                        }
+                        lastMobManagement = 0;
+                    }
                 }
                 return;
             }
@@ -1537,7 +1543,7 @@ function setupDataChannel(e, t) {
                             if (!o && wasMobRecentlyRemoved(t.id)) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
-                                o.spawner = s.username || n;
+                                o.spawner = updateSpawner;
                                 mobs.push(o);
                                 o.pos.set(t.x, t.y, t.z);
                             }
@@ -1606,7 +1612,7 @@ function setupDataChannel(e, t) {
                     if (s.originSeed) d.originSeed = s.originSeed;
                     if (s.spawnCommandKey) d.spawnCommandKey = s.spawnCommandKey;
                     if (d.type === "timber_wolf" && "petOwner" in s) d.petOwner = typeof s.petOwner === "string" ? s.petOwner : null;
-                    if (d.petOwner) d.spawner = d.petOwner;
+                    d.spawner = d.petOwner || s.spawner || d.spawner || s.username || n;
                     if (s.aiState) d.aiState = s.aiState;
                     if (s.isMoving !== undefined) d.isMoving = s.isMoving;
                     if (s.isAggressive !== undefined) d.isAggressive = s.isAggressive;
