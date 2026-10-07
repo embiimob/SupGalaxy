@@ -144,7 +144,7 @@ You get a warning message whenever your score crosses into a new tier. Dying res
 | **Spider** | 🌋 Vulcan | Eight-legged hunter. |
 | **Grub** | 🏜 Desert (max 2 per loaded map) | A segmented giant that eats cactus and glows at night. |
 | **Fish & Whales** | Water (every world but the Moon) | Schools of fish, rare fish and whales that feed on them. |
-| **UFO** | Near idle players | Drops Blue Calcite for the Blue Laser Gun. |
+| **UFO** | Once per player per game session, after one hour idle | Approaches for 90 seconds before firing blue lasers for up to 150 seconds, then leaves. Drops Blue Calcite for the Blue Laser Gun. |
 
 ### Level 2 (score 500+)
 
@@ -167,6 +167,10 @@ Grubs (max **2**) and Dust Vultures (max **4**) are counted across the **whole l
 
 Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not only voxel boxes. They have animated rigs (bow draw, slime squash-and-stretch, cinder throw, charge, wing flaps) and flash red when hit. Arrows and cinders are real projectiles that arc under gravity. Elite projectiles never destroy blocks, can be blocked by walls, and carry **no dynamic lights**: adding or removing a scene light recompiles every material and causes a visible freeze. Hits spawn a small shard burst instead.
 
+**UFO riding:** Land or teleport onto the large blue-laser UFO's hull to walk around and ride its existing flight animation. Riders cannot steer it. It carries you beyond the map boundary during departure; when it disappears, you fall. Surviving, destroying it, moving again, or changing planets does not grant another encounter until a new game session.
+
+**Idle logout:** Being killed by this UFO ends your game session, disconnects the dedicated server and all WebRTC peers, stops microphone/camera capture, and returns you to login. Ordinary deaths still offer normal respawning.
+
 ### 🦴 Bones
 
 Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's spawning authority keeps about 3 there and announces them to peers via `item_dropped`. Walk over a bone to pick it up. Bones are an **item-only crafting ingredient**: you can't place them, and their recipes are coming in a future update.
@@ -174,6 +178,7 @@ Bones (item ID 176) appear on the ground under Dust Vulture roosts. The roost's 
 ### Multiplayer Behaviour
 
 - Elites use the shared mob pipeline (`mob_spawn` / `mob_update_batch` / `mob_hit` / `mob_kill` / `mob_despawn`). Only the mob's **authority** runs its AI (the area spawner, or the host as fallback). Everyone else interpolates its position and aiState, so animations match on every screen.
+- In dedicated-server mode, the elected **world authority** spawns and simulates wild mobs, including grubs. **Pet wolves are simulated only by their owner**, including pets restored from session saves; other clients, even the world authority, interpolate the owner's updates.
 - Ranged attacks travel as `laser_fired_batch` projectiles. Each client checks hits **against its own player only**, so a dodge on your screen is a real dodge.
 - Melee and area attacks (vulture bite, hopper squash, drifter claw, brute charge/club, wolf bite and more) are sent as `elite_mob_attack` messages. The host relays them by world, and each client checks its own player once, with deduplication.
 - A player's projectile hit on a mob is reported **once, by the shooter**, to the mob's authority.

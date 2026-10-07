@@ -8,6 +8,7 @@ const wolfTameUnacknowledged = new Map();
 const combatRemovedPetIds = new Set();
 const wolfTameSession = Math.random().toString(36).slice(2);
 let wolfTameSequence = 0;
+const idleUfoIds = new Set();
 
 function sanitizePetData(data) {
     const result = [];
@@ -796,7 +797,12 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.redMaterials = Array(a.length).fill(T)
     } else if ("ufo_saucer" === this.type) {
         this.hp = 3000;
+        idleUfoIds.add(this.id);
+        // Double the ~45-second descent from spawn height 220 to hover height 108.
+        this.attackCooldown = 90;
         this.mesh = new THREE.Group();
+        this.ufoHullColumns = new Map();
+        const hullRandom = makeSeededRandom(this.originSeed + "_ufo_hull_" + this.id);
 
         // Build Star Destroyer voxel construct
         const voxelSize = 2;
@@ -830,7 +836,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
                     let color = hullColor;
 
                     if (isSurface) {
-                        const r = Math.random();
+                        const r = hullRandom();
                         if (r < 0.05) continue; // Small holes/greebling
                         if (r > 0.85) {
                             yOffset += voxelSize; // Raised greebling
@@ -842,6 +848,12 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
 
                     voxelPositions.push(new THREE.Vector3(x, y + yOffset, z - length/2));
                     voxelColors.push(color);
+                    const columnKey = `${x},${z}`;
+                    const top = y + yOffset + voxelSize/2;
+                    const column = this.ufoHullColumns.get(columnKey);
+                    if (!column || top > column.top) {
+                        this.ufoHullColumns.set(columnKey, { x: -x, z: length/2 - z, top });
+                    }
                 }
             }
         }
@@ -961,6 +973,7 @@ function manageMobs() {
             }
         }
 
+        if (dedicatedServer) spawner = isAuthority() ? userName : null;
         if (spawner === userName) {
             mySpawningAreas.push(area);
             window.isSpawnerForCurrentWorld = true;
@@ -974,8 +987,15 @@ function manageMobs() {
 
     // Assign mobs to their nearest active area so we can check if we have authority over them
     for (const mob of mobs) {
+        if (mob.type === "ufo_saucer") {
+            continue;
+        }
         if (mob.petOwner) {
             mob.spawner = mob.petOwner;
+            continue;
+        }
+        if (dedicatedServer) {
+            if (isAuthority()) mob.spawner = userName;
             continue;
         }
         let nearestArea = null;
@@ -998,45 +1018,16 @@ function manageMobs() {
         }
     }
 
-    // Check if any player in the world is idle
-    let hasIdlePlayer = false;
-    let idlePlayerPos = null;
+    // Each client requests its own encounter once, independent of area-spawner changes.
     const now = performance.now();
-    const IDLE_THRESHOLD = 900000; // 15 minutes
-
-    for (const p of playersInWorld) {
-        if (p.name === userName) {
-            if (typeof window !== 'undefined' && typeof window.lastMoveTime === 'undefined') { window.lastMoveTime = now; }
-            // lastMoveTime is in the global scope from js/main.js as window.lastMoveTime
-            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
-                if (now - window.lastMoveTime > IDLE_THRESHOLD) {
-                    hasIdlePlayer = true;
-                    idlePlayerPos = { x: player.x, z: player.z };
-                    break;
-                }
-            } else if (typeof lastMoveTime !== 'undefined') {
-                if (now - lastMoveTime > IDLE_THRESHOLD) {
-                    hasIdlePlayer = true;
-                    idlePlayerPos = { x: player.x, z: player.z };
-                    break;
-                }
-            }
-        } else if (userPositions[p.name]) {
-            const peerMoveTime = userPositions[p.name].lastMoveTime || userPositions[p.name].lastUpdate || now;
-            if (now - peerMoveTime > IDLE_THRESHOLD) {
-                hasIdlePlayer = true;
-                const pos = userPositions[p.name];
-                idlePlayerPos = { x: pos.targetX || pos.prevX, z: pos.targetZ || pos.prevZ };
-                break;
-            }
-        }
+    if (window.lastMoveTime === undefined) window.lastMoveTime = now;
+    if (!window.idleUfoEncountered && now - window.lastMoveTime >= 3600000) {
+        window.idleUfoEncountered = true;
+        spawnMobAndBroadcast("ufo_saucer", player.x, player.z, null, null, userName);
     }
 
     // Despawn mobs that are too far from ANY player in their active area
     const allowedTypes = (isNight ? worldArchetype.mobSpawnRules.night : worldArchetype.mobSpawnRules.day).slice();
-    if (hasIdlePlayer) {
-        allowedTypes.push("ufo_saucer");
-    }
 
     mobs = mobs.filter((mob) => {
         if (mob.petOwner) {
@@ -1052,19 +1043,15 @@ function manageMobs() {
         // Wide-ranging mobs stay until their chunk leaves the authority's loaded map; other clients wait for
         // the authority's mob_despawn instead of culling them by distance.
         const isNearAnyPlayer = isWideRange
-            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) : true)
+            ? (isAuthority ? isPositionInLoadedSpace(mob.pos.x, mob.pos.z) ||
+                (dedicatedServer && playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) : true)
             : playersInWorld.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96);
         const isAllowedType = isEliteMobType(mob.type)
             ? !isAuthority || isEliteMobAllowedAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld)
             : allowedTypes.includes(mob.type) && !(isAuthority && isMobTypeRetiredAt(mob.type, mob.pos.x, mob.pos.z, playersInWorld));
 
-        if (mob.type === "ufo_saucer" && (!isAllowedType || !isNearAnyPlayer)) {
-            // If the player is no longer idle or too far, transition the UFO to LEAVING instead of instantly despawning
-            if (mob.aiState !== "LEAVING") {
-                mob.aiState = "LEAVING";
-                mob.lingerTime = 180001; // Force leaving behavior
-            }
-            // Do not despawn instantly. Wait for the y > 800 check in update()
+        if (mob.type === "ufo_saucer") {
+            // Its authority handles departure; riders and observers cannot change its flight.
             return true;
         } else if (!isNearAnyPlayer || !isAllowedType) {
             // Only the person who "owns" the despawn should send it, but let's have everyone clean up their own locally.
@@ -1122,10 +1109,7 @@ function manageMobs() {
                 if (!hasEliteWorldCapacity(type)) continue;
                 if (Math.random() > getEliteMobDef(type).spawnChance) continue;
             }
-            else if ("ufo_saucer" === type) {
-                maxCount = 1;
-                if (Math.random() > 0.02) continue;
-            } else continue;
+            else continue;
             if (type === "fish_rare" && Math.random() > 0.12) continue;
             if (type === "whale" && Math.random() > 0.025) continue;
 
@@ -1134,20 +1118,14 @@ function manageMobs() {
             for (const mob of mobs) {
                 if (mob.type === type && !mob.petOwner) {
                     // Check if mob is near this area
-                    // UFO acts globally for the targeted player, it shouldn't just be counted if it's within 96 horizontal blocks of a spawning area player, since it might be high up or wandering.
-                    // Since we want max 1 UFO per idle player, let's just count global UFOs for now.
-                    if (isWideRangeMobType(type)) { /* already counted globally */ } else if (type === "ufo_saucer") { countInArea++; } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
+                    if (isWideRangeMobType(type)) { /* already counted globally */ } else if (area.players.some(p => Math.hypot(mob.pos.x - p.x, mob.pos.z - p.z) < 96)) { countInArea++; }
                 }
             }
 
             if (countInArea < maxCount) {
                 let spawnX, spawnZ;
 
-                if (type === "ufo_saucer" && idlePlayerPos) {
-                    // Spawn directly above the idle player
-                    spawnX = idlePlayerPos.x;
-                    spawnZ = idlePlayerPos.z;
-                } else {
+                {
                     const randomPlayer = area.players[Math.floor(Math.random() * area.players.length)];
                     const angle = Math.random() * Math.PI * 2;
                     const distance = 32 + 64 * Math.random() / 2;
@@ -1183,10 +1161,11 @@ function manageMobs() {
 }
 
 // Creates a mob owned by this client, queues its first update and announces it to peers.
-function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
+function spawnMobAndBroadcast(type, x, z, y = null, pet = null, ufoTarget = null) {
     const newMob = new Mob(x, z, pet ? pet.id : Date.now() + Math.random(), type, y, pet?.originSeed);
     newMob.petOwner = pet?.petOwner || null;
     newMob.spawner = newMob.petOwner || userName;
+    newMob.ufoTarget = ufoTarget;
     if (pet) {
         newMob.hp = pet.hp;
         newMob.maxHp = pet.maxHp;
@@ -1210,7 +1189,10 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
         isAggressive: newMob.isAggressive,
         originSeed: newMob.originSeed,
         petOwner: newMob.petOwner,
-        spawner: newMob.spawner
+        spawner: newMob.spawner,
+        ufoTarget: newMob.ufoTarget,
+        lingerTime: newMob.lingerTime,
+        attackCooldown: newMob.attackCooldown
     });
 
     const spawnMsg = JSON.stringify({
@@ -1227,6 +1209,9 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
         originSeed: newMob.originSeed,
         petOwner: newMob.petOwner,
         spawner: newMob.spawner,
+        ufoTarget: newMob.ufoTarget,
+        lingerTime: newMob.lingerTime,
+        attackCooldown: newMob.attackCooldown,
         world: worldName,
         username: userName
     });
@@ -1252,7 +1237,7 @@ function spawnMobAndBroadcast(type, x, z, y = null, pet = null) {
 
 function handleMobHit(t, toolId = null) {
     const damage = 4 * getPickaxeMultiplier(toolId);
-    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(t);
     if (t.spawnCommandKey && typeof canRemoveFishSpawnCommand === "function" && !canRemoveFishSpawnCommand(t.spawnCommandKey, userName)) {
         addMessage("You cannot catch a fish in another player's owned chunk.", 2500);
         return;
@@ -1281,7 +1266,7 @@ function handleMobHit(t, toolId = null) {
     safePlayAudioAt(soundHit, t.pos), addMessage("Hit mob!", 800)
 }
 function updateAquaticMob(t, delta) {
-    const isLocalSpawner = (t.spawner === userName) || (isAuthority() && !t.spawner) || peers.size === 0;
+    const isLocalSpawner = isMobAuthority(t);
     const now = Date.now();
     t.animationTime += delta * (t.type === "whale" ? 2.2 : 7);
     t.body.material.color.set(now < t.flashEnd ? 0xff4444 : t.aquaticColor);
@@ -1606,7 +1591,14 @@ Mob.prototype.update = function (t) {
             }
         }
 
-        if (this.lingerTime > 300000) {
+        if (this.lingerTime >= 240000) {
+            this.aiState = "LEAVING";
+        }
+        const target = this.ufoTarget === userName
+            ? { x: player.x, y: player.y, z: player.z, lastMoveTime: window.lastMoveTime, world: worldName }
+            : userPositions[this.ufoTarget];
+        if (!target || target.world !== worldName ||
+            performance.now() - (target.lastMoveTime ?? performance.now()) < 3600000) {
             this.aiState = "LEAVING";
         }
 
@@ -1620,7 +1612,9 @@ Mob.prototype.update = function (t) {
             this.pos.y += 10 * t;
             this.pos.x += Math.cos(this.mesh.rotation.y) * 10 * t;
             this.pos.z -= Math.sin(this.mesh.rotation.y) * 10 * t;
-            if (this.pos.y > 800) {
+            const beyondMap = this.pos.x < -65 || this.pos.x > MAP_SIZE + 65 ||
+                this.pos.z < -65 || this.pos.z > MAP_SIZE + 65;
+            if (this.pos.y > 800 && beyondMap) {
                 try {
                     scene.remove(this.mesh);
                     disposeObject(this.mesh);
@@ -1636,49 +1630,11 @@ Mob.prototype.update = function (t) {
                 return;
             }
         } else {
-            let targetPos = new THREE.Vector3(player.x, player.y, player.z);
-            let highestScore = player.score;
-            let foundIdlePlayer = false;
-
-            const now = performance.now();
-            const IDLE_THRESHOLD = 900000; // 15 minutes
-
-            // Check if local player is idle
-            let localIdle = false;
-            if (typeof window !== 'undefined' && typeof window.lastMoveTime !== 'undefined') {
-                if (now - window.lastMoveTime > IDLE_THRESHOLD) localIdle = true;
-            } else if (typeof lastMoveTime !== 'undefined') {
-                if (now - lastMoveTime > IDLE_THRESHOLD) localIdle = true;
-            }
-
-            if (localIdle) {
-                foundIdlePlayer = true;
-                targetPos.set(player.x, player.y, player.z);
-            }
-
-            for (const [peerName, pos] of Object.entries(userPositions)) {
-                const peerMoveTime = pos.lastMoveTime || pos.lastUpdate || now;
-                const isPeerIdle = (now - peerMoveTime > IDLE_THRESHOLD);
-
-                if (isPeerIdle) {
-                    // Prioritize idle players. If multiple, we just take the first we find or the current one.
-                    targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
-                    foundIdlePlayer = true;
-                    break;
-                } else if (!foundIdlePlayer && pos.score !== undefined && pos.score > highestScore) {
-                    // Fallback to highest score if no idle player found yet
-                    highestScore = pos.score;
-                    targetPos.set(pos.targetX || pos.prevX, pos.targetY || pos.prevY, pos.targetZ || pos.prevZ);
-                }
-            }
-            if (!foundIdlePlayer) {
-                for (const wolf of getWolfTargets()) {
-                    if (Math.hypot(wolf.x - this.pos.x, wolf.z - this.pos.z) <
-                        Math.hypot(targetPos.x - this.pos.x, targetPos.z - this.pos.z)) {
-                        targetPos.set(wolf.x, wolf.y, wolf.z);
-                    }
-                }
-            }
+            const targetPos = new THREE.Vector3(
+                target.targetX ?? target.x ?? target.prevX,
+                target.targetY ?? target.y ?? target.prevY,
+                target.targetZ ?? target.z ?? target.prevZ
+            );
 
             const dx = targetPos.x - this.pos.x;
             const dz = targetPos.z - this.pos.z;
@@ -1693,9 +1649,9 @@ Mob.prototype.update = function (t) {
             const baseTargetY = targetPos.y > 0 ? targetPos.y : chunkManager.getSurfaceY(this.pos.x, this.pos.z);
             let targetY = Math.max(baseTargetY + 40, 108); // Lower hover altitude, minimum height 108
             if (this.pos.y > targetY) {
-                this.pos.y -= 2.5 * t; // Slower altitude adjustment
+                this.pos.y = Math.max(targetY, this.pos.y - 2.5 * t);
             } else if (this.pos.y < targetY) {
-                this.pos.y += 2.5 * t;
+                this.pos.y = Math.min(targetY, this.pos.y + 2.5 * t);
             }
 
             // Smoothly rotate towards the target
@@ -1707,8 +1663,8 @@ Mob.prototype.update = function (t) {
             this.mesh.rotation.y += angleDiff * 0.25 * t; // Slower rotation
 
             this.attackCooldown -= t;
-            if (this.attackCooldown <= 0 && dist < 60) { // Closer distance required to shoot
-                if (typeof createProjectile === "function" && (typeof isAuthority !== "function" || isAuthority() || peers.size === 0)) {
+            if (this.attackCooldown <= 0 && dist < 60 && this.pos.y <= targetY + 1) {
+                if (typeof createProjectile === "function") {
                     const offsets = [
                         new THREE.Vector3(-8, 0, 0),
                         new THREE.Vector3(8, 0, 0),
@@ -1723,7 +1679,7 @@ Mob.prototype.update = function (t) {
                         const pPos = this.pos.clone().add(offsets[i]);
                         const laserDir = new THREE.Vector3().subVectors(targetPos, pPos).normalize();
 
-                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue");
+                        createProjectile(pid, this.id, pPos, laserDir.clone(), "blue", "mob");
 
                         if (!playedAudioThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
@@ -1737,6 +1693,7 @@ Mob.prototype.update = function (t) {
                             window.laserFireQueue.push({
                                 id: pid,
                                 user: this.id, // Ensure this identifies the mob
+                                damageSource: "mob",
                                 world: typeof window.worldName !== "undefined" ? window.worldName : "",
                                 position: { x: pPos.x, y: pPos.y, z: pPos.z },
                                 direction: { x: laserDir.x, y: laserDir.y, z: laserDir.z },
@@ -1749,6 +1706,13 @@ Mob.prototype.update = function (t) {
             }
         }
         this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
+        if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
+        window.mobUpdateQueue.push({
+            id: this.id, type: this.type, x: this.pos.x, y: this.pos.y, z: this.pos.z,
+            quaternion: this.mesh.quaternion.toArray(), hp: this.hp, aiState: this.aiState,
+            spawner: this.spawner, ufoTarget: this.ufoTarget, lingerTime: this.lingerTime,
+            attackCooldown: this.attackCooldown
+        });
     } else {
         if (this.pos.x += this.vx * t, this.pos.z += this.vz * t, this.vx *= 1 - 2 * t, this.vz *= 1 - 2 * t, "spider" === this.type) {
             let ceilingY = chunkManager.getCeilingY(this.pos.x, this.pos.z, this.pos.y) - 0.5;
@@ -2482,7 +2446,8 @@ Mob.prototype.update = function (t) {
         this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
             n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
-        if (a || n) {
+        if (a || n || this.lastSentState !== this.aiState || this.lastSentHp !== this.hp ||
+            this.lastSentSpawner !== this.spawner) {
             if (!window.mobUpdateQueue) window.mobUpdateQueue = [];
             window.mobUpdateQueue.push({
                 id: this.id,
@@ -2494,9 +2459,14 @@ Mob.prototype.update = function (t) {
                 aiState: this.aiState,
                 type: this.type,
                 hp: this.hp,
-                isAggressive: this.isAggressive
+                isAggressive: this.isAggressive,
+                spawner: this.spawner,
+                originSeed: this.originSeed
             });
             this.lastSentPos.copy(this.pos), this.lastSentQuaternion.copy(this.mesh.quaternion)
+            this.lastSentState = this.aiState;
+            this.lastSentHp = this.hp;
+            this.lastSentSpawner = this.spawner;
         }
     }
     if ("grub" === this.type) {

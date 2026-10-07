@@ -983,7 +983,13 @@ function setupDataChannel(e, t) {
                 feedRevision: t.feedRevision,
                 type: t.type,
                 petOwner: t.petOwner || null,
-                spawner: t.spawner
+                spawner: t.spawner,
+                originSeed: t.originSeed,
+                ufoTarget: t.ufoTarget,
+                lingerTime: t.lingerTime,
+                attackCooldown: t.attackCooldown,
+                aiState: t.aiState,
+                quaternion: t.mesh.quaternion.toArray()
             }));
             if (mobBatch.length > 0) {
                 e.send(JSON.stringify({
@@ -1044,6 +1050,12 @@ function setupDataChannel(e, t) {
                 if (dedicatedServer && typeof s.world === "string" && typeof s.username === "string") {
                     if (s.username === userName) dedicatedServer.authorityWorlds.add(s.world);
                     else dedicatedServer.authorityWorlds.delete(s.world);
+                    if (s.world === worldName) {
+                        for (const mob of mobs) {
+                            if (!mob.petOwner && mob.type !== "ufo_saucer") mob.spawner = s.username;
+                        }
+                        lastMobManagement = 0;
+                    }
                 }
                 return;
             }
@@ -1367,6 +1379,11 @@ function setupDataChannel(e, t) {
                         e.spawnCommandKey = s.spawnCommandKey || null;
                         e.petOwner = e.type === "timber_wolf" && typeof s.petOwner === "string" ? s.petOwner : null;
                         e.spawner = e.petOwner || s.spawner || s.username || n;
+                        if (e.type === "ufo_saucer") {
+                            e.ufoTarget = s.ufoTarget;
+                            e.lingerTime = s.lingerTime || 0;
+                            e.attackCooldown = s.attackCooldown ?? 90;
+                        }
                         if (Number.isFinite(s.hp)) e.hp = s.hp;
                         if (Number.isFinite(s.maxHp)) e.maxHp = s.maxHp;
                         if (Number.isSafeInteger(s.feedRevision)) e.feedRevision = s.feedRevision;
@@ -1452,7 +1469,7 @@ function setupDataChannel(e, t) {
                         for (const t of s.mobs) {
                             e.add(t.id);
                             let o = mobs.find((e => e.id === t.id));
-                            if (o && o.petOwner === userName) continue;
+                            if (o && (o.petOwner === userName || (o.type === "ufo_saucer" && isMobAuthority(o)))) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
                                 mobs.push(o);
@@ -1462,6 +1479,11 @@ function setupDataChannel(e, t) {
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
                             o.spawner = o.petOwner || t.spawner || o.spawner || n;
+                            if (o.type === "ufo_saucer") {
+                                o.ufoTarget = t.ufoTarget;
+                                if (Number.isFinite(t.lingerTime)) o.lingerTime = t.lingerTime;
+                                if (Number.isFinite(t.attackCooldown)) o.attackCooldown = t.attackCooldown;
+                            }
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -1486,7 +1508,7 @@ function setupDataChannel(e, t) {
                         // Only despawn if we are NOT the host (host manages despawns naturally)
                         if (!isAuthority(s.world || worldName)) {
                             mobs = mobs.filter((t => {
-                                if (e.has(t.id) || t.petOwner === userName) return true;
+                                if (e.has(t.id) || t.petOwner === userName || (t.type === "ufo_saucer" && isMobAuthority(t))) return true;
                                 if (t.engineAudio) t.engineAudio.pause();
                                 if (t.engineAudio2) t.engineAudio2.pause();
                                 scene.remove(t.mesh);
@@ -1521,7 +1543,7 @@ function setupDataChannel(e, t) {
                             if (!o && wasMobRecentlyRemoved(t.id)) continue;
                             if (!o) {
                                 o = new Mob(t.x, t.z, t.id, t.type || t.mobType, t.y, t.originSeed);
-                                o.spawner = s.username || n;
+                                o.spawner = updateSpawner;
                                 mobs.push(o);
                                 o.pos.set(t.x, t.y, t.z);
                             }
@@ -1529,6 +1551,11 @@ function setupDataChannel(e, t) {
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
                             o.spawner = o.petOwner || updateSpawner;
+                            if (o.type === "ufo_saucer") {
+                                o.ufoTarget = t.ufoTarget;
+                                if (Number.isFinite(t.lingerTime)) o.lingerTime = t.lingerTime;
+                                if (Number.isFinite(t.attackCooldown)) o.attackCooldown = t.attackCooldown;
+                            }
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -1585,7 +1612,7 @@ function setupDataChannel(e, t) {
                     if (s.originSeed) d.originSeed = s.originSeed;
                     if (s.spawnCommandKey) d.spawnCommandKey = s.spawnCommandKey;
                     if (d.type === "timber_wolf" && "petOwner" in s) d.petOwner = typeof s.petOwner === "string" ? s.petOwner : null;
-                    if (d.petOwner) d.spawner = d.petOwner;
+                    d.spawner = d.petOwner || s.spawner || d.spawner || s.username || n;
                     if (s.aiState) d.aiState = s.aiState;
                     if (s.isMoving !== undefined) d.isMoving = s.isMoving;
                     if (s.isAggressive !== undefined) d.isAggressive = s.isAggressive;
@@ -1681,8 +1708,7 @@ function setupDataChannel(e, t) {
                             break;
                         }
                         const damage = 4 * getPickaxeMultiplier(s.toolId);
-                        if (isAuthority(s.world || worldName) || mob.spawner === userName ||
-                            (isHost && !mob.spawner) || peers.size === 0) {
+                        if (isMobAuthority(mob)) {
                             mob.hurt(damage, s.username);
                         } else if (isHost) {
                             const spawnerPeer = peers.get(mob.spawner);
@@ -1700,6 +1726,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "player_damage":
                     {
+                        if (player.health <= 0 || isDying || deathScreenShown || gameSessionEnded) break;
                         const damage = s.damage || 1;
                         player.health = Math.max(0, player.health - damage);
                         lastDamageTime = Date.now();
@@ -1720,7 +1747,7 @@ function setupDataChannel(e, t) {
                         }
 
                         if (player.health <= 0) {
-                            handlePlayerDeath();
+                            handlePlayerDeath(s.attacker);
                         }
                     }
                     break;
@@ -2052,9 +2079,9 @@ function setupDataChannel(e, t) {
                             }
 
                             if (s.isBlue && typeof applyBlueLaserDamage === 'function') {
-                                applyBlueLaserDamage(s.x, s.y, s.z, s.username);
+                                applyBlueLaserDamage(s.x, s.y, s.z, s.username, getBlockDamageSource(s.username, s.damageSource));
                             } else {
-                                removeBlockAt(s.x, s.y, s.z, s.username, 1, false, s.toolId, s.laserColor);
+                                removeBlockAt(s.x, s.y, s.z, s.username, 1, false, s.toolId, s.laserColor, getBlockDamageSource(s.username, s.damageSource));
                             }
 
                         } catch (error) {
@@ -2346,7 +2373,10 @@ function setupDataChannel(e, t) {
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
                                         petOwner: m.petOwner || null,
-                                        spawner: m.spawner
+                                        spawner: m.spawner,
+                                        ufoTarget: m.ufoTarget,
+                                        lingerTime: m.lingerTime,
+                                        attackCooldown: m.attackCooldown
                                     }))
                                 });
                                 if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);
@@ -2368,7 +2398,11 @@ function setupDataChannel(e, t) {
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
                                         petOwner: m.petOwner || null,
-                                        spawner: m.spawner
+                                        spawner: m.spawner,
+                                        ufoTarget: m.ufoTarget,
+                                        lingerTime: m.lingerTime,
+                                        attackCooldown: m.attackCooldown,
+                                        aiState: m.aiState, quaternion: m.quaternion
                                     }))
                                 });
                                 if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);
@@ -2486,6 +2520,9 @@ function setupDataChannel(e, t) {
 
                             sendToPlayer(s.username, {
                                 type: 'block_action_denied',
+                                to: s.username,
+                                world: s.world,
+                                damageSource: "player",
                                 x: s.x,
                                 y: s.y,
                                 z: s.z,
@@ -2575,6 +2612,8 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'block_action_denied':
+                    if ((s.to && s.to !== userName) || (dedicatedServer && s.to !== userName) ||
+                        (s.world && s.world !== worldName) || (s.damageSource && s.damageSource !== "player")) break;
                     if (!isAuthority(s.world || worldName) || dedicatedServer) {
                         // Client receives denial from host
                         addMessage(s.reason === 'Cannot break that block' ? s.reason : `Cannot edit: ${s.reason}`, 3000);
@@ -2582,6 +2621,8 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'alert':
+                    if ((s.to && s.to !== userName) || (dedicatedServer && s.to !== userName) ||
+                        (s.damageSource && s.damageSource !== "player")) break;
                     if (!isHost && s.message) {
                         addMessage(s.message, 3000);
                     }

@@ -1778,7 +1778,8 @@ function releaseProjectileMesh(mesh) {
     }
 }
 
-function createProjectile(e, t, o, a, n = "red") {
+function createProjectile(e, t, o, a, n = "red", damageSource = null) {
+    damageSource = getBlockDamageSource(t, damageSource);
     const mobStyle = typeof MOB_PROJECTILE_STYLES !== "undefined" && Object.prototype.hasOwnProperty.call(MOB_PROJECTILE_STYLES, n) ? MOB_PROJECTILE_STYLES[n] : null;
     if (mobStyle) {
         const mesh = getProjectileMesh(mobStyle.color),
@@ -1790,6 +1791,7 @@ function createProjectile(e, t, o, a, n = "red") {
         projectiles.push({
             id: e,
             user: t,
+            damageSource,
             mesh,
             velocity: a.clone().normalize().multiplyScalar(mobStyle.speed),
             createdAt: Date.now(),
@@ -1815,6 +1817,7 @@ function createProjectile(e, t, o, a, n = "red") {
     p && p.position.copy(c.position), c.light = p, projectiles.push({
         id: e,
         user: t,
+        damageSource,
         mesh: c,
         velocity: a.multiplyScalar(s),
         createdAt: Date.now(),
@@ -3392,7 +3395,30 @@ function checkAndDeactivateHive(e, t, o) {
 }
 
 
-function applyBlueLaserDamage(cx, cy, cz, user) {
+function getBlockDamageSource(actor, source = null) {
+    if (source === "mob" || source === "environment") return source;
+    if (typeof actor === "number" || mobs.some(mob => mob.id === actor) ||
+        idleUfoIds.has(actor) || (typeof actor === "string" && actor.startsWith("ufo_saucer"))) return "mob";
+    return typeof actor === "string" && actor.length > 0 ? "player" : "environment";
+}
+
+function notifyBlockActionDenied(requester, reason, x, y, z, damageSource) {
+    if (getBlockDamageSource(requester, damageSource) !== "player") return;
+    if (requester === userName) {
+        addMessage(reason, 3000);
+    } else if (isAuthority()) {
+        sendToPlayer(requester, {
+            type: "block_action_denied",
+            to: requester,
+            world: worldName,
+            x, y, z, reason,
+            damageSource: "player"
+        });
+    }
+}
+
+function applyBlueLaserDamage(cx, cy, cz, user, damageSource = null) {
+    damageSource = getBlockDamageSource(user, damageSource);
     let batchedMessages = [];
     const modifiedChunks = new Set();
 
@@ -3446,7 +3472,7 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
         for (let dx = -1; dx <= 1; dx++) {
             for (let dz = -1; dz <= 1; dz++) {
                 for (let dy = 0; dy < 2; dy++) {
-                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true, null, "blue");
+                    removeBlockAt(cx + dx, cy - dy, cz + dz, user, 1, true, null, "blue", damageSource);
                 }
             }
         }
@@ -3475,21 +3501,17 @@ function applyBlueLaserDamage(cx, cy, cz, user) {
     }
 }
 
-function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolId = null, laserColor = null) {
+function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = false, toolId = null, laserColor = null, damageSource = null) {
+    damageSource = getBlockDamageSource(breaker, damageSource);
     const a = getBlockAt(e, t, o);
     if (!a || a === BLOCK_AIR || a === 6) return;
 
     const n = BLOCKS[a] || { strength: 1 };
     const isUfo = breaker && typeof breaker === 'string' && breaker.startsWith("ufo_saucer");
-    if (breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
+    if (damageSource === "player" && breaker === userName) { lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime; }
     const miningDamage = isUfo ? 1 : getMiningDamage(a, toolId, laserColor);
     if (!miningDamage) {
-        const message = "Cannot break that block";
-        if (isAuthority() && breaker && breaker !== userName) {
-            sendToPlayer(breaker, { type: 'alert', message });
-        } else {
-            addMessage(message);
-        }
+        notifyBlockActionDenied(breaker, "Cannot break that block", e, t, o, damageSource);
         return;
     }
 
@@ -3501,12 +3523,7 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
     if (!serverAuthorityWillValidate && !checkChunkOwnership(chunkKey, breaker || userName)) {
         const owner = getChunkOwnerName(chunkKey) || 'another user';
         const alertMsg = `You cannot break this block. It is owned by ${owner}.`;
-        if (isAuthority() && breaker && breaker !== userName) {
-            // If the breaker is a peer and we are host, send an alert to them
-            sendToPlayer(breaker, { type: 'alert', message: alertMsg });
-        } else if (!breaker || breaker === userName) {
-            addMessage(alertMsg, 3000);
-        }
+        notifyBlockActionDenied(breaker, alertMsg, e, t, o, damageSource);
         console.log(`[Ownership] Block break denied at (${e},${t},${o}) in chunk ${chunkKey} for ${breaker || userName}`);
         return;
     }
@@ -3646,7 +3663,8 @@ function removeBlockAt(e, t, o, breaker, damageAmount = 1, silent = false, toolI
                 y: t,
                 z: o,
                 username: userName,
-                world: worldName
+                world: worldName,
+                damageSource
             };
             if (dedicatedServer) {
                 sendToServer(requestMsg);
@@ -3928,8 +3946,37 @@ function getBlockAt(e, t, o) {
     return i.get(l, Math.floor(t), d)
 }
 
-function handlePlayerDeath() {
-    if (deathScreenShown || isDying) return;
+let gameSessionEnded = false;
+
+function endIdleUfoSession() {
+    if (gameSessionEnded) return;
+    gameSessionEnded = true;
+    webRtcPollingEnabled = false;
+    stopAllPolling();
+    disconnectDedicatedServer(null);
+    for (const [name, peer] of Array.from(peers.entries())) {
+        peer.dc?.close();
+        if (peer.keepaliveInterval) clearInterval(peer.keepaliveInterval);
+        cleanupPeer(name);
+    }
+    for (const stream of [localAudioStream, localVideoStream]) {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+    }
+    if (typeof lockWallet === "function") lockWallet();
+    document.exitPointerLock?.();
+    const loginUrl = new URL(window.location.href);
+    loginUrl.searchParams.delete("user-name");
+    loginUrl.searchParams.delete("loc");
+    window.location.replace(loginUrl.href);
+}
+
+function handlePlayerDeath(attacker = null) {
+    if (deathScreenShown || isDying || gameSessionEnded) return;
+    if (idleUfoIds.has(attacker)) {
+        player.health = 0;
+        endIdleUfoSession();
+        return;
+    }
     if (lightManager.playerLight) lightManager.playerLight.intensity = 0;
     avatarGroup && (avatarGroup.visible = !0), isDying = !0, deathAnimationStart = performance.now(), INVENTORY = new Array(36).fill(null), player.score = 0, document.getElementById("score").innerText = player.score, player.health = 0, updateHealthBar(), updateHotbarUI(), addMessage("You died! All items and score lost.", 5e3);
     const e = JSON.stringify({
@@ -4093,6 +4140,11 @@ function tryStepUpStairs(x, y, z) {
 
 function checkCollision(e, t, o) {
     if (checkBlockCollision(e, t, o)) return true;
+    for (const mob of mobs) {
+        if (mob.type !== "ufo_saucer") continue;
+        const hull = getUfoGroundSupport(e, o, Infinity, -Infinity, mob);
+        if (hull && t + player.height > mob.pos.y - 3 && t + 2.05 < hull.y) return true;
+    }
     return checkMeshCollision(e, t, o);
 }
 
@@ -4127,6 +4179,49 @@ function getCeilingLimitedY(x, y, z, targetY) {
 const MESH_STEP_HEIGHT = 0.55;
 const MESH_SNAP_DOWN = 0.3;
 const _meshPlayerBox = new THREE.Box3();
+let ufoRide = null;
+let ufoOffMap = false;
+const ufoCarrySinceLastMove = new THREE.Vector3();
+
+function getUfoGroundSupport(x, z, topY, minY, onlyMob = null) {
+    let support = null;
+    for (const mob of onlyMob ? [onlyMob] : mobs) {
+        if (mob.type !== "ufo_saucer" || !mob.ufoHullColumns ||
+            Math.hypot(x - mob.pos.x, z - mob.pos.z) > 65) continue;
+        mob.mesh.updateMatrixWorld(true);
+        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + player.width/2, 0, z + player.depth/2));
+        let hullTop = null;
+        for (const column of mob.ufoHullColumns.values()) {
+            if (Math.abs(local.x - column.x) <= 1 && Math.abs(local.z - column.z) <= 1) {
+                hullTop = Math.max(hullTop ?? -Infinity, column.top + mob.pos.y);
+            }
+        }
+        if (hullTop !== null && hullTop <= topY && hullTop >= minY &&
+            (!support || hullTop > support.y)) support = { mob, y: hullTop };
+    }
+    return support;
+}
+
+function carryUfoRider() {
+    if (!ufoRide) return;
+    const { mob, local, position } = ufoRide;
+    if (!mobs.includes(mob) || !player.onGround || player.vy > 0 ||
+        Math.hypot(player.x - position.x, player.y - position.y, player.z - position.z) > .1) {
+        ufoRide = null;
+        return;
+    }
+    mob.mesh.updateMatrixWorld(true);
+    const next = mob.mesh.localToWorld(local.clone());
+    if (!checkCollision(next.x, next.y, next.z)) {
+        ufoCarrySinceLastMove.add(new THREE.Vector3(next.x - player.x, next.y - player.y, next.z - player.z));
+        player.x = next.x;
+        player.y = next.y;
+        player.z = next.z;
+        ufoOffMap = true;
+    } else {
+        ufoRide = null;
+    }
+}
 
 function getCollidableStoneMeshes(box) {
     if (!magicianStones) return [];
@@ -5867,6 +5962,11 @@ function switchWorld(newWorldName, targetSpawn) {
                 if (Number.isSafeInteger(m.feedRevision)) o.feedRevision = m.feedRevision;
                 o.petOwner = o.type === "timber_wolf" && typeof m.petOwner === "string" ? m.petOwner : null;
                 o.spawner = o.petOwner || m.spawner || m.username;
+                if (o.type === "ufo_saucer") {
+                    o.ufoTarget = m.ufoTarget;
+                    o.lingerTime = m.lingerTime || 0;
+                    o.attackCooldown = m.attackCooldown ?? 90;
+                }
                 o.isAggressive = m.isAggressive;
                 if (m.aiState) o.aiState = m.aiState;
                 if (m.isMoving !== undefined) o.isMoving = m.isMoving;
@@ -6077,6 +6177,7 @@ function updateMobSafely(mob, dt) {
 }
 
 function runGameFrame(e) {
+    if (gameSessionEnded) return;
     restoreModelPerformancePlayer();
     if (!fpsSampleStart) fpsSampleStart = e;
     fpsFrameCount++;
@@ -6115,6 +6216,7 @@ function runGameFrame(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
+        carryUfoRider();
         const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
         const waterOverlay = document.getElementById("waterOverlay");
@@ -6185,8 +6287,10 @@ function runGameFrame(e) {
             player.z = S;
         }
 
-        player.x = modWrap(player.x, MAP_SIZE);
-        player.z = modWrap(player.z, MAP_SIZE);
+        if (!ufoOffMap) {
+            player.x = modWrap(player.x, MAP_SIZE);
+            player.z = modWrap(player.z, MAP_SIZE);
+        }
         player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
         if (inWater && player.vy < -2.0 && !(keys[" "] || document.getElementById("mobileJumpBtn").dataset.active === "true")) {
             player.vy = -2.0;
@@ -6223,6 +6327,20 @@ function runGameFrame(e) {
                 player.y = meshGroundY;
                 player.vy = 0;
                 player.onGround = !0;
+            }
+            const ufoSupport = player.vy <= 0
+                ? getUfoGroundSupport(player.x, player.z, previousY + (wasOnGround ? 2.05 : .001), player.y - (wasOnGround ? 2.05 : 0))
+                : null;
+            ufoRide = null;
+            if (ufoSupport && !checkCollision(player.x, ufoSupport.y, player.z)) {
+                player.y = ufoSupport.y;
+                player.vy = 0;
+                player.onGround = true;
+                const position = new THREE.Vector3(player.x, player.y, player.z);
+                ufoRide = { mob: ufoSupport.mob, position, local: ufoSupport.mob.mesh.worldToLocal(position.clone()) };
+                ufoOffMap = true;
+            } else if (player.onGround || player.y < -10) {
+                ufoOffMap = false;
             }
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
@@ -6371,12 +6489,15 @@ function runGameFrame(e) {
             petIdsKey = JSON.stringify(petIds),
             petsChanged = lastSentPosition.petIdsKey !== petIdsKey;
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
+            activeMovement = Math.hypot(player.x - lastSentPosition.x - ufoCarrySinceLastMove.x,
+                player.y - lastSentPosition.y - ufoCarrySinceLastMove.y,
+                player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
         if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
-            // Only update lastMoveTime (idle reset) if they physically moved (I) or attacked. (Looking around (k) does not break idle).
-            if (I || isAttacking) {
+            // Passive transport and looking around do not reset idle time.
+            if (activeMovement || isAttacking) {
                 lastMoveTime = e;
                 window.lastMoveTime = e;
             }
@@ -6389,6 +6510,7 @@ function runGameFrame(e) {
                 selectedBlockId: selectedBlockId,
                 petIdsKey: petIdsKey
             };
+            ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
                 type: "player_move",
                 username: userName,
@@ -6581,7 +6703,7 @@ function runGameFrame(e) {
                     if (t.user !== userName) {
                         const shooter = playerAvatars.get(t.user);
                         if (shooter) shooter.userData.laserFireTime = performance.now();
-                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color);
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color, t.damageSource);
                         if (t.color === "blue" && !playedBlueSoundThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
                             if (fireAudioTemplate) {
@@ -6594,7 +6716,7 @@ function runGameFrame(e) {
             } else if (e.user !== userName) {
                 const shooter = playerAvatars.get(e.user);
                 if (shooter) shooter.userData.laserFireTime = performance.now();
-                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color);
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color, e.damageSource);
                 if (e.color === "blue" && !playedBlueSoundThisFrame) {
                     const fireAudioTemplate = document.getElementById('ufoCannonFire');
                     if (fireAudioTemplate) {
@@ -6641,10 +6763,10 @@ function runGameFrame(e) {
                 if (isSolid(getBlockAt(a, n, r))) {
                     if (isAuthority() || peers.size === 0) {
                         if (o.isBlue) {
-                            applyBlueLaserDamage(a, n, r, o.user);
+                            applyBlueLaserDamage(a, n, r, o.user, o.damageSource);
 
                         } else {
-                            removeBlockAt(a, n, r, o.user, 1, false, null, o.isGreen ? "green" : "red");
+                            removeBlockAt(a, n, r, o.user, 1, false, null, o.isGreen ? "green" : "red", o.damageSource);
                         }
                     } else {
                         // Clients only broadcast block hit if they own the projectile
@@ -6657,6 +6779,7 @@ function runGameFrame(e) {
                                     y: n,
                                     z: r,
                                     username: o.user,
+                                    damageSource: o.damageSource,
                                     world: worldName,
                                     blockId: getBlockAt(a, n, r),
                                     isBlue: true
@@ -6676,6 +6799,7 @@ function runGameFrame(e) {
                                         y: n,
                                         z: r,
                                         username: o.user,
+                                        damageSource: o.damageSource,
                                         world: worldName,
                                         blockId: blockId,
                                         laserColor: o.isGreen ? "green" : "red"
@@ -6774,7 +6898,7 @@ function runGameFrame(e) {
                             addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
                             flashDamageEffect();
                             safePlayAudioAt(soundHit, stepPos);
-                            player.health <= 0 && handlePlayerDeath();
+                            player.health <= 0 && handlePlayerDeath(o.user);
 
                             hitPlayer = true;
                         }
