@@ -1367,6 +1367,11 @@ function setupDataChannel(e, t) {
                         e.spawnCommandKey = s.spawnCommandKey || null;
                         e.petOwner = e.type === "timber_wolf" && typeof s.petOwner === "string" ? s.petOwner : null;
                         e.spawner = e.petOwner || s.spawner || s.username || n;
+                        if (e.type === "ufo_saucer") {
+                            e.ufoTarget = s.ufoTarget;
+                            e.lingerTime = s.lingerTime || 0;
+                            e.attackCooldown = s.attackCooldown ?? 90;
+                        }
                         if (Number.isFinite(s.hp)) e.hp = s.hp;
                         if (Number.isFinite(s.maxHp)) e.maxHp = s.maxHp;
                         if (Number.isSafeInteger(s.feedRevision)) e.feedRevision = s.feedRevision;
@@ -1529,6 +1534,11 @@ function setupDataChannel(e, t) {
                             if (t.spawnCommandKey) o.spawnCommandKey = t.spawnCommandKey;
                             if (o.type === "timber_wolf" && "petOwner" in t) o.petOwner = typeof t.petOwner === "string" ? t.petOwner : null;
                             o.spawner = o.petOwner || updateSpawner;
+                            if (o.type === "ufo_saucer") {
+                                o.ufoTarget = t.ufoTarget;
+                                if (Number.isFinite(t.lingerTime)) o.lingerTime = t.lingerTime;
+                                if (Number.isFinite(t.attackCooldown)) o.attackCooldown = t.attackCooldown;
+                            }
                             const updateTime = performance.now();
                             if (o.lastUpdateTime > 0) {
                                 o.interpolationDuration = Math.max(50, Math.min(250, updateTime - o.lastUpdateTime));
@@ -2346,7 +2356,10 @@ function setupDataChannel(e, t) {
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
                                         petOwner: m.petOwner || null,
-                                        spawner: m.spawner
+                                        spawner: m.spawner,
+                                        ufoTarget: m.ufoTarget,
+                                        lingerTime: m.lingerTime,
+                                        attackCooldown: m.attackCooldown
                                     }))
                                 });
                                 if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);
@@ -2368,7 +2381,11 @@ function setupDataChannel(e, t) {
                                         originSeed: m.originSeed,
                                         spawnCommandKey: m.spawnCommandKey,
                                         petOwner: m.petOwner || null,
-                                        spawner: m.spawner
+                                        spawner: m.spawner,
+                                        ufoTarget: m.ufoTarget,
+                                        lingerTime: m.lingerTime,
+                                        attackCooldown: m.attackCooldown,
+                                        aiState: m.aiState, quaternion: m.quaternion
                                     }))
                                 });
                                 if (!dedicatedServer && peer.dc?.readyState === "open") peer.dc.send(mobBatchMsg);

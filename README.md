@@ -144,7 +144,7 @@ You get a warning message whenever your score crosses into a new tier. Dying res
 | **Spider** | 🌋 Vulcan | Eight-legged hunter. |
 | **Grub** | 🏜 Desert (max 2 per loaded map) | A segmented giant that eats cactus and glows at night. |
 | **Fish & Whales** | Water (every world but the Moon) | Schools of fish, rare fish and whales that feed on them. |
-| **UFO** | Near idle players | Drops Blue Calcite for the Blue Laser Gun. |
+| **UFO** | Once per player per game session, after one hour idle | Approaches for 90 seconds before firing blue lasers for up to 150 seconds, then leaves. Drops Blue Calcite for the Blue Laser Gun. |
 
 ### Level 2 (score 500+)
 
@@ -166,6 +166,8 @@ Each mob is based on a different voxel game and borrows that game's way of fight
 Grubs (max **2**) and Dust Vultures (max **4**) are counted across the **whole loaded map**, not just near each player. They **don't despawn when you walk away**. They leave only when their chunk unloads from the authority's loaded (third-person viewable) map, or when no player in the world still meets their tier. Other mobs still despawn beyond ~96 blocks.
 
 Elite mobs are built from Three.js meshes (spheres, cylinders, cones, tori), not only voxel boxes. They have animated rigs (bow draw, slime squash-and-stretch, cinder throw, charge, wing flaps) and flash red when hit. Arrows and cinders are real projectiles that arc under gravity. Elite projectiles never destroy blocks, can be blocked by walls, and carry **no dynamic lights**: adding or removing a scene light recompiles every material and causes a visible freeze. Hits spawn a small shard burst instead.
+
+**UFO riding:** Land or teleport onto the large blue-laser UFO's hull to walk around and ride its existing flight animation. Riders cannot steer it. It carries you beyond the map boundary during departure; when it disappears, you fall. Surviving, destroying it, moving again, or changing planets does not grant another encounter until a new game session.
 
 ### 🦴 Bones
 

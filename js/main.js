@@ -4093,6 +4093,8 @@ function tryStepUpStairs(x, y, z) {
 
 function checkCollision(e, t, o) {
     if (checkBlockCollision(e, t, o)) return true;
+    const hull = getUfoGroundSupport(e, o, Infinity, -Infinity);
+    if (hull && t + player.height > hull.mob.pos.y - 3 && t + 2.05 < hull.y) return true;
     return checkMeshCollision(e, t, o);
 }
 
@@ -4127,6 +4129,47 @@ function getCeilingLimitedY(x, y, z, targetY) {
 const MESH_STEP_HEIGHT = 0.55;
 const MESH_SNAP_DOWN = 0.3;
 const _meshPlayerBox = new THREE.Box3();
+let ufoRide = null;
+let ufoOffMap = false;
+
+function getUfoGroundSupport(x, z, topY, minY) {
+    let support = null;
+    for (const mob of mobs) {
+        if (mob.type !== "ufo_saucer" || !mob.ufoHullColumns ||
+            Math.hypot(x - mob.pos.x, z - mob.pos.z) > 65) continue;
+        mob.mesh.updateMatrixWorld(true);
+        const local = mob.mesh.worldToLocal(new THREE.Vector3(x + player.width/2, 0, z + player.depth/2));
+        let hullTop = null;
+        for (const column of mob.ufoHullColumns.values()) {
+            if (Math.abs(local.x - column.x) <= 1 && Math.abs(local.z - column.z) <= 1) {
+                hullTop = Math.max(hullTop ?? -Infinity, column.top + mob.pos.y);
+            }
+        }
+        if (hullTop !== null && hullTop <= topY && hullTop >= minY &&
+            (!support || hullTop > support.y)) support = { mob, y: hullTop };
+    }
+    return support;
+}
+
+function carryUfoRider() {
+    if (!ufoRide) return;
+    const { mob, local, position } = ufoRide;
+    if (!mobs.includes(mob) || !player.onGround || player.vy > 0 ||
+        Math.hypot(player.x - position.x, player.y - position.y, player.z - position.z) > .1) {
+        ufoRide = null;
+        return;
+    }
+    mob.mesh.updateMatrixWorld(true);
+    const next = mob.mesh.localToWorld(local.clone());
+    if (!checkCollision(next.x, next.y, next.z)) {
+        player.x = next.x;
+        player.y = next.y;
+        player.z = next.z;
+        ufoOffMap = true;
+    } else {
+        ufoRide = null;
+    }
+}
 
 function getCollidableStoneMeshes(box) {
     if (!magicianStones) return [];
@@ -5867,6 +5910,11 @@ function switchWorld(newWorldName, targetSpawn) {
                 if (Number.isSafeInteger(m.feedRevision)) o.feedRevision = m.feedRevision;
                 o.petOwner = o.type === "timber_wolf" && typeof m.petOwner === "string" ? m.petOwner : null;
                 o.spawner = o.petOwner || m.spawner || m.username;
+                if (o.type === "ufo_saucer") {
+                    o.ufoTarget = m.ufoTarget;
+                    o.lingerTime = m.lingerTime || 0;
+                    o.attackCooldown = m.attackCooldown ?? 90;
+                }
                 o.isAggressive = m.isAggressive;
                 if (m.aiState) o.aiState = m.aiState;
                 if (m.isMoving !== undefined) o.isMoving = m.isMoving;
@@ -6115,6 +6163,7 @@ function runGameFrame(e) {
         var o = document.getElementById("score");
         o && (o.innerText = player.score), renderer.render(scene, camera)
     } else {
+        carryUfoRider();
         const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
         window.playerInWater = inWater;
         const waterOverlay = document.getElementById("waterOverlay");
@@ -6185,8 +6234,10 @@ function runGameFrame(e) {
             player.z = S;
         }
 
-        player.x = modWrap(player.x, MAP_SIZE);
-        player.z = modWrap(player.z, MAP_SIZE);
+        if (!ufoOffMap) {
+            player.x = modWrap(player.x, MAP_SIZE);
+            player.z = modWrap(player.z, MAP_SIZE);
+        }
         player.vy -= (inWater ? gravity * 0.2 : gravity) * t;
         if (inWater && player.vy < -2.0 && !(keys[" "] || document.getElementById("mobileJumpBtn").dataset.active === "true")) {
             player.vy = -2.0;
@@ -6223,6 +6274,20 @@ function runGameFrame(e) {
                 player.y = meshGroundY;
                 player.vy = 0;
                 player.onGround = !0;
+            }
+            const ufoSupport = player.vy <= 0
+                ? getUfoGroundSupport(player.x, player.z, previousY + (wasOnGround ? 2.05 : .001), player.y - (wasOnGround ? 2.05 : 0))
+                : null;
+            ufoRide = null;
+            if (ufoSupport && !checkCollision(player.x, ufoSupport.y, player.z)) {
+                player.y = ufoSupport.y;
+                player.vy = 0;
+                player.onGround = true;
+                const position = new THREE.Vector3(player.x, player.y, player.z);
+                ufoRide = { mob: ufoSupport.mob, position, local: ufoSupport.mob.mesh.worldToLocal(position.clone()) };
+                ufoOffMap = true;
+            } else if (player.onGround || player.y < -10) {
+                ufoOffMap = false;
             }
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));

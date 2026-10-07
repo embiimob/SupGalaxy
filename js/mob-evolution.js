@@ -287,6 +287,10 @@ function wasMobRecentlyRemoved(id) {
 }
 
 function isMobAuthority(mob) {
+    if (mob.type === "ufo_saucer") {
+        const ownerHere = mob.spawner === userName || (peers.has(mob.spawner) && userPositions[mob.spawner]?.world === worldName);
+        return mob.spawner === userName || (!ownerHere && (isAuthority(mob.world || worldName) || peers.size === 0));
+    }
     return (typeof isAuthority === "function" && isAuthority(mob.world || worldName)) ||
         (mob.spawner === userName) || (isHost && (!mob.spawner || !peers.has(mob.spawner))) || peers.size === 0;
 }
