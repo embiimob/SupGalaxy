@@ -19,16 +19,75 @@ function galaxyHash(value) {
 function galaxyCoordinates(originName) {
     const seed = String(originName || "");
     const master = galaxyMasterKeyword();
-    const radius = .24 + Math.sqrt(galaxyHash(seed + ":" + master + ":orbit") / 4294967296) * .72;
+    const radius = .17 + Math.sqrt(galaxyHash(seed + ":" + master + ":orbit") / 4294967296) * .82;
     const pitch = (galaxyHash(master + ":height:" + seed) / 4294967296 - .5) * .14;
     const arm = galaxyHash(master + ":arm:" + seed) % 4;
-    const phase = (galaxyHash(master + ":phase:" + seed) / 4294967296 - .5) * .32;
-    const spiralAngle = arm * Math.PI / 2 + Math.log(radius / .24) * 1.15 + phase;
+    const phase = (galaxyHash(master + ":phase:" + seed) / 4294967296 - .5) * (.12 + radius * .22);
+    const spiralAngle = arm * Math.PI / 2 + Math.log(radius / .17) * 1.32 + phase;
     return new THREE.Vector3(
         Math.cos(spiralAngle) * radius,
         pitch * radius,
         Math.sin(spiralAngle) * radius
     );
+}
+
+let galaxyStarTextureCanvas;
+
+function getGalaxyStarTexture() {
+    if (!galaxyStarTextureCanvas) {
+        galaxyStarTextureCanvas = document.createElement("canvas");
+        galaxyStarTextureCanvas.width = galaxyStarTextureCanvas.height = 32;
+        const context = galaxyStarTextureCanvas.getContext("2d");
+        const glow = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+        glow.addColorStop(0, "rgba(255,255,255,1)");
+        glow.addColorStop(.32, "rgba(255,255,255,.95)");
+        glow.addColorStop(.72, "rgba(255,255,255,.38)");
+        glow.addColorStop(1, "rgba(255,255,255,0)");
+        context.fillStyle = glow;
+        context.fillRect(0, 0, 32, 32);
+    }
+    const texture = new THREE.CanvasTexture(galaxyStarTextureCanvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    return texture;
+}
+
+function generateGalaxyStarCatalog() {
+    const random = makeSeededRandom(galaxyMasterKeyword() + "_star_catalog");
+    const points = [];
+    const arms = 3600;
+    const armCount = 4;
+    for (let arm = 0; arm < armCount; arm++) {
+        for (let i = 0; i < arms; i++) {
+            const radius = .17 + Math.sqrt(random()) * .82;
+            const angle = arm * Math.PI * 2 / armCount +
+                Math.log(radius / .17) * 1.32 +
+                (random() - .5) * (.12 + radius * .22);
+            const thickness = .006 + radius * .028;
+            points.push(
+                Math.cos(angle) * radius + (random() - .5) * thickness,
+                (random() - .5) * thickness * .7,
+                Math.sin(angle) * radius + (random() - .5) * thickness
+            );
+        }
+    }
+    for (let i = 0; i < 1800; i++) {
+        const radius = .17 + Math.sqrt(random()) * .34;
+        const angle = random() * Math.PI * 2;
+        points.push(
+            Math.cos(angle) * radius,
+            (random() - .5) * .045,
+            Math.sin(angle) * radius
+        );
+    }
+    return new Float32Array(points);
+}
+
+let galaxyStarCatalog;
+
+function getGalaxyStarCatalog() {
+    if (!galaxyStarCatalog) galaxyStarCatalog = generateGalaxyStarCatalog();
+    return galaxyStarCatalog;
 }
 
 function getGalaxyWorldNames() {
@@ -39,29 +98,29 @@ function getGalaxyWorldNames() {
 
 function createGalaxySky(seed) {
     const galaxy = new THREE.Group;
-    const random = makeSeededRandom(galaxyMasterKeyword() + "_sky");
-    const noise = makeNoise(galaxyMasterKeyword() + "_starfield");
     const positions = [];
-    for (let i = 0; i < 5000; i++) {
-        const azimuth = random() * Math.PI * 2;
-        const polar = Math.acos(2 * random() - 1);
-        const x = 4000 * Math.sin(polar) * Math.cos(azimuth);
-        const y = 4000 * Math.cos(polar);
-        const z = 4000 * Math.sin(polar) * Math.sin(azimuth);
-        if (noise(.005 * x, .005 * y) > .7) positions.push(x, y, z);
+    const origin = galaxyCoordinates(typeof worldName === "string" && worldName ? worldName : seed);
+    const catalog = getGalaxyStarCatalog();
+    for (let i = 0; i < catalog.length; i += 3) {
+        const dx = catalog[i] - origin.x;
+        const dy = catalog[i + 1] - origin.y;
+        const dz = catalog[i + 2] - origin.z;
+        const distance = Math.hypot(dx, dy, dz);
+        if (distance > .001) positions.push(dx / distance * 4000, dy / distance * 4000, dz / distance * 4000);
     }
     const geometry = new THREE.BufferGeometry;
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     const stars = new THREE.Points(geometry, new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 2 + 3 * random()
+        map: getGalaxyStarTexture(),
+        size: 1.45,
+        transparent: true,
+        alphaTest: .08,
+        depthWrite: false
     }));
     galaxy.add(stars);
-    const origin = galaxyCoordinates(seed);
-    galaxy.rotation.y = Math.atan2(origin.x, origin.z);
-    galaxy.rotation.x = -Math.atan2(origin.y, Math.hypot(origin.x, origin.z));
     galaxy.userData.isGalaxySky = true;
-    refreshGalaxySkyWorlds(galaxy, seed);
+    refreshGalaxySkyWorlds(galaxy, typeof worldName === "string" && worldName ? worldName : seed);
     return galaxy;
 }
 
@@ -75,26 +134,38 @@ function refreshGalaxySkyWorlds(group = stars, originName = worldSeed) {
     const origin = galaxyCoordinates(originName);
     const positions = [];
     for (const name of getGalaxyWorldNames()) {
-        if (name === originName) continue;
-        const direction = galaxyCoordinates(name).sub(origin).normalize().multiplyScalar(3970);
-        positions.push(direction.x, direction.y, direction.z);
+        const delta = galaxyCoordinates(name).sub(origin);
+        if (delta.lengthSq() < .000001) continue;
+        delta.normalize().multiplyScalar(3970);
+        positions.push(delta.x, delta.y, delta.z);
     }
     const geometry = new THREE.BufferGeometry;
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const worldNames = getGalaxyWorldNames().filter(name => name !== originName);
     const markers = new THREE.Points(geometry, new THREE.PointsMaterial({
         color: 0xc9ffd8,
-        size: 5,
+        map: getGalaxyStarTexture(),
+        size: 3.2,
+        vertexColors: true,
         transparent: true,
         opacity: .95,
-        depthWrite: false
+        depthWrite: false,
+        alphaTest: .08
     }));
+    const colors = [];
+    for (const name of worldNames) {
+        const selected = name === worldName;
+        colors.push(selected ? .72 : .28, selected ? 1 : .82, selected ? .45 : .43);
+    }
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    markers.userData.worldNames = worldNames;
     group.add(markers);
     group.userData.worldMarkers = markers;
 }
 
 function getGalaxySystemDetails(seed) {
     const random = makeSeededRandom(seed + "_sky");
-    for (let i = 0; i < 4; i++) random();
+    for (let i = 0; i < 6; i++) random();
     const suns = 1 + Math.floor(3 * random());
     for (let i = 0; i < suns * 5; i++) random();
     const moons = Math.floor(4 * random());
@@ -183,8 +254,10 @@ function initGalaxyMap() {
             depthWrite: false,
             sizeAttenuation: true
         }));
-        label.scale.set(.31, .058, 1);
-        label.position.y += .055;
+        label.scale.set(.19, .036, 1);
+        label.position.y += .027;
+        label.userData.worldName = name;
+        label.userData.isWorldLabel = true;
         return label;
     }
 
@@ -192,57 +265,25 @@ function initGalaxyMap() {
         const galaxy = new THREE.Group;
         const points = [];
         const colors = [];
-        const random = makeSeededRandom(galaxyMasterKeyword() + "_hologram");
-        const armCount = 4;
-        const arms = 850;
-        for (let arm = 0; arm < armCount; arm++) {
-            for (let i = 0; i < arms; i++) {
-                const radius = .08 + Math.sqrt(random()) * .9;
-                const angle = arm * Math.PI * 2 / armCount + Math.log(radius / .08) * 1.45 + (random() - .5) * .42;
-                const thickness = .018 + radius * .035;
-                points.push(
-                    Math.cos(angle) * radius,
-                    (random() - .5) * thickness,
-                    Math.sin(angle) * radius
-                );
-                const brightness = .42 + random() * .58;
-                colors.push(.12 * brightness, .82 * brightness, .34 * brightness);
-            }
-        }
-        for (let i = 0; i < 480; i++) {
-            const radius = Math.pow(random(), 1.8) * .29;
-            const angle = random() * Math.PI * 2;
-            points.push(Math.cos(angle) * radius, (random() - .5) * .1, Math.sin(angle) * radius);
-            const brightness = .6 + random() * .4;
-            colors.push(.2 * brightness, .96 * brightness, .39 * brightness);
+        const catalog = getGalaxyStarCatalog();
+        for (let i = 0; i < catalog.length; i += 3) {
+            points.push(catalog[i], catalog[i + 1], catalog[i + 2]);
+            const brightness = .48 + .52 * ((i / 3 * 0.61803398875) % 1);
+            colors.push(.12 * brightness, .82 * brightness, .34 * brightness);
         }
         const geometry = new THREE.BufferGeometry;
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
         geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
         galaxy.add(new THREE.Points(geometry, new THREE.PointsMaterial({
-            size: .008,
+            map: getGalaxyStarTexture(),
+            size: .0058,
             vertexColors: true,
             transparent: true,
             opacity: .88,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
-            sizeAttenuation: true
-        })));
-
-        const corePoints = [];
-        for (let i = 0; i < 100; i++) {
-            const angle = i / 100 * Math.PI * 2;
-            corePoints.push(Math.cos(angle) * .085, (random() - .5) * .012, Math.sin(angle) * .085);
-        }
-        const coreGeometry = new THREE.BufferGeometry;
-        coreGeometry.setAttribute("position", new THREE.Float32BufferAttribute(corePoints, 3));
-        galaxy.add(new THREE.Points(coreGeometry, new THREE.PointsMaterial({
-            color: 0x79ff9f,
-            size: .012,
-            transparent: true,
-            opacity: .82,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending
+            sizeAttenuation: true,
+            alphaTest: .08
         })));
 
         const exclusion = new THREE.Mesh(
@@ -264,7 +305,7 @@ function initGalaxyMap() {
         for (const name of getGalaxyWorldNames()) {
             const position = galaxyCoordinates(name);
             const marker = new THREE.Mesh(
-                new THREE.SphereGeometry(name === worldName ? .019 : .014, 8, 6),
+                new THREE.SphereGeometry(name === worldName ? .009 : .007, 8, 6),
                 new THREE.MeshBasicMaterial({
                     color: name === worldName ? 0xcaff74 : 0x5dff95,
                     transparent: true,
@@ -275,8 +316,7 @@ function initGalaxyMap() {
             marker.userData.worldName = name;
             marker.userData.isWorld = true;
             const label = makeWorldLabel(name);
-            label.position.copy(position).add(new THREE.Vector3(0, .035, 0));
-            label.userData.worldName = name;
+            label.position.copy(position).add(new THREE.Vector3(0, .016, 0));
             state.scene.add(marker, label);
             state.worldObjects.push({ name, position, marker, label });
         }
@@ -338,7 +378,7 @@ function initGalaxyMap() {
         state.selected = typeof worldName === "string" ? worldName : "";
         ensureRenderer();
         addWorlds();
-        refreshGalaxySkyWorlds(stars, worldSeed);
+        refreshGalaxySkyWorlds(stars, worldName);
         resizeRenderer();
         if (state.selected) focusWorld(state.selected);
         updateDetails();
@@ -366,12 +406,17 @@ function initGalaxyMap() {
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointer, state.camera);
-        const hit = raycaster.intersectObjects(state.worldObjects.flatMap(world => [world.marker, world.label]), false)[0];
+        const hit = raycaster.intersectObjects(state.worldObjects.flatMap(world => [world.label, world.marker]), false)[0];
         if (!hit || !hit.object.userData.worldName) return;
         const name = hit.object.userData.worldName;
         state.selected = name;
+        for (const world of state.worldObjects) {
+            world.marker.material.color.set(world.name === name ? 0xcaff74 : 0x5dff95);
+            world.label.material.color.set(world.name === name ? 0x86ffae : 0x3dbe70);
+        }
         updateDetails();
-        if (name !== worldName) travelToWorld(name);
+        if (hit.object.userData.isWorldLabel) focusWorld(name, .24);
+        else if (name !== worldName) travelToWorld(name);
     }
 
     window.openGalaxyMap = openMap;
