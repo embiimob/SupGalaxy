@@ -3233,7 +3233,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 8px;">Switch world</button>\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:8px 0 0;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -3268,10 +3268,28 @@ function openUsersModal() {
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
-    var a = !1,
-        r = document.createElement("h4");
-    for (var s of (r.innerText = "Connected Players", o.appendChild(r), peers)) {
-        var n = s[0];
+    var a = !1;
+    const connectedNames = Array.from(new Set([
+        ...peers.keys(),
+        ...(dedicatedServer ? Object.keys(userPositions) : [])
+    ])).filter(name => name !== userName && name !== SERVER_PEER)
+        .sort((left, right) => left.localeCompare(right));
+    const connectedSection = document.createElement("details");
+    connectedSection.style.margin = "20px 0";
+    const connectedTitle = document.createElement("summary");
+    connectedTitle.textContent = `Connected Players ( ${connectedNames.length} )`;
+    connectedTitle.style.fontWeight = "bold";
+    connectedTitle.style.cursor = "pointer";
+    connectedTitle.style.userSelect = "none";
+    connectedSection.appendChild(connectedTitle);
+    const connectedContainer = document.createElement("div");
+    connectedContainer.style.maxHeight = "300px";
+    connectedContainer.style.overflowY = "auto";
+    connectedContainer.style.marginTop = "10px";
+    connectedContainer.style.paddingBottom = "10px";
+    connectedSection.appendChild(connectedContainer);
+    o.appendChild(connectedSection);
+    for (var n of connectedNames) {
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
             // Use cached spawn from spawnChunks if available, otherwise calculate
@@ -3302,11 +3320,13 @@ function openUsersModal() {
 
             h.appendChild(f);
             h.appendChild(m);
-            o.appendChild(h);
+            connectedContainer.appendChild(h);
         }
     }
 
-    o.appendChild(t.querySelector("#friendHandle").parentElement);
+    const friendControls = t.querySelector("#friendHandle").parentElement;
+    friendControls.style.marginTop = "20px";
+    o.appendChild(friendControls);
     o.appendChild(t.querySelector("#connectDedicatedServer"));
     updateDedicatedServerDialog();
 
@@ -3593,7 +3613,7 @@ function openUsersModal() {
     t.querySelector("#connectDedicatedServer").onclick = openDedicatedServerModal;
 }
 
-function openDedicatedServerModal() {
+function openDedicatedServerModal({ serverAddress } = {}) {
     document.getElementById("dedicatedServerModal")?.remove();
     const modal = document.createElement("div");
     modal.id = "dedicatedServerModal";
@@ -3642,6 +3662,7 @@ function openDedicatedServerModal() {
     let requestId = 0;
     let addressChangeTimeout;
     let statusInterval;
+    let startingGame = false;
     try {
         const savedAddress = localStorage.getItem("supgalaxy-dedicated-server-address");
         if (savedAddress) {
@@ -3654,6 +3675,10 @@ function openDedicatedServerModal() {
         localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:55555";
     } catch (error) {
         console.warn("[WEBRTC] Could not read the saved server address:", error);
+    }
+    if (serverAddress) {
+        addressInput.value = serverAddress;
+        localMode.checked = normalizeDedicatedServerAddress(serverAddress) === "http://127.0.0.1:55555";
     }
 
     const refreshStatus = async () => {
@@ -3729,7 +3754,8 @@ function openDedicatedServerModal() {
         }
     });
     modal.querySelector("#refreshDedicatedServerStatus").onclick = refreshStatus;
-    modal.querySelector("#dedicatedServerAction").onclick = () => {
+    modal.querySelector("#dedicatedServerAction").onclick = async () => {
+        if (startingGame) return;
         if (dedicatedServer) {
             disconnectDedicatedServer(isConnecting ? "Connection cancelled." : undefined);
         } else {
@@ -3738,7 +3764,28 @@ function openDedicatedServerModal() {
                 requestId++;
                 statusController.abort();
             }
-            connectToDedicatedServer(addressInput.value);
+            const action = modal.querySelector("#dedicatedServerAction");
+            try {
+                if (!chunkManager) {
+                    if (gameStarted) {
+                        status.textContent = "The world is still starting. Try connecting again once it has loaded.";
+                        return;
+                    }
+                    startingGame = true;
+                    action.disabled = true;
+                    action.textContent = "Starting world…";
+                    const started = await startGame({ serverLogin: true });
+                    if (!started) return;
+                }
+                if (!modal.isConnected) return;
+                isPromptOpen = true;
+                await connectToDedicatedServer(addressInput.value);
+            } catch (error) {
+                status.textContent = error.message || "Could not start the world.";
+            } finally {
+                startingGame = false;
+                updateDedicatedServerDialog();
+            }
         }
     };
     modal.querySelector("#closeDedicatedServerModal").onclick = closeModal;

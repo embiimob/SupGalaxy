@@ -5466,16 +5466,33 @@ async function populateSpawnChunks() {
         });
     }
 }
-async function startGame() {
+function fillLoginDefaults({ serverLogin = false } = {}) {
+    const worldInput = document.getElementById("worldNameInput");
+    const userInput = document.getElementById("userInput");
+    if (!userInput.value.trim()) {
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        const suffix = serverLogin
+            ? Array.from({ length: 3 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("")
+            : "";
+        userInput.value = "guest" + suffix;
+    }
+    if (!worldInput.value.trim()) {
+        const worlds = Array.from(knownWorlds.keys()).filter(name => typeof name === "string" && name.trim() && name.length <= 8);
+        if (worlds.length) worldInput.value = worlds[Math.floor(Math.random() * worlds.length)];
+    }
+}
+
+async function startGame({ serverLogin = false } = {}) {
     // Guard to prevent double game initialization
     if (gameStarted) {
         console.log("[LOGIN] Game already started, skipping duplicate initialization");
-        return;
+        return false;
     }
     gameStarted = true;
 
     var e = document.getElementById("startBtn");
-    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
+    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = serverLogin;
+    fillLoginDefaults({ serverLogin });
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
 
@@ -5488,9 +5505,9 @@ async function startGame() {
         }
         return false;
     }
-    if (validateAndReset(t.length > 8, "World name too long (max 8 chars)")) return;
-    if (validateAndReset(o.length > 20, "Username too long (max 20 chars)")) return;
-    if (validateAndReset(!t || !o, "Please enter a world and username")) return;
+    if (validateAndReset(t.length > 8, "World name too long (max 8 chars)")) return false;
+    if (validateAndReset(o.length > 20, "Username too long (max 20 chars)")) return false;
+    if (validateAndReset(!t.trim(), "No known worlds available yet. Enter a world name or try again after worlds load.")) return false;
 
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
     const a = makeSeededRandom((worldSeed = worldName) + "_colors");
@@ -5520,7 +5537,7 @@ async function startGame() {
     keywordCache.set(userAddress, r);
 
     // Process user session restoring
-    if (userAddress !== "anonymous") {
+    if (!serverLogin && userAddress !== "anonymous") {
         try {
             const messages = await GetPublicMessagesByAddress(userAddress);
             if (messages && messages.length > 0) {
@@ -5633,7 +5650,7 @@ async function startGame() {
         spawn: homeSpawn
     });
 
-    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) {
+    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile() && !serverLogin) {
         try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
@@ -5662,6 +5679,7 @@ async function startGame() {
         ids: Array.from(processedMessages)
     }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3);
     handleResizeAndOrientation();
+    return true;
 }
 
 function scanExpiredOwnership() {
@@ -7167,7 +7185,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
         const i = new URLSearchParams(window.location.search),
             l = i.get("world-seed"),
             d = i.get("user-name"),
-            c = i.get("loc");
+            c = i.get("loc"),
+            serverMode = i.has("server-mode");
         
         // Configure worker for Sup!? local mode and pass effective IPFS root
         if (typeof worker !== 'undefined') {
@@ -7193,7 +7212,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
-        l && d && startGame();
+        !serverMode && l && d && startGame();
         var a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
@@ -7205,6 +7224,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }
 
         const testnetWifLoginBtn = document.getElementById("testnetWifLoginBtn");
+        document.getElementById("loginConnectServerBtn").addEventListener("click", () => {
+            fillLoginDefaults({ serverLogin: true });
+            openDedicatedServerModal();
+        });
         if (testnetWifLoginBtn && wmb) {
             testnetWifLoginBtn.addEventListener("click", () => {
                 wmb.style.display = "block";
@@ -7246,6 +7269,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 t = document.getElementById("teleportY").value,
                 o = document.getElementById("teleportZ").value,
                 a = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${e},${t},${o}`;
+            if (dedicatedServer) {
+                a += `&server-mode=1&server-url=${encodeURIComponent(dedicatedServer.base)}`;
+            }
             navigator.clipboard.writeText(a).then((function () {
                 addMessage("Shareable URL copied to clipboard!", 3e3)
             }), (function (e) {
@@ -7296,7 +7322,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             acceptPendingOffers(), this.blur()
         })), document.getElementById("closePending").addEventListener("click", (function () {
             document.getElementById("pendingModal").style.display = "none", pendingOffers = [], updatePendingModal(), this.blur()
-        })), async function () {
+        }));
+        const knownWorldsReady = (async function () {
             console.log("[USERS] Initializing worlds and users");
             var e = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
             if (e) {
@@ -7366,7 +7393,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
                 console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }
-        }(), updateLoginUI(), setupEmojiPicker();
+        })().catch(error => {
+            console.error("[USERS] World discovery failed:", error);
+        });
+        updateLoginUI(), setupEmojiPicker();
         var s = document.getElementById("dropZone");
         s.addEventListener("dragover", (function (e) {
             e.preventDefault(), s.style.backgroundColor = "rgba(255, 255, 255, 0.1)"
@@ -7415,7 +7445,20 @@ document.addEventListener("DOMContentLoaded", (async function () {
             }
         });
 
-        console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
+        console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached");
+        if (serverMode) {
+            const serverAddress = i.get("server-url")?.trim() || "https://play.supgalaxy.org:55555";
+            normalizeDedicatedServerAddress(serverAddress);
+            openDedicatedServerModal({ serverAddress });
+            const modal = document.getElementById("dedicatedServerModal");
+            if (!document.getElementById("worldNameInput").value.trim()) {
+                modal.querySelector("#dedicatedServerStatus").textContent = "Loading known worlds…";
+                await knownWorldsReady;
+            }
+            if (modal.isConnected && !gameStarted) {
+                await modal.querySelector("#dedicatedServerAction").onclick();
+            }
+        }
     } catch (e) {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
     }
