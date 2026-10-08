@@ -54,6 +54,13 @@ function createGalaxySky(seed) {
             colors.push(color.r, color.g, color.b);
         }
     }
+    for (let i = 0; i < 520; i++) {
+        const distance = Math.pow(random(), 1.7) * 760;
+        const angle = random() * Math.PI * 2;
+        points.push(Math.cos(angle) * distance, (random() - .5) * 150, Math.sin(angle) * distance);
+        const color = new THREE.Color().setHSL((hue + .08 + random() * .12) % 1, .5, .68 + random() * .25);
+        colors.push(color.r, color.g, color.b);
+    }
     const geometry = new THREE.BufferGeometry;
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -65,34 +72,6 @@ function createGalaxySky(seed) {
         depthWrite: false
     }));
     galaxy.add(starCloud);
-
-    const glowCanvas = document.createElement("canvas");
-    glowCanvas.width = 512;
-    glowCanvas.height = 192;
-    const glowContext = glowCanvas.getContext("2d");
-    const glow = glowContext.createRadialGradient(256, 96, 5, 256, 96, 245);
-    glow.addColorStop(0, "rgba(255,238,213,.72)");
-    glow.addColorStop(.13, "rgba(205,166,255,.34)");
-    glow.addColorStop(.48, "rgba(100,115,255,.12)");
-    glow.addColorStop(1, "rgba(45,82,180,0)");
-    glowContext.fillStyle = glow;
-    glowContext.fillRect(0, 0, 512, 192);
-    const glowTexture = new THREE.CanvasTexture(glowCanvas);
-    const nebula = new THREE.Mesh(
-        new THREE.PlaneGeometry(radius * 2.2, radius * .72),
-        new THREE.MeshBasicMaterial({
-            map: glowTexture,
-            color: new THREE.Color().setHSL((hue + .6) % 1, .72, .72),
-            transparent: true,
-            opacity: .72,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        })
-    );
-    nebula.rotation.x = -Math.PI / 2;
-    nebula.rotation.z = .16;
-    galaxy.add(nebula);
 
     const location = galaxyCoordinates(seed, radius * .9);
     const planetHue = galaxyHash(seed + "_planet") / 4294967296;

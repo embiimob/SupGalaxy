@@ -395,6 +395,10 @@
             }
 
             @media (max-width: 700px) {
+                #galaxyMapButton {
+                    bottom: 76px;
+                }
+
                 #galaxyMap {
                     padding: 8px;
                 }

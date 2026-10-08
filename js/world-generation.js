@@ -622,7 +622,7 @@ function updateSky(e) {
         e.light.target.position.copy(camera.position);
         e.light.target.updateMatrixWorld();
         e.baseIntensity = 0.12 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.moons.length);
-    })), stars.visible = isNight || inSpace, stars.position.copy(camera.position), stars.rotation.y += .005 * e, stars.userData.planet && (stars.userData.planet.rotation.y += .12 * e), clouds.children.forEach((t => {
+    })), stars.visible = isNight || inSpace, stars.rotation.y += .005 * e, stars.userData.planet && (stars.userData.planet.rotation.y += .12 * e), clouds.children.forEach((t => {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
     clouds.visible = !inSpace;
