@@ -1301,29 +1301,35 @@ body.is-mobile-mode #messages {
 }
 
 .galaxy-atlas-button {
-        width: 42px;
-        height: 42px;
-        padding: 4px;
-        vertical-align: middle;
-        border: 1px solid rgba(116, 235, 168, .55) !important;
-        background: rgba(10, 54, 37, .88) !important;
-    }
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    place-items: center;
+    padding: 3px;
+    border: 1px solid rgba(255, 216, 161, .7);
+    border-radius: 50%;
+    background: linear-gradient(145deg, #3d281f, #151d20);
+    box-shadow: 0 0 15px rgba(225, 152, 87, .24), inset 0 0 8px rgba(255, 229, 178, .12);
+    cursor: pointer;
+}
 
-    .galaxy-atlas-button svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        overflow: visible;
-        fill: #b5edca;
-        stroke: #173f31;
-        stroke-width: 3.5;
-        stroke-linecap: round;
-    }
+.galaxy-atlas-button:hover {
+    background: linear-gradient(145deg, #68432e, #263336);
+    box-shadow: 0 0 20px rgba(225, 152, 87, .45), inset 0 0 8px rgba(255, 229, 178, .2);
+}
+
+.galaxy-atlas-button svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
 
     .galaxy-atlas {
         position: fixed;
         inset: 0;
-        z-index: 260;
+        z-index: 1100;
         display: none;
         align-items: center;
         justify-content: center;
