@@ -799,6 +799,11 @@
             box-sizing: border-box;
         }
 
+            #usersModal #usersList {
+                padding: 4px;
+                box-sizing: border-box;
+            }
+
             #usersModal h3 {
                 margin: 0 0 8px 0;
             }
