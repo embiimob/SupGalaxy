@@ -3742,7 +3742,11 @@ function openDedicatedServerModal() {
             }
             const action = modal.querySelector("#dedicatedServerAction");
             try {
-                if (!gameStarted) {
+                if (!chunkManager) {
+                    if (gameStarted) {
+                        status.textContent = "The world is still starting. Try connecting again once it has loaded.";
+                        return;
+                    }
                     startingGame = true;
                     action.disabled = true;
                     action.textContent = "Starting world…";
