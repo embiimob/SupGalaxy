@@ -3613,7 +3613,7 @@ function openUsersModal() {
     t.querySelector("#connectDedicatedServer").onclick = openDedicatedServerModal;
 }
 
-function openDedicatedServerModal() {
+function openDedicatedServerModal({ serverAddress } = {}) {
     document.getElementById("dedicatedServerModal")?.remove();
     const modal = document.createElement("div");
     modal.id = "dedicatedServerModal";
@@ -3675,6 +3675,10 @@ function openDedicatedServerModal() {
         localMode.checked = normalizeDedicatedServerAddress(addressInput.value) === "http://127.0.0.1:55555";
     } catch (error) {
         console.warn("[WEBRTC] Could not read the saved server address:", error);
+    }
+    if (serverAddress) {
+        addressInput.value = serverAddress;
+        localMode.checked = normalizeDedicatedServerAddress(serverAddress) === "http://127.0.0.1:55555";
     }
 
     const refreshStatus = async () => {

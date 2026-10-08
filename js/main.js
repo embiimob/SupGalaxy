@@ -7185,7 +7185,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
         const i = new URLSearchParams(window.location.search),
             l = i.get("world-seed"),
             d = i.get("user-name"),
-            c = i.get("loc");
+            c = i.get("loc"),
+            serverMode = i.has("server-mode");
         
         // Configure worker for Sup!? local mode and pass effective IPFS root
         if (typeof worker !== 'undefined') {
@@ -7211,7 +7212,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }
         console.log("[SYSTEM] DOMContentLoaded fired, initializing login elements");
         var e = document.getElementById("startBtn");
-        l && d && startGame();
+        !serverMode && l && d && startGame();
         var a = document.getElementById("acceptAll"),
             n = document.getElementById("pendingModal"),
             r = document.getElementById("loginOverlay");
@@ -7268,6 +7269,9 @@ document.addEventListener("DOMContentLoaded", (async function () {
                 t = document.getElementById("teleportY").value,
                 o = document.getElementById("teleportZ").value,
                 a = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${e},${t},${o}`;
+            if (dedicatedServer) {
+                a += `&server-mode=1&server-url=${encodeURIComponent(dedicatedServer.base)}`;
+            }
             navigator.clipboard.writeText(a).then((function () {
                 addMessage("Shareable URL copied to clipboard!", 3e3)
             }), (function (e) {
@@ -7318,7 +7322,8 @@ document.addEventListener("DOMContentLoaded", (async function () {
             acceptPendingOffers(), this.blur()
         })), document.getElementById("closePending").addEventListener("click", (function () {
             document.getElementById("pendingModal").style.display = "none", pendingOffers = [], updatePendingModal(), this.blur()
-        })), async function () {
+        }));
+        const knownWorldsReady = (async function () {
             console.log("[USERS] Initializing worlds and users");
             var e = await GetPublicAddressByKeyword(MASTER_WORLD_KEY);
             if (e) {
@@ -7388,7 +7393,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
                     } else o.TransactionId && console.log("[USERS] Skipping already processed message:", o.TransactionId);
                 console.log("[USERS] Discovered worlds:", knownWorlds.size, "and users:", knownUsers.size)
             }
-        }(), updateLoginUI(), setupEmojiPicker();
+        })().catch(error => {
+            console.error("[USERS] World discovery failed:", error);
+        });
+        updateLoginUI(), setupEmojiPicker();
         var s = document.getElementById("dropZone");
         s.addEventListener("dragover", (function (e) {
             e.preventDefault(), s.style.backgroundColor = "rgba(255, 255, 255, 0.1)"
@@ -7437,7 +7445,20 @@ document.addEventListener("DOMContentLoaded", (async function () {
             }
         });
 
-        console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached")
+        console.log("[SYSTEM] DOMContentLoaded completed, all listeners attached");
+        if (serverMode) {
+            const serverAddress = i.get("server-url")?.trim() || "https://play.supgalaxy.org:55555";
+            normalizeDedicatedServerAddress(serverAddress);
+            openDedicatedServerModal({ serverAddress });
+            const modal = document.getElementById("dedicatedServerModal");
+            if (!document.getElementById("worldNameInput").value.trim()) {
+                modal.querySelector("#dedicatedServerStatus").textContent = "Loading known worlds…";
+                await knownWorldsReady;
+            }
+            if (modal.isConnected && !gameStarted) {
+                await modal.querySelector("#dedicatedServerAction").onclick();
+            }
+        }
     } catch (e) {
         console.error("[SYSTEM] Error in DOMContentLoaded:", e), addMessage("Failed to initialize login system", 3e3)
     }

@@ -270,6 +270,22 @@ Instead of connecting directly to peers, you can connect through a central dedic
 2. Enter the server address (e.g., `https://play.supgalaxy.org:55555`).
 3. Click **Connect**.
 
+**Server-mode links**
+
+Open `https://supgalaxy.org/index.html?server-mode=1` to automatically start a world and connect to the default server (`https://play.supgalaxy.org:55555`), regardless of any previously saved server address.
+
+Optional query parameters:
+- `server-url`: URL-encoded HTTP/HTTPS server address.
+- `world-seed`: world name (max 8 characters). If omitted or blank, the app waits for known-world discovery and randomly chooses a known world.
+- `user-name`: username (max 20 characters). If omitted or blank, the app creates `guest` plus three random alphanumeric characters, such as `guestAB9`.
+- `loc`: spawn/teleport coordinates in `x,y,z` format.
+
+Example: `https://supgalaxy.org/index.html?server-mode=1&server-url=https%3A%2F%2Fplay.supgalaxy.org%3A55555&world-seed=earth&user-name=alice`
+
+The server dialog remains available for connection status and retries. If no known worlds can be loaded, enter a world name on the login screen and retry **Connect**. Existing links without `server-mode` retain their solo behavior.
+
+**Share world** includes `server-mode=1` and the active server address when in server mode, along with the world, username, and coordinates. A shared username must still be unique on the server: recipients can change or remove `user-name` in the link to use their own name or a generated guest name.
+
 ## Automated On-Chain Signaling (Recommended)
 When your Testnet3 wallet is unlocked, WebRTC connection files are automatically negotiated over the Bitcoin testnet3 network using IPFS and P2FK.
 
