@@ -1,6 +1,19 @@
 const GALAXY_MAP_RADIUS = 900;
 
 let galaxyMap = null;
+let galaxyLayout = null;
+
+function getGalaxyLayout() {
+    if (galaxyLayout) return galaxyLayout;
+    const random = makeSeededRandom(MASTER_WORLD_KEY + "_atlas_layout");
+    const armCount = 3 + Math.floor(random() * 5);
+    const armLengths = Array.from({ length: armCount }, () => .25 + .75 * random());
+    galaxyLayout = Object.freeze({
+        armCount,
+        armLengths: Object.freeze(armLengths)
+    });
+    return galaxyLayout;
+}
 
 function getGalaxyWorldSky(world) {
     const random = makeSeededRandom(world + "_sky");
@@ -30,9 +43,9 @@ function getGalaxyResidents(worldData) {
 
 function createGalaxyWorldPosition(world) {
     const random = makeSeededRandom(MASTER_WORLD_KEY + "_world_" + world);
-    const armCount = 5;
+    const { armCount, armLengths } = getGalaxyLayout();
     const arm = Math.floor(random() * armCount);
-    const radius = GALAXY_MAP_RADIUS * (.28 + .58 * Math.sqrt(random()));
+    const radius = GALAXY_MAP_RADIUS * armLengths[arm] * (.25 + .7 * Math.sqrt(random()));
     const angle = arm * Math.PI * 2 / armCount + radius * .0055 + (random() - .5) * .5;
     const height = (random() - .5) * (18 + 62 * Math.exp(-radius / 240));
     return new THREE.Vector3(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
@@ -62,7 +75,7 @@ function createGalaxyStarField() {
     const positions = [];
     const colors = [];
     const starCount = 18000;
-    const armCount = 5;
+    const { armCount, armLengths } = getGalaxyLayout();
     const gaussian = () => {
         const u = Math.max(1e-8, random());
         return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * random());
@@ -77,7 +90,7 @@ function createGalaxyStarField() {
             y = gaussian() * spread * .54;
         } else {
             const arm = Math.floor(random() * armCount);
-            const radius = GALAXY_MAP_RADIUS * Math.sqrt(random());
+            const radius = GALAXY_MAP_RADIUS * armLengths[arm] * Math.sqrt(random());
             const angle = arm * Math.PI * 2 / armCount + radius * .0055 + gaussian() * (.035 + radius / 2600);
             const thickness = 12 + 68 * Math.exp(-radius / 260);
             x = Math.cos(angle) * radius + gaussian() * (9 + radius * .035);
