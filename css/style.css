@@ -1298,7 +1298,310 @@ body.is-mobile-mode #messages {
         bottom: 16px;
         left: 16px;
     }
+}
+
+.galaxy-atlas-button {
+        width: 42px;
+        height: 42px;
+        padding: 4px;
+        vertical-align: middle;
+        border: 1px solid rgba(116, 235, 168, .55) !important;
+        background: rgba(10, 54, 37, .88) !important;
+    }
+
+    .galaxy-atlas-button svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        fill: #b5edca;
+        stroke: #173f31;
+        stroke-width: 3.5;
+        stroke-linecap: round;
+    }
+
+    .galaxy-atlas {
+        position: fixed;
+        inset: 0;
+        z-index: 260;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 3vh 4vw;
+        background: rgba(2, 7, 12, .83);
+        backdrop-filter: blur(8px);
+    }
+
+    .galaxy-atlas-window {
+        display: flex;
+        flex-direction: column;
+        width: min(1280px, 100%);
+        height: min(82vh, 820px);
+        overflow: hidden;
+        color: #d8f6e5;
+        background: #020c08;
+        border: 1px solid rgba(66, 205, 123, .55);
+        border-radius: 16px;
+        box-shadow: 0 20px 70px rgba(0, 0, 0, .65), 0 0 48px rgba(28, 185, 95, .15);
+        font-family: Inter, Arial, Helvetica, sans-serif;
+    }
+
+    .galaxy-atlas-header,
+    .galaxy-atlas-footer {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        background: rgba(5, 25, 17, .92);
+    }
+
+    .galaxy-atlas-header {
+        min-height: 40px;
+        border-bottom: 1px solid rgba(66, 205, 123, .2);
+    }
+
+    .galaxy-atlas-header h1 {
+        margin: 0;
+        color: #d8f6e5;
+        font-size: 19px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        line-height: 1.2;
+    }
+
+    .galaxy-atlas-controls {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .galaxy-atlas-controls button,
+    .galaxy-world-panel button {
+        min-height: 34px;
+        padding: 7px 12px;
+        color: #d8f6e5;
+        background: #0a2b1d;
+        border: 1px solid rgba(66, 205, 123, .4);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .galaxy-atlas-controls button.selected,
+    .galaxy-world-panel button {
+        background: #145c39;
+    }
+
+    .galaxy-atlas-controls button:hover,
+    .galaxy-world-panel button:hover {
+        background: #1b7549;
+    }
+
+    .galaxy-atlas-main {
+        display: grid;
+        flex: 1 1 auto;
+        grid-template-columns: minmax(0, 1fr) 270px;
+        min-height: 0;
+    }
+
+    .galaxy-canvas-host {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: #020b08;
+    }
+
+    .galaxy-canvas-host canvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+    }
+
+    .galaxy-world-panel {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 16px;
+        border-left: 1px solid rgba(66, 205, 123, .2);
+        background: rgba(4, 20, 13, .8);
+    }
+
+    .galaxy-planet-preview {
+        width: 112px;
+        height: 112px;
+        flex: 0 0 auto;
+        margin: 0 0 10px;
+        border-radius: 50%;
+        background:
+            repeating-linear-gradient(8deg, transparent 0 14px, rgba(5, 18, 16, .48) 15px 21px, transparent 22px 32px),
+            radial-gradient(ellipse at 35% 32%, rgba(255, 255, 255, .85), transparent 12%),
+            radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--planet-color, #64d68d) 95%, white), var(--planet-color, #64d68d) 46%, #071a15 88%);
+        box-shadow: 0 0 28px color-mix(in srgb, var(--planet-color, #64d68d) 45%, transparent), inset -14px -9px 24px rgba(0, 0, 0, .7);
+    }
+
+    .galaxy-world-panel h2 {
+        max-width: 100%;
+        margin: 0 0 10px;
+        overflow: hidden;
+        color: #d8f6e5;
+        font-size: 20px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .galaxy-world-summary {
+        width: 100%;
+        margin: 0 0 14px;
+        overflow: hidden;
+        color: #a9c9d5;
+        font-size: 13px;
+        line-height: 1.4;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .galaxy-world-stats {
+        display: grid;
+        width: 100%;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .galaxy-world-stats div {
+        display: flex;
+        min-height: 58px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        background: rgba(8, 37, 24, .78);
+        border: 1px solid rgba(66, 205, 123, .25);
+        border-radius: 10px;
+    }
+
+    .galaxy-world-stats strong {
+        color: #fff;
+        font-size: 19px;
+    }
+
+    .galaxy-world-stats span {
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .galaxy-world-panel button {
+        width: 100%;
+        margin-top: auto;
+    }
+
+    .galaxy-atlas-footer {
+        min-height: 16px;
+        color: #a9c9d5;
+        border-top: 1px solid rgba(66, 205, 123, .2);
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .galaxy-atlas-footer span:last-child {
+        flex: 0 0 auto;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 700px) {
+        .galaxy-atlas {
+            padding: 8px;
+        }
+
+        .galaxy-atlas-window {
+            width: 100%;
+            height: min(94vh, 900px);
+            border-radius: 11px;
+        }
+
+        .galaxy-atlas-header {
+            gap: 8px;
+            padding: 10px;
+        }
+
+        .galaxy-atlas-header h1 {
+            font-size: 15px;
+            letter-spacing: .04em;
+        }
+
+        .galaxy-atlas-controls {
+            gap: 3px;
+        }
+
+        .galaxy-atlas-controls button {
+            min-height: 32px;
+            padding: 6px 8px;
+            font-size: 11px;
+        }
+
+        .galaxy-atlas-main {
+            grid-template-columns: minmax(0, 1fr) 146px;
+        }
+
+        .galaxy-world-panel {
+            padding: 12px 8px;
+        }
+
+        .galaxy-planet-preview {
+            width: 76px;
+            height: 76px;
+        }
+
+        .galaxy-world-panel h2 {
+            font-size: 16px;
+        }
+
+        .galaxy-world-summary {
+            font-size: 10px;
+        }
+
+        .galaxy-world-stats {
+            gap: 4px;
+        }
+
+        .galaxy-world-stats div {
+            min-height: 50px;
+        }
+
+        .galaxy-atlas-footer {
+            align-items: flex-start;
+            padding: 8px 10px;
+            font-size: 10px;
+        }
+
+        .galaxy-atlas-footer span:last-child {
+            white-space: normal;
+        }
+    }
+
+    @media (max-width: 400px) {
+        .galaxy-atlas-main {
+            grid-template-columns: minmax(0, 1fr) 128px;
+        }
+
+        .galaxy-atlas-header h1 {
+            font-size: 13px;
+        }
+
+        #galaxyOverviewBtn {
+            display: none;
+        }
+    }
     
+@media (max-width: 700px) {
     #mobileModeToggle {
         bottom: 16px;
         left: 56px; /* 16px (chatButton left) + 28px (button width) + 12px (spacing) */
