@@ -38,7 +38,7 @@ function getGalaxyWorldNames() {
 
 function createGalaxySky(seed) {
     const galaxy = new THREE.Group;
-    const random = makeSeededRandom(seed + "_sky");
+    const random = makeSeededRandom(galaxyMasterKeyword() + "_sky");
     const noise = makeNoise(galaxyMasterKeyword() + "_starfield");
     const positions = [];
     for (let i = 0; i < 5000; i++) {
@@ -56,6 +56,9 @@ function createGalaxySky(seed) {
         size: 2 + 3 * random()
     }));
     galaxy.add(stars);
+    const origin = galaxyCoordinates(seed);
+    galaxy.rotation.y = Math.atan2(origin.x, origin.z);
+    galaxy.rotation.x = -Math.atan2(origin.y, Math.hypot(origin.x, origin.z));
     galaxy.userData.isGalaxySky = true;
     refreshGalaxySkyWorlds(galaxy, seed);
     return galaxy;
@@ -316,7 +319,6 @@ function initGalaxyMap() {
         state.controls.rotateSpeed = .65;
         state.controls.zoomSpeed = .8;
         addGalaxyPoints();
-        addWorlds();
     }
 
     function resizeRenderer() {
