@@ -572,25 +572,8 @@ function initSky() {
             angleOffset: e() * Math.PI * 2
         }), scene.add(l), scene.add(light), scene.add(light.target)
     }
-    stars = new THREE.Group;
-    const i = new THREE.BufferGeometry,
-        l = [],
-        d = makeNoise(worldSeed + "_stars");
-    for (let t = 0; t < 5e3; t++) {
-        const t = e() * Math.PI * 2,
-            o = Math.acos(2 * e() - 1),
-            a = 4e3 * Math.sin(o) * Math.cos(t),
-            n = 4e3 * Math.sin(o) * Math.sin(t),
-            r = 4e3 * Math.cos(o);
-        d(.005 * a, .005 * r) > .7 && l.push(a, n, r)
-    }
-    i.setAttribute("position", new THREE.Float32BufferAttribute(l, 3));
-    const c = new THREE.PointsMaterial({
-        color: 16777215,
-        size: 2 + 3 * e()
-    }),
-        u = new THREE.Points(i, c);
-    stars.add(u), scene.add(stars), clouds = new THREE.Group;
+    stars = typeof createGalaxySky === "function" ? createGalaxySky(worldSeed) : new THREE.Group;
+    scene.add(stars), clouds = new THREE.Group;
     const p = createCloudTexture(worldSeed),
         m = Math.floor(80 * e());
     for (let t = 0; t < m; t++) {
@@ -639,7 +622,7 @@ function updateSky(e) {
         e.light.target.position.copy(camera.position);
         e.light.target.updateMatrixWorld();
         e.baseIntensity = 0.12 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.moons.length);
-    })), stars.visible = isNight || inSpace, stars.rotation.y += .005 * e, clouds.children.forEach((t => {
+    })), stars.visible = isNight || inSpace, stars.position.copy(camera.position), stars.rotation.y += .005 * e, stars.userData.planet && (stars.userData.planet.rotation.y += .12 * e), clouds.children.forEach((t => {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
     clouds.visible = !inSpace;

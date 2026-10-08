@@ -203,7 +203,263 @@
                 font-weight: 700;
             }
 
-        #messages {
+            #galaxyMapButton {
+                position: fixed;
+                left: 12px;
+                bottom: 12px;
+                z-index: 209;
+                width: 48px;
+                height: 48px;
+                display: grid;
+                place-items: center;
+                padding: 0;
+                border: 1px solid rgba(121, 224, 255, .55);
+                border-radius: 50%;
+                color: #d9f8ff;
+                background: radial-gradient(circle at 35% 30%, #254b76, #081523 72%);
+                box-shadow: 0 0 18px rgba(59, 194, 255, .35), inset 0 0 12px rgba(94, 214, 255, .18);
+                cursor: pointer;
+            }
+
+            #galaxyMapButton svg {
+                width: 31px;
+                height: 31px;
+                filter: drop-shadow(0 0 5px #7de8ff);
+            }
+
+            #galaxyMap {
+                position: fixed;
+                inset: 0;
+                z-index: 260;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                box-sizing: border-box;
+                background: rgba(1, 7, 17, .78);
+                backdrop-filter: blur(8px);
+            }
+
+            #galaxyMap[hidden] {
+                display: none;
+            }
+
+            .galaxy-panel {
+                width: min(1120px, 100%);
+                height: min(720px, 94vh);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                border: 1px solid rgba(97, 210, 255, .36);
+                border-radius: 16px;
+                color: #e7f8ff;
+                background: linear-gradient(145deg, rgba(8, 24, 42, .97), rgba(4, 9, 22, .98));
+                box-shadow: 0 0 45px rgba(36, 176, 255, .18), inset 0 0 32px rgba(42, 149, 202, .08);
+            }
+
+            .galaxy-header,
+            .galaxy-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 14px 18px;
+            }
+
+            .galaxy-header {
+                border-bottom: 1px solid rgba(134, 218, 255, .14);
+            }
+
+            .galaxy-header h2 {
+                margin: 0;
+                font-size: 18px;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+            }
+
+            .galaxy-header small,
+            .galaxy-footer small {
+                color: #9bb7ca;
+            }
+
+            .galaxy-map-content {
+                flex: 1;
+                min-height: 0;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 270px;
+            }
+
+            #galaxyCanvas {
+                width: 100%;
+                height: 100%;
+                min-height: 300px;
+                touch-action: none;
+                cursor: grab;
+            }
+
+            #galaxyCanvas:active {
+                cursor: grabbing;
+            }
+
+            .galaxy-details {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+                padding: 20px 16px;
+                overflow-y: auto;
+                border-left: 1px solid rgba(134, 218, 255, .14);
+                background: rgba(2, 11, 24, .48);
+                text-align: center;
+            }
+
+            .galaxy-planet {
+                width: 112px;
+                height: 112px;
+                flex: 0 0 auto;
+                border-radius: 50%;
+                background:
+                    radial-gradient(ellipse at 30% 27%, rgba(255,255,255,.7), transparent 8%),
+                    repeating-linear-gradient(8deg, transparent 0 13px, rgba(15, 54, 105, .68) 14px 18px, transparent 21px 27px),
+                    radial-gradient(circle at 38% 35%, #a8efff 0, #317aa6 30%, #173354 65%, #06101f 100%);
+                box-shadow: inset -18px -8px 25px rgba(0,0,0,.72), 0 0 28px rgba(91,207,255,.35);
+                animation: galaxy-planet-turn 18s linear infinite;
+            }
+
+            @keyframes galaxy-planet-turn {
+                from { background-position: 0 0, 0 0, center; }
+                to { background-position: 0 0, 112px 0, center; }
+            }
+
+            .galaxy-details h3 {
+                margin: 2px 0 0;
+                font-size: 20px;
+                overflow-wrap: anywhere;
+            }
+
+            .galaxy-details p {
+                margin: 0;
+                color: #a9c0d1;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+
+            .galaxy-stat-grid {
+                width: 100%;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .galaxy-stat {
+                padding: 9px 6px;
+                border: 1px solid rgba(114, 207, 255, .17);
+                border-radius: 9px;
+                background: rgba(18, 44, 66, .48);
+                font-size: 12px;
+            }
+
+            .galaxy-stat strong {
+                display: block;
+                margin-bottom: 3px;
+                color: #fff;
+                font-size: 19px;
+            }
+
+            .galaxy-zoom-controls {
+                display: flex;
+                gap: 6px;
+            }
+
+            .galaxy-zoom-controls button,
+            #galaxyMapClose,
+            #galaxyTravel {
+                padding: 8px 12px;
+                border: 1px solid rgba(117, 218, 255, .3);
+                border-radius: 8px;
+                color: #eafaff;
+                background: rgba(17, 49, 69, .85);
+                cursor: pointer;
+                font-weight: 700;
+            }
+
+            #galaxyTravel {
+                width: 100%;
+                margin-top: auto;
+                background: linear-gradient(90deg, #11506b, #17436c);
+            }
+
+            #galaxyTravel:disabled {
+                opacity: .55;
+                cursor: default;
+            }
+
+            @media (max-width: 700px) {
+                #galaxyMap {
+                    padding: 8px;
+                }
+
+                .galaxy-panel {
+                    height: 96vh;
+                }
+
+                .galaxy-header,
+                .galaxy-footer {
+                    padding: 10px;
+                }
+
+                .galaxy-header h2 {
+                    font-size: 14px;
+                }
+
+                .galaxy-map-content {
+                    grid-template-columns: 1fr;
+                    grid-template-rows: minmax(190px, 1fr) auto;
+                }
+
+                .galaxy-details {
+                    display: grid;
+                    grid-template-columns: 56px 1fr 1fr;
+                    text-align: left;
+                    padding: 8px;
+                    gap: 7px;
+                    border-top: 1px solid rgba(134, 218, 255, .14);
+                    border-left: 0;
+                }
+
+                .galaxy-planet {
+                    width: 48px;
+                    height: 48px;
+                    grid-row: span 2;
+                }
+
+                .galaxy-details h3 {
+                    font-size: 16px;
+                }
+
+                .galaxy-details p {
+                    font-size: 11px;
+                }
+
+                .galaxy-stat-grid {
+                    grid-column: 2 / 4;
+                }
+
+                .galaxy-stat {
+                    padding: 5px;
+                }
+
+                .galaxy-stat strong {
+                    font-size: 15px;
+                }
+
+                #galaxyTravel {
+                    grid-column: 2 / 4;
+                    margin-top: 0;
+                }
+            }
+
+            #messages {
             position: fixed;
             left: 12px;
             top: 180px;
