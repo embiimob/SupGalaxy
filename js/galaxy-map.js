@@ -207,7 +207,7 @@ function initGalaxyMap() {
                 </aside>
             </div>
             <footer class="galaxy-footer">
-                <small>Drag to rotate · scroll or pinch to zoom · click a world to travel</small>
+                <small>Drag to rotate · scroll or pinch to zoom · click a world name for details · click its planet to travel</small>
                 <small id="galaxyWorldCount"></small>
             </footer>
         </section>`;
@@ -324,16 +324,6 @@ function initGalaxyMap() {
             `${state.worldObjects.length} known worlds · green core exclusion zone`;
     }
 
-    function focusWorld(name, distance = .42) {
-        const target = galaxyCoordinates(name);
-        const offset = state.camera.position.clone().sub(state.controls.target);
-        if (offset.length() < .001) offset.set(0, .15, 1);
-        offset.setLength(distance);
-        state.controls.target.copy(target);
-        state.camera.position.copy(target).add(offset);
-        state.controls.update();
-    }
-
     function animate() {
         if (!state.open) return;
         state.frame = requestAnimationFrame(animate);
@@ -380,7 +370,9 @@ function initGalaxyMap() {
         addWorlds();
         refreshGalaxySkyWorlds(stars, worldName);
         resizeRenderer();
-        if (state.selected) focusWorld(state.selected);
+        state.controls.target.set(0, 0, 0);
+        state.camera.position.set(0, .35, 1.65);
+        state.controls.update();
         updateDetails();
         animate();
         modal.querySelector("#galaxyMapClose").focus();
@@ -401,12 +393,39 @@ function initGalaxyMap() {
         }
     }
 
+    function findScreenWorldHit(event, rect) {
+        const pixelsPerWorldUnit = rect.height /
+            (2 * Math.tan(state.camera.fov * Math.PI / 360) * state.camera.position.distanceTo(state.controls.target));
+        let bestHit = null;
+        let bestScore = Infinity;
+        for (const world of state.worldObjects) {
+            for (const object of [world.label, world.marker]) {
+                const position = object.getWorldPosition(new THREE.Vector3()).project(state.camera);
+                if (position.z < -1 || position.z > 1 || Math.abs(position.x) > 1 || Math.abs(position.y) > 1) continue;
+                const x = rect.left + (position.x + 1) * rect.width / 2;
+                const y = rect.top + (1 - position.y) * rect.height / 2;
+                const padding = object === world.label ? 9 : 4;
+                const halfWidth = (object === world.label ? object.scale.x / 2 : .009) * pixelsPerWorldUnit + padding;
+                const halfHeight = (object === world.label ? object.scale.y / 2 : .009) * pixelsPerWorldUnit + padding;
+                const dx = (event.clientX - x) / halfWidth;
+                const dy = (event.clientY - y) / halfHeight;
+                const score = dx * dx + dy * dy;
+                if (score <= 1 && score < bestScore) {
+                    bestHit = { object };
+                    bestScore = score;
+                }
+            }
+        }
+        return bestHit;
+    }
+
     function pickWorld(event) {
         const rect = state.renderer.domElement.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointer, state.camera);
-        const hit = raycaster.intersectObjects(state.worldObjects.flatMap(world => [world.label, world.marker]), false)[0];
+        const hit = raycaster.intersectObjects(state.worldObjects.flatMap(world => [world.label, world.marker]), false)[0] ||
+            findScreenWorldHit(event, rect);
         if (!hit || !hit.object.userData.worldName) return;
         const name = hit.object.userData.worldName;
         state.selected = name;
@@ -415,8 +434,7 @@ function initGalaxyMap() {
             world.label.material.color.set(world.name === name ? 0x86ffae : 0x3dbe70);
         }
         updateDetails();
-        if (hit.object.userData.isWorldLabel) focusWorld(name, .24);
-        else if (name !== worldName) travelToWorld(name);
+        if (!hit.object.userData.isWorldLabel && name !== worldName) travelToWorld(name);
     }
 
     window.openGalaxyMap = openMap;

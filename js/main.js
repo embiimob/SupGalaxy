@@ -307,7 +307,7 @@ function upsertKnownWorldUser(world, user, options = {}) {
         timestamp: hasExplicitTimestamp ? timestamp : existingUserData && existingUserData.timestamp ? existingUserData.timestamp : timestamp,
         address: nextAddress,
         claimed: claimed || !!(existingUserData && existingUserData.claimed === !0)
-    }), knownWorlds.set(world, worldData)
+    }), knownWorlds.set(world, worldData), typeof refreshGalaxySkyWorlds === "function" && refreshGalaxySkyWorlds()
 }
 
 function registerKnownWorldJoin(world, user, options = {}) {

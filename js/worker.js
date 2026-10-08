@@ -1863,6 +1863,7 @@ self.onmessage = async function(e) {
                         });
                     });
                 }
+                if (typeof refreshGalaxySkyWorlds === "function") refreshGalaxySkyWorlds();
                 if (data.processedIds) {
                     data.processedIds.forEach(id => processedMessages.add(id));
                 }
