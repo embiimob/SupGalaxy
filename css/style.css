@@ -1319,6 +1319,13 @@ body.is-mobile-mode #messages {
     box-shadow: 0 0 20px rgba(225, 152, 87, .45), inset 0 0 8px rgba(255, 229, 178, .2);
 }
 
+.galaxy-atlas-button-compact {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    padding: 1px;
+}
+
 .galaxy-atlas-button svg {
     display: block;
     width: 100%;

@@ -3226,6 +3226,31 @@ async function initServers() {
     startOfferPolling();
 }
 
+function galaxyAtlasButtonMarkup(id) {
+    return `<button id="${id}" class="galaxy-atlas-button galaxy-atlas-button-compact" type="button" title="Open Galaxy Atlas" aria-label="Open Galaxy Atlas">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+            <defs>
+                <clipPath id="${id}Clip"><circle cx="24" cy="24" r="19"/></clipPath>
+                <radialGradient id="${id}Shade" cx="34%" cy="28%" r="76%">
+                    <stop offset="0" stop-color="#fff2c0" stop-opacity=".6"/>
+                    <stop offset=".55" stop-color="#e6a65f" stop-opacity=".05"/>
+                    <stop offset="1" stop-color="#351b18" stop-opacity=".8"/>
+                </radialGradient>
+            </defs>
+            <circle cx="24" cy="24" r="20" fill="#9a5735"/>
+            <g clip-path="url(#${id}Clip)">
+                <path fill="#d28b54" d="M2 7h44v5H2zM2 14h44v4H2zM2 20h44v5H2zM2 29h44v4H2zM2 37h44v5H2z"/>
+                <path fill="#f0d2a0" d="M2 12h44v3H2zM2 25h44v4H2zM2 34h44v3H2z"/>
+                <path fill="#75433b" d="M2 18h44v3H2zM2 32h44v2H2z"/>
+                <ellipse cx="32" cy="27" rx="5" ry="2.5" fill="#b84e32"/>
+                <ellipse cx="32" cy="27" rx="3" ry="1.2" fill="#d98555"/>
+                <circle cx="24" cy="24" r="19" fill="url(#${id}Shade)"/>
+            </g>
+            <circle cx="24" cy="24" r="19" fill="none" stroke="#ffd8a1" stroke-opacity=".85" stroke-width="1.5"/>
+        </svg>
+    </button>`;
+}
+
 function openUsersModal() {
     enableWebRtcPolling();
     console.log("[MODAL] Opening users modal");
@@ -3233,7 +3258,22 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:8px 0 0;">Switch World</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = `
+            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>
+            <div style="margin-bottom:10px;">
+                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:8px 0 0;">Switch World</button>
+            </div>
+            <div style="margin-bottom:10px;">
+                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">
+                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>
+            </div>
+            <div id="usersList" style="overflow-y:auto;flex-grow:1;margin-bottom:10px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:8px;">
+                ${galaxyAtlasButtonMarkup("usersGalaxyAtlasBtn")}
+                <button id="closeUsers">Close</button>
+            </div>
+        `, document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -3266,6 +3306,7 @@ function openUsersModal() {
         return !0
     };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
+    t.querySelector("#usersGalaxyAtlasBtn").onclick = openGalaxyAtlas;
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     o.appendChild(t.querySelector("#switchWorldInput").parentElement);
@@ -3643,35 +3684,12 @@ function openDedicatedServerModal({ serverAddress } = {}) {
                 <button id="dedicatedServerAction" class="uniform-action-btn" style="order:-1;flex:1 0 100%;padding:13px 18px;background:#1599d0;color:#fff;font-size:1.1rem;box-shadow:0 0 18px rgba(21,153,208,.45);">Connect</button>
                 <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:10px 12px;">Refresh status</button>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
-                <button id="galaxyAtlasBtn" class="galaxy-atlas-button" type="button" title="Open Galaxy Atlas" aria-label="Open Galaxy Atlas">
-                    <svg viewBox="0 0 48 48" aria-hidden="true">
-                        <defs>
-                            <clipPath id="jupiterClip"><circle cx="24" cy="24" r="19"/></clipPath>
-                            <radialGradient id="jupiterShade" cx="34%" cy="28%" r="76%">
-                                <stop offset="0" stop-color="#fff2c0" stop-opacity=".6"/>
-                                <stop offset=".55" stop-color="#e6a65f" stop-opacity=".05"/>
-                                <stop offset="1" stop-color="#351b18" stop-opacity=".8"/>
-                            </radialGradient>
-                        </defs>
-                        <circle cx="24" cy="24" r="20" fill="#9a5735"/>
-                        <g clip-path="url(#jupiterClip)">
-                            <path fill="#d28b54" d="M2 7h44v5H2zM2 14h44v4H2zM2 20h44v5H2zM2 29h44v4H2zM2 37h44v5H2z"/>
-                            <path fill="#f0d2a0" d="M2 12h44v3H2zM2 25h44v4H2zM2 34h44v3H2z"/>
-                            <path fill="#75433b" d="M2 18h44v3H2zM2 32h44v2H2z"/>
-                            <ellipse cx="32" cy="27" rx="5" ry="2.5" fill="#b84e32"/>
-                            <ellipse cx="32" cy="27" rx="3" ry="1.2" fill="#d98555"/>
-                            <circle cx="24" cy="24" r="19" fill="url(#jupiterShade)"/>
-                        </g>
-                        <circle cx="24" cy="24" r="19" fill="none" stroke="#ffd8a1" stroke-opacity=".85" stroke-width="1.5"/>
-                    </svg>
-                </button>
+            <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:14px;">
                 <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:10px 12px;">Close</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     isPromptOpen = !0;
-    modal.querySelector("#galaxyAtlasBtn").addEventListener("click", openGalaxyAtlas);
 
     const addressInput = modal.querySelector("#dedicatedServerAddress");
     const localMode = modal.querySelector("#dedicatedServerLocalMode");
