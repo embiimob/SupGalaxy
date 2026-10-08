@@ -19,10 +19,11 @@ function galaxyHash(value) {
 function galaxyCoordinates(originName) {
     const seed = String(originName || "");
     const master = galaxyMasterKeyword();
-    const angle = galaxyHash(master + ":world:" + seed) / 4294967296 * Math.PI * 2;
     const radius = .24 + Math.sqrt(galaxyHash(seed + ":" + master + ":orbit") / 4294967296) * .72;
     const pitch = (galaxyHash(master + ":height:" + seed) / 4294967296 - .5) * .14;
-    const spiralAngle = angle + Math.log(radius) * .58;
+    const arm = galaxyHash(master + ":arm:" + seed) % 4;
+    const phase = (galaxyHash(master + ":phase:" + seed) / 4294967296 - .5) * .32;
+    const spiralAngle = arm * Math.PI / 2 + Math.log(radius / .24) * 1.15 + phase;
     return new THREE.Vector3(
         Math.cos(spiralAngle) * radius,
         pitch * radius,
