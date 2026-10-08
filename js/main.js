@@ -5466,10 +5466,16 @@ async function populateSpawnChunks() {
         });
     }
 }
-function fillLoginDefaults() {
+function fillLoginDefaults({ serverLogin = false } = {}) {
     const worldInput = document.getElementById("worldNameInput");
     const userInput = document.getElementById("userInput");
-    if (!userInput.value.trim()) userInput.value = "guest";
+    if (!userInput.value.trim()) {
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        const suffix = serverLogin
+            ? Array.from({ length: 3 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("")
+            : "";
+        userInput.value = "guest" + suffix;
+    }
     if (!worldInput.value.trim()) {
         const worlds = Array.from(knownWorlds.keys()).filter(name => typeof name === "string" && name.trim() && name.length <= 8);
         if (worlds.length) worldInput.value = worlds[Math.floor(Math.random() * worlds.length)];
@@ -5486,7 +5492,7 @@ async function startGame({ serverLogin = false } = {}) {
 
     var e = document.getElementById("startBtn");
     e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = serverLogin;
-    fillLoginDefaults();
+    fillLoginDefaults({ serverLogin });
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
 
@@ -7218,7 +7224,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
 
         const testnetWifLoginBtn = document.getElementById("testnetWifLoginBtn");
         document.getElementById("loginConnectServerBtn").addEventListener("click", () => {
-            fillLoginDefaults();
+            fillLoginDefaults({ serverLogin: true });
             openDedicatedServerModal();
         });
         if (testnetWifLoginBtn && wmb) {
