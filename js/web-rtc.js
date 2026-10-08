@@ -3266,6 +3266,22 @@ function openUsersModal() {
         return !0
     };
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
+    const galaxyButton = document.createElement("button");
+    galaxyButton.id = "galaxyMapButton";
+    galaxyButton.type = "button";
+    galaxyButton.title = "Open the galaxy map";
+    galaxyButton.setAttribute("aria-label", "Open the galaxy map");
+    galaxyButton.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 22c2-9 14-15 24-10 7 4 3 12-5 14-7 2-15 0-16 6 0 4 6 6 12 3" fill="none" stroke="#8bffae" stroke-width="2.2" stroke-linecap="round"/><path d="M13 22c2-5 9-8 14-5 4 2 1 6-4 7-4 1-9 0-9 4" fill="none" stroke="#c2ffd3" stroke-width="1.8" stroke-linecap="round"/><circle cx="20" cy="21" r="2.2" fill="#e8ffef"/><circle cx="8" cy="10" r="1" fill="#fff"/></svg>';
+    const usersFooter = t.querySelector("#closeUsers").parentElement;
+    usersFooter.style.display = "flex";
+    usersFooter.style.alignItems = "center";
+    usersFooter.style.justifyContent = "space-between";
+    usersFooter.style.gap = "12px";
+    usersFooter.style.textAlign = "left";
+    usersFooter.insertBefore(galaxyButton, t.querySelector("#closeUsers"));
+    galaxyButton.addEventListener("click", () => {
+        if (typeof window.openGalaxyMap === "function") window.openGalaxyMap();
+    });
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
     o.appendChild(t.querySelector("#switchWorldInput").parentElement);

@@ -204,27 +204,24 @@
             }
 
             #galaxyMapButton {
-                position: fixed;
-                left: 12px;
-                bottom: 12px;
-                z-index: 209;
-                width: 48px;
-                height: 48px;
+                width: 38px;
+                height: 38px;
                 display: grid;
                 place-items: center;
                 padding: 0;
-                border: 1px solid rgba(121, 224, 255, .55);
+                border: 1px solid rgba(115, 255, 166, .6);
                 border-radius: 50%;
-                color: #d9f8ff;
-                background: radial-gradient(circle at 35% 30%, #254b76, #081523 72%);
-                box-shadow: 0 0 18px rgba(59, 194, 255, .35), inset 0 0 12px rgba(94, 214, 255, .18);
+                color: #b7ffd0;
+                background: radial-gradient(circle at 35% 30%, #184b33, #071811 72%);
+                box-shadow: 0 0 14px rgba(64, 255, 138, .27), inset 0 0 10px rgba(94, 255, 155, .14);
                 cursor: pointer;
+                flex: 0 0 auto;
             }
 
             #galaxyMapButton svg {
-                width: 31px;
-                height: 31px;
-                filter: drop-shadow(0 0 5px #7de8ff);
+                width: 27px;
+                height: 27px;
+                filter: drop-shadow(0 0 5px #62ff9b);
             }
 
             #galaxyMap {
@@ -250,11 +247,11 @@
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
-                border: 1px solid rgba(97, 210, 255, .36);
+                border: 1px solid rgba(90, 255, 139, .42);
                 border-radius: 16px;
-                color: #e7f8ff;
-                background: linear-gradient(145deg, rgba(8, 24, 42, .97), rgba(4, 9, 22, .98));
-                box-shadow: 0 0 45px rgba(36, 176, 255, .18), inset 0 0 32px rgba(42, 149, 202, .08);
+                color: #dcffe8;
+                background: linear-gradient(145deg, rgba(5, 24, 17, .97), rgba(2, 11, 10, .98));
+                box-shadow: 0 0 45px rgba(36, 255, 118, .16), inset 0 0 32px rgba(42, 202, 103, .08);
             }
 
             .galaxy-header,
@@ -289,16 +286,23 @@
                 grid-template-columns: minmax(0, 1fr) 270px;
             }
 
-            #galaxyCanvas {
+            #galaxyViewport {
                 width: 100%;
                 height: 100%;
                 min-height: 300px;
                 touch-action: none;
                 cursor: grab;
+                background: radial-gradient(ellipse at center, rgba(0, 47, 28, .25), rgba(0, 0, 0, .25));
             }
 
-            #galaxyCanvas:active {
+            #galaxyViewport:active {
                 cursor: grabbing;
+            }
+
+            #galaxyViewport canvas {
+                width: 100%;
+                height: 100%;
+                display: block;
             }
 
             .galaxy-details {
@@ -308,8 +312,8 @@
                 gap: 12px;
                 padding: 20px 16px;
                 overflow-y: auto;
-                border-left: 1px solid rgba(134, 218, 255, .14);
-                background: rgba(2, 11, 24, .48);
+                border-left: 1px solid rgba(118, 255, 167, .18);
+                background: rgba(2, 16, 10, .48);
                 text-align: center;
             }
 
@@ -321,8 +325,8 @@
                 background:
                     radial-gradient(ellipse at 30% 27%, rgba(255,255,255,.7), transparent 8%),
                     repeating-linear-gradient(8deg, transparent 0 13px, rgba(15, 54, 105, .68) 14px 18px, transparent 21px 27px),
-                    radial-gradient(circle at 38% 35%, #a8efff 0, #317aa6 30%, #173354 65%, #06101f 100%);
-                box-shadow: inset -18px -8px 25px rgba(0,0,0,.72), 0 0 28px rgba(91,207,255,.35);
+                    radial-gradient(circle at 38% 35%, #b7ffd0 0, #31894d 30%, #17412c 65%, #06150e 100%);
+                box-shadow: inset -18px -8px 25px rgba(0,0,0,.72), 0 0 28px rgba(91,255,148,.35);
                 animation: galaxy-planet-turn 18s linear infinite;
             }
 
@@ -353,9 +357,9 @@
 
             .galaxy-stat {
                 padding: 9px 6px;
-                border: 1px solid rgba(114, 207, 255, .17);
+                border: 1px solid rgba(114, 255, 162, .2);
                 border-radius: 9px;
-                background: rgba(18, 44, 66, .48);
+                background: rgba(18, 54, 33, .4);
                 font-size: 12px;
             }
 
@@ -375,10 +379,10 @@
             #galaxyMapClose,
             #galaxyTravel {
                 padding: 8px 12px;
-                border: 1px solid rgba(117, 218, 255, .3);
+                border: 1px solid rgba(117, 255, 160, .32);
                 border-radius: 8px;
                 color: #eafaff;
-                background: rgba(17, 49, 69, .85);
+                background: rgba(17, 58, 36, .85);
                 cursor: pointer;
                 font-weight: 700;
             }
@@ -386,7 +390,7 @@
             #galaxyTravel {
                 width: 100%;
                 margin-top: auto;
-                background: linear-gradient(90deg, #11506b, #17436c);
+                background: linear-gradient(90deg, #145b35, #174b30);
             }
 
             #galaxyTravel:disabled {
@@ -395,10 +399,6 @@
             }
 
             @media (max-width: 700px) {
-                #galaxyMapButton {
-                    bottom: 76px;
-                }
-
                 #galaxyMap {
                     padding: 8px;
                 }

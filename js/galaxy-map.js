@@ -16,105 +16,81 @@ function galaxyHash(value) {
     return hash >>> 0;
 }
 
-function galaxyCoordinates(seed, scale = 1) {
+function galaxyCoordinates(originName) {
+    const seed = String(originName || "");
     const master = galaxyMasterKeyword();
-    const angleSeed = galaxyHash(master + ":world:" + seed);
-    const radiusSeed = galaxyHash(seed + ":" + master + ":orbit");
-    const angle = angleSeed / 4294967296 * Math.PI * 2;
-    const radius = .23 + Math.sqrt(radiusSeed / 4294967296) * .72;
-    const spiralAngle = angle + Math.log(radius) * .42;
-    return {
-        x: Math.cos(spiralAngle) * radius * scale,
-        y: Math.sin(spiralAngle) * radius * scale,
-        radius
-    };
+    const angle = galaxyHash(master + ":world:" + seed) / 4294967296 * Math.PI * 2;
+    const radius = .24 + Math.sqrt(galaxyHash(seed + ":" + master + ":orbit") / 4294967296) * .72;
+    const pitch = (galaxyHash(master + ":height:" + seed) / 4294967296 - .5) * .14;
+    const spiralAngle = angle + Math.log(radius) * .58;
+    return new THREE.Vector3(
+        Math.cos(spiralAngle) * radius,
+        pitch * radius,
+        Math.sin(spiralAngle) * radius
+    );
+}
+
+function getGalaxyWorldNames() {
+    const names = new Set(knownWorlds instanceof Map ? knownWorlds.keys() : []);
+    if (typeof worldName === "string" && worldName) names.add(worldName);
+    return Array.from(names).filter(name => typeof name === "string" && name.trim()).sort((a, b) => a.localeCompare(b));
 }
 
 function createGalaxySky(seed) {
     const galaxy = new THREE.Group;
-    const random = makeSeededRandom(galaxyMasterKeyword() + "_galaxy");
-    const points = [];
-    const colors = [];
-    const hue = random();
-    const radius = 2700;
-    for (let arm = 0; arm < 4; arm++) {
-        for (let i = 0; i < 740; i++) {
-            const distance = 180 + Math.sqrt(random()) * radius;
-            const angle = arm * Math.PI / 2 + Math.log(distance / 180) * 1.45 + (random() - .5) * .48;
-            points.push(
-                Math.cos(angle) * distance,
-                (random() - .5) * (90 + distance * .025),
-                Math.sin(angle) * distance
-            );
-            const color = new THREE.Color().setHSL(
-                (hue + .48 + random() * .1) % 1,
-                .45 + random() * .35,
-                .52 + random() * .33
-            );
-            colors.push(color.r, color.g, color.b);
-        }
-    }
-    for (let i = 0; i < 520; i++) {
-        const distance = Math.pow(random(), 1.7) * 760;
-        const angle = random() * Math.PI * 2;
-        points.push(Math.cos(angle) * distance, (random() - .5) * 150, Math.sin(angle) * distance);
-        const color = new THREE.Color().setHSL((hue + .08 + random() * .12) % 1, .5, .68 + random() * .25);
-        colors.push(color.r, color.g, color.b);
+    const random = makeSeededRandom(seed + "_sky");
+    const noise = makeNoise(galaxyMasterKeyword() + "_starfield");
+    const positions = [];
+    for (let i = 0; i < 5000; i++) {
+        const azimuth = random() * Math.PI * 2;
+        const polar = Math.acos(2 * random() - 1);
+        const x = 4000 * Math.sin(polar) * Math.cos(azimuth);
+        const y = 4000 * Math.cos(polar);
+        const z = 4000 * Math.sin(polar) * Math.sin(azimuth);
+        if (noise(.005 * x, .005 * y) > .7) positions.push(x, y, z);
     }
     const geometry = new THREE.BufferGeometry;
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
-    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    const starCloud = new THREE.Points(geometry, new THREE.PointsMaterial({
-        size: 2.2,
-        vertexColors: true,
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const stars = new THREE.Points(geometry, new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 2 + 3 * random()
+    }));
+    galaxy.add(stars);
+    galaxy.userData.isGalaxySky = true;
+    refreshGalaxySkyWorlds(galaxy, seed);
+    return galaxy;
+}
+
+function refreshGalaxySkyWorlds(group = stars, originName = worldSeed) {
+    if (!group || !group.userData || !group.userData.isGalaxySky) return;
+    const previous = group.userData.worldMarkers;
+    if (previous) {
+        group.remove(previous);
+        disposeObject(previous);
+    }
+    const origin = galaxyCoordinates(originName);
+    const positions = [];
+    for (const name of getGalaxyWorldNames()) {
+        if (name === originName) continue;
+        const direction = galaxyCoordinates(name).sub(origin).normalize().multiplyScalar(3970);
+        positions.push(direction.x, direction.y, direction.z);
+    }
+    const geometry = new THREE.BufferGeometry;
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const markers = new THREE.Points(geometry, new THREE.PointsMaterial({
+        color: 0xc9ffd8,
+        size: 5,
         transparent: true,
-        opacity: .9,
+        opacity: .95,
         depthWrite: false
     }));
-    galaxy.add(starCloud);
-
-    const location = galaxyCoordinates(seed, radius * .9);
-    const planetHue = galaxyHash(seed + "_planet") / 4294967296;
-    const planetGeometry = new THREE.SphereGeometry(24, 32, 24);
-    const planetPositions = planetGeometry.attributes.position;
-    const planetColors = [];
-    for (let i = 0; i < planetPositions.count; i++) {
-        const x = planetPositions.getX(i) / 24;
-        const y = planetPositions.getY(i) / 24;
-        const z = planetPositions.getZ(i) / 24;
-        const latitude = Math.asin(Math.max(-1, Math.min(1, y)));
-        const longitude = Math.atan2(z, x);
-        const surface = Math.sin(longitude * 3 + Math.sin(latitude * 7 + planetHue * 12)) +
-            .55 * Math.sin(longitude * 7 - latitude * 9 + planetHue * 23) +
-            .3 * Math.cos(latitude * 17 + longitude * 2);
-        const color = new THREE.Color().setHSL(
-            (planetHue + .48 + surface * .025 + 1) % 1,
-            .66,
-            Math.max(.2, Math.min(.73, .43 + surface * .09))
-        );
-        planetColors.push(color.r, color.g, color.b);
-    }
-    planetGeometry.setAttribute("color", new THREE.Float32BufferAttribute(planetColors, 3));
-    const planet = new THREE.Mesh(
-        planetGeometry,
-        new THREE.MeshBasicMaterial({ vertexColors: true })
-    );
-    planet.position.set(location.x, 10, location.y);
-    const orbit = new THREE.Mesh(
-        new THREE.TorusGeometry(43, 2, 5, 36),
-        new THREE.MeshBasicMaterial({ color: 0x7de8ff, transparent: true, opacity: .75 })
-    );
-    orbit.position.copy(planet.position);
-    orbit.rotation.x = Math.PI / 2;
-    galaxy.add(planet, orbit);
-    galaxy.userData.planet = planet;
-    galaxy.userData.isGalaxy = true;
-    return galaxy;
+    group.add(markers);
+    group.userData.worldMarkers = markers;
 }
 
 function getGalaxySystemDetails(seed) {
     const random = makeSeededRandom(seed + "_sky");
-    for (let i = 0; i < 7; i++) random();
+    for (let i = 0; i < 4; i++) random();
     const suns = 1 + Math.floor(3 * random());
     for (let i = 0; i < suns * 5; i++) random();
     const moons = Math.floor(4 * random());
@@ -122,14 +98,6 @@ function getGalaxySystemDetails(seed) {
 }
 
 function initGalaxyMap() {
-    const button = document.createElement("button");
-    button.id = "galaxyMapButton";
-    button.type = "button";
-    button.title = "Open the galaxy map";
-    button.setAttribute("aria-label", "Open the galaxy map");
-    button.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 22c2-9 14-15 24-10 7 4 3 12-5 14-7 2-15 0-16 6 0 4 6 6 12 3" fill="none" stroke="#8be8ff" stroke-width="2.2" stroke-linecap="round"/><path d="M13 22c2-5 9-8 14-5 4 2 1 6-4 7-4 1-9 0-9 4" fill="none" stroke="#d9aaff" stroke-width="1.8" stroke-linecap="round"/><circle cx="20" cy="21" r="2.2" fill="#fff1c7"/><circle cx="8" cy="10" r="1" fill="#fff"/></svg>';
-    document.body.appendChild(button);
-
     const modal = document.createElement("div");
     modal.id = "galaxyMap";
     modal.hidden = true;
@@ -144,13 +112,14 @@ function initGalaxyMap() {
                     <small id="galaxyMasterLabel"></small>
                 </div>
                 <div class="galaxy-zoom-controls">
+                    <button type="button" id="galaxyOverview">Galaxy overview</button>
                     <button type="button" id="galaxyZoomOut" aria-label="Zoom out">−</button>
                     <button type="button" id="galaxyZoomIn" aria-label="Zoom in">+</button>
                     <button type="button" id="galaxyMapClose">Close</button>
                 </div>
             </header>
             <div class="galaxy-map-content">
-                <canvas id="galaxyCanvas" aria-label="Interactive map of the seeded galaxy"></canvas>
+                <div id="galaxyViewport" aria-label="Interactive three-dimensional galaxy hologram"></div>
                 <aside class="galaxy-details">
                     <div class="galaxy-planet" aria-hidden="true"></div>
                     <h3 id="galaxyWorldName"></h3>
@@ -163,202 +132,263 @@ function initGalaxyMap() {
                 </aside>
             </div>
             <footer class="galaxy-footer">
-                <small>Scroll to zoom · drag to pan · right-drag or Shift-drag to rotate · click a world to travel</small>
+                <small>Drag to rotate · scroll or pinch to zoom · click a world to travel</small>
                 <small id="galaxyWorldCount"></small>
             </footer>
         </section>`;
     document.body.appendChild(modal);
 
-    const canvas = modal.querySelector("#galaxyCanvas");
-    const context = canvas.getContext("2d");
-    const state = { zoom: .92, rotation: 0, panX: 0, panY: 0, selected: "", width: 0, height: 0, dpr: 1 };
-    const mapRandom = makeSeededRandom(galaxyMasterKeyword() + "_atlas");
-    const backgroundStars = Array.from({ length: 950 }, () => ({
-        x: mapRandom() * 2 - 1,
-        y: mapRandom() * 2 - 1,
-        size: .35 + mapRandom() * 1.1,
-        alpha: .2 + mapRandom() * .65
-    }));
-    const masterLabel = modal.querySelector("#galaxyMasterLabel");
-    masterLabel.textContent = `MASTER KEYWORD · ${galaxyMasterKeyword()}`;
-
-    function worldNames() {
-        const names = new Set(knownWorlds instanceof Map ? knownWorlds.keys() : []);
-        if (typeof worldName === "string" && worldName) names.add(worldName);
-        return Array.from(names).filter(name => typeof name === "string" && name.trim()).sort((a, b) => a.localeCompare(b));
-    }
-
-    function resizeCanvas() {
-        const rect = canvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        state.width = rect.width;
-        state.height = rect.height;
-        state.dpr = Math.min(2, window.devicePixelRatio || 1);
-        canvas.width = Math.round(rect.width * state.dpr);
-        canvas.height = Math.round(rect.height * state.dpr);
-        drawMap();
-    }
-
-    function transformPoint(point) {
-        const cos = Math.cos(state.rotation);
-        const sin = Math.sin(state.rotation);
-        const radius = Math.min(state.width, state.height) * .43 * state.zoom;
-        return {
-            x: state.width / 2 + state.panX + (point.x * cos - point.y * sin) * radius,
-            y: state.height / 2 + state.panY + (point.x * sin + point.y * cos) * radius
-        };
-    }
-
-    function drawMap() {
-        if (!state.width || !state.height || modal.hidden) return;
-        context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-        context.clearRect(0, 0, state.width, state.height);
-        const background = context.createRadialGradient(state.width * .5, state.height * .48, 0, state.width * .5, state.height * .48, Math.max(state.width, state.height) * .7);
-        background.addColorStop(0, "#0b1c37");
-        background.addColorStop(1, "#030914");
-        context.fillStyle = background;
-        context.fillRect(0, 0, state.width, state.height);
-        for (const star of backgroundStars) {
-            context.globalAlpha = star.alpha;
-            context.fillStyle = "#cceeff";
-            context.fillRect((star.x + 1) * state.width / 2, (star.y + 1) * state.height / 2, star.size, star.size);
-        }
-        context.globalAlpha = 1;
-        context.save();
-        context.translate(state.width / 2 + state.panX, state.height / 2 + state.panY);
-        context.rotate(state.rotation);
-        const scale = Math.min(state.width, state.height) * .43 * state.zoom;
-        context.scale(scale, scale);
-
-        const nebula = context.createRadialGradient(0, 0, .05, 0, 0, 1.05);
-        nebula.addColorStop(0, "rgba(255,205,147,.46)");
-        nebula.addColorStop(.16, "rgba(159,117,255,.24)");
-        nebula.addColorStop(.5, "rgba(63,111,255,.12)");
-        nebula.addColorStop(1, "rgba(25,50,130,0)");
-        context.fillStyle = nebula;
-        context.beginPath();
-        context.ellipse(0, 0, 1, .36, 0, 0, Math.PI * 2);
-        context.fill();
-
-        for (let arm = 0; arm < 4; arm++) {
-            context.beginPath();
-            for (let i = 0; i <= 120; i++) {
-                const t = i / 120;
-                const radius = .08 + t * .9;
-                const angle = arm * Math.PI / 2 + t * Math.PI * 2.2;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius * .36;
-                if (i === 0) context.moveTo(x, y);
-                else context.lineTo(x, y);
-            }
-            const armGlow = context.createLinearGradient(-1, -.4, 1, .4);
-            armGlow.addColorStop(0, "rgba(88,142,255,0)");
-            armGlow.addColorStop(.5, "rgba(171,171,255,.48)");
-            armGlow.addColorStop(1, "rgba(101,220,255,0)");
-            context.strokeStyle = armGlow;
-            context.lineWidth = .055;
-            context.lineCap = "round";
-            context.stroke();
-        }
-
-        context.beginPath();
-        context.arc(0, 0, .22, 0, Math.PI * 2);
-        context.strokeStyle = "rgba(255,201,132,.24)";
-        context.setLineDash([.012, .018]);
-        context.lineWidth = .003;
-        context.stroke();
-        context.setLineDash([]);
-        context.beginPath();
-        context.arc(0, 0, .075, 0, Math.PI * 2);
-        context.fillStyle = "#03050b";
-        context.fill();
-        context.strokeStyle = "rgba(255,170,110,.75)";
-        context.lineWidth = .008;
-        context.stroke();
-        context.restore();
-
-        const names = worldNames();
-        state.worldPoints = names.map(name => ({ name, ...transformPoint(galaxyCoordinates(name)) }));
-        const activeWorld = typeof worldName === "string" ? worldName : "";
-        for (const point of state.worldPoints) {
-            const current = point.name === activeWorld;
-            const selected = point.name === state.selected;
-            context.beginPath();
-            context.arc(point.x, point.y, current ? 6 : 4, 0, Math.PI * 2);
-            context.fillStyle = current ? "#fff2b3" : selected ? "#83f3ff" : "#90c7ff";
-            context.shadowColor = current ? "#ffd876" : "#60d9ff";
-            context.shadowBlur = current || selected ? 15 : 7;
-            context.fill();
-            context.shadowBlur = 0;
-            if ((state.zoom > 1.15 || current || selected) && state.width > 430) {
-                context.font = current ? "bold 12px Inter, Arial" : "11px Inter, Arial";
-                context.fillStyle = current ? "#fff3c5" : "#c8ddeb";
-                context.fillText(point.name, point.x + 9, point.y + 4);
-            }
-        }
-        modal.querySelector("#galaxyWorldCount").textContent = `${names.length} known world${names.length === 1 ? "" : "s"} · core exclusion zone`;
-        if (!state.selected || !names.includes(state.selected)) state.selected = activeWorld || names[0] || "";
-        updateDetails();
-    }
+    const viewport = modal.querySelector("#galaxyViewport");
+    const raycaster = new THREE.Raycaster;
+    const pointer = new THREE.Vector2;
+    const state = { selected: "", renderer: null, scene: null, camera: null, controls: null, worldObjects: [], frame: 0, open: false };
+    modal.querySelector("#galaxyMasterLabel").textContent = `MASTER KEYWORD · ${galaxyMasterKeyword()}`;
 
     function updateDetails() {
         const name = state.selected || (typeof worldName === "string" ? worldName : "Unknown");
         const system = getGalaxySystemDetails(name);
         const position = galaxyCoordinates(name);
-        const data = knownWorlds instanceof Map ? knownWorlds.get(name) : null;
-        const residents = data && data.users instanceof Map ? data.users.size : data && data.users instanceof Set ? data.users.size : 0;
+        const world = knownWorlds instanceof Map ? knownWorlds.get(name) : null;
+        const residents = world && world.users instanceof Map ? world.users.size : world && world.users instanceof Set ? world.users.size : 0;
         modal.querySelector("#galaxyWorldName").textContent = name;
         modal.querySelector("#galaxySunCount").textContent = system.suns;
         modal.querySelector("#galaxyMoonCount").textContent = system.moons;
         modal.querySelector("#galaxyWorldInfo").textContent =
-            `Seed ${name} · ${Math.round(position.radius * 100)}% galactic radius · ${residents} known resident${residents === 1 ? "" : "s"}`;
+            `Origin ${name} · ${Math.round(position.length() * 100)}% galactic radius · ${residents} known resident${residents === 1 ? "" : "s"}`;
         const travel = modal.querySelector("#galaxyTravel");
         travel.disabled = !name || name === worldName;
-        travel.textContent = name === worldName ? "Current world" : gameStarted ? "Travel to world" : "Use this world";
+        travel.textContent = name === worldName ? "Current world" : "Travel to world";
+    }
+
+    function makeWorldLabel(name) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 512;
+        canvas.height = 96;
+        const context = canvas.getContext("2d");
+        context.font = "bold 42px Arial";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.shadowColor = "#50ff8b";
+        context.shadowBlur = 18;
+        context.fillStyle = "#baffca";
+        context.fillText(name, 256, 48, 490);
+        const texture = new THREE.CanvasTexture(canvas);
+        const label = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+            sizeAttenuation: true
+        }));
+        label.scale.set(.31, .058, 1);
+        label.position.y += .055;
+        return label;
+    }
+
+    function addGalaxyPoints() {
+        const galaxy = new THREE.Group;
+        const points = [];
+        const colors = [];
+        const random = makeSeededRandom(galaxyMasterKeyword() + "_hologram");
+        const armCount = 4;
+        const arms = 850;
+        for (let arm = 0; arm < armCount; arm++) {
+            for (let i = 0; i < arms; i++) {
+                const radius = .08 + Math.sqrt(random()) * .9;
+                const angle = arm * Math.PI * 2 / armCount + Math.log(radius / .08) * 1.45 + (random() - .5) * .42;
+                const thickness = .018 + radius * .035;
+                points.push(
+                    Math.cos(angle) * radius,
+                    (random() - .5) * thickness,
+                    Math.sin(angle) * radius
+                );
+                const brightness = .42 + random() * .58;
+                colors.push(.12 * brightness, .82 * brightness, .34 * brightness);
+            }
+        }
+        for (let i = 0; i < 480; i++) {
+            const radius = Math.pow(random(), 1.8) * .29;
+            const angle = random() * Math.PI * 2;
+            points.push(Math.cos(angle) * radius, (random() - .5) * .1, Math.sin(angle) * radius);
+            const brightness = .6 + random() * .4;
+            colors.push(.2 * brightness, .96 * brightness, .39 * brightness);
+        }
+        const geometry = new THREE.BufferGeometry;
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+        geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+        galaxy.add(new THREE.Points(geometry, new THREE.PointsMaterial({
+            size: .008,
+            vertexColors: true,
+            transparent: true,
+            opacity: .88,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true
+        })));
+
+        const corePoints = [];
+        for (let i = 0; i < 100; i++) {
+            const angle = i / 100 * Math.PI * 2;
+            corePoints.push(Math.cos(angle) * .085, (random() - .5) * .012, Math.sin(angle) * .085);
+        }
+        const coreGeometry = new THREE.BufferGeometry;
+        coreGeometry.setAttribute("position", new THREE.Float32BufferAttribute(corePoints, 3));
+        galaxy.add(new THREE.Points(coreGeometry, new THREE.PointsMaterial({
+            color: 0x79ff9f,
+            size: .012,
+            transparent: true,
+            opacity: .82,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        })));
+
+        const exclusion = new THREE.Mesh(
+            new THREE.SphereGeometry(.055, 12, 8),
+            new THREE.MeshBasicMaterial({ color: 0x010905 })
+        );
+        exclusion.userData.isCore = true;
+        galaxy.add(exclusion);
+        state.scene.add(galaxy);
+    }
+
+    function addWorlds() {
+        for (const old of state.worldObjects) {
+            state.scene.remove(old.marker, old.label);
+            disposeObject(old.marker);
+            disposeObject(old.label);
+        }
+        state.worldObjects = [];
+        for (const name of getGalaxyWorldNames()) {
+            const position = galaxyCoordinates(name);
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(name === worldName ? .019 : .014, 8, 6),
+                new THREE.MeshBasicMaterial({
+                    color: name === worldName ? 0xcaff74 : 0x5dff95,
+                    transparent: true,
+                    opacity: .96
+                })
+            );
+            marker.position.copy(position);
+            marker.userData.worldName = name;
+            marker.userData.isWorld = true;
+            const label = makeWorldLabel(name);
+            label.position.copy(position).add(new THREE.Vector3(0, .035, 0));
+            label.userData.worldName = name;
+            state.scene.add(marker, label);
+            state.worldObjects.push({ name, position, marker, label });
+        }
+        modal.querySelector("#galaxyWorldCount").textContent =
+            `${state.worldObjects.length} known worlds · green core exclusion zone`;
+    }
+
+    function focusWorld(name, distance = .42) {
+        const target = galaxyCoordinates(name);
+        const offset = state.camera.position.clone().sub(state.controls.target);
+        if (offset.length() < .001) offset.set(0, .15, 1);
+        offset.setLength(distance);
+        state.controls.target.copy(target);
+        state.camera.position.copy(target).add(offset);
+        state.controls.update();
+    }
+
+    function animate() {
+        if (!state.open) return;
+        state.frame = requestAnimationFrame(animate);
+        state.controls.update();
+        state.renderer.render(state.scene, state.camera);
+    }
+
+    function ensureRenderer() {
+        if (state.renderer) return;
+        state.scene = new THREE.Scene;
+        state.scene.background = new THREE.Color(0x020a05);
+        state.camera = new THREE.PerspectiveCamera(48, 1, .01, 20);
+        state.camera.position.set(0, .35, 1.65);
+        state.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "low-power" });
+        state.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
+        state.renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        viewport.appendChild(state.renderer.domElement);
+        state.controls = new THREE.OrbitControls(state.camera, state.renderer.domElement);
+        state.controls.enableDamping = true;
+        state.controls.dampingFactor = .08;
+        state.controls.target.set(0, 0, 0);
+        state.controls.minDistance = .12;
+        state.controls.maxDistance = 3.5;
+        state.controls.rotateSpeed = .65;
+        state.controls.zoomSpeed = .8;
+        addGalaxyPoints();
+        addWorlds();
+    }
+
+    function resizeRenderer() {
+        if (!state.renderer || modal.hidden) return;
+        const width = viewport.clientWidth;
+        const height = viewport.clientHeight;
+        if (!width || !height) return;
+        state.renderer.setSize(width, height, false);
+        state.camera.aspect = width / height;
+        state.camera.updateProjectionMatrix();
     }
 
     function openMap() {
         modal.hidden = false;
+        state.open = true;
         state.selected = typeof worldName === "string" ? worldName : "";
-        state.panX = 0;
-        state.panY = 0;
-        state.zoom = .92;
-        resizeCanvas();
+        ensureRenderer();
+        addWorlds();
+        refreshGalaxySkyWorlds(stars, worldSeed);
+        resizeRenderer();
+        if (state.selected) focusWorld(state.selected);
+        updateDetails();
+        animate();
         modal.querySelector("#galaxyMapClose").focus();
     }
 
     function closeMap() {
+        state.open = false;
+        if (state.frame) cancelAnimationFrame(state.frame);
+        state.frame = 0;
         modal.hidden = true;
-        button.focus();
     }
 
     function travelToWorld(name) {
         if (!name || name === worldName) return;
         closeMap();
-        if (gameStarted && typeof switchWorld === "function") {
+        if (typeof switchWorld === "function" && gameStarted) {
             switchWorld(name);
-            return;
-        }
-        const input = document.getElementById("worldNameInput");
-        if (input) {
-            input.value = name;
-            if (typeof updateLoginUI === "function") updateLoginUI();
         }
     }
 
-    button.addEventListener("click", openMap);
+    function pickWorld(event) {
+        const rect = state.renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(pointer, state.camera);
+        const hit = raycaster.intersectObjects(state.worldObjects.flatMap(world => [world.marker, world.label]), false)[0];
+        if (!hit || !hit.object.userData.worldName) return;
+        const name = hit.object.userData.worldName;
+        state.selected = name;
+        updateDetails();
+        if (name !== worldName) travelToWorld(name);
+    }
+
+    window.openGalaxyMap = openMap;
     modal.querySelector("#galaxyMapClose").addEventListener("click", closeMap);
-    modal.addEventListener("click", event => {
-        if (event.target === modal) closeMap();
-    });
     modal.querySelector("#galaxyTravel").addEventListener("click", () => travelToWorld(state.selected));
+    modal.querySelector("#galaxyOverview").addEventListener("click", () => {
+        state.controls.target.set(0, 0, 0);
+        state.camera.position.set(0, .35, 1.65);
+        state.controls.update();
+    });
     modal.querySelector("#galaxyZoomIn").addEventListener("click", () => {
-        state.zoom = Math.min(4, state.zoom * 1.25);
-        drawMap();
+        state.camera.position.add(state.controls.target.clone().sub(state.camera.position).multiplyScalar(.2));
+        state.controls.update();
     });
     modal.querySelector("#galaxyZoomOut").addEventListener("click", () => {
-        state.zoom = Math.max(.45, state.zoom / 1.25);
-        drawMap();
+        state.camera.position.add(state.camera.position.clone().sub(state.controls.target).multiplyScalar(.25));
+        state.controls.update();
+    });
+    modal.addEventListener("click", event => {
+        if (event.target === modal) closeMap();
     });
     modal.addEventListener("keydown", event => {
         if (event.key === "Escape") {
@@ -366,61 +396,19 @@ function initGalaxyMap() {
             closeMap();
         }
     }, true);
-    window.addEventListener("resize", resizeCanvas);
-
-    let drag = null;
-    canvas.addEventListener("contextmenu", event => event.preventDefault());
-    canvas.addEventListener("wheel", event => {
-        event.preventDefault();
-        state.zoom = Math.max(.45, Math.min(4, state.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
-        drawMap();
-    }, { passive: false });
-    canvas.addEventListener("pointerdown", event => {
-        const rotate = event.button === 2 || event.shiftKey;
-        drag = { x: event.clientX, y: event.clientY, moved: false, rotate, pointerId: event.pointerId };
-        canvas.setPointerCapture(event.pointerId);
-    });
-    canvas.addEventListener("pointermove", event => {
-        if (drag) {
-            const dx = event.clientX - drag.x;
-            const dy = event.clientY - drag.y;
-            if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-            if (drag.rotate) state.rotation += dx * .006;
-            else {
-                state.panX += dx;
-                state.panY += dy;
-            }
-            drag.x = event.clientX;
-            drag.y = event.clientY;
-            drawMap();
-            return;
-        }
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const point = (state.worldPoints || []).find(candidate => Math.hypot(candidate.x - x, candidate.y - y) < 13);
-        if (point && point.name !== state.selected) {
-            state.selected = point.name;
-            drawMap();
+    let pointerDown = null;
+    modal.addEventListener("pointerdown", event => {
+        if (state.open && event.target === state.renderer.domElement) {
+            pointerDown = { x: event.clientX, y: event.clientY };
         }
     });
-    canvas.addEventListener("pointerup", event => {
-        if (!drag) return;
-        const didMove = drag.moved;
-        drag = null;
-        if (didMove) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const point = (state.worldPoints || []).find(candidate => Math.hypot(candidate.x - x, candidate.y - y) < 15);
-        if (point) {
-            state.selected = point.name;
-            updateDetails();
-            if (point.name !== worldName) travelToWorld(point.name);
-        }
-        drawMap();
+    modal.addEventListener("pointerup", event => {
+        if (!state.open || !pointerDown || event.target !== state.renderer.domElement) return;
+        const distance = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
+        pointerDown = null;
+        if (distance < 6) pickWorld(event);
     });
-    canvas.addEventListener("pointercancel", () => { drag = null; });
+    window.addEventListener("resize", resizeRenderer);
 }
 
 initGalaxyMap();
