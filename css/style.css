@@ -1596,9 +1596,6 @@ body.is-mobile-mode #messages {
             font-size: 13px;
         }
 
-        #galaxyOverviewBtn {
-            display: none;
-        }
     }
     
 @media (max-width: 700px) {
