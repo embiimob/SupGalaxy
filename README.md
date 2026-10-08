@@ -223,6 +223,8 @@ You're in!
 ## 🌍 World & Player Setup
 - **World Name**: max 8 chars  
 - **Username**: max 20 chars  
+- Leave the username blank to play as **guest**; leave the world blank to choose a random known world once world discovery has loaded.
+- **Connect to server** on the login screen opens the server dialog and joins using these names; **Spawn World** uses the same defaults for solo play.
 - **Seed**: auto-generated as `worldname`  
 
 Spawn, explore, build, fight, survive.

@@ -5466,16 +5466,27 @@ async function populateSpawnChunks() {
         });
     }
 }
-async function startGame() {
+function fillLoginDefaults() {
+    const worldInput = document.getElementById("worldNameInput");
+    const userInput = document.getElementById("userInput");
+    if (!userInput.value.trim()) userInput.value = "guest";
+    if (!worldInput.value.trim()) {
+        const worlds = Array.from(knownWorlds.keys()).filter(name => typeof name === "string" && name.trim() && name.length <= 8);
+        if (worlds.length) worldInput.value = worlds[Math.floor(Math.random() * worlds.length)];
+    }
+}
+
+async function startGame({ serverLogin = false } = {}) {
     // Guard to prevent double game initialization
     if (gameStarted) {
         console.log("[LOGIN] Game already started, skipping duplicate initialization");
-        return;
+        return false;
     }
     gameStarted = true;
 
     var e = document.getElementById("startBtn");
-    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = !1;
+    e && e.blur(), console.log("[LOGIN] Start game triggered"), isPromptOpen = serverLogin;
+    fillLoginDefaults();
     var t = document.getElementById("worldNameInput").value,
         o = document.getElementById("userInput").value;
 
@@ -5488,9 +5499,9 @@ async function startGame() {
         }
         return false;
     }
-    if (validateAndReset(t.length > 8, "World name too long (max 8 chars)")) return;
-    if (validateAndReset(o.length > 20, "Username too long (max 20 chars)")) return;
-    if (validateAndReset(!t || !o, "Please enter a world and username")) return;
+    if (validateAndReset(t.length > 8, "World name too long (max 8 chars)")) return false;
+    if (validateAndReset(o.length > 20, "Username too long (max 20 chars)")) return false;
+    if (validateAndReset(!t.trim(), "No known worlds available yet. Enter a world name or try again after worlds load.")) return false;
 
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
     const a = makeSeededRandom((worldSeed = worldName) + "_colors");
@@ -5520,7 +5531,7 @@ async function startGame() {
     keywordCache.set(userAddress, r);
 
     // Process user session restoring
-    if (userAddress !== "anonymous") {
+    if (!serverLogin && userAddress !== "anonymous") {
         try {
             const messages = await GetPublicMessagesByAddress(userAddress);
             if (messages && messages.length > 0) {
@@ -5633,7 +5644,7 @@ async function startGame() {
         spawn: homeSpawn
     });
 
-    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile()) {
+    if (console.log("[LOGIN] Preloading initial chunks"), chunkManager.preloadChunks(i, l, INITIAL_LOAD_RADIUS), setupMobile(), initMinimap(), updateHotbarUI(), cameraMode = "first", controls.enabled = !1, avatarGroup.visible = !1, camera.position.set(player.x, player.y + 1.62, player.z), camera.rotation.set(0, 0, 0, "YXZ"), !isMobile() && !serverLogin) {
         try {
             renderer.domElement.requestPointerLock(), mouseLocked = !0, document.getElementById("crosshair").style.display = "block"
         } catch (e) {
@@ -5662,6 +5673,7 @@ async function startGame() {
         ids: Array.from(processedMessages)
     }), startWorker(), setInterval(scanExpiredOwnership, 600000), addMessage("Joined world " + worldName + " as " + userName, 3e3);
     handleResizeAndOrientation();
+    return true;
 }
 
 function scanExpiredOwnership() {
@@ -7205,6 +7217,10 @@ document.addEventListener("DOMContentLoaded", (async function () {
         }
 
         const testnetWifLoginBtn = document.getElementById("testnetWifLoginBtn");
+        document.getElementById("loginConnectServerBtn").addEventListener("click", () => {
+            fillLoginDefaults();
+            openDedicatedServerModal();
+        });
         if (testnetWifLoginBtn && wmb) {
             testnetWifLoginBtn.addEventListener("click", () => {
                 wmb.style.display = "block";
