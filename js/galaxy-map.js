@@ -75,9 +75,29 @@ function createGalaxySky(seed) {
 
     const location = galaxyCoordinates(seed, radius * .9);
     const planetHue = galaxyHash(seed + "_planet") / 4294967296;
+    const planetGeometry = new THREE.SphereGeometry(24, 32, 24);
+    const planetPositions = planetGeometry.attributes.position;
+    const planetColors = [];
+    for (let i = 0; i < planetPositions.count; i++) {
+        const x = planetPositions.getX(i) / 24;
+        const y = planetPositions.getY(i) / 24;
+        const z = planetPositions.getZ(i) / 24;
+        const latitude = Math.asin(Math.max(-1, Math.min(1, y)));
+        const longitude = Math.atan2(z, x);
+        const surface = Math.sin(longitude * 3 + Math.sin(latitude * 7 + planetHue * 12)) +
+            .55 * Math.sin(longitude * 7 - latitude * 9 + planetHue * 23) +
+            .3 * Math.cos(latitude * 17 + longitude * 2);
+        const color = new THREE.Color().setHSL(
+            (planetHue + .48 + surface * .025 + 1) % 1,
+            .66,
+            Math.max(.2, Math.min(.73, .43 + surface * .09))
+        );
+        planetColors.push(color.r, color.g, color.b);
+    }
+    planetGeometry.setAttribute("color", new THREE.Float32BufferAttribute(planetColors, 3));
     const planet = new THREE.Mesh(
-        new THREE.SphereGeometry(24, 16, 12),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(planetHue, .62, .62) })
+        planetGeometry,
+        new THREE.MeshBasicMaterial({ vertexColors: true })
     );
     planet.position.set(location.x, 10, location.y);
     const orbit = new THREE.Mesh(
