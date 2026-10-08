@@ -3233,7 +3233,7 @@ function openUsersModal() {
     e && (e.remove(), console.log("[MODAL] Removed existing usersModal"));
     var t = document.createElement("div");
     t.id = "usersModal", t.style.position = "fixed", t.style.left = "50%", t.style.top = "50%", t.style.transform = "translate(-50%,-50%)", t.style.zIndex = "220", t.style.background = "var(--panel)", t.style.padding = "14px", t.style.borderRadius = "10px", t.style.minWidth = "360px", t.style.maxHeight = "80vh", t.style.display = "flex", t.style.flexDirection = "column",
-        t.innerHTML = '\n            <h3 style="margin-top:0;">Switch world</h3>\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:8px 0 0;">Switch world</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
+        t.innerHTML = '\n            <button id="connectDedicatedServer" class="uniform-action-btn" style="width:100%;padding:10px;margin:0 0 10px;">Connect to Server</button>\n            <div style="margin-bottom:10px;">\n                <input id="switchWorldInput" placeholder="Enter world name" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="switchWorldAction" class="uniform-action-btn" style="width:100%;padding:10px;margin:8px 0 0;">Switch World</button>\n            </div>\n            <div style="margin-bottom:10px;">\n                <input id="friendHandle" placeholder="Enter friend’s handle" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#0d1620;color:#fff;box-sizing:border-box;" autocomplete="off">\n                <button id="connectFriend" class="uniform-action-btn" style="width:100%;padding:10px;margin-top:8px;">Connect to Friend</button>\n            </div>\n            <div id="usersList" style="overflow-y: auto; flex-grow: 1; margin-bottom: 10px;"></div>\n            <p class="warning" style="font-size: 0.8em; opacity: 0.7;">Note: displays blockchain authenticated world joins only.</p>\n            <div style="margin-top:auto;text-align:right;">\n                <button id="closeUsers">Close</button>\n            </div>\n        ', document.body.appendChild(t), console.log("[MODAL] Modal added to DOM");
     const styleKnownWorldButton = (button, compact, fontSize) => {
         if (!button) return;
         button.classList.add("uniform-action-btn");
@@ -3268,6 +3268,7 @@ function openUsersModal() {
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
+    o.appendChild(t.querySelector("#switchWorldInput").parentElement);
     var a = !1;
     const connectedNames = Array.from(new Set([
         ...peers.keys(),
@@ -3331,29 +3332,21 @@ function openUsersModal() {
     updateDedicatedServerDialog();
 
     // Known Worlds Section
-    var c = document.createElement("h4");
-    c.innerText = "► Known Worlds";
-    c.style.marginTop = "20px";
+    const worldsSection = document.createElement("details");
+    worldsSection.style.marginBottom = "10px";
+    var c = document.createElement("summary");
+    c.textContent = `Known Worlds ( ${knownWorlds.size} )`;
+    c.style.fontWeight = "bold";
     c.style.cursor = "pointer";
     c.style.userSelect = "none";
-    o.appendChild(c);
+    worldsSection.appendChild(c);
+    o.prepend(worldsSection);
 
     var worldsContainer = document.createElement("div");
-    worldsContainer.style.display = "none";
     worldsContainer.style.maxHeight = "300px";
     worldsContainer.style.overflowY = "auto";
     worldsContainer.style.marginTop = "10px";
-    o.appendChild(worldsContainer);
-
-    c.onclick = () => {
-        if (worldsContainer.style.display === "none") {
-            worldsContainer.style.display = "block";
-            c.innerText = "▼ Known Worlds";
-        } else {
-            worldsContainer.style.display = "none";
-            c.innerText = "► Known Worlds";
-        }
-    };
+    worldsSection.appendChild(worldsContainer);
 
     // Sort known worlds, putting current world first, then by discovery time or user count
     const sortedWorlds = Array.from(knownWorlds.entries()).sort((a, b) => {
