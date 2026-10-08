@@ -3642,7 +3642,6 @@ function openDedicatedServerModal({ serverAddress } = {}) {
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
                 <button id="dedicatedServerAction" class="uniform-action-btn" style="order:-1;flex:1 0 100%;padding:13px 18px;background:#1599d0;color:#fff;font-size:1.1rem;box-shadow:0 0 18px rgba(21,153,208,.45);">Connect</button>
                 <button id="refreshDedicatedServerStatus" class="uniform-action-btn" style="padding:10px 12px;">Refresh status</button>
-                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:10px 12px;">Close</button>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
                 <button id="galaxyAtlasBtn" class="galaxy-atlas-button" type="button" title="Open Galaxy Atlas" aria-label="Open Galaxy Atlas">
@@ -3667,7 +3666,7 @@ function openDedicatedServerModal({ serverAddress } = {}) {
                         <circle cx="24" cy="24" r="19" fill="none" stroke="#ffd8a1" stroke-opacity=".85" stroke-width="1.5"/>
                     </svg>
                 </button>
-                <span style="flex:1;text-align:right;color:#a9c9d5;font-size:12px;">Explore the Galaxy Atlas</span>
+                <button id="closeDedicatedServerModal" class="uniform-action-btn" style="padding:10px 12px;">Close</button>
             </div>
         </div>`;
     document.body.appendChild(modal);

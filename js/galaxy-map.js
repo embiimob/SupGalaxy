@@ -262,7 +262,6 @@ function closeGalaxyAtlas() {
 }
 
 function initGalaxyAtlas() {
-    document.getElementById("loginGalaxyAtlasBtn")?.addEventListener("click", openGalaxyAtlas);
     document.getElementById("galaxyCloseBtn")?.addEventListener("click", closeGalaxyAtlas);
     document.getElementById("galaxyZoomInBtn")?.addEventListener("click", () => {
         if (galaxyMap) galaxyMap.camera.position.multiplyScalar(.82);

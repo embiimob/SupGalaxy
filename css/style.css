@@ -66,25 +66,6 @@
                 cursor: pointer;
             }
 
-        .login-atlas-launch {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 12px;
-            color: #d8f6e5;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        #loginCard .login-atlas-launch .galaxy-atlas-button {
-            width: 48px;
-            height: 48px;
-            margin-top: 0;
-            border: 1px solid rgba(255, 216, 161, .7);
-            background: linear-gradient(145deg, #3d281f, #151d20);
-            box-shadow: 0 0 15px rgba(225, 152, 87, .24), inset 0 0 8px rgba(255, 229, 178, .12);
-        }
-
         .inputContainer {
             display: flex;
             align-items: center;
