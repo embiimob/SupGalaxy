@@ -3268,10 +3268,28 @@ function openUsersModal() {
     styleKnownWorldButton(t.querySelector("#closeUsers"), true);
     var o = t.querySelector("#usersList");
     o.innerHTML = "";
-    var a = !1,
-        r = document.createElement("h4");
-    for (var s of (r.innerText = "Connected Players", o.appendChild(r), peers)) {
-        var n = s[0];
+    var a = !1;
+    const connectedNames = Array.from(new Set([
+        ...peers.keys(),
+        ...(dedicatedServer ? Object.keys(userPositions) : [])
+    ])).filter(name => name !== userName && name !== SERVER_PEER)
+        .sort((left, right) => left.localeCompare(right));
+    const connectedSection = document.createElement("details");
+    connectedSection.style.margin = "20px 0";
+    const connectedTitle = document.createElement("summary");
+    connectedTitle.textContent = `Connected Players ( ${connectedNames.length} )`;
+    connectedTitle.style.fontWeight = "bold";
+    connectedTitle.style.cursor = "pointer";
+    connectedTitle.style.userSelect = "none";
+    connectedSection.appendChild(connectedTitle);
+    const connectedContainer = document.createElement("div");
+    connectedContainer.style.maxHeight = "300px";
+    connectedContainer.style.overflowY = "auto";
+    connectedContainer.style.marginTop = "10px";
+    connectedContainer.style.paddingBottom = "10px";
+    connectedSection.appendChild(connectedContainer);
+    o.appendChild(connectedSection);
+    for (var n of connectedNames) {
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
             // Use cached spawn from spawnChunks if available, otherwise calculate
@@ -3302,11 +3320,13 @@ function openUsersModal() {
 
             h.appendChild(f);
             h.appendChild(m);
-            o.appendChild(h);
+            connectedContainer.appendChild(h);
         }
     }
 
-    o.appendChild(t.querySelector("#friendHandle").parentElement);
+    const friendControls = t.querySelector("#friendHandle").parentElement;
+    friendControls.style.marginTop = "20px";
+    o.appendChild(friendControls);
     o.appendChild(t.querySelector("#connectDedicatedServer"));
     updateDedicatedServerDialog();
 
