@@ -629,7 +629,7 @@ function maintainPlayerPets() {
         }
         mob.petOwner = userName;
         mob.spawner = userName;
-        if (!mob.petTransport && Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 32) {
+        if (!mob.petTransport && Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 64) {
             const position = findPlayerPetPosition(pet.id, index);
             if (!position) continue;
             mob.pos.set(position.x, position.y, position.z);
