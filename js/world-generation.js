@@ -405,6 +405,28 @@ function createBlockTexture(e, t) {
                 r.fillRect(2 + Math.floor(s() * (a - 4)), y + 1 + Math.floor(s() * 5), 1, 1);
             }
         }
+    } else if (style === "leaves") {
+        r.fillStyle = seededBase.getStyle(), r.fillRect(0, 0, a, a);
+        let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());
+        const d = Math.floor(5 * s()),
+            c = makeNoise(e + "_pattern_noise_" + t);
+        for (let x = 0; x < a; x += 2)
+            for (let y = 0; y < a; y += 2) {
+                const grain = c(x / 5, y / 5) - .5;
+                if (Math.abs(grain) > .24) {
+                    r.fillStyle = colorAt(1 + grain * .22);
+                    r.fillRect(x, y, 1, 1);
+                }
+            }
+        r.globalCompositeOperation = "destination-out";
+        for (let x = 0; x < a; x++) {
+            for (let y = 0; y < a; y++) {
+                if (s() > 0.65) {
+                    r.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+        r.globalCompositeOperation = "source-over";
     } else {
         r.fillStyle = seededBase.getStyle(), r.fillRect(0, 0, a, a);
         let l = (new THREE.Color).setHSL(s(), .5 + .3 * s(), .2 + .3 * s());

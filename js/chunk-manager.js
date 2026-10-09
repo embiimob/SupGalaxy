@@ -228,6 +228,12 @@ function buildGreedyMesh(e, t, o) {
                 };
             }
             else if (o.fusionReactor) a = createFusionReactorMaterial(t.seed, t.blockId);
+            else if (o.textureStyle === "leaves") a = new THREE.MeshStandardMaterial({
+                map: createBlockTexture(t.seed, t.blockId),
+                transparent: true,
+                alphaTest: 0.1,
+                side: THREE.DoubleSide
+            });
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -658,6 +664,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 };
             }
             else if (K.fusionReactor) D = createFusionReactorMaterial(b, w);
+            else if (K.textureStyle === "leaves") D = new THREE.MeshStandardMaterial({
+                map: createBlockTexture(b, w),
+                transparent: true,
+                alphaTest: 0.1,
+                side: THREE.DoubleSide
+            });
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
