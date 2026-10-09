@@ -1,4 +1,4 @@
-// Score-driven mob evolution (v1.3.0).
+// Score-driven mob evolution (v2.0.0).
 //
 // Each tier unlocks once any player in an active area reaches its score. Tiers are cumulative:
 // later tiers may introduce new mob types and retire older ones (for example crawleys).

@@ -6,6 +6,7 @@ let galaxyWorldData = null;
 let galaxyLoadSequence = 0;
 const galaxyLayouts = new Map();
 const galaxyWorldCache = new Map();
+const KNOWN_GALAXY_KEYS = Object.freeze([MASTER_WORLD_KEY, "MCWorlds"]);
 
 function getGalaxyLayout(masterKey = galaxyMasterKey) {
     if (galaxyLayouts.has(masterKey)) return galaxyLayouts.get(masterKey);
@@ -423,6 +424,20 @@ function closeGalaxyAtlas() {
 }
 
 function initGalaxyAtlas() {
+    const knownGalaxyList = document.getElementById("knownGalaxyList");
+    const knownGalaxyCount = document.getElementById("knownGalaxyCount");
+    knownGalaxyCount.textContent = KNOWN_GALAXY_KEYS.length;
+    for (const masterKey of KNOWN_GALAXY_KEYS) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = masterKey;
+        button.addEventListener("click", () => {
+            const input = document.getElementById("galaxyAtlasTitle");
+            input.value = masterKey;
+            loadGalaxyFromInput();
+        });
+        knownGalaxyList.appendChild(button);
+    }
     document.getElementById("galaxyAtlasTitle")?.addEventListener("keydown", event => {
         event.stopPropagation();
         if (event.key === "Enter") {

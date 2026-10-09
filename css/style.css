@@ -1525,6 +1525,35 @@ body.is-mobile-mode #messages {
         margin-top: auto;
     }
 
+    .known-galaxies {
+        width: 100%;
+        margin-top: auto;
+        color: #d8f6e5;
+        font-size: 14px;
+    }
+
+    .known-galaxies summary {
+        padding: 8px 0;
+        cursor: pointer;
+        font-weight: 700;
+    }
+
+    .known-galaxy-list {
+        display: grid;
+        gap: 6px;
+    }
+
+    .galaxy-world-panel .known-galaxy-list button {
+        margin: 0;
+        padding: 6px 10px;
+        font-size: 13px;
+        text-align: left;
+    }
+
+    .galaxy-world-panel > #galaxyTravelBtn {
+        margin-top: 10px;
+    }
+
     .galaxy-atlas-footer {
         min-height: 16px;
         color: #a9c9d5;

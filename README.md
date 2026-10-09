@@ -1,4 +1,4 @@
-# 🌌 SupGalaxy v1.3.0
+# 🌌 SupGalaxy v2.0.0
 
 **SupGalaxy** is an open-source, serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
@@ -10,7 +10,7 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 
 ---
 
-## 🆕 What's New in v1.3.0
+## 🆕 What's New in v2.0.0
 
 - **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
 - **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
