@@ -730,6 +730,24 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             itemOnly: !0,
             craftingItem: !0,
             bone: !0
+        },
+        178: {
+            name: "Arrow",
+            color: "#e6dcc0",
+            itemOnly: !0
+        },
+        179: {
+            name: "Bow",
+            color: "#8b5a33",
+            itemOnly: !0,
+            hand_attachable: !0,
+            breakChance: 1 / 100
+        },
+        180: {
+            name: "Feather",
+            color: "#ffffff",
+            itemOnly: !0,
+            craftingItem: !0
         }
     },
     BIOMES = [{
@@ -1189,7 +1207,20 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             139: 3,
             106: 1
         }
+
+    }, {
+        id: "arrows",
+        out: {
+            id: 178,
+            count: 3
+        },
+        requires: {
+            180: 1,
+            8: 1,
+            4: 1
+        }
     }],
+
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
     WORLD_STATES = new Map,

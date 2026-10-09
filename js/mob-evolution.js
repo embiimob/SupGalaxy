@@ -61,7 +61,7 @@ const ELITE_MOB_TYPES = {
         day: false, night: true,
         hp: 20, score: 40, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 1.1, hitRadius: 1.3,
-        drop: { id: 124, count: 1, chance: 0.5 }
+        drop: null
     },
     dust_vulture: {
         name: "Dust Vulture",
@@ -71,7 +71,7 @@ const ELITE_MOB_TYPES = {
         hp: 12, score: 30, maxCount: 4, worldMax: 4, wideRange: true, spawnChance: 0.4, spawnAltitude: 18,
         roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
-        drop: { id: 176, count: 2, chance: 0.6 }
+        drop: { id: 180, count: 2, chance: 0.6 }
     },
     crater_hopper: {
         name: "Crater Hopper",
@@ -114,7 +114,7 @@ const ELITE_MOB_TYPES = {
         day: true, night: true,
         hp: 12, score: 25, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 0.6, hitRadius: 1.1,
-        drop: { id: 176, count: 2, chance: 0.6 }
+        drop: { id: 180, count: 2, chance: 0.6 }
     },
     // ---- level 3 (score 1500+) — only hostile to armed or attacking players ----
     sentinel_drone: {
@@ -3004,12 +3004,38 @@ function getEliteDrop(def) {
 function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
     spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
-    const drop = getEliteDrop(def);
-    if (!drop || !killer || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
-    if (killer === userName) {
-        addToInventory(drop.id, drop.count, worldSeed);
-        addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
+
+    if (!killer) return;
+
+    if (mob.type === "bone_archer") {
+        let rand = Math.random();
+        let dropId = null;
+        let dropCount = 0;
+
+        if (rand < 0.1) {
+            dropId = 179; // Bow
+            dropCount = 1;
+        } else if (rand < 0.7) {
+            dropId = 178; // Arrow
+            dropCount = Math.floor(Math.random() * 3) + 1; // 1 to 3
+        }
+
+        if (dropId && BLOCKS[dropId]) {
+            if (killer === userName) {
+                addToInventory(dropId, dropCount, worldSeed);
+                addMessage(`${def.name} dropped ${dropCount} ${BLOCKS[dropId].name}!`, 2500);
+            } else {
+                sendToPlayer(killer, { type: "add_to_inventory", blockId: dropId, count: dropCount, originSeed: worldSeed });
+            }
+        }
     } else {
-        sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
+        const drop = getEliteDrop(def);
+        if (!drop || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
+        if (killer === userName) {
+            addToInventory(drop.id, drop.count, worldSeed);
+            addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
+        } else {
+            sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
+        }
     }
 }

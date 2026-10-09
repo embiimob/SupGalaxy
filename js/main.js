@@ -938,7 +938,8 @@ function createPickaxeMesh(toolId) {
 var LASER_GUN_MUZZLES = {
     121: new THREE.Vector3(0, .09, -.47),
     126: new THREE.Vector3(0, .09, -.47),
-    133: new THREE.Vector3(0, .13, -.5)
+    133: new THREE.Vector3(0, .13, -.5),
+    179: new THREE.Vector3(0, 0, -.47)
 };
 var laserGunTmpMatrix = new THREE.Matrix4(),
     laserGunTmpMatrix2 = new THREE.Matrix4(),
@@ -948,7 +949,7 @@ var laserGunTmpMatrix = new THREE.Matrix4(),
     laserGunTmpScale = new THREE.Vector3(1, 1, 1);
 
 function isLaserGunId(id) {
-    return id === 121 || id === 126 || id === 133;
+    return id === 121 || id === 126 || id === 133 || id === 179;
 }
 
 function createLaserGunMesh(toolId) {
@@ -966,6 +967,28 @@ function createLaserGunMesh(toolId) {
         return mesh;
     };
     const glow = mat(accent, accent, 1.6, .2);
+    if (toolId === 179) {
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b5a33, roughness: 0.8, metalness: 0.1 });
+        const stringMat = new THREE.MeshBasicMaterial({ color: 0xf5f5f5 });
+        const limb = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 6, 16, Math.PI), woodMat);
+        limb.rotation.set(0, Math.PI / 2, Math.PI / 2);
+        group.add(limb);
+        const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
+        group.add(bowString);
+        group.rotation.set(0, Math.PI/2, Math.PI/2);
+        group.position.set(0, 0, -0.4);
+        group.userData.isBow = true;
+        group.userData.bowString = bowString;
+
+        // Add muzzle property since prepareLaserShot tries to use it
+        const muzzle = new THREE.Object3D();
+        muzzle.position.copy(LASER_GUN_MUZZLES[toolId]);
+        group.add(muzzle);
+        group.userData.muzzle = muzzle;
+        group.userData.toolId = toolId;
+
+        return group;
+    }
     if (toolId === 133) {
         // Blue cannon: wide bore, segmented coils and a heavy rear housing.
         const hull = mat(0x1b2a4a, 0, 0, .7);
@@ -1089,16 +1112,34 @@ function poseFirstPersonLaserGun(w, recoil) {
     // The bulkier cannon sits farther out so it frames the shot instead of filling the view.
     // Both sit roughly one gun-width right of the old spot to keep the crosshair area clear.
     const cannon = gun.userData.toolId === 133;
-    const rest = laserGunTmpVec.set((cannon ? .62 : .48) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
-    const aimX = (cannon ? .44 : .33) * widen, aimY = cannon ? -.27 : -.2, aimZ = cannon ? -.8 : -.5;
-    gun.position.set(rest.x + (aimX - rest.x) * w, rest.y + (aimY - rest.y) * w, rest.z + (aimZ - rest.z) * w + .07 * recoil);
+    const bow = gun.userData.toolId === 179;
+
+    let rest, aimX, aimY, aimZ;
+    if (bow) {
+        rest = laserGunTmpVec.set(.48 * widen, -.36, -.62);
+        aimX = .33 * widen; aimY = -.2; aimZ = -.5;
+    } else {
+        rest = laserGunTmpVec.set((cannon ? .62 : .48) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
+        aimX = (cannon ? .44 : .33) * widen; aimY = cannon ? -.27 : -.2; aimZ = cannon ? -.8 : -.5;
+    }
+
+    gun.position.set(rest.x + (aimX - rest.x) * w, rest.y + (aimY - rest.y) * w, rest.z + (aimZ - rest.z) * w + .07 * Math.max(0, recoil));
     // Rest tips the barrel up and inward; aiming points it from the grip at the crosshair target.
-    const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(1.05, .25, .15));
+    let restEulerX = 1.05;
+    if (bow) restEulerX = 0; // Don't tip bow
+    const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(restEulerX, .25, .15));
     const distance = gun.userData.aimDistance || 20;
     const aimDir = new THREE.Vector3(-aimX, -aimY, -distance - aimZ).normalize();
     gun.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
     gun.quaternion.slerpQuaternions(restQuat, gun.quaternion.clone(), w);
+
+    if (bow && gun.userData.bowString) {
+        let draw = w;
+        if (recoil > 0) draw = 1 - recoil;
+        gun.userData.bowString.position.y = -0.4 * draw;
+    }
 }
+
 
 function updateFirstPersonLaserGun(now) {
     const toolId = isLaserGunId(selectedBlockId) ? selectedBlockId : null;
@@ -1801,7 +1842,35 @@ function createProjectile(e, t, o, a, n = "red", damageSource = null) {
             damage: mobStyle.damage,
             hitRadius: mobStyle.hitRadius,
             color: mobStyle.color,
-            label: mobStyle.label
+            label: mobStyle.label,
+            isArrow: n === "arrow" || n === "arrow_player",
+            isPlayerArrow: n === "arrow_player"
+        });
+        return;
+    }
+
+    // Player Arrow Projectile
+    if (n === "arrow_player") {
+        const mesh = getProjectileMesh(0xe6dcc0),
+            quaternion = new THREE.Quaternion;
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a.clone().normalize()), mesh.quaternion.copy(quaternion), mesh.position.copy(o);
+        mesh.scale.set(0.45, 0.45, 2.6);
+        projectiles.push({
+            id: e,
+            user: t,
+            damageSource,
+            mesh,
+            velocity: a.clone().normalize().multiplyScalar(48), // twice as fast as skeleton
+            createdAt: Date.now(),
+            light: null,
+            mobStyle: null,
+            gravity: 14,
+            damage: 10, // Green laser damage
+            hitRadius: 1.2,
+            color: 0xe6dcc0,
+            label: "Shot by a player's arrow",
+            isArrow: true,
+            isPlayerArrow: true
         });
         return;
     }
@@ -2868,7 +2937,8 @@ function dropSelectedItem(dropAll = false) {
                 y: a.y,
                 z: a.z
             },
-            dropper: userName
+            dropper: userName,
+            count: 1
         });
         for (const [key, peer] of peers.entries()) {
             if (peer.dc && peer.dc.readyState === "open") {
@@ -2974,6 +3044,49 @@ function onPointerDown(e) {
                 createProjectile(r, userName, shot.origin.clone(), shot.direction.clone(), "blue");
                 queueLaserShot(r, shot.remoteOrigin, shot.remoteDirection, "blue");
             }, i * 150);
+        }
+        return;
+    }
+
+    if (t && 179 === t.id) {
+        const e = Date.now();
+        if (e - (player.lastFireTime || 0) < 500) return;
+        let tIndex = -1;
+        for (let i = 0; i < INVENTORY.length; i++) {
+            if (INVENTORY[i] && 178 === INVENTORY[i].id) {
+                tIndex = i;
+                break;
+            }
+        }
+        if (-1 === tIndex) return void addMessage("No Arrows to fire!", 1e3);
+
+        INVENTORY[tIndex].count--;
+        if (INVENTORY[tIndex].count <= 0) INVENTORY[tIndex] = null;
+        updateHotbarUI();
+
+        if (Math.random() < 1/100) {
+            INVENTORY[selectedHotIndex] = null;
+            selectedBlockId = null;
+            updateHotbarUI();
+            addMessage("Your bow broke!", 2000);
+            return;
+        }
+
+        player.lastFireTime = e;
+        const shot = prepareLaserShot(179);
+        const r = `${userName}-${Date.now()}-arrow`;
+        createProjectile(r, userName, shot.origin.clone(), shot.direction.clone(), "arrow_player");
+
+        const shotMsg = JSON.stringify({
+            type: "arrow_shot",
+            id: r,
+            user: userName,
+            origin: { x: shot.remoteOrigin.x, y: shot.remoteOrigin.y, z: shot.remoteOrigin.z },
+            direction: { x: shot.remoteDirection.x, y: shot.remoteDirection.y, z: shot.remoteDirection.z },
+            world: worldName
+        });
+        for (const [key, peer] of peers.entries()) {
+            if (peer.dc && peer.dc.readyState === "open") peer.dc.send(shotMsg);
         }
         return;
     }
@@ -6781,7 +6894,13 @@ function runGameFrame(e) {
         while (laserQueue.length > 0) {
             const e = laserQueue.shift();
 
-            if ("laser_fired_batch" === e.type) {
+            if (e.type === "arrow_shot") {
+                if (e.user !== userName) {
+                    const shooter = playerAvatars.get(e.user);
+                    if (shooter) shooter.userData.laserFireTime = performance.now();
+                    createProjectile(e.id, e.user, new THREE.Vector3(e.origin.x, e.origin.y, e.origin.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), "arrow_player", e.damageSource);
+                }
+            } else if ("laser_fired_batch" === e.type) {
                 for (const t of e.projectiles) {
                     if (t.user !== userName) {
                         const shooter = playerAvatars.get(t.user);
@@ -6833,7 +6952,18 @@ function runGameFrame(e) {
                 const r = Math.floor(stepPos.z);
 
                 // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
+
+                if (isSolid(getBlockAt(a, n, r)) && o.isArrow) {
+                    spawnEliteBurst(stepPos, o.color, 5);
+                    createBlockParticles(a, n, r, getBlockAt(a, n, r));
+                    releaseProjectileMesh(o.mesh);
+                    releaseProjectileLight(o.light);
+                    projectiles.splice(e, 1);
+                    s = !0;
+                    break;
+                }
                 if (isSolid(getBlockAt(a, n, r)) && o.mobStyle) {
+
                     // Elite mob projectiles shatter on terrain without destroying blocks (light-free burst).
                     spawnEliteBurst(stepPos, o.color, 5);
                     createBlockParticles(a, n, r, getBlockAt(a, n, r));
@@ -6914,7 +7044,25 @@ function runGameFrame(e) {
                 }
 
                 // Elite projectiles hit wolves on the shooter authority and players on their own client.
-                if (o.mobStyle) {
+
+                if (o.mobStyle || o.isPlayerArrow) {
+                    if (o.user !== userName && Date.now() - lastDamageTime > 1000) {
+                        const localCenter = new THREE.Vector3(player.x + (player.width || 0.8)/2, player.y + (player.height || 1.8)/2, player.z + (player.depth || 0.8)/2);
+                        if (player.health > 0 && stepPos.distanceTo(localCenter) < (o.hitRadius || 1.2)) {
+                            if (o.isArrow) {
+                                addToInventory(178, 1, worldSeed);
+                                addMessage("Caught an arrow!", 1500);
+                            }
+                            const push = o.velocity.clone().setY(0).normalize().multiplyScalar(4);
+                            applyEliteDamageToLocalPlayer(o.damage, o.label, push.x, push.z);
+                            spawnEliteBurst(stepPos, o.color, 5);
+                            releaseProjectileMesh(o.mesh);
+                            releaseProjectileLight(o.light);
+                            projectiles.splice(e, 1);
+                            s = !0;
+                            break;
+                        }
+                    }
                     if (handleEliteProjectileWolfHit(o, stepPos)) {
                         spawnEliteBurst(stepPos, o.color, 5);
                         releaseProjectileMesh(o.mesh);
@@ -6923,19 +7071,11 @@ function runGameFrame(e) {
                         s = !0;
                         break;
                     }
-                    const localCenter = new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2);
-                    if (player.health > 0 && stepPos.distanceTo(localCenter) < o.hitRadius) {
-                        const push = o.velocity.clone().setY(0).normalize().multiplyScalar(4);
-                        applyEliteDamageToLocalPlayer(o.damage, o.label, push.x, push.z);
-                        spawnEliteBurst(stepPos, o.color, 5);
-                        releaseProjectileMesh(o.mesh);
-                        releaseProjectileLight(o.light);
-                        projectiles.splice(e, 1);
-                        s = !0;
-                        break;
+                    if (!o.isPlayerArrow) {
+                        continue;
                     }
-                    continue;
                 }
+
 
                 // 2. MOB COLLISION LOGIC
                 for (const mob of mobs) {
@@ -6974,8 +7114,15 @@ function runGameFrame(e) {
                         // Make blue laser slightly more forgiving
                         const hitThreshold = o.isBlue ? 2.5 : 1.5;
                         if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
-                            const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
-                            player.health -= damage;
+
+                            const damageAmount = o.damage || (o.isBlue ? 15 : (o.isGreen ? 10 : 5));
+
+                            if (o.isArrow) {
+                                addToInventory(178, 1, worldSeed);
+                                addMessage("Caught an arrow!", 1500);
+                            }
+
+                            player.health -= damageAmount;
                             document.getElementById("health").innerText = player.health;
                             updateHealthBar();
                             addMessage("Hit by " + o.user + "! HP: " + player.health, 1e3);
@@ -6984,6 +7131,7 @@ function runGameFrame(e) {
                             player.health <= 0 && handlePlayerDeath(o.user);
 
                             hitPlayer = true;
+
                         }
                     }
 
@@ -7000,17 +7148,24 @@ function runGameFrame(e) {
                             }
                             remotePlayerPos.y += player.height / 2; // Adjust to player center
 
+
                             const hitThreshold = o.isBlue ? 2.5 : 1.5;
                             if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
-                                const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                                const damageAmount = o.damage || (o.isBlue ? 15 : (o.isGreen ? 10 : 5));
+
+                                if (o.isArrow) {
+                                    sendToPlayer(username, { type: "add_to_inventory", blockId: 178, count: 1, originSeed: worldSeed });
+                                }
+
                                 sendToPlayer(username, {
                                     type: 'player_damage',
-                                    damage: damage,
+                                    damage: damageAmount,
                                     attacker: o.user
                                 });
                                 hitPlayer = true;
                                 break; // break player loop
                             }
+
                         }
                     }
 
