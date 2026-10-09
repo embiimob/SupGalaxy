@@ -127,7 +127,7 @@ function collectGalaxyWorlds(masterKey) {
     const hasLoadedGalaxy = galaxyWorldData !== null && galaxyMasterKey === masterKey;
     const sourceWorlds = hasLoadedGalaxy
         ? galaxyWorldData
-        : knownWorlds;
+        : new Map();
     const worlds = Array.from(sourceWorlds.entries())
         .filter(([name]) => typeof name === "string" && name.trim())
         .map(([name, data]) => ({ name, data }));
@@ -428,9 +428,11 @@ function openGalaxyAtlas() {
     if (galaxyMasterKey !== MASTER_WORLD_KEY) {
         galaxyMasterKey = MASTER_WORLD_KEY;
         galaxyWorldData = null;
-        buildGalaxyMap(MASTER_WORLD_KEY);
     }
-    if (!galaxyMap) buildGalaxyMap();
+    buildGalaxyMap(MASTER_WORLD_KEY);
+    if (galaxyWorldData === null) {
+        loadGalaxyFromInput();
+    }
     if (!galaxyMap) return;
     overlay.style.display = "flex";
     overlay.setAttribute("aria-hidden", "false");

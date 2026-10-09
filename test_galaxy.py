@@ -7,35 +7,40 @@ def run():
         page = browser.new_page()
         page.goto("http://localhost:8000")
 
-        # Override data and call the methods to test galaxy logic
+        # We need to stub network request so loadGalaxyFromInput won't crash
         page.evaluate("""
-            // Fake some things so the function works
             window.MASTER_WORLD_KEY = "NEW_GALAXY";
             window.worldName = "START";
             window.galaxyMasterKey = "NEW_GALAXY";
-            window.knownWorlds = new Map();
-            window.galaxyWorldData = new Map();
+            window.knownWorlds = new Map([["OLDWORLD", {}]]);
+            window.galaxyWorldData = null;
 
-            // Bypass waiting for canvas/engine
+            // Bypass DOM missing stuff
             const host = document.createElement("div");
             host.id = "galaxyCanvasHost";
             host.style.width = "800px";
             host.style.height = "600px";
             document.body.appendChild(host);
+
+            // Mock network
+            window.discoverGalaxyWorlds = async function() { return new Map([["REMOTE_WORLD", {}]]); };
         """)
 
-        # Call openGalaxyAtlas which calls buildGalaxyMap
+        # Test 1: Open atlas. Should show START (current world), NOT OLDWORLD (because we don't fall back to knownWorlds).
+        # Then the background fetch completes and it should show REMOTE_WORLD.
+
+        # Set up a hook to track worlds in nodes
         page.evaluate("openGalaxyAtlas()")
+
+        # Let's inspect before network finishes
+        worlds_before = page.evaluate("galaxyMap.worldNodes.map(n => n.userData.world.name)")
+        print(f"Worlds immediately after open: {worlds_before}")
 
         time.sleep(2)
 
-        # Verify galaxy travel button is NOT disabled
-        is_disabled = page.evaluate('document.getElementById("galaxyTravelBtn").disabled')
-        print(f"Travel button disabled: {is_disabled}")
-
-        # Verify selected is START
-        selected_name = page.evaluate('galaxyMap.selected.name')
-        print(f"Selected world: {selected_name}")
+        # Now the async discoverGalaxyWorlds should have finished and it should have rebuilt map
+        worlds_after = page.evaluate("galaxyMap.worldNodes.map(n => n.userData.world.name)")
+        print(f"Worlds after network loads: {worlds_after}")
 
         browser.close()
 
