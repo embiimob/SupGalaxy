@@ -131,7 +131,7 @@ function collectGalaxyWorlds(masterKey) {
     const worlds = Array.from(sourceWorlds.entries())
         .filter(([name]) => typeof name === "string" && name.trim())
         .map(([name, data]) => ({ name, data }));
-    if (!hasLoadedGalaxy && masterKey === MASTER_WORLD_KEY && typeof worldName === "string" &&
+    if (masterKey === MASTER_WORLD_KEY && typeof worldName === "string" &&
         worldName && !worlds.some(world => world.name === worldName)) {
         worlds.push({ name: worldName, data: null });
     }
@@ -388,14 +388,14 @@ function buildGalaxyMap(masterKey = galaxyMasterKey) {
         updateGalaxyWorldDetails(selected.userData.world, false);
         document.getElementById("galaxyTravelBtn").disabled = false;
     } else {
-        galaxyMap.selected = null;
+        galaxyMap.selected = { name: "START" };
         renderGalaxyKnownPlayers(null);
         document.getElementById("galaxyWorldName").textContent = "No worlds found";
         document.getElementById("galaxyWorldSummary").textContent = `No known worlds are linked to “${masterKey}”.`;
         document.getElementById("galaxySunCount").textContent = "0";
         document.getElementById("galaxyMoonCount").textContent = "0";
         document.getElementById("galaxyPlanetPreview").style.setProperty("--planet-color", "#64d68d");
-        document.getElementById("galaxyTravelBtn").disabled = true;
+        document.getElementById("galaxyTravelBtn").disabled = false;
     }
     resizeGalaxyMap();
 }
