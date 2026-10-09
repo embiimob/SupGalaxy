@@ -474,8 +474,11 @@ Chunk.prototype.idx = function (e, t, o) {
                 continue;
             }
             if (BLOCKS[w] && BLOCKS[w].model) {
+                const isLeaves = BLOCKS[w].model === "leaves";
                 const modelMaterial = new THREE.MeshStandardMaterial({
                     map: createBlockTexture(b, w),
+                    transparent: isLeaves,
+                    alphaTest: isLeaves ? 0.1 : 0,
                     side: THREE.DoubleSide,
                     metalness: BLOCKS[w].textureStyle === "metal" ? .65 : 0,
                     roughness: BLOCKS[w].textureStyle === "metal" ? .38 : .85
@@ -493,7 +496,19 @@ Chunk.prototype.idx = function (e, t, o) {
                         z: modWrap(B.z, MAP_SIZE)
                     } : null;
                     model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
-                    if (BLOCKS[w].model === "stairs") {
+                    if (BLOCKS[w].model === "leaves") {
+                        const plane1 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane1.rotation.y = Math.PI / 4;
+                        const plane2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane2.rotation.y = -Math.PI / 4;
+                        const plane3 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane3.rotation.x = Math.PI / 2;
+
+                        plane1.position.y = 0.5;
+                        plane2.position.y = 0.5;
+                        plane3.position.y = 0.5;
+                        model.add(plane1, plane2, plane3);
+                    } else if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
                         lowerStep.position.y = .25;
                         const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);

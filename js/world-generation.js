@@ -449,15 +449,40 @@ function createBlockTexture(e, t) {
     }
 
     if (style === "leaves") {
-        r.globalCompositeOperation = "destination-out";
-        for (let x = 0; x < a; x++) {
-            for (let y = 0; y < a; y++) {
-                if (s() > 0.65) {
-                    r.fillRect(x, y, 1, 1);
-                }
-            }
+        const macroCanvas = document.createElement("canvas");
+        macroCanvas.width = a;
+        macroCanvas.height = a;
+        macroCanvas.getContext("2d").drawImage(n, 0, 0);
+
+        r.clearRect(0, 0, a, a);
+
+        const numLeaves = 35;
+        for (let i = 0; i < numLeaves; i++) {
+            const leafWidth = 12 + s() * 8;
+            const leafHeight = 6 + s() * 4;
+            const x = s() * a;
+            const y = s() * a;
+            const angle = s() * Math.PI * 2;
+
+            r.save();
+            r.translate(x, y);
+            r.rotate(angle);
+
+            r.beginPath();
+            r.moveTo(-leafWidth/2, 0);
+            r.quadraticCurveTo(0, -leafHeight, leafWidth/2, 0);
+            r.quadraticCurveTo(0, leafHeight, -leafWidth/2, 0);
+            r.closePath();
+
+            r.clip();
+            r.drawImage(macroCanvas, -leafWidth/2, -leafHeight/2, leafWidth, leafHeight);
+
+            r.strokeStyle = "rgba(0,0,0,0.3)";
+            r.lineWidth = 0.5;
+            r.stroke();
+
+            r.restore();
         }
-        r.globalCompositeOperation = "source-over";
     }
     const u = new THREE.CanvasTexture(n);
     return u.magFilter = THREE.NearestFilter, u.minFilter = THREE.NearestFilter, textureCache.set(o, u), u
