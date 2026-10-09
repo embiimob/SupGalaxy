@@ -228,6 +228,12 @@ function buildGreedyMesh(e, t, o) {
                 };
             }
             else if (o.fusionReactor) a = createFusionReactorMaterial(t.seed, t.blockId);
+            else if (o.textureStyle === "leaves") a = new THREE.MeshStandardMaterial({
+                map: createBlockTexture(t.seed, t.blockId),
+                transparent: true,
+                alphaTest: 0.1,
+                side: THREE.DoubleSide
+            });
             else if (o.transparent) a = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(o.color),
                 transparent: !0,
@@ -368,7 +374,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 }], g = BLOCKS[w] && BLOCKS[w].transparent, E = 0, v = 0; v < f.length; v++) {
                     var M = f[v],
                         S = this.getBlockGlobal(e.cx, e.cz, d + M.x, u + M.y, c + M.z);
-                    if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S) {
+                    if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S || (w === 8 && S === 8)) {
                         if (w === 6 && S === 136) continue;
                         if (w === 6 && (S === 6 || (S !== BLOCK_AIR && BLOCKS[S] && !BLOCKS[S].transparent))) continue;
                         E |= (1 << v);
@@ -468,8 +474,11 @@ Chunk.prototype.idx = function (e, t, o) {
                 continue;
             }
             if (BLOCKS[w] && BLOCKS[w].model) {
+                const isLeaves = BLOCKS[w].model === "leaves";
                 const modelMaterial = new THREE.MeshStandardMaterial({
                     map: createBlockTexture(b, w),
+                    transparent: isLeaves,
+                    alphaTest: isLeaves ? 0.1 : 0,
                     side: THREE.DoubleSide,
                     metalness: BLOCKS[w].textureStyle === "metal" ? .65 : 0,
                     roughness: BLOCKS[w].textureStyle === "metal" ? .38 : .85
@@ -487,7 +496,19 @@ Chunk.prototype.idx = function (e, t, o) {
                         z: modWrap(B.z, MAP_SIZE)
                     } : null;
                     model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
-                    if (BLOCKS[w].model === "stairs") {
+                    if (BLOCKS[w].model === "leaves") {
+                        const plane1 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane1.rotation.y = Math.PI / 4;
+                        const plane2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane2.rotation.y = -Math.PI / 4;
+                        const plane3 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), modelMaterial);
+                        plane3.rotation.x = Math.PI / 2;
+
+                        plane1.position.y = 0.5;
+                        plane2.position.y = 0.5;
+                        plane3.position.y = 0.5;
+                        model.add(plane1, plane2, plane3);
+                    } else if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
                         lowerStep.position.y = .25;
                         const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);
@@ -658,6 +679,12 @@ Chunk.prototype.idx = function (e, t, o) {
                 };
             }
             else if (K.fusionReactor) D = createFusionReactorMaterial(b, w);
+            else if (K.textureStyle === "leaves") D = new THREE.MeshStandardMaterial({
+                map: createBlockTexture(b, w),
+                transparent: true,
+                alphaTest: 0.1,
+                side: THREE.DoubleSide
+            });
             else if (K.transparent) D = new THREE.MeshBasicMaterial({
                 color: new THREE.Color(K.color),
                 transparent: !0,
