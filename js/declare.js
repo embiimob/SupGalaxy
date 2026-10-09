@@ -44,7 +44,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     SEA_LEVEL = 16,
     MAP_SIZE = 16384,
     BLOCK_AIR = 0,
-    MASTER_WORLD_KEY = "Milky Way",
+    MASTER_WORLD_KEY = "hive",
     PENDING_PERIOD = 2592e6,
     OWNERSHIP_EXPIRY = 31536e6,
     IPFS_MATURITY_PERIOD = 30 * 24 * 60 * 60 * 1000,
