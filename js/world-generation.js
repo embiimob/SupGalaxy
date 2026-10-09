@@ -579,15 +579,18 @@ function initSky() {
     for (let t = 0; t < 5e3; t++) {
         const t = e() * Math.PI * 2,
             o = Math.acos(2 * e() - 1),
-            a = 4e3 * Math.sin(o) * Math.cos(t),
-            n = 4e3 * Math.sin(o) * Math.sin(t),
-            r = 4e3 * Math.cos(o);
+            a = 12e3 * Math.sin(o) * Math.cos(t),
+            n = 12e3 * Math.sin(o) * Math.sin(t),
+            r = 12e3 * Math.cos(o);
         d(.005 * a, .005 * r) > .7 && l.push(a, n, r)
     }
     i.setAttribute("position", new THREE.Float32BufferAttribute(l, 3));
     const c = new THREE.PointsMaterial({
         color: 16777215,
-        size: 2 + 3 * e()
+        size: 6 + 9 * e(),
+        transparent: true,
+        opacity: 1,
+        depthWrite: false
     }),
         u = new THREE.Points(i, c);
     stars.add(u), scene.add(stars), clouds = new THREE.Group;
@@ -639,7 +642,9 @@ function updateSky(e) {
         e.light.target.position.copy(camera.position);
         e.light.target.updateMatrixWorld();
         e.baseIntensity = 0.12 * Math.max(0, Math.min(1, (altitude + 0.1) / 0.3)) / Math.max(1, skyProps.moons.length);
-    })), stars.visible = isNight || inSpace, stars.rotation.y += .005 * e, clouds.children.forEach((t => {
+    })), stars.visible = true, stars.children.forEach(starsObject => {
+        starsObject.material.opacity = isNight || inSpace ? 1 : .16;
+    }), stars.rotation.y += .005 * e, clouds.children.forEach((t => {
         t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
     }));
     clouds.visible = !inSpace;

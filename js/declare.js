@@ -44,7 +44,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     SEA_LEVEL = 16,
     MAP_SIZE = 16384,
     BLOCK_AIR = 0,
-    MASTER_WORLD_KEY = "MCWorlds",
+    MASTER_WORLD_KEY = "hive",
     PENDING_PERIOD = 2592e6,
     OWNERSHIP_EXPIRY = 31536e6,
     IPFS_MATURITY_PERIOD = 30 * 24 * 60 * 60 * 1000,
@@ -72,7 +72,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     REMOTE_PLAYER_VIEW_DISTANCE = 64,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v1.3.0",
+    VERSION = "SupGalaxy v2.0.0",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 20,
     BLOCKS = {

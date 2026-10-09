@@ -1301,7 +1301,7 @@ self.onmessage = async function(e) {
                             var keywordCandidates = [normalizedKeyword];
                             normalizedKeyword.startsWith("o") && keywordCandidates.unshift(normalizedKeyword.slice(1).trim());
                             for (var outputKeyword of keywordCandidates) {
-                                if (!outputKeyword || outputKeyword === "MCWorlds") continue;
+                                if (!outputKeyword || outputKeyword === masterKey) continue;
                                 if (outputKeyword.startsWith(joinKeywordPrefix)) {
                                     var outputWorldName = outputKeyword.slice(joinKeywordPrefix.length).trim();
                                     if (outputWorldName) {
@@ -2137,7 +2137,7 @@ self.onmessage = async function(e) {
             worker.postMessage({
                 type: 'poll',
                 chunkKeys: filteredKeys,
-                masterKey: "MCWorlds",
+                masterKey: MASTER_WORLD_KEY,
                 userAddress: userAddress,
                 worldName: worldName,
                 serverKeyword: serverKeyword,
