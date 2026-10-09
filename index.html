@@ -528,9 +528,10 @@
     <div id="galaxyAtlas" class="galaxy-atlas" aria-hidden="true">
         <section class="galaxy-atlas-window" role="dialog" aria-modal="true" aria-labelledby="galaxyAtlasTitle">
             <header class="galaxy-atlas-header">
-                <h1 id="galaxyAtlasTitle">MCWorlds</h1>
+                <input id="galaxyAtlasTitle" class="galaxy-master-key" type="text" value="MCWorlds"
+                    maxlength="20" pattern="[A-Za-z0-9 ]{1,20}" autocomplete="off" spellcheck="false"
+                    aria-label="Master world key" title="Enter a master world key and press Enter">
                 <div class="galaxy-atlas-controls">
-                    <button id="galaxyOverviewBtn" class="selected" type="button">Overview</button>
                     <button id="galaxyZoomOutBtn" type="button" aria-label="Zoom out">−</button>
                     <button id="galaxyZoomInBtn" type="button" aria-label="Zoom in">+</button>
                     <button id="galaxyCloseBtn" type="button">Close</button>
@@ -551,7 +552,7 @@
             </div>
             <footer class="galaxy-atlas-footer">
                 <span>Drag to rotate · scroll or pinch to zoom · click a world name for details · click its planet to travel</span>
-                <span id="galaxyWorldCount"></span>
+                <span><span id="galaxyMapStatus" role="status" aria-live="polite"></span><span id="galaxyWorldCount"></span></span>
             </footer>
         </section>
     </div>

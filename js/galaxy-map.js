@@ -1,18 +1,24 @@
 const GALAXY_MAP_RADIUS = 900;
 
 let galaxyMap = null;
-let galaxyLayout = null;
+let galaxyMasterKey = MASTER_WORLD_KEY;
+let galaxyWorldData = null;
+let galaxyLoadSequence = 0;
+const galaxyLayouts = new Map();
+const galaxyWorldCache = new Map();
 
-function getGalaxyLayout() {
-    if (galaxyLayout) return galaxyLayout;
-    const random = makeSeededRandom(MASTER_WORLD_KEY + "_atlas_layout");
+function getGalaxyLayout(masterKey = galaxyMasterKey) {
+    if (galaxyLayouts.has(masterKey)) return galaxyLayouts.get(masterKey);
+    const random = makeSeededRandom(masterKey + "_atlas_layout");
     const armCount = 3 + Math.floor(random() * 5);
     const armLengths = Array.from({ length: armCount }, () => .25 + .75 * random());
-    galaxyLayout = Object.freeze({
+    const layout = Object.freeze({
         armCount,
         armLengths: Object.freeze(armLengths)
     });
-    return galaxyLayout;
+    galaxyLayouts.set(masterKey, layout);
+    if (galaxyLayouts.size > 20) galaxyLayouts.delete(galaxyLayouts.keys().next().value);
+    return layout;
 }
 
 function getGalaxyWorldSky(world) {
@@ -41,9 +47,9 @@ function getGalaxyResidents(worldData) {
     return users && typeof users === "object" ? Object.keys(users).length : 0;
 }
 
-function createGalaxyWorldPosition(world) {
-    const random = makeSeededRandom(MASTER_WORLD_KEY + "_world_" + world);
-    const { armCount, armLengths } = getGalaxyLayout();
+function createGalaxyWorldPosition(world, masterKey) {
+    const random = makeSeededRandom(masterKey + "_world_" + world);
+    const { armCount, armLengths } = getGalaxyLayout(masterKey);
     const arm = Math.floor(random() * armCount);
     const radius = GALAXY_MAP_RADIUS * armLengths[arm] * (.25 + .7 * Math.sqrt(random()));
     const angle = arm * Math.PI * 2 / armCount + radius * .0055 + (random() - .5) * .5;
@@ -70,12 +76,12 @@ function createGalaxyLabel(name, color) {
     return label;
 }
 
-function createGalaxyStarField() {
-    const random = makeSeededRandom(MASTER_WORLD_KEY + "_atlas_stars");
+function createGalaxyStarField(masterKey) {
+    const random = makeSeededRandom(masterKey + "_atlas_stars");
     const positions = [];
     const colors = [];
     const starCount = 12000;
-    const { armCount, armLengths } = getGalaxyLayout();
+    const { armCount, armLengths } = getGalaxyLayout(masterKey);
     const gaussian = () => {
         const u = Math.max(1e-8, random());
         return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * random());
@@ -117,14 +123,87 @@ function createGalaxyStarField() {
     return new THREE.Points(geometry, material);
 }
 
-function collectGalaxyWorlds() {
-    const worlds = Array.from(knownWorlds.entries())
+function collectGalaxyWorlds(masterKey) {
+    const hasLoadedGalaxy = galaxyWorldData !== null && galaxyMasterKey === masterKey;
+    const sourceWorlds = hasLoadedGalaxy
+        ? galaxyWorldData
+        : knownWorlds;
+    const worlds = Array.from(sourceWorlds.entries())
         .filter(([name]) => typeof name === "string" && name.trim())
         .map(([name, data]) => ({ name, data }));
-    if (typeof worldName === "string" && worldName && !worlds.some(world => world.name === worldName)) {
+    if (!hasLoadedGalaxy && masterKey === MASTER_WORLD_KEY && typeof worldName === "string" &&
+        worldName && !worlds.some(world => world.name === worldName)) {
         worlds.push({ name: worldName, data: null });
     }
     return worlds;
+}
+
+async function discoverGalaxyWorlds(masterKey) {
+    if (galaxyWorldCache.has(masterKey)) return new Map(galaxyWorldCache.get(masterKey));
+
+    const worlds = new Map();
+    const masterAddress = await GetPublicAddressByKeyword(masterKey);
+    if (!masterAddress) return null;
+
+    let skip = 0;
+    const pageSize = 5000;
+    while (true) {
+        const roots = await GetRootsByAddress(masterAddress, skip, pageSize);
+        if (!roots.length) break;
+        for (const root of roots) {
+            if (!root.TransactionId) continue;
+            const profile = await GetProfileByAddress(root.FromAddress);
+            if (!profile?.URN) continue;
+            const username = profile.URN.replace(/^"|"$/g, "").trim();
+            const userProfile = await GetProfileByURN(username);
+            if (!userProfile?.Creators?.includes(root.FromAddress)) continue;
+
+            let worldNameFromKey = null;
+            let worldAddressFromKey = null;
+            const joinKeywordPrefix = "MCUserJoin@";
+            for (const [outputAddress, rawKeyword] of Object.entries(root.Keyword || {})) {
+                if (!outputAddress || !rawKeyword) continue;
+                const keyword = String(rawKeyword).replace(/^"|"$/g, "").replace(/#+$/g, "").trim();
+                const candidates = keyword.startsWith("o") ? [keyword.slice(1).trim(), keyword] : [keyword];
+                for (const candidate of candidates) {
+                    if (!candidate || candidate === masterKey) continue;
+                    if (candidate.startsWith(joinKeywordPrefix)) {
+                        worldNameFromKey = candidate.slice(joinKeywordPrefix.length).trim();
+                        worldAddressFromKey = outputAddress;
+                        break;
+                    }
+                    const legacyParts = candidate.split("@");
+                    const legacyWorld = legacyParts[0]?.trim();
+                    const legacyUser = legacyParts.slice(1).join("@").trim();
+                    if (legacyParts.length >= 2 && legacyWorld && legacyUser && username === legacyUser) {
+                        worldNameFromKey = legacyWorld;
+                        worldAddressFromKey = outputAddress;
+                        break;
+                    }
+                }
+                if (worldNameFromKey) break;
+            }
+            if (!worldNameFromKey) continue;
+
+            let worldData = worlds.get(worldNameFromKey);
+            if (!worldData) {
+                worldData = { discoverer: username, users: new Map(), toAddress: worldAddressFromKey };
+                worlds.set(worldNameFromKey, worldData);
+            }
+            worldData.users.set(username, {
+                timestamp: Date.parse(root.BlockDate) || Date.now(),
+                address: root.FromAddress || null,
+                claimed: true
+            });
+            worldData.toAddress ||= worldAddressFromKey;
+        }
+        if (roots.length < pageSize) break;
+        skip += pageSize;
+    }
+
+    galaxyWorldCache.set(masterKey, worlds);
+    if (galaxyWorldCache.size > 5) galaxyWorldCache.delete(galaxyWorldCache.keys().next().value);
+    return new Map(worlds);
 }
 
 function updateGalaxyWorldDetails(world, focus = true) {
@@ -150,10 +229,29 @@ function updateGalaxyWorldDetails(world, focus = true) {
     });
 }
 
-function buildGalaxyMap() {
+function disposeGalaxyMap() {
+    if (!galaxyMap) return;
+    cancelAnimationFrame(galaxyMap.animation);
+    galaxyMap.controls.dispose();
+    galaxyMap.scene.traverse(object => {
+        object.geometry?.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.filter(Boolean).forEach(material => {
+            for (const value of Object.values(material)) {
+                if (value && value.isTexture) value.dispose();
+            }
+            material.dispose();
+        });
+    });
+    galaxyMap.renderer.dispose();
+    galaxyMap.renderer.domElement.remove();
+    galaxyMap = null;
+}
+
+function buildGalaxyMap(masterKey = galaxyMasterKey) {
     const host = document.getElementById("galaxyCanvasHost");
     if (!host || !window.THREE || !THREE.OrbitControls) return;
-    document.getElementById("galaxyAtlasTitle").textContent = MASTER_WORLD_KEY;
+    disposeGalaxyMap();
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020b08);
     const camera = new THREE.PerspectiveCamera(42, 1, .1, 8000);
@@ -169,7 +267,7 @@ function buildGalaxyMap() {
     controls.maxDistance = 3300;
     controls.maxPolarAngle = Math.PI * .92;
     controls.target.set(0, 0, 0);
-    scene.add(createGalaxyStarField());
+    scene.add(createGalaxyStarField(masterKey));
 
     const core = new THREE.Mesh(
         new THREE.SphereGeometry(94, 32, 24),
@@ -181,8 +279,8 @@ function buildGalaxyMap() {
 
     const worldNodes = [];
     const worldTargets = [];
-    collectGalaxyWorlds().forEach(({ name, data }) => {
-        const position = createGalaxyWorldPosition(name);
+    collectGalaxyWorlds(masterKey).forEach(({ name, data }) => {
+        const position = createGalaxyWorldPosition(name, masterKey);
         const sky = getGalaxyWorldSky(name);
         const planet = new THREE.Mesh(
             new THREE.SphereGeometry(8, 24, 18),
@@ -206,7 +304,6 @@ function buildGalaxyMap() {
         worldTargets.push(planet, label);
     });
 
-    if (!worldNodes.length) return;
     document.getElementById("galaxyWorldCount").textContent = `${worldNodes.length} known worlds`;
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -223,9 +320,20 @@ function buildGalaxyMap() {
         if (hit) updateGalaxyWorldDetails(hit.object.userData.world);
     });
 
-    galaxyMap = { scene, camera, renderer, controls, worldNodes, selected: null, animation: null };
+    galaxyMap = { scene, camera, renderer, controls, worldNodes, selected: null, animation: null, masterKey };
     const selected = worldNodes.find(node => node.userData.world.name === worldName) || worldNodes[0];
-    updateGalaxyWorldDetails(selected.userData.world, false);
+    if (selected) {
+        updateGalaxyWorldDetails(selected.userData.world, false);
+        document.getElementById("galaxyTravelBtn").disabled = false;
+    } else {
+        galaxyMap.selected = null;
+        document.getElementById("galaxyWorldName").textContent = "No worlds found";
+        document.getElementById("galaxyWorldSummary").textContent = `No known worlds are linked to “${masterKey}”.`;
+        document.getElementById("galaxySunCount").textContent = "0";
+        document.getElementById("galaxyMoonCount").textContent = "0";
+        document.getElementById("galaxyPlanetPreview").style.setProperty("--planet-color", "#64d68d");
+        document.getElementById("galaxyTravelBtn").disabled = true;
+    }
     resizeGalaxyMap();
 }
 
@@ -249,6 +357,16 @@ function renderGalaxyMap() {
 function openGalaxyAtlas() {
     const overlay = document.getElementById("galaxyAtlas");
     if (!overlay) return;
+    galaxyLoadSequence++;
+    const input = document.getElementById("galaxyAtlasTitle");
+    input.value = MASTER_WORLD_KEY;
+    input.disabled = false;
+    document.getElementById("galaxyMapStatus").textContent = "";
+    if (galaxyMasterKey !== MASTER_WORLD_KEY) {
+        galaxyMasterKey = MASTER_WORLD_KEY;
+        galaxyWorldData = null;
+        buildGalaxyMap(MASTER_WORLD_KEY);
+    }
     if (!galaxyMap) buildGalaxyMap();
     if (!galaxyMap) return;
     overlay.style.display = "flex";
@@ -256,6 +374,44 @@ function openGalaxyAtlas() {
     resizeGalaxyMap();
     cancelAnimationFrame(galaxyMap.animation);
     renderGalaxyMap();
+}
+
+async function loadGalaxyFromInput() {
+    const input = document.getElementById("galaxyAtlasTitle");
+    const status = document.getElementById("galaxyMapStatus");
+    const masterKey = input.value.trim();
+    if (!/^(?=.*[A-Za-z0-9])[A-Za-z0-9 ]{1,20}$/.test(masterKey)) {
+        status.textContent = "Use 1–20 letters, numbers, or spaces.";
+        input.focus();
+        return;
+    }
+
+    const request = ++galaxyLoadSequence;
+    input.disabled = true;
+    status.textContent = `Loading ${masterKey}…`;
+    try {
+        const worlds = await discoverGalaxyWorlds(masterKey);
+        if (request !== galaxyLoadSequence) return;
+        if (!worlds) {
+            status.textContent = `Could not find master key “${masterKey}”.`;
+            return;
+        }
+        galaxyMasterKey = masterKey;
+        galaxyWorldData = worlds;
+        status.textContent = "";
+        buildGalaxyMap(masterKey);
+        if (galaxyMap) {
+            cancelAnimationFrame(galaxyMap.animation);
+            renderGalaxyMap();
+        }
+    } catch (error) {
+        if (request === galaxyLoadSequence) {
+            console.error("[GalaxyAtlas] Failed to load galaxy:", error);
+            status.textContent = "Could not load this galaxy. Try again.";
+        }
+    } finally {
+        if (request === galaxyLoadSequence) input.disabled = false;
+    }
 }
 
 function closeGalaxyAtlas() {
@@ -267,6 +423,13 @@ function closeGalaxyAtlas() {
 }
 
 function initGalaxyAtlas() {
+    document.getElementById("galaxyAtlasTitle")?.addEventListener("keydown", event => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+            event.preventDefault();
+            loadGalaxyFromInput();
+        }
+    });
     document.getElementById("galaxyCloseBtn")?.addEventListener("click", closeGalaxyAtlas);
     document.getElementById("galaxyZoomInBtn")?.addEventListener("click", () => {
         if (galaxyMap) zoomGalaxyCamera(.78);
