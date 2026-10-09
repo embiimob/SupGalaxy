@@ -1525,33 +1525,64 @@ body.is-mobile-mode #messages {
         margin-top: auto;
     }
 
-    .known-galaxies {
+    .known-players {
         width: 100%;
-        margin-top: auto;
+        margin-top: 8px;
         color: #d8f6e5;
         font-size: 14px;
     }
 
-    .known-galaxies summary {
+    .known-players summary {
         padding: 8px 0;
         cursor: pointer;
         font-weight: 700;
     }
 
-    .known-galaxy-list {
+    .known-player-list {
         display: grid;
+        max-height: 260px;
+        overflow-y: auto;
         gap: 6px;
     }
 
-    .galaxy-world-panel .known-galaxy-list button {
+    .known-player-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 0;
+        border-top: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .known-player-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .known-player-details {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+    }
+
+    .known-player-time {
+        color: #a9c9d5;
+        font-size: 11px;
+    }
+
+    .galaxy-world-panel .known-player-row button {
+        width: auto;
+        flex: 0 0 auto;
         margin: 0;
         padding: 6px 10px;
         font-size: 13px;
-        text-align: left;
     }
 
     .galaxy-world-panel > #galaxyTravelBtn {
-        margin-top: 10px;
+        margin-top: auto;
     }
 
     .galaxy-atlas-footer {

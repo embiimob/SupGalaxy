@@ -6,7 +6,6 @@ let galaxyWorldData = null;
 let galaxyLoadSequence = 0;
 const galaxyLayouts = new Map();
 const galaxyWorldCache = new Map();
-const KNOWN_GALAXY_KEYS = Object.freeze([MASTER_WORLD_KEY, "MCWorlds"]);
 
 function getGalaxyLayout(masterKey = galaxyMasterKey) {
     if (galaxyLayouts.has(masterKey)) return galaxyLayouts.get(masterKey);
@@ -223,11 +222,73 @@ function updateGalaxyWorldDetails(world, focus = true) {
         `${radius}% galactic radius · ${world.residents} known residents`;
     document.getElementById("galaxySunCount").textContent = world.sky.suns;
     document.getElementById("galaxyMoonCount").textContent = world.sky.moons;
+    renderGalaxyKnownPlayers(world);
     galaxyMap.worldNodes.forEach(node => {
         const selected = node.userData.world === world;
         node.scale.setScalar(selected ? 1.45 : 1);
         node.material.emissiveIntensity = selected ? 1.1 : .35;
     });
+}
+
+function renderGalaxyKnownPlayers(world) {
+    const list = document.getElementById("knownPlayerList");
+    const count = document.getElementById("knownPlayerCount");
+    if (!list || !count) return;
+    const users = world?.data?.users;
+    const players = users instanceof Map
+        ? Array.from(users.entries())
+        : users instanceof Set
+            ? Array.from(users, name => [name, null])
+            : users && typeof users === "object"
+                ? Object.entries(users)
+                : [];
+    const knownPlayers = players
+        .filter(([name]) => typeof name === "string" && name.trim())
+        .sort(([left], [right]) => left.localeCompare(right));
+    count.textContent = knownPlayers.length;
+    list.replaceChildren();
+
+    if (!knownPlayers.length) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "known-player-empty";
+        emptyState.textContent = "No known players.";
+        list.appendChild(emptyState);
+        return;
+    }
+
+    for (const [name, playerData] of knownPlayers) {
+        const row = document.createElement("div");
+        row.className = "known-player-row";
+        const playerDetails = document.createElement("div");
+        playerDetails.className = "known-player-details";
+        const playerName = document.createElement("span");
+        playerName.className = "known-player-name";
+        playerName.textContent = name;
+        const joinedAt = document.createElement("span");
+        joinedAt.className = "known-player-time";
+        const timestamp = playerData?.timestamp ? new Date(playerData.timestamp) : null;
+        joinedAt.textContent = timestamp && Number.isFinite(timestamp.getTime())
+            ? timestamp.toLocaleString()
+            : "Unknown time";
+        playerDetails.append(playerName, joinedAt);
+        const spawnButton = document.createElement("button");
+        spawnButton.type = "button";
+        spawnButton.textContent = "Spawn";
+        spawnButton.addEventListener("click", () => {
+            const spawnKey = `${name}@${world.name}`;
+            const spawn = spawnChunks.get(spawnKey)?.spawn || calculateSpawnPoint(spawnKey);
+            const galaxyKeyChanged = MASTER_WORLD_KEY !== galaxyMap.masterKey;
+            MASTER_WORLD_KEY = galaxyMap.masterKey;
+            closeGalaxyAtlas();
+            if (worldName !== world.name || galaxyKeyChanged) {
+                switchWorld(world.name, spawn);
+            } else {
+                respawnPlayer(spawn.x, spawn.y, spawn.z);
+            }
+        });
+        row.append(playerDetails, spawnButton);
+        list.appendChild(row);
+    }
 }
 
 function disposeGalaxyMap() {
@@ -328,6 +389,7 @@ function buildGalaxyMap(masterKey = galaxyMasterKey) {
         document.getElementById("galaxyTravelBtn").disabled = false;
     } else {
         galaxyMap.selected = null;
+        renderGalaxyKnownPlayers(null);
         document.getElementById("galaxyWorldName").textContent = "No worlds found";
         document.getElementById("galaxyWorldSummary").textContent = `No known worlds are linked to “${masterKey}”.`;
         document.getElementById("galaxySunCount").textContent = "0";
@@ -424,20 +486,6 @@ function closeGalaxyAtlas() {
 }
 
 function initGalaxyAtlas() {
-    const knownGalaxyList = document.getElementById("knownGalaxyList");
-    const knownGalaxyCount = document.getElementById("knownGalaxyCount");
-    knownGalaxyCount.textContent = KNOWN_GALAXY_KEYS.length;
-    for (const masterKey of KNOWN_GALAXY_KEYS) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = masterKey;
-        button.addEventListener("click", () => {
-            const input = document.getElementById("galaxyAtlasTitle");
-            input.value = masterKey;
-            loadGalaxyFromInput();
-        });
-        knownGalaxyList.appendChild(button);
-    }
     document.getElementById("galaxyAtlasTitle")?.addEventListener("keydown", event => {
         event.stopPropagation();
         if (event.key === "Enter") {
