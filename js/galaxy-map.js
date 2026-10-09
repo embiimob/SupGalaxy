@@ -455,8 +455,12 @@ function initGalaxyAtlas() {
     document.getElementById("galaxyTravelBtn")?.addEventListener("click", () => {
         if (!galaxyMap?.selected) return;
         const targetWorld = galaxyMap.selected.name;
+        const targetMasterKey = galaxyMap.masterKey;
         closeGalaxyAtlas();
-        if (targetWorld !== worldName) switchWorld(targetWorld);
+        if (targetWorld !== worldName || targetMasterKey !== MASTER_WORLD_KEY) {
+            MASTER_WORLD_KEY = targetMasterKey;
+            switchWorld(targetWorld);
+        }
     });
     document.getElementById("galaxyAtlas")?.addEventListener("click", event => {
         if (event.target.id === "galaxyAtlas") closeGalaxyAtlas();
