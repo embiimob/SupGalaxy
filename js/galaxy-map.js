@@ -56,7 +56,7 @@ function createGalaxyLabel(name, color) {
     const context = canvas.getContext("2d");
     canvas.width = 256;
     canvas.height = 72;
-    context.font = "700 42px Arial";
+    context.font = "700 52px Arial";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.shadowColor = color.getStyle();
@@ -65,7 +65,7 @@ function createGalaxyLabel(name, color) {
     context.fillText(name, canvas.width / 2, canvas.height / 2);
     const texture = new THREE.CanvasTexture(canvas);
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-    label.scale.set(74, 21, 1);
+    label.scale.set(100, 28, 1);
     label.position.y = 18;
     return label;
 }
@@ -74,7 +74,7 @@ function createGalaxyStarField() {
     const random = makeSeededRandom(MASTER_WORLD_KEY + "_atlas_stars");
     const positions = [];
     const colors = [];
-    const starCount = 18000;
+    const starCount = 12000;
     const { armCount, armLengths } = getGalaxyLayout();
     const gaussian = () => {
         const u = Math.max(1e-8, random());
@@ -127,9 +127,14 @@ function collectGalaxyWorlds() {
     return worlds;
 }
 
-function updateGalaxyWorldDetails(world) {
+function updateGalaxyWorldDetails(world, focus = true) {
     if (!galaxyMap || !world) return;
     galaxyMap.selected = world;
+    if (focus) {
+        const targetOffset = world.position.clone().sub(galaxyMap.controls.target);
+        galaxyMap.controls.target.copy(world.position);
+        galaxyMap.camera.position.add(targetOffset);
+    }
     const radius = Math.round(world.position.length() / GALAXY_MAP_RADIUS * 100);
     const color = world.sky.color;
     document.getElementById("galaxyPlanetPreview").style.setProperty("--planet-color", color.getStyle());
@@ -160,7 +165,7 @@ function buildGalaxyMap() {
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = .06;
-    controls.minDistance = 750;
+    controls.minDistance = 80;
     controls.maxDistance = 3300;
     controls.maxPolarAngle = Math.PI * .92;
     controls.target.set(0, 0, 0);
@@ -220,7 +225,7 @@ function buildGalaxyMap() {
 
     galaxyMap = { scene, camera, renderer, controls, worldNodes, selected: null, animation: null };
     const selected = worldNodes.find(node => node.userData.world.name === worldName) || worldNodes[0];
-    updateGalaxyWorldDetails(selected.userData.world);
+    updateGalaxyWorldDetails(selected.userData.world, false);
     resizeGalaxyMap();
 }
 
@@ -264,10 +269,10 @@ function closeGalaxyAtlas() {
 function initGalaxyAtlas() {
     document.getElementById("galaxyCloseBtn")?.addEventListener("click", closeGalaxyAtlas);
     document.getElementById("galaxyZoomInBtn")?.addEventListener("click", () => {
-        if (galaxyMap) galaxyMap.camera.position.multiplyScalar(.82);
+        if (galaxyMap) zoomGalaxyCamera(.78);
     });
     document.getElementById("galaxyZoomOutBtn")?.addEventListener("click", () => {
-        if (galaxyMap) galaxyMap.camera.position.multiplyScalar(1.22);
+        if (galaxyMap) zoomGalaxyCamera(1.28);
     });
     document.getElementById("galaxyTravelBtn")?.addEventListener("click", () => {
         if (!galaxyMap?.selected) return;
@@ -279,6 +284,15 @@ function initGalaxyAtlas() {
         if (event.target.id === "galaxyAtlas") closeGalaxyAtlas();
     });
     window.addEventListener("resize", resizeGalaxyMap);
+}
+
+function zoomGalaxyCamera(factor) {
+    const offset = galaxyMap.camera.position.clone().sub(galaxyMap.controls.target);
+    const distance = Math.max(galaxyMap.controls.minDistance,
+        Math.min(galaxyMap.controls.maxDistance, offset.length() * factor));
+    offset.setLength(distance);
+    galaxyMap.camera.position.copy(galaxyMap.controls.target).add(offset);
+    galaxyMap.controls.update();
 }
 
 initGalaxyAtlas();

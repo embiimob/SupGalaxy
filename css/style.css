@@ -1400,7 +1400,7 @@ body.is-mobile-mode #messages {
         border: 1px solid rgba(66, 205, 123, .4);
         border-radius: 8px;
         font: inherit;
-        font-size: 13px;
+        font-size: 15px;
         font-weight: 700;
         cursor: pointer;
     }
@@ -1464,7 +1464,7 @@ body.is-mobile-mode #messages {
         margin: 0 0 10px;
         overflow: hidden;
         color: #d8f6e5;
-        font-size: 20px;
+        font-size: 24px;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
@@ -1472,13 +1472,11 @@ body.is-mobile-mode #messages {
     .galaxy-world-summary {
         width: 100%;
         margin: 0 0 14px;
-        overflow: hidden;
         color: #a9c9d5;
-        font-size: 13px;
-        line-height: 1.4;
+        font-size: 15px;
+        line-height: 1.5;
         text-align: center;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
     }
 
     .galaxy-world-stats {
@@ -1502,11 +1500,11 @@ body.is-mobile-mode #messages {
 
     .galaxy-world-stats strong {
         color: #fff;
-        font-size: 19px;
+        font-size: 22px;
     }
 
     .galaxy-world-stats span {
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 700;
     }
 
@@ -1519,8 +1517,8 @@ body.is-mobile-mode #messages {
         min-height: 16px;
         color: #a9c9d5;
         border-top: 1px solid rgba(66, 205, 123, .2);
-        font-size: 12px;
-        line-height: 1.4;
+        font-size: 13px;
+        line-height: 1.5;
     }
 
     .galaxy-atlas-footer span:last-child {
@@ -1557,7 +1555,7 @@ body.is-mobile-mode #messages {
         .galaxy-atlas-controls button {
             min-height: 32px;
             padding: 6px 8px;
-            font-size: 11px;
+            font-size: 12px;
         }
 
         .galaxy-atlas-main {
@@ -1574,11 +1572,11 @@ body.is-mobile-mode #messages {
         }
 
         .galaxy-world-panel h2 {
-            font-size: 16px;
+            font-size: 18px;
         }
 
         .galaxy-world-summary {
-            font-size: 10px;
+            font-size: 12px;
         }
 
         .galaxy-world-stats {
@@ -1587,6 +1585,14 @@ body.is-mobile-mode #messages {
 
         .galaxy-world-stats div {
             min-height: 50px;
+        }
+
+        .galaxy-world-stats strong {
+            font-size: 18px;
+        }
+
+        .galaxy-world-stats span {
+            font-size: 12px;
         }
 
         .galaxy-atlas-footer {
