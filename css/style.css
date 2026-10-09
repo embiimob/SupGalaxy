@@ -1718,6 +1718,32 @@ body.is-mobile-mode #messages {
 .f-status.good { background-color: #28a745; color: white; }
 .hidden { display: none !important; }
 .divider { border: 0; height: 1px; background: #444; margin: 16px 0; }
+.wallet-settings { margin-bottom: 12px; }
+.wallet-settings-summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.wallet-settings-summary::-webkit-details-marker { display: none; }
+.wallet-settings-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wallet-settings-summary .f-status { flex: 1; margin: 0; }
+.wallet-settings-gear {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 8px;
+  font-size: 20px;
+}
+.wallet-settings[open] .wallet-settings-gear { background: rgba(255,255,255,.08); }
+.wallet-settings-content { padding-top: 8px; }
 .wallet-address-card { background: #1a1a1a; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #333; }
 .wallet-addr-title { font-size: 0.8rem; color: #aaa; margin-bottom: 4px; }
 .wallet-addr-val { font-family: monospace; word-break: break-all; color: #fff; }

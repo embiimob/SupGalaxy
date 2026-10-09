@@ -619,25 +619,32 @@ function renderWalletUI(container, balance=null){
   const locked=!S.priv;
   let html='';
   if(!locked){
-    html+=`<div class="wallet-address-card">
-      <div class="wallet-addr-title">Wallet addresses (main + change)</div>
-      <div class="wallet-addr-val mono">${esc(S.addr)}</div>
-      <div class="wallet-balances" id="walletBalances">
-        <span style="color:var(--muted);font-size:.82rem;">Loading balances…</span>
+    html+=`<details class="wallet-settings">
+      <summary class="wallet-settings-summary">
+        <span class="f-status info" id="walletStatusMsg">Wallet unlocked ✓</span>
+        <span class="wallet-settings-gear" aria-hidden="true">⚙</span>
+      </summary>
+      <div class="wallet-settings-content">
+        <div class="wallet-address-card">
+          <div class="wallet-addr-title">Wallet addresses (main + change)</div>
+          <div class="wallet-addr-val mono">${esc(S.addr)}</div>
+          <div class="wallet-balances" id="walletBalances">
+            <span style="color:var(--muted);font-size:.82rem;">Loading balances…</span>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-bottom:16px;">
+          <button class="btn btn-out btn-sm" onclick="exportWif()">Export WIF</button>
+          <button class="btn btn-pri btn-sm" onclick="consolidateChange()">Consolidate</button>
+          <button class="btn btn-pri btn-sm" onclick="consolidateForMessaging()">Consolidate for messaging</button>
+          <button class="btn btn-out btn-sm" onclick="lockWallet()">Lock</button>
+          <button class="btn btn-dng btn-sm" onclick="forgetWallet()">Forget key</button>
+        </div>
+        <div class="f-field hidden" id="wifExportFallback" style="margin-bottom:12px;">
+          <label class="f-label">Clipboard blocked — copy your WIF manually</label>
+          <textarea class="f-input mono" id="wifExportBox" rows="3" readonly autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
+        </div>
       </div>
-    </div>
-    <div class="f-status info" id="walletStatusMsg" style="margin-bottom:12px;">Wallet unlocked ✓ (main + ${S.keyring?.changes?.length || 0} change addresses)</div>
-    <div class="btn-row" style="margin-bottom:16px;">
-      <button class="btn btn-out btn-sm" onclick="exportWif()">Export WIF</button>
-      <button class="btn btn-pri btn-sm" onclick="consolidateChange()">Consolidate</button>
-      <button class="btn btn-pri btn-sm" onclick="consolidateForMessaging()">Consolidate for messaging</button>
-      <button class="btn btn-out btn-sm" onclick="lockWallet()">Lock</button>
-      <button class="btn btn-dng btn-sm" onclick="forgetWallet()">Forget key</button>
-    </div>
-    <div class="f-field hidden" id="wifExportFallback" style="margin-bottom:12px;">
-      <label class="f-label">Clipboard blocked — copy your WIF manually</label>
-      <textarea class="f-input mono" id="wifExportBox" rows="3" readonly autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
-    </div>`;
+    </details>`;
   } else {
     const stored=localStorage.getItem(WALLET_KEY);
     if(stored){
