@@ -1,25 +1,12 @@
 # 🌌 SupGalaxy v2.0.0
 
-**SupGalaxy** is an open-source, serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
+**SupGalaxy** is an open-source, *serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
 Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **ChatGPT** and **github CoPilot**.
 
 > **License: CC0 (Public Domain)**  
 > Use, modify, remix, or commercialize freely.  
 > **Demo: https://supgalaxy.org**
-
----
-
-## 🆕 What's New in v2.0.0
-
-- **⛏ Iron & Blue Iron Picks** — real mining tools with per-block hit counts, melee damage multipliers, breakage odds and a glowing Blue Iron head (see [Mining and Picks](#-mining-and-picks)).
-- **🏰 Castle building set** — doors that open and close, oak & castle-stone stairs, portcullis gates, castle bricks, battlements, limestone, roof tiles, support beams and rose stained glass (see [Building Blocks](#-building-blocks-stairs-doors--castles)).
-- **👹 Level 2 mobs (score ≥ 500)** — every world type gets a new mob modelled on a different voxel game: Bone Archers (night), Timber Wolves, Dust Vultures, Crater Hoppers, Ember Drifters and Moss Brutes. Dust Vultures are the first **flying** mobs (see [Mob Evolution](#-mob-evolution--elite-mobs)).
-- **❓ …and more beyond** — keep raising your score. Rumour has it that stranger, deadlier things wait at higher tiers.
-- **👀 Longer player view** — other players' avatars are now drawn up to 64 blocks away (was 32).
-- **🦴 Bones** — scattered under Dust Vulture roosts. Pick them up and keep them as a crafting item.
-
----
 
 ## ✨ Core Features
 
@@ -260,7 +247,7 @@ Spawn, explore, build, fight, survive.
 
 There are three ways to connect with other players via WebRTC: **Dedicated Server**, **Automated On-Chain Signaling (Testnet3)**, and **Manual Drag-and-Drop**.
 
-## Dedicated Server Mode
+## *Dedicated Server Mode
 Instead of connecting directly to peers, you can connect through a central dedicated server. This allows for instant, always-on connections without exchanging files or using a wallet.
 - **Default Server**: `https://play.supgalaxy.org:55555`
 - **Host Your Own**: You can run your own instance. Check out the project site at [https://github.com/embiimob/SupGalaxy-Server](https://github.com/embiimob/SupGalaxy-Server).
