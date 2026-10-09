@@ -994,6 +994,8 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.isAggressive = !0;
     } else if ("spider" === this.type) {
         this.isAggressive = !0;
+    } else if ("cow" === this.type) {
+        this.isAggressive = !1;
     } else {
         const t = makeSeededRandom(worldSeed + "_crawley_aggro")();
         this.isAggressive = t > .5
@@ -1050,6 +1052,47 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             s.position.set(.45 * i, 0, .3 * (Math.floor(e / 2) - 1)), this.mesh.add(s), this.mesh.legs.push(s)
         }
         this.originalColor = new THREE.Color(4868682)
+    } else if ("cow" === this.type) {
+        this.hp = 20;
+        this.speed = 0.015 + 0.01 * Math.random();
+        this.isAggressive = false;
+        this.aiState = "IDLE";
+        this.animationTime = Math.random() * Math.PI * 2;
+
+        this.mesh = new THREE.Group();
+
+        const bodyTex = createMobTexture(this.originSeed, "cow_body");
+        const headTex = createMobTexture(this.originSeed, "cow_head");
+
+        const bodyMat = new THREE.MeshLambertMaterial({ map: bodyTex });
+        const headMat = new THREE.MeshLambertMaterial({ map: headTex });
+
+        const bodyGeo = new THREE.BoxGeometry(1.2, 0.8, 1.8);
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        this.mesh.add(body);
+
+        const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.8);
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.set(0, 1.1, 1.1);
+        this.mesh.add(head);
+
+        const legGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+        this.mesh.legs = [];
+
+        const positions = [
+            [-0.4, 0.4, 0.7], [0.4, 0.4, 0.7],
+            [-0.4, 0.4, -0.7], [0.4, 0.4, -0.7]
+        ];
+
+        for (let i = 0; i < 4; i++) {
+            const leg = new THREE.Mesh(legGeo, bodyMat);
+            leg.position.set(positions[i][0], positions[i][1], positions[i][2]);
+            this.mesh.add(leg);
+            this.mesh.legs.push(leg);
+        }
+
+        this.originalColor = null;
     } else if ("spider" === this.type) {
         this.mesh = new THREE.Group;
         const t = new THREE.MeshLambertMaterial({
@@ -1503,6 +1546,9 @@ function manageMobs() {
                     spawnZ = eliteSpawn.z;
                     spawnY = eliteSpawn.y;
                     if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
+                } else if (type === "cow") {
+                    const surfaceY = chunkManager.getSurfaceY(spawnX, spawnZ);
+                    if (getBlockAt(spawnX, surfaceY, spawnZ) !== 2) continue; // Grass block
                 }
                 const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
                 if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
@@ -2715,63 +2761,65 @@ Mob.prototype.update = function (t) {
             }
         }
         let h = !1;
-        if (i && o > .01) {
-            const e = i.x - this.pos.x,
-                s = i.z - this.pos.z,
-                a = e / o * this.speed,
-                n = s / o * this.speed,
-                r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
-                l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
-            if ("grub" === this.type || "crawley" === this.type) {
-                if (checkCollisionWithBlock(r, this.pos.y, l)) {
-                    if (!checkCollisionWithBlock(r, this.pos.y + 1, l)) {
-                        this.pos.y += 1;
-                    } else if (!checkCollisionWithBlock(r, this.pos.y + 2, l)) {
-                        this.pos.y += 2;
-                    } else if ("crawley" === this.type && !checkCollisionWithBlock(r, this.pos.y + 3, l)) {
-                        this.pos.y += 3;
+        if (!(this.type === "cow" && isNight)) {
+            if (i && o > .01) {
+                const e = i.x - this.pos.x,
+                    s = i.z - this.pos.z,
+                    a = e / o * this.speed,
+                    n = s / o * this.speed,
+                    r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
+                    l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
+                if ("grub" === this.type || "crawley" === this.type) {
+                    if (checkCollisionWithBlock(r, this.pos.y, l)) {
+                        if (!checkCollisionWithBlock(r, this.pos.y + 1, l)) {
+                            this.pos.y += 1;
+                        } else if (!checkCollisionWithBlock(r, this.pos.y + 2, l)) {
+                            this.pos.y += 2;
+                        } else if ("crawley" === this.type && !checkCollisionWithBlock(r, this.pos.y + 3, l)) {
+                            this.pos.y += 3;
+                        }
                     }
                 }
-            }
-            checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
-        } else {
-            let s, i;
-            if ("crawley" === this.type) {
-                if (!this.nextWanderChange || Date.now() > this.nextWanderChange) {
-                    this.nextWanderChange = Date.now() + 2000 + Math.random() * 3000;
-                    if (Math.random() < 0.3) {
-                        this.wanderDir = new THREE.Vector3(0, 0, 0); // pause
-                    } else {
-                        const angle = Math.random() * Math.PI * 2;
-                        this.wanderDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
-                    }
-                }
-                const e = 0.5 * this.speed;
-                s = this.pos.x + (this.wanderDir ? this.wanderDir.x : 0) * e * t * 60;
-                i = this.pos.z + (this.wanderDir ? this.wanderDir.z : 0) * e * t * 60;
+                checkCollisionWithBlock(r, this.pos.y, l) || (this.pos.x = r, this.pos.z = l, h = !0)
             } else {
-                const e = .5 * this.speed;
-                s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
-                i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
-            }
-            if ("grub" === this.type || "crawley" === this.type) {
-                if (checkCollisionWithBlock(s, this.pos.y, i)) {
-                    if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
-                        this.pos.y += 1;
-                    } else if (!checkCollisionWithBlock(s, this.pos.y + 2, i)) {
-                        this.pos.y += 2;
-                    } else if ("crawley" === this.type && !checkCollisionWithBlock(s, this.pos.y + 3, i)) {
-                        this.pos.y += 3;
+                let s, i;
+                if ("crawley" === this.type || "cow" === this.type) {
+                    if (!this.nextWanderChange || Date.now() > this.nextWanderChange) {
+                        this.nextWanderChange = Date.now() + 2000 + Math.random() * 3000;
+                        if (Math.random() < 0.3) {
+                            this.wanderDir = new THREE.Vector3(0, 0, 0); // pause
+                        } else {
+                            const angle = Math.random() * Math.PI * 2;
+                            this.wanderDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+                        }
+                    }
+                    const e = 0.5 * this.speed;
+                    s = modWrap(this.pos.x + (this.wanderDir ? this.wanderDir.x : 0) * e * t * 60, MAP_SIZE);
+                    i = modWrap(this.pos.z + (this.wanderDir ? this.wanderDir.z : 0) * e * t * 60, MAP_SIZE);
+                } else {
+                    const e = .5 * this.speed;
+                    s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
+                    i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
+                }
+                if ("grub" === this.type || "crawley" === this.type) {
+                    if (checkCollisionWithBlock(s, this.pos.y, i)) {
+                        if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
+                            this.pos.y += 1;
+                        } else if (!checkCollisionWithBlock(s, this.pos.y + 2, i)) {
+                            this.pos.y += 2;
+                        } else if ("crawley" === this.type && !checkCollisionWithBlock(s, this.pos.y + 3, i)) {
+                            this.pos.y += 3;
+                        }
                     }
                 }
-            }
-            if (!checkCollisionWithBlock(s, this.pos.y, i)) {
-                this.pos.x = s;
-                this.pos.z = i;
-                if ("crawley" === this.type && this.wanderDir && this.wanderDir.lengthSq() > 0) {
-                    h = !0;
-                } else if ("crawley" !== this.type) {
-                    h = !0;
+                if (!checkCollisionWithBlock(s, this.pos.y, i)) {
+                    this.pos.x = s;
+                    this.pos.z = i;
+                    if (("crawley" === this.type || "cow" === this.type) && this.wanderDir && this.wanderDir.lengthSq() > 0) {
+                        h = !0;
+                    } else if ("crawley" !== this.type && "cow" !== this.type) {
+                        h = !0;
+                    }
                 }
             }
         }
@@ -2779,8 +2827,8 @@ Mob.prototype.update = function (t) {
             const t = (new THREE.Vector3).subVectors(new THREE.Vector3(i.x, this.pos.y, i.z), this.pos).normalize(),
                 e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05)
-        } else if (this.isMoving && "crawley" === this.type && this.wanderDir && this.wanderDir.lengthSq() > 0 && !i) {
-            // Point the crawley in the direction of its wanderDir
+        } else if (this.isMoving && ("crawley" === this.type || "cow" === this.type) && this.wanderDir && this.wanderDir.lengthSq() > 0 && !i) {
+            // Point the crawley or cow in the direction of its wanderDir
             const t = this.wanderDir.clone().normalize();
             const e = Math.atan2(t.x, t.z);
             this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);

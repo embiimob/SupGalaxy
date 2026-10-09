@@ -130,14 +130,32 @@ function createMobTexture(e, t, o = !1) {
     const s = r.getContext("2d"),
         i = makeSeededRandom(e + "_mob_texture_" + t);
     let l, d;
-    t.includes("body") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
-    const c = makeNoise(e + "_mob_pattern_" + t);
-    for (let e = 0; e < 50; e++) {
-        const e = Math.floor(i() * n),
-            t = Math.floor(i() * n),
-            o = c(e / n, t / n) > .5 ? d : l.clone().lerp(d, .5);
-        s.fillStyle = o.getStyle(), s.fillRect(e, t, 1, 1)
+
+    if (t.includes("cow")) {
+        l = new THREE.Color(0xffffff); // White base
+        d = new THREE.Color(0x1a1a1a); // Black spots
+        s.fillStyle = l.getStyle();
+        s.fillRect(0, 0, n, n);
+        const c = makeNoise(e + "_cow_pattern_" + t);
+        for (let x = 0; x < n; x++) {
+            for (let y = 0; y < n; y++) {
+                if (c(x / (n / 2), y / (n / 2)) > 0.6) {
+                    s.fillStyle = d.getStyle();
+                    s.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+    } else {
+        t.includes("body") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
+        const c = makeNoise(e + "_mob_pattern_" + t);
+        for (let e = 0; e < 50; e++) {
+            const e = Math.floor(i() * n),
+                t = Math.floor(i() * n),
+                o = c(e / n, t / n) > .5 ? d : l.clone().lerp(d, .5);
+            s.fillStyle = o.getStyle(), s.fillRect(e, t, 1, 1)
+        }
     }
+
     if (o) {
         const e = (new THREE.Color).setHSL(i(), .5 + .3 * i(), .2 + .2 * i());
         s.fillStyle = e.getStyle(), s.fillRect(0, 0, n, 1), s.fillRect(0, 15, n, 1), s.fillRect(0, 0, 1, n), s.fillRect(15, 0, 1, n)
