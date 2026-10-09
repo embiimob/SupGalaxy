@@ -374,7 +374,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 }], g = BLOCKS[w] && BLOCKS[w].transparent, E = 0, v = 0; v < f.length; v++) {
                     var M = f[v],
                         S = this.getBlockGlobal(e.cx, e.cz, d + M.x, u + M.y, c + M.z);
-                    if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S) {
+                    if (g !== (S === BLOCK_AIR || BLOCKS[S] && BLOCKS[S].transparent) || g && w !== S || (w === 8 && S === 8)) {
                         if (w === 6 && S === 136) continue;
                         if (w === 6 && (S === 6 || (S !== BLOCK_AIR && BLOCKS[S] && !BLOCKS[S].transparent))) continue;
                         E |= (1 << v);
