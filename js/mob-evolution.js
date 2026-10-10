@@ -490,7 +490,7 @@ function getBiomeKeyAt(x, z) {
     const mods = worldArchetype.biomeModifications || {};
     if (mods.onlyDesert) return "desert";
     if (worldArchetype.terrainGenerator && worldArchetype.terrainGenerator !== "generateStandardTerrain") return null;
-    const seed = makeChunkKey(worldName, 0, 0).split(":")[0];
+    const seed = typeof worldSeed !== "undefined" ? worldSeed : worldName;
     if (biomeNoiseCache.seed !== seed) biomeNoiseCache = { seed, noise: makeNoise(seed) };
     const nx = (modWrap(Math.floor(x), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;
     const nz = (modWrap(Math.floor(z), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;

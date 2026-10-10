@@ -380,7 +380,7 @@ async function applySaveFile(e, t, o) {
         }
 
         addMessage("Session file verified. Loading player...", 2e3), worldName = t.world, userName = t.user;
-        const c = makeSeededRandom((worldSeed = t.seed) + "_colors");
+        const c = makeSeededRandom((worldSeed = MASTER_WORLD_KEY + worldName) + "_colors");
         for (const e in BLOCKS)
             if (Object.hasOwnProperty.call(BLOCKS, e)) {
                 const t = BLOCKS[e],
