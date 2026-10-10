@@ -1,0 +1,10 @@
+--- js/main.js
++++ js/main.js
+@@ -1136,5 +1136,5 @@
+     if (bow && gun.userData.bowString) {
+         let draw = w;
+         if (recoil > 0) draw = 1 - recoil;
+         gun.userData.bowString.position.y = 0;
+-        gun.userData.bowString.position.x = 0.4 * draw;
++        gun.userData.bowString.position.x = -0.4 * draw;
+     }

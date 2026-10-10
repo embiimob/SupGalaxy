@@ -1,0 +1,9 @@
+--- js/main.js
++++ js/main.js
+@@ -1134,2 +1134,8 @@
+     gun.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
++    // The base model was rotated to be upright. When we align it with the aimDir using (0,0,-1) -> aimDir,
++    // it aligns its local -Z axis. If the local -Z is no longer "forward" for the model because of `group.rotation.set`,
++    // we might need to adjust. However, `group.rotation.set` affects the group's local axes.
++    // A simple fix for the animation flipping left/right instead of up/down is to change how we mix between rest and aim.
+     gun.quaternion.slerpQuaternions(restQuat, gun.quaternion.clone(), w);

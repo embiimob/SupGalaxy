@@ -1,0 +1,9 @@
+--- js/main.js
++++ js/main.js
+@@ -1128,7 +1128,7 @@
+     let restEulerX = 1.05;
+     let restEulerZ = .15;
+-    if (bow) { restEulerX = 0; restEulerZ = -0.4; } // Don't tip bow up, and hold it more centered/vertical
++    if (bow) { restEulerX = 0; restEulerZ = 0; } // Hold the bow vertically, naturally resting in front.
+     const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(restEulerX, .25, restEulerZ));
+     const distance = gun.userData.aimDistance || 20;
