@@ -130,14 +130,63 @@ function createMobTexture(e, t, o = !1) {
     const s = r.getContext("2d"),
         i = makeSeededRandom(e + "_mob_texture_" + t);
     let l, d;
-    t.includes("body") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
-    const c = makeNoise(e + "_mob_pattern_" + t);
-    for (let e = 0; e < 50; e++) {
-        const e = Math.floor(i() * n),
-            t = Math.floor(i() * n),
-            o = c(e / n, t / n) > .5 ? d : l.clone().lerp(d, .5);
-        s.fillStyle = o.getStyle(), s.fillRect(e, t, 1, 1)
+
+    if (t.includes("cow")) {
+        l = new THREE.Color(0xffffff); // White base
+        d = new THREE.Color(0x1a1a1a); // Black spots
+        s.fillStyle = l.getStyle();
+        s.fillRect(0, 0, n, n);
+        const c = makeNoise(e + "_cow_pattern_" + t.replace('_blink', '').replace('_sleep', ''));
+        for (let x = 0; x < n; x++) {
+            for (let y = 0; y < n; y++) {
+                if (c(x / (n / 2), y / (n / 2)) > 0.6) {
+                    s.fillStyle = d.getStyle();
+                    s.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+
+        // Add eyes if it's a head texture
+        if (t.includes("cow_head")) {
+            // Draw muzzle
+            s.fillStyle = "#ffb6c1"; // Pinkish muzzle
+            s.fillRect(4, 10, 8, 4);
+
+            // Draw eyes based on state
+            if (t.includes("sleep")) {
+                // Closed eyes (horizontal lines)
+                s.fillStyle = "#000000";
+                s.fillRect(2, 6, 3, 1);
+                s.fillRect(11, 6, 3, 1);
+            } else if (t.includes("blink")) {
+                // Half-closed eyes
+                s.fillStyle = "#000000";
+                s.fillRect(2, 5, 3, 2);
+                s.fillRect(11, 5, 3, 2);
+                s.fillStyle = "#ffffff";
+                s.fillRect(3, 5, 1, 1);
+                s.fillRect(12, 5, 1, 1);
+            } else {
+                // Open eyes
+                s.fillStyle = "#000000";
+                s.fillRect(2, 4, 3, 3);
+                s.fillRect(11, 4, 3, 3);
+                s.fillStyle = "#ffffff";
+                s.fillRect(3, 4, 1, 1);
+                s.fillRect(12, 4, 1, 1);
+            }
+        }
+    } else {
+        t.includes("body") ? (l = (new THREE.Color).setHSL(i(), .2 + .8 * i(), .2 + .6 * i()), d = l.clone().multiplyScalar(.7 + .2 * i())) : (l = (new THREE.Color).setHSL(.1 * i() + .05, .2 + .2 * i(), .2 + .1 * i()), d = l.clone().multiplyScalar(1.2 + .2 * i())), s.fillStyle = l.getStyle(), s.fillRect(0, 0, n, n);
+        const c = makeNoise(e + "_mob_pattern_" + t);
+        for (let e = 0; e < 50; e++) {
+            const e = Math.floor(i() * n),
+                t = Math.floor(i() * n),
+                o = c(e / n, t / n) > .5 ? d : l.clone().lerp(d, .5);
+            s.fillStyle = o.getStyle(), s.fillRect(e, t, 1, 1)
+        }
     }
+
     if (o) {
         const e = (new THREE.Color).setHSL(i(), .5 + .3 * i(), .2 + .2 * i());
         s.fillStyle = e.getStyle(), s.fillRect(0, 0, n, 1), s.fillRect(0, 15, n, 1), s.fillRect(0, 0, 1, n), s.fillRect(15, 0, 1, n)
@@ -1036,6 +1085,30 @@ function getAudioPositionForPlayer(username) {
     };
 }
 
+function manageGrassSeeds() {
+    if (isAuthority() || peers.size === 0) {
+        const now = Date.now();
+        const state = typeof getCurrentWorldState !== "undefined" ? getCurrentWorldState() : null;
+        if (!state || !state.grassSeeds) return;
+
+        for (const [key, seedData] of state.grassSeeds.entries()) {
+            if (now - seedData.plantedTime >= 300000) { // 5 minutes
+                const cx = seedData.x;
+                const cy = seedData.y;
+                const cz = seedData.z;
+                if (typeof getBlockAt === 'function' && getBlockAt(cx, cy, cz) === 3) {
+                    if (typeof chunkManager !== 'undefined' && chunkManager.setBlockGlobal) {
+                         chunkManager.setBlockGlobal(cx, cy, cz, 2, true, null, 'local');
+                    } else if (typeof setBlockAt === 'function') {
+                         setBlockAt(cx, cy, cz, 2);
+                    }
+                }
+                state.grassSeeds.delete(key);
+            }
+        }
+    }
+}
+
 function manageTreeSeeds() {
     if (isAuthority() || 0 === peers.size) {
         const now = Date.now();
@@ -1134,6 +1207,31 @@ function manageVolcanoes() {
                     handleVolcanoEvent(r);
                     for (const [e, t] of peers.entries()) t.dc && "open" === t.dc.readyState && t.dc.send(JSON.stringify(r))
                 }
+            }
+        }
+    }
+}
+
+
+function managePrairieRegen() {
+    if (isAuthority() || peers.size === 0) {
+        const now = Date.now();
+        const state = typeof getCurrentWorldState !== "undefined" ? getCurrentWorldState() : null;
+        if (!state || !state.prairieDirt) return;
+
+        for (const [key, dirtData] of state.prairieDirt.entries()) {
+            if (now - dirtData.eatTime >= 7200000) { // 2 hours
+                const cx = dirtData.x;
+                const cy = dirtData.y;
+                const cz = dirtData.z;
+                if (typeof getBlockAt === 'function' && getBlockAt(cx, cy, cz) === 3) {
+                    if (typeof chunkManager !== 'undefined' && chunkManager.setBlockGlobal) {
+                         chunkManager.setBlockGlobal(cx, cy, cz, 2, true, null, 'local');
+                    } else if (typeof setBlockAt === 'function') {
+                         setBlockAt(cx, cy, cz, 2);
+                    }
+                }
+                state.prairieDirt.delete(key);
             }
         }
     }
