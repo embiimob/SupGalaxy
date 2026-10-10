@@ -975,7 +975,7 @@ function createLaserGunMesh(toolId) {
         group.add(limb);
         const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
         group.add(bowString);
-        group.rotation.set(0, -Math.PI/2, Math.PI/2);
+        group.rotation.set(Math.PI/2, 0, Math.PI/2);
         group.position.set(0, 0, 0);
         group.userData.isBow = true;
         group.userData.bowString = bowString;
@@ -1136,7 +1136,8 @@ function poseFirstPersonLaserGun(w, recoil) {
     if (bow && gun.userData.bowString) {
         let draw = w;
         if (recoil > 0) draw = 1 - recoil;
-        gun.userData.bowString.position.y = -0.4 * draw;
+        gun.userData.bowString.position.y = 0;
+        gun.userData.bowString.position.x = -0.4 * draw;
     }
 }
 
