@@ -257,6 +257,7 @@ const BLOCKS = {
 
 const BIOMES = [
         { key: 'plains', palette: [2, 3, 4, 13, 15], heightScale: 0.8, roughness: 0.3, featureDensity: 0.05 },
+        { key: 'prairie', palette: [2, 3, 4], heightScale: 0.7, roughness: 0.2, featureDensity: 0.01 },
         { key: 'desert', palette: [5, 118, 4], heightScale: 0.6, roughness: 0.4, featureDensity: 0.02 },
         { key: 'forest', palette: [2, 3, 14, 4], heightScale: 1.3, roughness: 0.4, featureDensity: 0.03 },
         { key: 'snow', palette: [10, 17, 4], heightScale: 1.2, roughness: 0.5, featureDensity: 0.02 },
@@ -710,13 +711,44 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
     var baseZ = cz * CHUNK_SIZE;
     const hiveNoise = makeNoise(worldSeed + '_earth_hive');
 
-    function pickEarthBiome(elevation, temperature, moisture) {
-        if (elevation > 0.65) return modifiedBiomes.find(b => b.key === 'mountain') || modifiedBiomes[4];
-        if (temperature < 0.3) return modifiedBiomes.find(b => b.key === 'snow') || modifiedBiomes[3];
-        if (moisture < 0.35 && temperature > 0.6) return modifiedBiomes.find(b => b.key === 'desert') || modifiedBiomes[1];
-        if (moisture > 0.6 && temperature > 0.4) return modifiedBiomes.find(b => b.key === 'swamp') || modifiedBiomes[5];
-        if (moisture > 0.5) return modifiedBiomes.find(b => b.key === 'forest') || modifiedBiomes[2];
-        return modifiedBiomes.find(b => b.key === 'plains') || modifiedBiomes[0];
+    function getBiomeWeights(elevation, temperature, moisture) {
+        let weights = {};
+
+        let mntWeight = Math.max(0, (elevation - 0.55) * 10);
+        let snowWeight = Math.max(0, (0.35 - temperature) * 10);
+        let desertWeight = Math.max(0, (temperature - 0.55) * 10) * Math.max(0, (0.4 - moisture) * 10);
+        let swampWeight = Math.max(0, (moisture - 0.55) * 10) * Math.max(0, (temperature - 0.35) * 10);
+        let forestWeight = Math.max(0, (moisture - 0.45) * 10);
+        let prairieWeight = Math.max(0, (0.6 - elevation) * 10) * Math.max(0, (0.6 - moisture) * 10) * Math.max(0, (temperature - 0.4) * 10);
+
+        // Base plains weight
+        let plainsWeight = 1.0;
+
+        weights['mountain'] = mntWeight;
+        weights['snow'] = snowWeight;
+        weights['desert'] = desertWeight;
+        weights['swamp'] = swampWeight;
+        weights['forest'] = forestWeight;
+        weights['prairie'] = prairieWeight;
+        weights['plains'] = plainsWeight;
+
+        let total = 0;
+        for (let k in weights) total += weights[k];
+        for (let k in weights) weights[k] /= total;
+
+        return weights;
+    }
+
+    function getPrimaryBiome(weights) {
+        let maxWeight = 0;
+        let bestBiomeKey = 'plains';
+        for (let k in weights) {
+            if (weights[k] > maxWeight) {
+                maxWeight = weights[k];
+                bestBiomeKey = k;
+            }
+        }
+        return modifiedBiomes.find(b => b.key === bestBiomeKey) || modifiedBiomes[0];
     }
 
     for (var lx = 0; lx < CHUNK_SIZE; lx++) {
@@ -731,32 +763,55 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
             var temperature = fbm(temperatureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
             var moisture = fbm(moistureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
 
-            var biome = pickEarthBiome(elevation, temperature, moisture);
-            var heightScale = biome.heightScale;
-            var roughness = biome.roughness;
+            var biomeWeights = getBiomeWeights(elevation, temperature, moisture);
+            var primaryBiome = getPrimaryBiome(biomeWeights);
 
-            // Deep oceans for very low elevation
+            var heightScale = 0;
+            var roughness = 0;
+
+            for (let bKey in biomeWeights) {
+                let w = biomeWeights[bKey];
+                if (w > 0) {
+                    let b = modifiedBiomes.find(mb => mb.key === bKey) || modifiedBiomes[0];
+                    heightScale += b.heightScale * w;
+                    roughness += b.roughness * w;
+                }
+            }
+
             var baseHeight = 40;
-            if (elevation < 0.3) {
-                baseHeight = 20; // Deep ocean bed
+            var depthMultiplier = 1.0;
+            if (elevation < 0.4) {
+                // Ocean bed logic, smooth transition to deep ocean
+                var oceanDepth = (0.4 - elevation) / 0.4; // 0 at shore, 1 at deepest
+                // Base height drops to 10 for very deep oceans, making it up to 2x deeper than rivers usually are
+                baseHeight = 40 - (oceanDepth * 30);
             }
 
             var height = Math.floor(elevation * baseHeight * heightScale + 8);
-            if (elevation > 0.65) height += Math.floor((elevation - 0.65) * 80 * heightScale); // Tall mountains
+
+            // Smooth mountain heights using a power curve
+            if (elevation > 0.55) {
+                var mntT = (elevation - 0.55) / 0.45;
+                height += Math.floor(Math.pow(mntT, 1.5) * 60 * heightScale);
+            }
 
             // Rivers and Canyons
             var rNoise = fbm(riverNoise, nx * 0.005, nz * 0.005, 4, 0.5);
             var riverValley = Math.abs(rNoise - 0.5) * 2.0; // 0 at center of river
-            if (riverValley < 0.1) {
-                // Carve a canyon/river
-                var depth = Math.floor((0.1 - riverValley) * 10 * 80);
+            if (riverValley < 0.15) {
+                // Carve a canyon/river, smoothing the banks
+                var depth = Math.pow((0.15 - riverValley) / 0.15, 2) * 15; // deeper rivers
                 height -= depth;
-                biome = modifiedBiomes.find(b => b.key === 'plains') || modifiedBiomes[0]; // Rivers have plain banks usually
+                if (riverValley < 0.05) {
+                   primaryBiome = modifiedBiomes.find(b => b.key === 'plains') || modifiedBiomes[0];
+                }
             }
 
             var localN = fbm(elevationNoise, nx * 0.05, nz * 0.05, 4, 0.5);
             height += Math.floor(localN * 15 * roughness);
-            height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+
+            // Cap max land height at 190
+            height = Math.max(1, Math.min(190, height));
 
             for (var y = 0; y <= height; y++) {
                 var id = BLOCK_AIR;
@@ -765,8 +820,8 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
                 else if (y < height) id = 3;
                 else {
                     var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
-                    var paletteIndex = Math.floor(blockN * biome.palette.length);
-                    id = biome.palette[paletteIndex % biome.palette.length];
+                    var paletteIndex = Math.floor(blockN * primaryBiome.palette.length);
+                    id = primaryBiome.palette[paletteIndex % primaryBiome.palette.length];
                 }
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }
@@ -776,12 +831,12 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
             }
 
             const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
-            if (archetype.flora.includes('hives') && biome.key === 'forest' && hiveValue > 0.98) {
+            if (archetype.flora.includes('hives') && primaryBiome.key === 'forest' && hiveValue > 0.98) {
                 placeHive(chunkData, lx, height + 1, lz, wx, wz);
             }
-            else if (archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
-            else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
-            else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (archetype.flora.includes('trees') && primaryBiome.key === 'forest' && chunkRnd() < primaryBiome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (archetype.flora.includes('flowers') && (primaryBiome.key === 'plains' || primaryBiome.key === 'prairie') && chunkRnd() < primaryBiome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
+            else if (archetype.flora.includes('cactus') && primaryBiome.key === 'desert' && chunkRnd() < primaryBiome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
         }
     }
     addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL);

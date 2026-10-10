@@ -356,6 +356,16 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 0.5,
             noShadow: true
         },
+        181: {
+            name: "Grass Seed",
+            color: "#3fb34f",
+            itemOnly: true
+        },
+        139: {
+            name: "Burger",
+            color: "#8B4513",
+            itemOnly: true
+        },
         137: {
             name: "Tuna",
             color: "#ff9bcb",
@@ -738,6 +748,12 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         heightScale: .8,
         roughness: .3,
         featureDensity: .05
+    }, {
+        key: "prairie",
+        palette: [2, 3, 4],
+        heightScale: .7,
+        roughness: .2,
+        featureDensity: .01
     }, {
         key: "desert",
         palette: [5, 118, 4],

@@ -30,6 +30,7 @@ function getCurrentWorldState() {
             chunkDeltas: new Map,
             foreignBlockOrigins: new Map,
             treeSeeds: new Map,
+            prairieDirt: new Map,
             spawnCommands: new Map,
             fishInventoryDirty: false,
             // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
@@ -356,6 +357,7 @@ async function applySaveFile(e, t, o) {
                 chunkDeltas: new Map(data.chunkDeltas),
                 foreignBlockOrigins: new Map(data.foreignBlockOrigins),
                 treeSeeds: treeSeedsMap,
+                prairieDirt: new Map(data.prairieDirt || []),
                 spawnCommands: new Map(data.spawnCommands || []),
                 ipfsTruncatedDates: new Map(data.ipfsTruncatedDates || [])
             });
@@ -2924,6 +2926,27 @@ function onPointerDown(e) {
     e.preventDefault();
     const t = INVENTORY[selectedHotIndex];
     if (2 === e.button && t && BLOCKS[t.id] && BLOCKS[t.id].hand_attachable) return void dropSelectedItem();
+    if (2 === e.button && t && t.id === 181) {
+        // use grass seed
+        const now = Date.now();
+        if (now - lastPointerDownTime < 500) return;
+        const o = new THREE.Raycaster(camera.position, camera.getWorldDirection(new THREE.Vector3));
+        const intersects = o.intersectObjects(scene.children.filter(m => m.isMesh && !m.userData.isAvatar && m.material && !m.material.transparent));
+        if (intersects.length > 0) {
+            const hit = intersects[0];
+            const point = hit.point.clone().sub(hit.face.normal.clone().multiplyScalar(0.1));
+            const bx = Math.floor(point.x), by = Math.floor(point.y), bz = Math.floor(point.z);
+            const blockId = getBlockAt(bx, by, bz);
+            if (blockId === 3) {
+                if (typeof chunkManager !== 'undefined' && chunkManager.setBlockGlobal) { chunkManager.setBlockGlobal(bx, by, bz, 2, true, null, 'local'); } else if (typeof setBlockAt === 'function') { setBlockAt(bx, by, bz, 2); }
+                INVENTORY[selectedHotIndex].count--;
+                if (INVENTORY[selectedHotIndex].count <= 0) INVENTORY[selectedHotIndex] = null;
+                updateHotbarUI();
+                addMessage("Planted Grass Seed!", 2000);
+            }
+        }
+        return;
+    }
     if (t && 121 === t.id) {
         const e = Date.now();
         if (e - (player.lastFireTime || 0) < 1e3) return;
@@ -3044,6 +3067,7 @@ function onPointerDown(e) {
         }
         return
     }
+    if (0 === e.button && t && 139 === t.id) return player.health = Math.min(999, player.health + 20), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Burger! +20 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
     if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
     if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
         getCurrentWorldState().fishInventoryDirty = true;
@@ -3613,6 +3637,10 @@ function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = f
                     if (a === 8 && Math.random() < 0.1) { // 1/10 chance on leaves
                         addToInventory(135, 5, l);
                         addMessage("Found 5 Tree Seeds" + (l ? ` from ${l}` : ""));
+                    }
+                    if (a === 2 && Math.random() < 0.1) { // 1/10 chance on grass
+                        addToInventory(181, 1, l);
+                        addMessage("Found Grass Seed" + (l ? ` from ${l}` : ""));
                     }
 
                     safePlayAudioAt(soundBreak, { x: e, y: t, z: o });
@@ -4789,6 +4817,7 @@ async function publishToTestnet() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
+        prairieDirt: Array.from((getCurrentWorldState().prairieDirt || new Map()).entries()),
         spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
@@ -4975,6 +5004,7 @@ async function downloadSinglePlayerSession() {
         deltas: [],
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
+        prairieDirt: Array.from((getCurrentWorldState().prairieDirt || new Map()).entries()),
         spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
@@ -6502,7 +6532,7 @@ function runGameFrame(e) {
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
         document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
             if (e.type !== "ufo_saucer") updateMobSafely(e, t)
-        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
+        })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), managePrairieRegen(), manageGrassSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
         meshGroup.visible = player.y < 3000;
 
         // Update chest animations

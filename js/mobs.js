@@ -995,69 +995,13 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     } else if ("spider" === this.type) {
         this.isAggressive = !0;
     } else if ("cow" === this.type) {
-        this.isAggressive = !1;
-    } else {
-        const t = makeSeededRandom(worldSeed + "_crawley_aggro")();
-        this.isAggressive = t > .5
-    }
-    if ("bee" === this.type) {
-        this.mesh = new THREE.Group;
-        const t = new THREE.MeshLambertMaterial({
-            color: 16776960
-        }),
-            e = new THREE.MeshLambertMaterial({
-                color: 16777215,
-                transparent: !0,
-                opacity: .7
-            }),
-            s = new THREE.BoxGeometry(.6, .6, 1),
-            i = new THREE.Mesh(s, t);
-        this.mesh.add(i);
-        const o = new THREE.BoxGeometry(.8, .1, .4),
-            h = new THREE.Mesh(o, e);
-        h.position.set(-.5, .2, 0), this.mesh.add(h);
-        const a = new THREE.Mesh(o, e);
-        a.position.set(.5, .2, 0), this.mesh.add(a), this.mesh.leftWing = h, this.mesh.rightWing = a, this.originalColor = new THREE.Color(16776960)
-    } else if ("crawley" === this.type) {
-        this.mesh = new THREE.Group;
-        const t = new THREE.MeshLambertMaterial({
-            color: 4868682
-        }),
-            e = makeSeededRandom(worldSeed + "_eye_color_" + this.id)();
-        let s;
-        e < .1 ? (s = 255, this.eyeColor = "blue", this.hp = 15) : e < .5 ? (s = 65280, this.eyeColor = "green", this.hp = 5) : (s = 16711680, this.eyeColor = "red", this.hp = 10);
-        const i = new THREE.MeshBasicMaterial({
-            color: s
-        }),
-            o = new THREE.BoxGeometry(.9, .9, .9),
-            h = new THREE.Mesh(o, t);
-        this.mesh.add(h);
-        const a = new THREE.BoxGeometry(.2, .2, .1),
-            n = new THREE.Mesh(a, i);
-        // The face sits on local +Z, the direction the mob is rotated to face (atan2(dx, dz)).
-        n.position.set(-.25, .2, .45), this.mesh.add(n);
-        const r = new THREE.Mesh(a, i);
-        r.position.set(.25, .2, .45), this.mesh.add(r);
-        // One glow sprite per eye, tinted to the eye colour (red, green or blue).
-        const l = new THREE.Group;
-        for (const eyeX of [-.25, .25]) {
-            const glow = createMobGlowSprite(s, .45, .9);
-            glow.position.set(eyeX, .2, .5), l.add(glow);
-        }
-        this.mesh.add(l), this.mesh.eyeLight = l, this.mesh.legs = [];
-        const p = new THREE.BoxGeometry(.1, .6, .1);
-        for (let e = 0; e < 6; e++) {
-            const s = new THREE.Mesh(p, t),
-                i = e % 2 == 0 ? 1 : -1;
-            s.position.set(.45 * i, 0, .3 * (Math.floor(e / 2) - 1)), this.mesh.add(s), this.mesh.legs.push(s)
-        }
-        this.originalColor = new THREE.Color(4868682)
-    } else if ("cow" === this.type) {
-        this.hp = 20;
+        this.hp = 30;
         this.speed = 0.015 + 0.01 * Math.random();
         this.isAggressive = false;
         this.aiState = "IDLE";
         this.animationTime = Math.random() * Math.PI * 2;
+        this.eatTimer = 0;
+        this.fallenTimer = 0;
 
         this.mesh = new THREE.Group();
 
@@ -1065,7 +1009,10 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         const headTex = createMobTexture(this.originSeed, "cow_head");
 
         const bodyMat = new THREE.MeshLambertMaterial({ map: bodyTex });
-        const headMat = new THREE.MeshLambertMaterial({ map: headTex });
+        this.headMat = new THREE.MeshLambertMaterial({ map: headTex });
+        // Generate alternate textures for blinking and sleeping
+        this.headTexBlink = createMobTexture(this.originSeed, "cow_head_blink");
+        this.headTexSleep = createMobTexture(this.originSeed, "cow_head_sleep");
 
         const bodyGeo = new THREE.BoxGeometry(1.2, 0.8, 1.8);
         const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -1073,9 +1020,9 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
         this.mesh.add(body);
 
         const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.8);
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.set(0, 1.1, 1.1);
-        this.mesh.add(head);
+        this.headMesh = new THREE.Mesh(headGeo, this.headMat);
+        this.headMesh.position.set(0, 1.1, 1.1);
+        this.mesh.add(this.headMesh);
 
         const legGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
         this.mesh.legs = [];
@@ -1132,7 +1079,9 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
             this.mesh.legs.push(s);
         }
         this.originalColor = new THREE.Color(0x1a1a1a);
-    } else if ("grub" === this.type) {
+    }
+
+    if ("grub" === this.type) {
         this.hp = 40, this.speed = (.01 + .005 * Math.random()) / 2, this.aiState = "IDLE", this.animationTime = Math.random() * Math.PI * 2, this.cactusEaten = 0, this.isAggressive = !1;
         const t = 3,
             e = createMobTexture(worldSeed, "grub_body"),
@@ -1549,6 +1498,9 @@ function manageMobs() {
                 } else if (type === "cow") {
                     const surfaceY = chunkManager.getSurfaceY(spawnX, spawnZ);
                     if (getBlockAt(spawnX, surfaceY, spawnZ) !== 2) continue; // Grass block
+                    // Limit to 20 cows in vicinity
+                    let localCows = mobs.filter(m => m.type === "cow" && Math.hypot(m.pos.x - spawnX, m.pos.z - spawnZ) < 200).length;
+                    if (localCows >= 20) continue;
                 }
                 const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
                 if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
@@ -2470,7 +2422,80 @@ Mob.prototype.update = function (t) {
         }
         let i = null,
             o = 1 / 0;
-        if ("grub" === this.type) {
+
+    if ("cow" === this.type) {
+        if (isNight) {
+            this.headMat.map = this.headTexSleep;
+            this.aiState = "IDLE";
+            this.isMoving = false;
+        } else {
+            // Blink logic
+            if (Math.random() < 0.01) {
+                this.headMat.map = this.headTexBlink;
+                setTimeout(() => {
+                    if (this.headMat.map !== this.headTexSleep) {
+                        this.headMat.map = this.headMat._originalMap || this.headMat.map;
+                    }
+                }, 200);
+            } else if (!this.headMat._originalMap) {
+                this.headMat._originalMap = this.headMat.map;
+            }
+
+            // Randomly eat grass
+            this.eatTimer = (this.eatTimer || 0) + t;
+            this.hungerTimer = (this.hungerTimer || 0) + t;
+
+            // If hasn't eaten in 1 hour (3600 seconds), die
+            if (this.hungerTimer >= 3600 && isLocalSpawner) {
+                 this.hp = 0;
+            }
+
+            if (this.eatTimer > 10 + Math.random() * 20) { // Eat every 10-30 seconds
+                this.eatTimer = 0;
+                let bx = Math.floor(this.pos.x);
+                let by = Math.floor(this.pos.y);
+                let bz = Math.floor(this.pos.z);
+                let blockId = getBlockAt(bx, by - 1, bz);
+
+                // if standing on grass (2)
+                if (blockId === 2) {
+                    if (typeof chunkManager !== 'undefined' && chunkManager.setBlockGlobal) { chunkManager.setBlockGlobal(bx, by - 1, bz, 3, true, null, 'local'); } else if (typeof setBlockAt === 'function') { setBlockAt(bx, by - 1, bz, 3); } // dirt
+                    this.hungerTimer = 0; // Reset hunger timer when eating
+                    if (typeof getCurrentWorldState === 'function') {
+                         const pr = `${bx},${by - 1},${bz}`;
+                         if (!getCurrentWorldState().prairieDirt) getCurrentWorldState().prairieDirt = new Map();
+                         getCurrentWorldState().prairieDirt.set(pr, {
+                             x: bx, y: by - 1, z: bz, eatTime: Date.now()
+                         });
+                    }
+                    if (Math.random() > 0.5) { // 50% chance to drop seed
+                        // Register grass seed growth if running on main game logic
+                        if (typeof getCurrentWorldState === 'function') {
+                            const r = `${bx},${by - 1},${bz}`;
+                            if (!getCurrentWorldState().grassSeeds) getCurrentWorldState().grassSeeds = new Map();
+                            getCurrentWorldState().grassSeeds.set(r, {
+                                x: bx, y: by - 1, z: bz, originSeed: worldSeed, plantedTime: Date.now()
+                            });
+                        }
+                    }
+                    this.headMesh.rotation.x = Math.PI / 4; // Head down animation
+                    setTimeout(() => {
+                        this.headMesh.rotation.x = 0;
+                    }, 500);
+                }
+            }
+        }
+
+        if (this.fallenTimer > 0) {
+            this.fallenTimer -= t;
+            this.isMoving = false;
+            this.mesh.rotation.z = Math.PI / 2; // Fallen on side
+            if (this.fallenTimer <= 0) {
+                this.mesh.rotation.z = 0; // Get back up
+            }
+        }
+    }
+    if ("grub" === this.type) {
             if (("IDLE" === this.aiState || "SEARCHING_FOR_CACTUS" === this.aiState) && Date.now() >= (this.nextCactusSearchTime || 0)) {
                 this.aiState = "SEARCHING_FOR_CACTUS";
                 this.nextCactusSearchTime = Date.now() + 1000;
@@ -2769,7 +2794,7 @@ Mob.prototype.update = function (t) {
                     n = s / o * this.speed,
                     r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
                     l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
-                if ("grub" === this.type || "crawley" === this.type) {
+                if ("grub" === this.type || "crawley" === this.type || "cow" === this.type) {
                     if (checkCollisionWithBlock(r, this.pos.y, l)) {
                         if (!checkCollisionWithBlock(r, this.pos.y + 1, l)) {
                             this.pos.y += 1;
@@ -2801,7 +2826,7 @@ Mob.prototype.update = function (t) {
                     s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
                     i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
                 }
-                if ("grub" === this.type || "crawley" === this.type) {
+                if ("grub" === this.type || "crawley" === this.type || "cow" === this.type) {
                     if (checkCollisionWithBlock(s, this.pos.y, i)) {
                         if (!checkCollisionWithBlock(s, this.pos.y + 1, i)) {
                             this.pos.y += 1;
@@ -2866,6 +2891,7 @@ Mob.prototype.update = function (t) {
             this.lastSentSpawner = this.spawner;
         }
     }
+
     if ("grub" === this.type) {
         const e = "EATING_CACTUS" === this.aiState,
             s = (this.isMoving ? 8 : 4) / 2;
@@ -2897,6 +2923,25 @@ Mob.prototype.update = function (t) {
     }
     if (isEliteMobType(this.type)) markEliteMobProvoked(this, e);
     this.hp -= t, this.flashEnd = Date.now() + 200, this.lastDamageTime = Date.now(), safePlayAudioAt(soundHit, this.pos);
+
+    if ("cow" === this.type) {
+        if (isNight) {
+            this.fallenTimer = 10; // fall over for 10 seconds (dt is in seconds)
+        } else {
+            // Day combat response
+            let r = Math.random();
+            if (r < 0.33) {
+                // Ignore
+            } else if (r < 0.66) {
+                this.isAggressive = false;
+                this.isMoving = true;
+                // Run away (already handled by knockback and random wander)
+            } else {
+                this.isAggressive = true;
+            }
+        }
+    }
+
     const s = e === userName ? player : userPositions[e];
     if (s) {
         const t = e === userName ? s.x : s.targetX,
@@ -3002,13 +3047,19 @@ Mob.prototype.update = function (t) {
     if ("ufo_saucer" === this.type) {
         e = 1000;
         if (Math.random() < (1/3)) {
-            if (typeof window.createDroppedItemOrb === 'function') {
-                window.createDroppedItemOrb(`${userName}-${Date.now()}-ufo-drop`, this.pos.clone(), 133, worldSeed, userName, 1);
+            if (typeof createDroppedItemOrb === 'function') {
+                createDroppedItemOrb(`${userName}-${Date.now()}-ufo-drop`, this.pos.clone(), 133, worldSeed, userName, 1);
             }
         }
     } else if (isEliteMobType(this.type)) {
         e = getEliteMobDef(this.type).score;
         onEliteMobDeath(this, t);
+    } else if ("cow" === this.type) {
+        e = 10;
+        if (isLocalSpawner && typeof createDroppedItemOrb === 'function') {
+            const numBurgers = Math.floor(Math.random() * 5) + 1; // 1 to 5 burgers
+            createDroppedItemOrb(`${userName}-${Date.now()}-cow-drop`, this.pos.clone(), 139, worldSeed, userName, numBurgers);
+        }
     } else if ("red" === this.eyeColor) { e = 20; } else if ("blue" === this.eyeColor) { e = 30; }
     if (t === userName) {
         player.score += e;
