@@ -61,7 +61,8 @@ const ELITE_MOB_TYPES = {
         day: false, night: true,
         hp: 20, score: 40, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 1.1, hitRadius: 1.3,
-        drop: null
+        drop: { id: 179, count: 1, chance: 0.1 },
+        drops2: { id: 178, count: 3, chance: 0.6 }
     },
     dust_vulture: {
         name: "Dust Vulture",
@@ -71,7 +72,7 @@ const ELITE_MOB_TYPES = {
         hp: 12, score: 30, maxCount: 4, worldMax: 4, wideRange: true, spawnChance: 0.4, spawnAltitude: 18,
         roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
-        drop: { id: 180, count: 2, chance: 0.6 }
+        drop: { id: 180, count: 1, chance: 0.6 }
     },
     crater_hopper: {
         name: "Crater Hopper",
@@ -114,7 +115,7 @@ const ELITE_MOB_TYPES = {
         day: true, night: true,
         hp: 12, score: 25, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 0.6, hitRadius: 1.1,
-        drop: { id: 180, count: 2, chance: 0.6 }
+        drop: { id: 176, count: 2, chance: 0.6 }
     },
     // ---- level 3 (score 1500+) — only hostile to armed or attacking players ----
     sentinel_drone: {
@@ -490,7 +491,7 @@ function getBiomeKeyAt(x, z) {
     const mods = worldArchetype.biomeModifications || {};
     if (mods.onlyDesert) return "desert";
     if (worldArchetype.terrainGenerator && worldArchetype.terrainGenerator !== "generateStandardTerrain") return null;
-    const seed = makeChunkKey(worldName, 0, 0).split(":")[0];
+    const seed = typeof worldSeed !== "undefined" ? worldSeed : worldName;
     if (biomeNoiseCache.seed !== seed) biomeNoiseCache = { seed, noise: makeNoise(seed) };
     const nx = (modWrap(Math.floor(x), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;
     const nz = (modWrap(Math.floor(z), MAP_SIZE) % MAP_SIZE) / MAP_SIZE * 10000;
@@ -3005,55 +3006,27 @@ function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
     spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
 
-    if (!killer) return;
+    // Process drops dynamically for the killer
+    const drop1 = getEliteDrop(def);
+    const drop2 = def.drops2;
 
-    if (mob.type === "bone_archer") {
-        let rand = Math.random();
-        let dropId = null;
-        let dropCount = 0;
+    const tryDrop = (dropDef) => {
+        if (!dropDef || !killer || Math.random() > dropDef.chance || !BLOCKS[dropDef.id]) return;
 
-        if (rand < 0.1) {
-            dropId = 179; // Bow
-            dropCount = 1;
-        } else if (rand < 0.7) {
-            dropId = 178; // Arrow
-            dropCount = Math.floor(Math.random() * 3) + 1; // 1 to 3
+        let count = dropDef.count;
+        // For arrows, make it drop 1-3 randomly if count is 3
+        if (dropDef.id === 178) {
+            count = Math.floor(Math.random() * count) + 1;
         }
 
-        if (dropId && BLOCKS[dropId]) {
-            if (killer === userName) {
-                const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-                createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), dropId, worldSeed, userName, dropCount);
-                const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: dropId, originSeed: worldSeed, dropper: userName, world: worldName, count: dropCount });
-                for (const [peerName, peer] of peers.entries()) {
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
-                }
-            } else if (isMobAuthority(mob)) {
-                const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-                createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), dropId, worldSeed, userName, dropCount);
-                const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: dropId, originSeed: worldSeed, dropper: userName, world: worldName, count: dropCount });
-                for (const [peerName, peer] of peers.entries()) {
-                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
-                }
-            }
+        const dropId = `${userName}-drop-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const pos = mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0));
+
+        if (typeof createDroppedItemOrb === "function") {
+             createDroppedItemOrb(dropId, pos, dropDef.id, worldSeed, userName, count);
         }
-    } else {
-        const drop = getEliteDrop(def);
-        if (!drop || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
-        if (killer === userName) {
-            const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-            createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), drop.id, worldSeed, userName, drop.count);
-            const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: drop.id, originSeed: worldSeed, dropper: userName, world: worldName, count: drop.count });
-            for (const [peerName, peer] of peers.entries()) {
-                if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
-            }
-        } else if (isMobAuthority(mob)) {
-            const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-            createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), drop.id, worldSeed, userName, drop.count);
-            const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: drop.id, originSeed: worldSeed, dropper: userName, world: worldName, count: drop.count });
-            for (const [peerName, peer] of peers.entries()) {
-                if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
-            }
-        }
-    }
+    };
+
+    tryDrop(drop1);
+    tryDrop(drop2);
 }

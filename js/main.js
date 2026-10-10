@@ -970,17 +970,14 @@ function createLaserGunMesh(toolId) {
     if (toolId === 179) {
         const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b5a33, roughness: 0.8, metalness: 0.1 });
         const stringMat = new THREE.MeshBasicMaterial({ color: 0xf5f5f5 });
-
         const innerGroup = new THREE.Group();
         const limb = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 6, 16, Math.PI), woodMat);
         limb.rotation.set(0, Math.PI / 2, Math.PI / 2);
         innerGroup.add(limb);
         const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
         innerGroup.add(bowString);
-        // Rotate the inner bow so the string is vertical and handle points outwards
-        innerGroup.rotation.set(-Math.PI/2, 0, Math.PI/2);
+        innerGroup.rotation.set(-Math.PI/2, 0, Math.PI/2 + Math.PI/4);
         group.add(innerGroup);
-
         group.userData.isBow = true;
         group.userData.bowString = bowString;
 
@@ -1033,6 +1030,14 @@ function createLaserGunMesh(toolId) {
 
 // Arm-space grip: w=0 holds the barrel up in front of the hand, w=1 runs it down the aimed arm.
 function laserGunGripMatrix(toolId, w, skinned, out) {
+    if (toolId === 179) {
+        const restZ = skinned ? -.14 : -.30;
+        const restY = skinned ? .02 : -.20;
+        const aimY = skinned ? -.04 : 0.10;
+        laserGunTmpVec.set(0, restY + (aimY - restY) * w, restZ * (1 - w));
+        laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(Math.PI / 2 - Math.PI / 2 * w, 0, -Math.PI/4 * w));
+        return out.compose(laserGunTmpVec, laserGunTmpQuat, laserGunTmpScale);
+    }
     const restZ = toolId === 133 ? (skinned ? -.24 : -.36) : (skinned ? -.14 : -.26);
     const restY = skinned ? .02 : (toolId === 133 ? -.3 : -.36);
     const aimY = skinned ? -.04 : -.45;
@@ -1120,8 +1125,8 @@ function poseFirstPersonLaserGun(w, recoil) {
 
     let rest, aimX, aimY, aimZ;
     if (bow) {
-        rest = laserGunTmpVec.set(.40 * widen, -.56, -.62);
-        aimX = .0; aimY = -.2; aimZ = -.4;
+        rest = laserGunTmpVec.set(.48 * widen, -.36, -.62);
+        aimX = .33 * widen; aimY = -.2; aimZ = -.5;
     } else {
         rest = laserGunTmpVec.set((cannon ? .62 : .48) * widen, cannon ? -.44 : -.36, cannon ? -.85 : -.62);
         aimX = (cannon ? .44 : .33) * widen; aimY = cannon ? -.27 : -.2; aimZ = cannon ? -.8 : -.5;
@@ -1130,9 +1135,8 @@ function poseFirstPersonLaserGun(w, recoil) {
     gun.position.set(rest.x + (aimX - rest.x) * w, rest.y + (aimY - rest.y) * w, rest.z + (aimZ - rest.z) * w + .07 * Math.max(0, recoil));
     // Rest tips the barrel up and inward; aiming points it from the grip at the crosshair target.
     let restEulerX = 1.05;
-    let restEulerZ = .15;
-    if (bow) { restEulerX = 0; restEulerZ = 0; } // Hold the bow vertically, naturally resting in front.
-    const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(restEulerX, .25, restEulerZ));
+    if (bow) restEulerX = 0; // Don't tip bow
+    const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(restEulerX, .25, .15));
     const distance = gun.userData.aimDistance || 20;
     const aimDir = new THREE.Vector3(-aimX, -aimY, -distance - aimZ).normalize();
     gun.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
@@ -1141,9 +1145,7 @@ function poseFirstPersonLaserGun(w, recoil) {
     if (bow && gun.userData.bowString) {
         let draw = w;
         if (recoil > 0) draw = 1 - recoil;
-        // The bow is rotated so its local +Y is towards the camera. Draw the string back towards the camera.
-        gun.userData.bowString.position.y = 0.4 * draw;
-        gun.userData.bowString.position.x = 0;
+        gun.userData.bowString.position.y = -0.4 * draw;
     }
 }
 
@@ -1906,7 +1908,7 @@ function createProjectile(e, t, o, a, n = "red", damageSource = null) {
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
-    const l = r.pickaxe ? createPickaxeMesh(o) : (o === 179) ? createLaserGunMesh(179) : r.bone ? createBoneMesh() : new THREE.Mesh(
+    const l = r.pickaxe ? createPickaxeMesh(o) : r.bone ? createBoneMesh() : new THREE.Mesh(
         new THREE.SphereGeometry(.25, 16, 16),
         new THREE.MeshStandardMaterial({
             color: r.color,
@@ -1917,31 +1919,6 @@ function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     // Give dropping blue laser guns the same visual scale as their fired projectiles
     if (o === 133) {
         l.scale.set(3, 3, 6);
-    } else if (o === 179) {
-        l.scale.set(0.5, 0.5, 0.5);
-    } else if (o === 178 || o === 180) {
-        // Fix visual for dropped items
-        if (o === 178) {
-            const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), new THREE.MeshStandardMaterial({color: 0x8b5a33}));
-            const tip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.15), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
-            const fletching = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), new THREE.MeshStandardMaterial({color: 0xffffff}));
-            tip.position.z = -0.3;
-            fletching.position.z = 0.25;
-            l.geometry.dispose();
-            l.material.dispose();
-            l.geometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
-            l.material = new THREE.MeshBasicMaterial({transparent: true, opacity: 0});
-            l.add(shaft, tip, fletching);
-        } else if (o === 180) {
-            const quill = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
-            const vane = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.3), new THREE.MeshStandardMaterial({color: 0xffffff}));
-            vane.position.z = 0.05;
-            l.geometry.dispose();
-            l.material.dispose();
-            l.geometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
-            l.material = new THREE.MeshBasicMaterial({transparent: true, opacity: 0});
-            l.add(quill, vane);
-        }
     }
 
     l.position.copy(t);
@@ -5744,7 +5721,7 @@ async function startGame({ serverLogin = false } = {}) {
     } catch (e) {
         console.error("Failed to initialize audio:", e), addMessage("Could not initialize audio, continuing without it.", 3e3)
     }
-    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restorePetSaveData(null), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[0] = {
+    console.log("[LOGIN] Initializing Three.js after audio"), initThree(), restorePetSaveData(null), restoreAvatarFromSave(null), initMusicPlayer(), initVideoPlayer(), INVENTORY[2] = { id: 179, count: 1, originSeed: worldSeed }, INVENTORY[3] = { id: 178, count: 64, originSeed: worldSeed }, INVENTORY[2] = { id: 179, count: 1, originSeed: worldSeed }, INVENTORY[3] = { id: 178, count: 64, originSeed: worldSeed }, INVENTORY[0] = {
         id: 120,
         count: 7
     }, INVENTORY[1] = {
