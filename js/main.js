@@ -7183,7 +7183,7 @@ function runGameFrame(e) {
 document.addEventListener("DOMContentLoaded", (async function () {
     try {
         const i = new URLSearchParams(window.location.search),
-            l = i.get("world-seed"),
+            l = i.get("world-seed") || i.get("world-name"),
             d = i.get("user-name"),
             c = i.get("loc"),
             serverMode = i.has("server-mode");
@@ -7268,7 +7268,7 @@ document.addEventListener("DOMContentLoaded", (async function () {
             var e = document.getElementById("teleportX").value,
                 t = document.getElementById("teleportY").value,
                 o = document.getElementById("teleportZ").value,
-                a = `https://supgalaxy.org/index.html?world-seed=${encodeURIComponent(worldSeed)}&user-name=${encodeURIComponent(userName)}&loc=${e},${t},${o}`;
+                a = `https://supgalaxy.org/index.html?world-name=${encodeURIComponent(worldName)}&user-name=${encodeURIComponent(userName)}&loc=${e},${t},${o}`;
             if (dedicatedServer) {
                 a += `&server-mode=1&server-url=${encodeURIComponent(dedicatedServer.base)}`;
             }
