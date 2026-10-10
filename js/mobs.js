@@ -1448,6 +1448,7 @@ function manageMobs() {
             else if ("fish_school" === type) maxCount = 6;
             else if ("fish_rare" === type) maxCount = 1;
             else if ("whale" === type) maxCount = 3;
+            else if ("cow" === type) maxCount = 6;
             else if (isEliteMobType(type)) {
                 maxCount = isWideRangeMobType(type) ? getWideRangeMobCap(type) : getEliteMobDef(type).maxCount;
                 if (!hasEliteWorldCapacity(type)) continue;
@@ -1497,7 +1498,8 @@ function manageMobs() {
                     if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
                 } else if (type === "cow") {
                     const surfaceY = chunkManager.getSurfaceY(spawnX, spawnZ);
-                    if (getBlockAt(spawnX, surfaceY, spawnZ) !== 2) continue; // Grass block
+                    // getSurfaceY returns the air block above the solid ground, so check the block beneath it
+                    if (getBlockAt(spawnX, surfaceY - 1, spawnZ) !== 2) continue; // Grass block
                     // Limit to 20 cows in vicinity
                     let localCows = mobs.filter(m => m.type === "cow" && Math.hypot(m.pos.x - spawnX, m.pos.z - spawnZ) < 200).length;
                     if (localCows >= 20) continue;

@@ -760,8 +760,8 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
 
             const biomeNoiseScale = 0.003;
             var rawElevation = fbm(elevationNoise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
-            // Remap elevation to ensure deep oceans can form
-            var elevation = rawElevation * 1.3 - 0.15;
+            // Remap elevation aggressively to ensure deep oceans and higher mountains
+            var elevation = rawElevation * 1.5 - 0.25;
 
             var temperature = fbm(temperatureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
             var moisture = fbm(moistureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
@@ -786,7 +786,7 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
             if (elevation < 0.45) {
                 // Ocean bed logic, smooth transition to deep ocean
                 var oceanDepth = (0.45 - elevation) / 0.45; // 0 at shore, 1 at deepest
-                baseHeight = 40 - (oceanDepth * 35);
+                baseHeight = 40 - (oceanDepth * 40); // Drop significantly lower to ensure oceans
             }
 
             var height = Math.floor(elevation * baseHeight * heightScale + 8);
@@ -803,13 +803,13 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
             // Rivers and Canyons
             var rNoise = fbm(riverNoise, nx * 0.005, nz * 0.005, 4, 0.5);
             var riverValley = Math.abs(rNoise - 0.5) * 2.0; // 0 at center of river
-            if (riverValley < 0.10) {
+            if (riverValley < 0.08) {
                 // Carve a canyon/river, smoothing the banks, and ensure it drops below SEA_LEVEL
-                var depthT = Math.pow((0.10 - riverValley) / 0.10, 1.5); // deeper rivers
-                var dropAmount = (height - SEA_LEVEL + 4) * depthT;
+                var depthT = Math.pow((0.08 - riverValley) / 0.08, 1.5); // deeper rivers
+                var dropAmount = (height - SEA_LEVEL + 8) * depthT; // push to height ~8
                 if (dropAmount > 0) height -= dropAmount;
 
-                if (riverValley < 0.05) {
+                if (riverValley < 0.04) {
                    primaryBiome = modifiedBiomes.find(b => b.key === 'plains') || modifiedBiomes[0];
                 }
             }
