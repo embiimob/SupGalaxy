@@ -1,0 +1,10 @@
+--- js/main.js
++++ js/main.js
+@@ -1914,8 +1914,8 @@
+     } else if (o === 178 || o === 180) {
+         // Fix visual for dropped items
+-        l.scale.set(0.5, 0.5, 0.5);
+         const tempScale = o === 178 ? 0.3 : (o === 180 ? 0.4 : 1.0);
++        l.scale.set(1, 1, 1);
+         l.geometry = new THREE.BoxGeometry(tempScale, tempScale, tempScale);
+     }

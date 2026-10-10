@@ -975,7 +975,7 @@ function createLaserGunMesh(toolId) {
         group.add(limb);
         const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
         group.add(bowString);
-        group.rotation.set(0, -Math.PI/2, -Math.PI/2);
+        group.rotation.set(0, -Math.PI/2, Math.PI/2);
         group.position.set(0, 0, 0);
         group.userData.isBow = true;
         group.userData.bowString = bowString;
@@ -1136,7 +1136,7 @@ function poseFirstPersonLaserGun(w, recoil) {
     if (bow && gun.userData.bowString) {
         let draw = w;
         if (recoil > 0) draw = 1 - recoil;
-        gun.userData.bowString.position.y = 0.4 * draw;
+        gun.userData.bowString.position.y = -0.4 * draw;
     }
 }
 
@@ -1914,8 +1914,8 @@ function createDroppedItemOrb(e, t, o, a, n, count = 1) {
         l.scale.set(0.5, 0.5, 0.5);
     } else if (o === 178 || o === 180) {
         // Fix visual for dropped items
-        l.scale.set(0.5, 0.5, 0.5);
         const tempScale = o === 178 ? 0.3 : (o === 180 ? 0.4 : 1.0);
+        l.scale.set(1, 1, 1);
         l.geometry = new THREE.BoxGeometry(tempScale, tempScale, tempScale);
     }
 
