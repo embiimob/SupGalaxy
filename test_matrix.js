@@ -22,17 +22,12 @@ const THREE = {
   }
 };
 
-const stringEnd = new THREE.Vector3(1, 0, 0); // X-axis
-const handle = new THREE.Vector3(0, 1, 0); // Y-axis
+const ep = new THREE.Vector3(1, 0, 0);
+const mid = new THREE.Vector3(0, 1, 0);
 
-const eulers = [
-  new THREE.Euler(-Math.PI/2, Math.PI/2, 0, 'XYZ'),
-  new THREE.Euler(-Math.PI/2, -Math.PI/2, 0, 'XYZ'),
-  new THREE.Euler(0, -Math.PI/2, 0, 'XYZ'),
-];
+// We want ep to be (0, 1, 0)
+// We want mid to be (0, 0, -1)
 
-for(let euler of eulers) {
-    let p1 = stringEnd.applyEuler(euler);
-    let p2 = handle.applyEuler(euler);
-    console.log(euler, "\n  StringEnd:", p1, "\n  Handle:", p2);
-}
+const e = new THREE.Euler(-Math.PI/2, 0, Math.PI/2, 'XYZ');
+console.log("ep mapped:", ep.applyEuler(e));
+console.log("mid mapped:", mid.applyEuler(e));

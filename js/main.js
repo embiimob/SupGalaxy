@@ -970,13 +970,17 @@ function createLaserGunMesh(toolId) {
     if (toolId === 179) {
         const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b5a33, roughness: 0.8, metalness: 0.1 });
         const stringMat = new THREE.MeshBasicMaterial({ color: 0xf5f5f5 });
+
+        const innerGroup = new THREE.Group();
         const limb = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 6, 16, Math.PI), woodMat);
         limb.rotation.set(0, Math.PI / 2, Math.PI / 2);
-        group.add(limb);
+        innerGroup.add(limb);
         const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
-        group.add(bowString);
-        group.rotation.set(-Math.PI/2, Math.PI, -Math.PI/2);
-        group.position.set(0, 0, 0);
+        innerGroup.add(bowString);
+        // Rotate the inner bow so the string is vertical and handle points outwards
+        innerGroup.rotation.set(-Math.PI/2, 0, Math.PI/2);
+        group.add(innerGroup);
+
         group.userData.isBow = true;
         group.userData.bowString = bowString;
 
@@ -1137,6 +1141,7 @@ function poseFirstPersonLaserGun(w, recoil) {
     if (bow && gun.userData.bowString) {
         let draw = w;
         if (recoil > 0) draw = 1 - recoil;
+        // The bow is rotated so its local +Y is towards the camera. Draw the string back towards the camera.
         gun.userData.bowString.position.y = 0.4 * draw;
         gun.userData.bowString.position.x = 0;
     }
