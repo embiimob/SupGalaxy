@@ -1,0 +1,14 @@
+--- js/main.js
++++ js/main.js
+@@ -1909,6 +1909,11 @@
+     // Give dropping blue laser guns the same visual scale as their fired projectiles
+     if (o === 133) {
+         l.scale.set(3, 3, 6);
++    } else if (o === 178 || o === 179 || o === 180) {
++        // Fix visual for dropped items
++        l.scale.set(0.5, 0.5, 0.5);
++        const tempScale = o === 178 ? 0.3 : (o === 180 ? 0.4 : 1.0);
++        if (o === 178 || o === 179 || o === 180) l.geometry = new THREE.BoxGeometry(tempScale, tempScale, tempScale);
+     }
+
+     l.position.copy(t);
