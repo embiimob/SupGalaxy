@@ -31,6 +31,7 @@ function getCurrentWorldState() {
             foreignBlockOrigins: new Map,
             treeSeeds: new Map,
             prairieDirt: new Map,
+            grassSeeds: new Map,
             spawnCommands: new Map,
             fishInventoryDirty: false,
             // Maps block position key (e.g., "x,y,z") to its IPFS truncated date for monotonic ordering
@@ -358,6 +359,7 @@ async function applySaveFile(e, t, o) {
                 foreignBlockOrigins: new Map(data.foreignBlockOrigins),
                 treeSeeds: treeSeedsMap,
                 prairieDirt: new Map(data.prairieDirt || []),
+                grassSeeds: new Map(data.grassSeeds || []),
                 spawnCommands: new Map(data.spawnCommands || []),
                 ipfsTruncatedDates: new Map(data.ipfsTruncatedDates || [])
             });
@@ -4818,6 +4820,7 @@ async function publishToTestnet() {
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
         prairieDirt: Array.from((getCurrentWorldState().prairieDirt || new Map()).entries()),
+        grassSeeds: Array.from((getCurrentWorldState().grassSeeds || new Map()).entries()),
         spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,
@@ -5005,6 +5008,7 @@ async function downloadSinglePlayerSession() {
         foreignBlockOrigins: Array.from(getCurrentWorldState().foreignBlockOrigins.entries()),
         treeSeeds: Array.from((getCurrentWorldState().treeSeeds || new Map()).entries()),
         prairieDirt: Array.from((getCurrentWorldState().prairieDirt || new Map()).entries()),
+        grassSeeds: Array.from((getCurrentWorldState().grassSeeds || new Map()).entries()),
         spawnCommands: Array.from(getCurrentWorldState().spawnCommands.entries()),
         magicianStones: serializableMagicianStones,
         calligraphyStones: serializableCalligraphyStones,

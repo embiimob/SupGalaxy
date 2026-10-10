@@ -719,10 +719,10 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
         let desertWeight = Math.max(0, (temperature - 0.55) * 10) * Math.max(0, (0.4 - moisture) * 10);
         let swampWeight = Math.max(0, (moisture - 0.55) * 10) * Math.max(0, (temperature - 0.35) * 10);
         let forestWeight = Math.max(0, (moisture - 0.45) * 10);
-        let prairieWeight = Math.max(0, (0.6 - elevation) * 10) * Math.max(0, (0.6 - moisture) * 10) * Math.max(0, (temperature - 0.4) * 10);
+        let prairieWeight = Math.max(0, (0.7 - elevation) * 10) * Math.max(0, (0.6 - moisture) * 10) * Math.max(0, (temperature - 0.3) * 10);
 
         // Base plains weight
-        let plainsWeight = 1.0;
+        let plainsWeight = 0.5;
 
         weights['mountain'] = mntWeight;
         weights['snow'] = snowWeight;
@@ -759,7 +759,10 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
             var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
 
             const biomeNoiseScale = 0.003;
-            var elevation = fbm(elevationNoise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
+            var rawElevation = fbm(elevationNoise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
+            // Remap elevation to ensure deep oceans can form
+            var elevation = rawElevation * 1.3 - 0.15;
+
             var temperature = fbm(temperatureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
             var moisture = fbm(moistureNoise, nx * biomeNoiseScale * 0.8, nz * biomeNoiseScale * 0.8, 4, 0.5);
 
@@ -780,11 +783,10 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
 
             var baseHeight = 40;
             var depthMultiplier = 1.0;
-            if (elevation < 0.4) {
+            if (elevation < 0.45) {
                 // Ocean bed logic, smooth transition to deep ocean
-                var oceanDepth = (0.4 - elevation) / 0.4; // 0 at shore, 1 at deepest
-                // Base height drops to 10 for very deep oceans, making it up to 2x deeper than rivers usually are
-                baseHeight = 40 - (oceanDepth * 30);
+                var oceanDepth = (0.45 - elevation) / 0.45; // 0 at shore, 1 at deepest
+                baseHeight = 40 - (oceanDepth * 35);
             }
 
             var height = Math.floor(elevation * baseHeight * heightScale + 8);
@@ -795,23 +797,25 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
                 height += Math.floor(Math.pow(mntT, 1.5) * 60 * heightScale);
             }
 
+            var localN = fbm(elevationNoise, nx * 0.05, nz * 0.05, 4, 0.5);
+            height += Math.floor(localN * 15 * roughness);
+
             // Rivers and Canyons
             var rNoise = fbm(riverNoise, nx * 0.005, nz * 0.005, 4, 0.5);
             var riverValley = Math.abs(rNoise - 0.5) * 2.0; // 0 at center of river
-            if (riverValley < 0.15) {
-                // Carve a canyon/river, smoothing the banks
-                var depth = Math.pow((0.15 - riverValley) / 0.15, 2) * 15; // deeper rivers
-                height -= depth;
+            if (riverValley < 0.10) {
+                // Carve a canyon/river, smoothing the banks, and ensure it drops below SEA_LEVEL
+                var depthT = Math.pow((0.10 - riverValley) / 0.10, 1.5); // deeper rivers
+                var dropAmount = (height - SEA_LEVEL + 4) * depthT;
+                if (dropAmount > 0) height -= dropAmount;
+
                 if (riverValley < 0.05) {
                    primaryBiome = modifiedBiomes.find(b => b.key === 'plains') || modifiedBiomes[0];
                 }
             }
 
-            var localN = fbm(elevationNoise, nx * 0.05, nz * 0.05, 4, 0.5);
-            height += Math.floor(localN * 15 * roughness);
-
             // Cap max land height at 190
-            height = Math.max(1, Math.min(190, height));
+            height = Math.max(1, Math.min(190, Math.floor(height)));
 
             for (var y = 0; y <= height; y++) {
                 var id = BLOCK_AIR;
@@ -819,9 +823,13 @@ function generateEarthTerrain(chunkData, chunkKey, archetype) {
                 else if (y < height - 3) id = 4;
                 else if (y < height) id = 3;
                 else {
-                    var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
-                    var paletteIndex = Math.floor(blockN * primaryBiome.palette.length);
-                    id = primaryBiome.palette[paletteIndex % primaryBiome.palette.length];
+                    if (primaryBiome.key === 'prairie' || primaryBiome.key === 'plains') {
+                         id = 2; // solid grass to guarantee cows can spawn
+                    } else {
+                        var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
+                        var paletteIndex = Math.floor(blockN * primaryBiome.palette.length);
+                        id = primaryBiome.palette[paletteIndex % primaryBiome.palette.length];
+                    }
                 }
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }

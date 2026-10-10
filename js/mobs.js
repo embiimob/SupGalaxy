@@ -995,7 +995,7 @@ function Mob(t, e, s, i = "crawley", aquaticY = null, originSeed = null) {
     } else if ("spider" === this.type) {
         this.isAggressive = !0;
     } else if ("cow" === this.type) {
-        this.hp = 30;
+        this.hp = 80;
         this.speed = 0.015 + 0.01 * Math.random();
         this.isAggressive = false;
         this.aiState = "IDLE";
