@@ -269,7 +269,7 @@ Chunk.prototype.idx = function (e, t, o) {
     window.lastChunkLoadTime = Date.now();
     e.generating || e.generated || (e.generating = !0, worker.postMessage({
         type: "generate_chunk",
-        key: e.key
+        key: e.key, seed: typeof worldSeed !== "undefined" ? worldSeed : this.seed
     }))
 }, ChunkManager.prototype.pickBiome = function (e) {
     return e > .68 ? BIOMES.find((function (e) {

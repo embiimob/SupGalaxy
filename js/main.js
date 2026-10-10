@@ -380,7 +380,7 @@ async function applySaveFile(e, t, o) {
         }
 
         addMessage("Session file verified. Loading player...", 2e3), worldName = t.world, userName = t.user;
-        const c = makeSeededRandom((worldSeed = t.seed) + "_colors");
+        const c = makeSeededRandom((worldSeed = MASTER_WORLD_KEY + worldName) + "_colors");
         for (const e in BLOCKS)
             if (Object.hasOwnProperty.call(BLOCKS, e)) {
                 const t = BLOCKS[e],
@@ -5510,7 +5510,7 @@ async function startGame({ serverLogin = false } = {}) {
     if (validateAndReset(!t.trim(), "No known worlds available yet. Enter a world name or try again after worlds load.")) return false;
 
     worldName = t.slice(0, 8), userName = o.slice(0, 20);
-    const a = makeSeededRandom((worldSeed = worldName) + "_colors");
+    const a = makeSeededRandom((worldSeed = MASTER_WORLD_KEY + worldName) + "_colors");
     for (const e in BLOCKS)
         if (Object.hasOwnProperty.call(BLOCKS, e)) {
             const t = BLOCKS[e],
@@ -5926,7 +5926,7 @@ function switchWorld(newWorldName, targetSpawn) {
             if (body.light.shadow.map) body.light.shadow.map.dispose();
         }
     }
-    worldName = e.slice(0, 8), worldSeed = worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], stars && (scene.remove(stars), disposeObject(stars)), clouds && (scene.remove(clouds), clouds.children[0]?.material.map?.dispose(), disposeObject(clouds)), document.getElementById("worldLabel").textContent = worldName;
+    worldName = e.slice(0, 8), worldSeed = MASTER_WORLD_KEY + worldName, chunkManager.chunks.clear(), meshGroup.children.forEach(disposeObject), meshGroup.children = [], stars && (scene.remove(stars), disposeObject(stars)), clouds && (scene.remove(clouds), clouds.children[0]?.material.map?.dispose(), disposeObject(clouds)), document.getElementById("worldLabel").textContent = worldName;
     upsertKnownWorldUser(worldName, userName, {
         address: userAddress,
         claimed: !1

@@ -407,8 +407,8 @@ function pickBiome(n, biomes, archetype) {
         return biomes.find(b => b.key === 'plains') || biomes[0];
 }
 
-function generateStandardTerrain(chunkData, chunkKey, archetype) {
-    const worldSeed = chunkKey.split(':')[0];
+function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
+
     const biomeRnd = makeSeededRandom(worldSeed + '_biomes');
     const modifiedBiomes = BIOMES.map(biome => ({
         ...biome,
@@ -467,8 +467,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype) {
     if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL);
 }
 
-function generateMoonTerrain(chunkData, chunkKey, archetype) {
-    const worldSeed = chunkKey.split(':')[0];
+function generateMoonTerrain(chunkData, chunkKey, archetype, worldSeed) {
+
     const noise = makeNoise(worldSeed);
     const craterNoise = makeNoise(worldSeed + '_craters');
     const cx = parseInt(chunkKey.split(':')[1]);
@@ -502,8 +502,8 @@ function generateMoonTerrain(chunkData, chunkKey, archetype) {
     }
 }
 
-function generateVulcanTerrain(chunkData, chunkKey, archetype) {
-    const worldSeed = chunkKey.split(':')[0];
+function generateVulcanTerrain(chunkData, chunkKey, archetype, worldSeed) {
+
     const VULCAN_SEA_LEVEL = 32 + Math.floor(makeSeededRandom(worldSeed + '_vulcan_sea_level')() * 8);
     const noise = makeNoise(worldSeed);
     const mountainNoise = makeNoise(worldSeed + '_mountains');
@@ -680,12 +680,12 @@ function generateVulcanTerrain(chunkData, chunkKey, archetype) {
     }
 }
 
-function generateDesertTerrain(chunkData, chunkKey, archetype) {
-    generateStandardTerrain(chunkData, chunkKey, archetype);
+function generateDesertTerrain(chunkData, chunkKey, archetype, worldSeed) {
+    generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed);
 }
 
-function generateChunkData(chunkKey) {
-        const worldSeed = chunkKey.split(':')[0];
+function generateChunkData(chunkKey, worldSeed) {
+
         const archetype = selectArchetype(worldSeed);
         self.postMessage({ type: 'world_archetype', archetype: archetype, seed: worldSeed });
 
@@ -693,19 +693,19 @@ function generateChunkData(chunkKey) {
 
         switch (archetype.terrainGenerator) {
             case 'generateStandardTerrain':
-                generateStandardTerrain(chunkData, chunkKey, archetype);
+                generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed);
                 break;
             case 'generateMoonTerrain':
-                generateMoonTerrain(chunkData, chunkKey, archetype);
+                generateMoonTerrain(chunkData, chunkKey, archetype, worldSeed);
                 break;
             case 'generateVulcanTerrain':
-                generateVulcanTerrain(chunkData, chunkKey, archetype);
+                generateVulcanTerrain(chunkData, chunkKey, archetype, worldSeed);
                 break;
             case 'generateDesertTerrain':
-                generateDesertTerrain(chunkData, chunkKey, archetype);
+                generateDesertTerrain(chunkData, chunkKey, archetype, worldSeed);
                 break;
             default:
-                generateStandardTerrain(chunkData, chunkKey, archetype);
+                generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed);
         }
         return chunkData;
 }
@@ -1070,7 +1070,7 @@ self.onmessage = async function(e) {
         }
 
         if (type === 'generate_chunk') {
-            const chunkData = generateChunkData(data.key);
+            const chunkData = generateChunkData(data.key, data.seed);
             self.postMessage({ type: 'chunk_generated', key: data.key, data: chunkData }, [chunkData.buffer]);
             return;
         }
