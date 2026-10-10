@@ -3022,20 +3022,38 @@ function onEliteMobDeath(mob, killer) {
 
         if (dropId && BLOCKS[dropId]) {
             if (killer === userName) {
-                addToInventory(dropId, dropCount, worldSeed);
-                addMessage(`${def.name} dropped ${dropCount} ${BLOCKS[dropId].name}!`, 2500);
-            } else {
-                sendToPlayer(killer, { type: "add_to_inventory", blockId: dropId, count: dropCount, originSeed: worldSeed });
+                const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+                createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), dropId, worldSeed, userName, dropCount);
+                const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: dropId, originSeed: worldSeed, dropper: userName, world: worldName, count: dropCount });
+                for (const [peerName, peer] of peers.entries()) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+                }
+            } else if (isMobAuthority(mob)) {
+                const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+                createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), dropId, worldSeed, userName, dropCount);
+                const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: dropId, originSeed: worldSeed, dropper: userName, world: worldName, count: dropCount });
+                for (const [peerName, peer] of peers.entries()) {
+                    if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+                }
             }
         }
     } else {
         const drop = getEliteDrop(def);
         if (!drop || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
         if (killer === userName) {
-            addToInventory(drop.id, drop.count, worldSeed);
-            addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
-        } else {
-            sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
+            const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+            createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), drop.id, worldSeed, userName, drop.count);
+            const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: drop.id, originSeed: worldSeed, dropper: userName, world: worldName, count: drop.count });
+            for (const [peerName, peer] of peers.entries()) {
+                if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+            }
+        } else if (isMobAuthority(mob)) {
+            const dropItemId = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+            createDroppedItemOrb(dropItemId, mob.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), drop.id, worldSeed, userName, drop.count);
+            const message = JSON.stringify({ type: "item_dropped", dropId: dropItemId, position: { x: mob.pos.x, y: mob.pos.y + 0.5, z: mob.pos.z }, blockId: drop.id, originSeed: worldSeed, dropper: userName, world: worldName, count: drop.count });
+            for (const [peerName, peer] of peers.entries()) {
+                if (peerName !== userName && peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+            }
         }
     }
 }
