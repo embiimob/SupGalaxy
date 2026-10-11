@@ -443,6 +443,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
     const crystalPocketNoise = makeNoise(worldSeed + '_crystal_pockets');
     const crystalColorNoise = makeNoise(worldSeed + '_crystal_colors');
     const cobblePocketNoise = makeNoise(worldSeed + '_cobble_pockets');
+    const oceanSurfaceY = SEA_LEVEL + 32;
     const chunkRnd = makeSeededRandom(chunkKey);
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
@@ -462,9 +463,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             var roughness = biome.roughness;
             const elevation = fbm(noise, nx * 0.0018, nz * 0.0018, 4, 0.55);
             const localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5) - 0.5;
-            const oceanValue = fbm(oceanNoise, nx * 0.00065, nz * 0.00065, 4, 0.58);
+            const oceanValue = fbm(oceanNoise, nx * 0.00025, nz * 0.00025, 4, 0.58);
             const oceanWeight = 1 - smoothTerrainStep(0.4, 0.58, oceanValue);
-            const oceanLevel = SEA_LEVEL + Math.round(oceanWeight * 24);
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
             let riverLevel = SEA_LEVEL;
             let riverFactor = 0;
@@ -481,9 +481,9 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                 const riverDistance = Math.abs(riverNoiseValue - 0.5);
                 riverFactor = 1 - smoothTerrainStep(0, 0.075, riverDistance);
                 if (riverFactor > 0.08) {
-                    riverLevel = SEA_LEVEL + Math.round(riverFactor * 6);
-                    const riverbedTarget = riverLevel - 15;
-                    height -= Math.floor(riverFactor * Math.max(24, height - riverbedTarget));
+                    riverLevel = SEA_LEVEL + 6;
+                    const riverbedTarget = riverLevel - 22;
+                    height -= Math.floor(riverFactor * Math.max(31, height - riverbedTarget));
                 }
             }
             if (oceanWeight > 0.001) {
@@ -491,7 +491,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                 const oceanFloor = 2 + Math.floor(oceanFloorNoise * 7);
                 height = Math.round(height * (1 - oceanWeight) + oceanFloor * oceanWeight);
             }
-            const waterLevel = Math.max(riverLevel, oceanLevel);
+            const isOcean = oceanWeight > 0.08;
+            const waterLevel = isOcean ? oceanSurfaceY : riverLevel;
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
             for (var y = 0; y <= height; y++) {
                 var id = BLOCK_AIR;
@@ -513,7 +514,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                 else if (y < height) id = 3;
                 else {
                     if (archetype.biomeModifications.levelTwoTerrain &&
-                        ((oceanWeight > 0.08 && height >= waterLevel - 5 && height <= waterLevel + 2) ||
+                        ((isOcean && height >= waterLevel - 5 && height <= waterLevel + 2) ||
                             (riverFactor > 0.25 && height >= riverLevel - 4 && height <= riverLevel + 2))) {
                         id = 5;
                     } else {
@@ -536,7 +537,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             else if (height >= waterLevel && archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
         }
     }
-    if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL + 24, 48);
+    if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL + 32, 48);
 }
 
 function generateMoonTerrain(chunkData, chunkKey, archetype, worldSeed) {
