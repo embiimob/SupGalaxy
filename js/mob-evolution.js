@@ -143,7 +143,7 @@ const ELITE_MOB_TYPES = {
         name: "Magma Wyrm",
         burstColor: 0xff6a00,
         inspiredBy: "Subnautica (Sea Dragon Leviathan)",
-        archetypes: ["Vulcan"],
+        archetypes: ["Vulcan", "Earth", "Massive"],
         day: true, night: true, aquatic: true, provoke: "armed",
         hp: 45, score: 70, maxCount: 1, spawnChance: 0.25,
         hitCenterY: 0, hitRadius: 2.6, heavy: true,

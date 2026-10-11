@@ -157,7 +157,7 @@ const ARCHETYPES = {
         skyType: 'desert',
             mobSpawnRules: { day: ['grub', 'fish_school', 'fish_rare', 'whale'], night: ['crawley', 'grub', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateDesertTerrain',
-        biomeModifications: { onlyDesert: true },
+        biomeModifications: { onlyDesert: true, noWater: true },
         flora: ['cactus']
     },
     'Massive': {
@@ -470,7 +470,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             const elevation = fbm(noise, nx * 0.0018, nz * 0.0018, 4, 0.55);
             const localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5) - 0.5;
             const oceanValue = fbm(oceanNoise, nx * oceanNoiseScale, nz * oceanNoiseScale, 4, 0.58);
-            const oceanWeight = 1 - smoothTerrainStep(0.4, 0.56, oceanValue);
+            const oceanWeight = archetype.biomeModifications.noWater ? 0 : 1 - smoothTerrainStep(0.4, 0.56, oceanValue);
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
             let riverLevel = SEA_LEVEL;
             let riverFactor = 0;
