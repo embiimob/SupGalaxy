@@ -225,7 +225,7 @@ Spawn, explore, build, fight, survive.
 |--------|------------------|--------|
 | Move | `WASD` | Arrow buttons |
 | Jump | `Space` | `J` |
-| Attack / Mine | Left-click | ⚔ |
+| Attack / Mine | Left-click; hold/release to draw/fire a bow | ⚔ |
 | Place Block | Right-click | Hold |
 | Select Item | Scroll | Hotbar tap |
 | Toggle View | `T` | `T` |
@@ -234,6 +234,8 @@ Spawn, explore, build, fight, survive.
 | Teleport | `P` | — |
 | Save | `X` | — |
 | **Open Chat** | **`/`** | **📢 button** |
+
+Each login currently includes a temporary bow and 64 arrows for testing.
 
 **Tips:**  
 - 2 sand → 4 glass  

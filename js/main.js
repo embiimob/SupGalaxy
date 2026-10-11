@@ -969,6 +969,19 @@ function createArrowMesh() {
     return arrow;
 }
 
+function createFeatherMesh() {
+    const feather = new THREE.Group();
+    const vane = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: .9 }));
+    vane.scale.set(.075, .28, .025);
+    vane.rotation.z = -.2;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.006, .006, .54, 4),
+        new THREE.MeshStandardMaterial({ color: 0xc7c0b4, roughness: .8 }));
+    shaft.rotation.z = -.2;
+    feather.add(vane, shaft);
+    return feather;
+}
+
 function getArrowProjectileMesh() {
     let arrow = arrowProjectileMeshPool.find(candidate => !candidate.inUse);
     if (!arrow) {
@@ -1023,7 +1036,7 @@ function updateBowDrawPose(bow, draw) {
 }
 
 function getBowDrawProgress(now = performance.now()) {
-    return player.bowDrawStart ? Math.min(1, Math.max(0, (now - player.bowDrawStart) / 700)) : 0;
+    return player.bowDrawStart != null ? Math.min(1, Math.max(0, (now - player.bowDrawStart) / 700)) : 0;
 }
 
 // Gun-local frame: grip at the origin, barrel along -Z above the grip (+Y).
@@ -2093,7 +2106,7 @@ function createProjectile(e, t, o, a, n = "red", damageSource = null, options = 
 function createDroppedItemOrb(e, t, o, a, n, count = 1) {
     const r = BLOCKS[o];
     if (!r) return;
-    const l = r.pickaxe ? createPickaxeMesh(o) : r.bone ? createBoneMesh() : new THREE.Mesh(
+    const l = r.pickaxe ? createPickaxeMesh(o) : r.bow ? createBowMesh() : o === 178 ? createArrowMesh() : o === 180 ? createFeatherMesh() : r.bone ? createBoneMesh() : new THREE.Mesh(
         new THREE.SphereGeometry(.25, 16, 16),
         new THREE.MeshStandardMaterial({
             color: r.color,
@@ -3177,7 +3190,11 @@ function releaseBowShot() {
         updateFirstPersonBow(now);
         return;
     }
-    if (now - (player.lastBowFireTime || 0) < 180) return;
+    if (now - (player.lastBowFireTime || 0) < 180) {
+        updateHeldBowPose(avatarGroup);
+        updateFirstPersonBow(now);
+        return;
+    }
     const arrowIndex = INVENTORY.findIndex(item => item && item.id === 178 && item.count > 0);
     if (arrowIndex < 0) {
         addMessage("No arrows to fire!", 1200);
