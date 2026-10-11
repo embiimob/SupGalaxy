@@ -464,7 +464,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             const elevation = fbm(noise, nx * 0.0018, nz * 0.0018, 4, 0.55);
             const localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5) - 0.5;
             const oceanValue = fbm(oceanNoise, nx * 0.00025, nz * 0.00025, 4, 0.58);
-            const oceanWeight = 1 - smoothTerrainStep(0.4, 0.58, oceanValue);
+            const oceanWeight = 1 - smoothTerrainStep(0.4, 0.56, oceanValue);
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
             let riverLevel = SEA_LEVEL;
             let riverFactor = 0;
@@ -487,13 +487,21 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                     if (riverFactor > 0.85) height = Math.min(height, riverbedTarget);
                 }
             }
-            if (oceanWeight > 0.001) {
+            if (oceanWeight > 0) {
                 const oceanFloorNoise = fbm(oceanNoise, nx * 0.004, nz * 0.004, 3, 0.5);
                 const oceanFloor = 2 + Math.floor(oceanFloorNoise * 7);
-                height = Math.round(height * (1 - oceanWeight) + oceanFloor * oceanWeight);
+                if (oceanWeight <= 0.08) {
+                    const coastBlend = smoothTerrainStep(0, 0.08, oceanWeight);
+                    height = Math.round(height * (1 - coastBlend) + (oceanSurfaceY - 1) * coastBlend);
+                } else {
+                    const basinBlend = smoothTerrainStep(0.08, 0.7, oceanWeight);
+                    height = Math.round((oceanSurfaceY - 1) * (1 - basinBlend) + oceanFloor * basinBlend);
+                }
             }
             const isOcean = oceanWeight > 0.08;
-            const waterLevel = isOcean ? oceanSurfaceY : riverLevel;
+            const coastalRiverBlend = smoothTerrainStep(0, 0.08, oceanWeight);
+            const waterLevel = isOcean ? oceanSurfaceY :
+                riverFactor > 0.08 ? Math.round(riverLevel + (oceanSurfaceY - riverLevel) * coastalRiverBlend) : SEA_LEVEL;
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
             for (var y = 0; y <= height; y++) {
                 var id = BLOCK_AIR;
