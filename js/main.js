@@ -1331,7 +1331,7 @@ var firstPersonBow = null;
 function poseFirstPersonBow(direction = null) {
     if (!firstPersonBow) return;
     const widen = Math.max(1, camera.aspect / (16 / 9));
-    firstPersonBow.position.set(.55 * widen, -.16, -.28);
+    firstPersonBow.position.set(.22 * widen, -.05, -.28);
     if (direction) {
         const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
         const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
@@ -1354,7 +1354,7 @@ function updateFirstPersonBow(now = performance.now()) {
         if (toolId) {
             firstPersonBow = createBowMesh();
             firstPersonBow.userData.toolId = toolId;
-            firstPersonBow.scale.setScalar(.45);
+            firstPersonBow.scale.setScalar(.5);
             firstPersonBow.traverse(object => {
                 if (!object.isMesh) return;
                 object.renderOrder = 1000;
