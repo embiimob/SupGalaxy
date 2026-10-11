@@ -444,6 +444,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
     const crystalColorNoise = makeNoise(worldSeed + '_crystal_colors');
     const cobblePocketNoise = makeNoise(worldSeed + '_cobble_pockets');
     const oceanSurfaceY = SEA_LEVEL + 32;
+    const oceanSizeScale = 0.25 + makeSeededRandom(worldSeed + '_ocean_size')() * 0.75;
+    const oceanNoiseScale = 0.00025 / oceanSizeScale;
     const chunkRnd = makeSeededRandom(chunkKey);
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
@@ -463,7 +465,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             var roughness = biome.roughness;
             const elevation = fbm(noise, nx * 0.0018, nz * 0.0018, 4, 0.55);
             const localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5) - 0.5;
-            const oceanValue = fbm(oceanNoise, nx * 0.00025, nz * 0.00025, 4, 0.58);
+            const oceanValue = fbm(oceanNoise, nx * oceanNoiseScale, nz * oceanNoiseScale, 4, 0.58);
             const oceanWeight = 1 - smoothTerrainStep(0.4, 0.56, oceanValue);
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
             let riverLevel = SEA_LEVEL;
