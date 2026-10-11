@@ -1007,16 +1007,16 @@ function createBowMesh() {
     ]), 24, .035, 6, false), wood);
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .32, 8), wood);
     const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, .56, 0),
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, -.56, 0)
+        new THREE.Vector3(0, .56, .1),
+        new THREE.Vector3(0, 0, .1),
+        new THREE.Vector3(0, -.56, .1)
     ]);
     const bowstring = new THREE.Line(stringGeometry, stringMaterial);
     const arrow = createArrowMesh();
-    arrow.position.z = -.24;
+    arrow.position.z = -.08;
     arrow.visible = false;
     const muzzle = new THREE.Object3D();
-    muzzle.position.z = -.2;
+    muzzle.position.z = -.38;
     bow.add(limb, grip, bowstring, arrow, muzzle);
     bow.userData.bowstring = bowstring;
     bow.userData.nockedArrow = arrow;
@@ -1028,12 +1028,13 @@ function updateBowDrawPose(bow, draw) {
     if (!bow) return;
     const pull = .34 * draw;
     const stringPositions = bow.userData.bowstring.geometry.attributes.position;
-    stringPositions.setXYZ(1, 0, 0, pull);
+    stringPositions.setXYZ(0, 0, .56, .1);
+    stringPositions.setXYZ(1, 0, 0, .1 + pull);
+    stringPositions.setXYZ(2, 0, -.56, .1);
     stringPositions.needsUpdate = true;
     bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
-    bow.userData.nockedArrow.position.z = -.24 + pull;
-    bow.userData.muzzle.position.z = -.2 + pull;
+    bow.userData.nockedArrow.position.z = -.08 + pull;
 }
 
 function getBowDrawProgress(now = performance.now()) {
@@ -1329,7 +1330,7 @@ var firstPersonBow = null;
 function poseFirstPersonBow(direction = null) {
     if (!firstPersonBow) return;
     const widen = Math.max(1, camera.aspect / (16 / 9));
-    firstPersonBow.position.set(.58 * widen, -.34, -.82);
+    firstPersonBow.position.set(.42 * widen, -.2, -1.3);
     if (direction) {
         const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
         const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
@@ -1352,7 +1353,7 @@ function updateFirstPersonBow(now = performance.now()) {
         if (toolId) {
             firstPersonBow = createBowMesh();
             firstPersonBow.userData.toolId = toolId;
-            firstPersonBow.scale.setScalar(1.2);
+            firstPersonBow.scale.setScalar(.85);
             firstPersonBow.traverse(object => {
                 if (!object.isMesh) return;
                 object.renderOrder = 1000;
