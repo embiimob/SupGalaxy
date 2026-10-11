@@ -1000,26 +1000,24 @@ function createBowMesh() {
     const stringMaterial = new THREE.MeshBasicMaterial({ color: 0xf5f5f5 });
     const limb = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, -.56, 0),
-        new THREE.Vector3(.24, -.3, 0),
-        new THREE.Vector3(.28, 0, 0),
-        new THREE.Vector3(.24, .3, 0),
+        new THREE.Vector3(-.24, -.3, 0),
+        new THREE.Vector3(-.28, 0, 0),
+        new THREE.Vector3(-.24, .3, 0),
         new THREE.Vector3(0, .56, 0)
     ]), 24, .035, 6, false), wood);
     limb.position.z = -.22;
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .32, 8), wood);
-    grip.position.z = -.22;
     const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, .56, .24),
-        new THREE.Vector3(0, 0, .24),
-        new THREE.Vector3(0, -.56, .24)
+        new THREE.Vector3(0, .56, -.22),
+        new THREE.Vector3(0, 0, -.22),
+        new THREE.Vector3(0, -.56, -.22)
     ]);
     const bowstring = new THREE.Line(stringGeometry, stringMaterial);
     const arrow = createArrowMesh();
-    arrow.position.z = .01;
+    arrow.position.z = -.435;
     arrow.visible = false;
     const muzzle = new THREE.Object3D();
-    muzzle.position.z = -.77;
-    bow.add(limb, grip, bowstring, arrow, muzzle);
+    muzzle.position.z = -1.215;
+    bow.add(limb, bowstring, arrow, muzzle);
     bow.userData.bowstring = bowstring;
     bow.userData.nockedArrow = arrow;
     bow.userData.muzzle = muzzle;
@@ -1030,14 +1028,14 @@ function updateBowDrawPose(bow, draw) {
     if (!bow) return;
     const pull = .48 * draw;
     const stringPositions = bow.userData.bowstring.geometry.attributes.position;
-    stringPositions.setXYZ(0, 0, .56, .24);
-    stringPositions.setXYZ(1, 0, 0, .24 + pull);
-    stringPositions.setXYZ(2, 0, -.56, .24);
+    stringPositions.setXYZ(0, 0, .56, -.22);
+    stringPositions.setXYZ(1, 0, 0, -.22 + pull);
+    stringPositions.setXYZ(2, 0, -.56, -.22);
     stringPositions.needsUpdate = true;
     bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
-    bow.userData.nockedArrow.position.z = .01 + pull;
-    bow.userData.muzzle.position.z = -.77 + pull;
+    bow.userData.nockedArrow.position.z = -.435 + pull;
+    bow.userData.muzzle.position.z = -1.215 + pull;
 }
 
 function getBowDrawProgress(now = performance.now()) {
@@ -1333,7 +1331,7 @@ var firstPersonBow = null;
 function poseFirstPersonBow(direction = null) {
     if (!firstPersonBow) return;
     const widen = Math.max(1, camera.aspect / (16 / 9));
-    firstPersonBow.position.set(.42 * widen, -.2, -.95);
+    firstPersonBow.position.set(.36 * widen, -.18, -.48);
     if (direction) {
         const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
         const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
@@ -1356,7 +1354,7 @@ function updateFirstPersonBow(now = performance.now()) {
         if (toolId) {
             firstPersonBow = createBowMesh();
             firstPersonBow.userData.toolId = toolId;
-            firstPersonBow.scale.setScalar(.55);
+            firstPersonBow.scale.setScalar(.45);
             firstPersonBow.traverse(object => {
                 if (!object.isMesh) return;
                 object.renderOrder = 1000;
