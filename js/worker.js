@@ -478,12 +478,12 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             let desertBluffFactor = 0;
             let desertMountainFactor = 0;
             if (isDesertTerrain) {
-                const bluffRegion = fbm(desertBluffNoise, nx * 0.0015, nz * 0.0015, 4, 0.55);
-                const mountainRegion = fbm(desertMountainNoise, nx * 0.0011, nz * 0.0011, 4, 0.55);
+                const bluffRegion = fbm(desertBluffNoise, nx * 0.002, nz * 0.002, 4, 0.55);
+                const mountainRegion = fbm(desertMountainNoise, nx * 0.0015, nz * 0.0015, 4, 0.55);
                 const mountainRidgeNoise = fbm(desertMountainNoise, nx * 0.008, nz * 0.008, 4, 0.55);
                 const mountainRidge = Math.pow(1 - Math.abs(mountainRidgeNoise * 2 - 1), 2);
-                desertBluffFactor = smoothTerrainStep(0.62, 0.65, bluffRegion);
-                desertMountainFactor = smoothTerrainStep(0.61, 0.76, mountainRegion);
+                desertBluffFactor = smoothTerrainStep(0.54, 0.64, bluffRegion);
+                desertMountainFactor = smoothTerrainStep(0.52, 0.70, mountainRegion);
                 height += Math.floor(desertBluffFactor * 24);
                 height += Math.floor(desertMountainFactor * (40 + mountainRidge * 32));
             }
@@ -567,7 +567,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             else if (height >= waterLevel && archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
             else if (height >= waterLevel && archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
             else if (height >= waterLevel && archetype.flora.includes('cactus') && biome.key === 'desert' &&
-                desertBluffFactor < 0.1 && desertMountainFactor < 0.1 && chunkRnd() < biome.featureDensity) {
+                desertBluffFactor < 0.1 && desertMountainFactor < 0.1 && chunkRnd() < biome.featureDensity * 0.35) {
                 placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
             }
         }
