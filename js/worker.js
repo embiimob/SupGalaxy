@@ -130,7 +130,7 @@ const ARCHETYPES = {
         skyType: 'earth',
         mobSpawnRules: { day: ['bee', 'fish_school', 'fish_rare', 'whale'], night: ['crawley', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
-        biomeModifications: {},
+        biomeModifications: { levelTwoTerrain: true, lushFlora: true },
         flora: ['trees', 'flowers', 'hives']
     },
     'Moon': {
@@ -166,7 +166,7 @@ const ARCHETYPES = {
         skyType: 'earth',
         mobSpawnRules: { day: ['fish_school', 'fish_rare', 'whale'], night: ['bee', 'crawley', 'fish_school', 'fish_rare', 'whale'] },
         terrainGenerator: 'generateStandardTerrain',
-        biomeModifications: { largeBiomes: true },
+        biomeModifications: { largeBiomes: true, levelTwoTerrain: true, lushFlora: true },
         flora: ['trees', 'flowers', 'hives']
     }
 };
@@ -340,8 +340,8 @@ function addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, seaLevel, maxDept
 }
 
 function placeTree(chunkData, lx, cy, lz, rnd) {
-        const treeHeight = 5 + Math.floor(rnd() * 6);
-        const canopySize = 2 + Math.floor(rnd() * 2);
+        const treeHeight = 7 + Math.floor(rnd() * 7);
+        const canopySize = 3 + Math.floor(rnd() * 2);
         const trunkBlock = 7; // Wood
         const leafBlock = 8; // Leaves
 
@@ -401,8 +401,8 @@ function pickBiome(n, biomes, archetype) {
         }
         if (n > 0.68) return biomes.find(b => b.key === 'snow') || biomes[0];
         if (n < 0.25) return biomes.find(b => b.key === 'desert') || biomes[1];
-        if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
         if (n > 0.60) return biomes.find(b => b.key === 'mountain') || biomes[4];
+        if (n > 0.45) return biomes.find(b => b.key === 'forest') || biomes[2];
         if (n < 0.35) return biomes.find(b => b.key === 'swamp') || biomes[5];
         return biomes.find(b => b.key === 'plains') || biomes[0];
 }
@@ -414,10 +414,14 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
         ...biome,
         heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
         roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
-        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5)
+        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5) * (archetype.biomeModifications.lushFlora ? 2 : 1),
+        palette: archetype.biomeModifications.lushFlora && biome.key === 'plains' ? [2, 2, 2, 3, 4, 13, 15] :
+            archetype.biomeModifications.lushFlora && biome.key === 'forest' ? [2, 2, 14, 14, 3, 4] : biome.palette
     }));
     const noise = makeNoise(worldSeed);
     const blockNoise = makeNoise(worldSeed + '_block');
+    const riverNoise = makeNoise(worldSeed + '_rivers');
+    const canyonNoise = makeNoise(worldSeed + '_canyons');
     const chunkRnd = makeSeededRandom(chunkKey);
     const cx = parseInt(chunkKey.split(':')[1]);
     const cz = parseInt(chunkKey.split(':')[2]);
@@ -430,7 +434,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             var wz = baseZ + lz;
             var nx = (wx % MAP_SIZE) / MAP_SIZE * 10000;
             var nz = (wz % MAP_SIZE) / MAP_SIZE * 10000;
-            const biomeNoiseScale = archetype.biomeModifications.largeBiomes ? 0.002 : 0.005;
+            const biomeNoiseScale = archetype.biomeModifications.largeBiomes ? 0.0012 :
+                archetype.biomeModifications.levelTwoTerrain ? 0.0035 : 0.005;
             var n = fbm(noise, nx * biomeNoiseScale, nz * biomeNoiseScale, 5, 0.6);
             var biome = pickBiome(n, modifiedBiomes, archetype);
             var heightScale = biome.heightScale;
@@ -439,29 +444,60 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             if (n > 0.7) height += Math.floor((n - 0.7) * 60 * heightScale);
             var localN = fbm(noise, nx * 0.05, nz * 0.05, 4, 0.5);
             height += Math.floor(localN * 15 * roughness);
+            let riverLevel = SEA_LEVEL;
+            let canyonDistance = 1;
+            if (archetype.biomeModifications.levelTwoTerrain) {
+                const mountainFactor = Math.max(0, Math.min(1, (n - 0.59) / 0.09));
+                if (biome.key === 'mountain') {
+                    height = 44 + Math.floor(mountainFactor * (archetype.biomeModifications.largeBiomes ? 176 : 150)) + Math.floor(localN * 15 * roughness);
+                    const ridgeNoise = fbm(noise, nx * 0.018, nz * 0.018, 4, 0.55);
+                    const ridge = Math.pow(1 - Math.abs(ridgeNoise * 2 - 1), 2);
+                    height += Math.floor(ridge * mountainFactor * (archetype.biomeModifications.largeBiomes ? 34 : 26));
+                }
+                const canyonNoiseValue = fbm(canyonNoise, nx * 0.001, nz * 0.001, 3, 0.55);
+                canyonDistance = Math.abs(canyonNoiseValue - 0.5);
+                if (canyonDistance < 0.035) {
+                    const canyonDepth = (archetype.biomeModifications.largeBiomes ? 34 : 26) * (1 - canyonDistance / 0.035);
+                    height -= Math.floor(canyonDepth);
+                }
+                const riverNoiseValue = fbm(riverNoise, nx * 0.003, nz * 0.003, 3, 0.55);
+                const riverDistance = Math.abs(riverNoiseValue - 0.5);
+                if (riverDistance < 0.02) {
+                    riverLevel = SEA_LEVEL + 3;
+                    const riverbedDepth = (archetype.biomeModifications.largeBiomes ? 15 : 12) * (1 - riverDistance / 0.02);
+                    height = Math.min(height - Math.floor(riverbedDepth), riverLevel - 2);
+                }
+            }
             height = Math.max(1, Math.min(MAX_HEIGHT - 1, height));
+            if (canyonDistance < 0.035 && riverLevel === SEA_LEVEL) {
+                height = Math.max(SEA_LEVEL + 4, height);
+            }
             for (var y = 0; y <= height; y++) {
                 var id = BLOCK_AIR;
                 if (y === 0) id = 1;
                 else if (y < height - 3) id = 4;
                 else if (y < height) id = 3;
                 else {
-                    var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
-                    var paletteIndex = Math.floor(blockN * biome.palette.length);
-                    id = biome.palette[paletteIndex % biome.palette.length];
+                    if (archetype.biomeModifications.levelTwoTerrain && height >= SEA_LEVEL - 3 && height <= SEA_LEVEL + 2) {
+                        id = 5;
+                    } else {
+                        var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
+                        var paletteIndex = Math.floor(blockN * biome.palette.length);
+                        id = biome.palette[paletteIndex % biome.palette.length];
+                    }
                 }
                 chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = id;
             }
             if (!archetype.biomeModifications.noWater) {
-                for (var y = height + 1; y <= SEA_LEVEL; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
+                for (var y = height + 1; y <= riverLevel; y++) chunkData[y * CHUNK_SIZE * CHUNK_SIZE + lz * CHUNK_SIZE + lx] = 6;
             }
             const hiveValue = hiveNoise(nx * 0.1, nz * 0.1);
-            if (archetype.flora.includes('hives') && biome.key === 'forest' && hiveValue > 0.98) {
+            if (height >= riverLevel && archetype.flora.includes('hives') && biome.key === 'forest' && hiveValue > 0.98) {
                 placeHive(chunkData, lx, height + 1, lz, wx, wz);
             }
-            else if (archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
-            else if (archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
-            else if (archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (height >= riverLevel && archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (height >= riverLevel && archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
+            else if (height >= riverLevel && archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
         }
     }
     if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL);
@@ -1915,6 +1951,9 @@ self.onmessage = async function(e) {
                 if (data.seed === worldSeed) {
                     worldArchetype = data.archetype;
                     gravity = data.archetype.gravity;
+                    if (typeof setPlanetWeatherEnabled === 'function') {
+                        setPlanetWeatherEnabled(data.archetype.name === 'Earth' || data.archetype.name === 'Massive');
+                    }
                     document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
                 }
             } else if (data.type === "server_updates") {

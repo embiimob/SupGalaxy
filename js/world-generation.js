@@ -1,4 +1,15 @@
 // This file will contain functions related to procedural world generation.
+var weatherParticles = null,
+    weatherEnabled = false,
+    weatherRandom = null,
+    weatherTimer = 0,
+    weatherDuration = 0,
+    weatherIntensity = 0,
+    weatherTarget = 0,
+    weatherPositions = null,
+    weatherFallSpeeds = null,
+    stormCloudColor = null;
+
 function makeSeededRandom(e) {
     for (var t = 2166136261, o = 0; o < e.length; o++) t = Math.imul(t ^ e.charCodeAt(o), 16777619) >>> 0;
     return function () {
@@ -171,7 +182,43 @@ function createBlockTexture(e, t) {
         colorAt = (shade) => seededBase.clone().multiplyScalar(shade).getStyle(),
         brickSurfaceNoise = isSeededBrick ? makeNoise(e + "_brick_surface_" + textureSeedId) : null;
 
-    if (style === "sand") {
+    if (["grass", "dirt", "stone", "bark", "leaves", "moss", "snow"].includes(style)) {
+        const surfaceNoise = makeNoise(e + "_block_surface_" + textureSeedId);
+        const baseShade = style === "snow" ? 1.04 : style === "stone" ? .92 : .98;
+        for (let x = 0; x < a; x++) {
+            for (let y = 0; y < a; y++) {
+                const broadVariation = surfaceNoise(x / 8, y / 8) - .5;
+                const fineVariation = surfaceNoise(x / 2.5, y / 2.5) - .5;
+                let shade = baseShade + broadVariation * .28 + fineVariation * .16 + (s() - .5) * .12;
+                if (style === "moss" && surfaceNoise(x / 4, y / 4) > .57) shade *= .82;
+                if (style === "leaves" && surfaceNoise(x / 3, y / 3) > .68) shade *= 1.2;
+                if (style === "bark") shade += Math.sin((x + surfaceNoise(x / 5, y / 5) * 3) * Math.PI / 4) * .13;
+                r.fillStyle = colorAt(shade);
+                r.fillRect(x, y, 1, 1);
+            }
+        }
+        if (style === "grass" || style === "moss") {
+            for (let patch = 0; patch < 90; patch++) {
+                const x = Math.floor(s() * a);
+                const y = Math.floor(s() * a);
+                r.fillStyle = colorAt(style === "grass" ? .7 + s() * .65 : .62 + s() * .65);
+                r.fillRect(x, y, style === "moss" && s() > .7 ? 2 : 1, style === "moss" && s() > .7 ? 2 : 1);
+            }
+        } else if (style === "leaves") {
+            for (let vein = 0; vein < 18; vein++) {
+                const x = Math.floor(s() * a);
+                const y = Math.floor(s() * a);
+                r.fillStyle = colorAt(s() > .5 ? 1.28 : .68);
+                r.fillRect(x, y, 1, 1);
+                if (x + 1 < a && y + 1 < a && s() > .45) r.fillRect(x + 1, y + 1, 1, 1);
+            }
+        } else if (style === "stone") {
+            for (let fleck = 0; fleck < 65; fleck++) {
+                r.fillStyle = colorAt(.55 + s() * .85);
+                r.fillRect(Math.floor(s() * a), Math.floor(s() * a), 1 + Math.floor(s() * 2), 1);
+            }
+        }
+    } else if (style === "sand") {
         r.fillStyle = colorAt(.98);
         r.fillRect(0, 0, a, a);
         const sandNoise = makeNoise(e + "_sand_grain_" + textureSeedId);
@@ -488,16 +535,69 @@ function createCloudTexture(e) {
     o.width = t, o.height = t;
     const a = o.getContext("2d"),
         n = makeNoise(e + "_clouds");
+    const image = a.createImageData(t, t);
+    const pixels = image.data;
     for (let e = 0; e < t; e++)
         for (let o = 0; o < t; o++) {
-            const t = 255 * fbm(n, e / 32, o / 32, 4, .5),
-                r = Math.max(0, t - 128);
-            a.fillStyle = `rgba(255, 255, 255, ${r / 128})`, a.fillRect(e, o, 1, 1)
+            const density = fbm(n, e / 36, o / 36, 5, .55) * .78 + fbm(n, e / 12, o / 12, 2, .5) * .22;
+            const alpha = Math.max(0, Math.min(.9, (density - .49) * 4.5));
+            const index = 4 * (o * t + e);
+            pixels[index] = 255;
+            pixels[index + 1] = 255;
+            pixels[index + 2] = 255;
+            pixels[index + 3] = Math.floor(alpha * 255);
         }
+    a.putImageData(image, 0, 0);
     return new THREE.CanvasTexture(o)
 }
 
+function setPlanetWeatherEnabled(enabled) {
+    weatherEnabled = !!enabled;
+    if (!weatherEnabled) {
+        weatherIntensity = 0;
+        weatherTarget = 0;
+    } else if (!weatherParticles) {
+        createWeatherParticles();
+    }
+    if (weatherParticles) weatherParticles.visible = weatherEnabled && weatherIntensity > .25;
+}
+
+function createWeatherParticles() {
+    const count = 180;
+    const geometry = new THREE.BufferGeometry();
+    weatherPositions = new Float32Array(count * 6);
+    weatherFallSpeeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+        const offset = i * 6;
+        weatherPositions[offset] = (weatherRandom() - .5) * 56;
+        weatherPositions[offset + 1] = weatherRandom() * 45;
+        weatherPositions[offset + 2] = (weatherRandom() - .5) * 56;
+        weatherPositions[offset + 3] = weatherPositions[offset];
+        weatherPositions[offset + 4] = weatherPositions[offset + 1] - 1.8;
+        weatherPositions[offset + 5] = weatherPositions[offset + 2];
+        weatherFallSpeeds[i] = 24 + weatherRandom() * 18;
+    }
+    geometry.setAttribute("position", new THREE.BufferAttribute(weatherPositions, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xc6e8ff, transparent: true, opacity: 0, depthWrite: false });
+    weatherParticles = new THREE.LineSegments(geometry, material);
+    weatherParticles.visible = false;
+    scene.add(weatherParticles);
+}
+
 function initSky() {
+    if (weatherParticles) {
+        scene.remove(weatherParticles);
+        weatherParticles.geometry.dispose();
+        weatherParticles.material.dispose();
+    }
+    weatherParticles = null;
+    weatherEnabled = false;
+    weatherRandom = makeSeededRandom(worldSeed + "_weather");
+    weatherTimer = 0;
+    weatherDuration = 45 + weatherRandom() * 90;
+    weatherIntensity = 0;
+    weatherTarget = 0;
+    stormCloudColor = new THREE.Color(0x73869a);
     const e = makeSeededRandom(worldSeed + "_sky"),
         t = e(),
         o = .5 + .5 * e(),
@@ -595,7 +695,7 @@ function initSky() {
         u = new THREE.Points(i, c);
     stars.add(u), scene.add(stars), clouds = new THREE.Group;
     const p = createCloudTexture(worldSeed),
-        m = Math.floor(80 * e());
+        m = 55 + Math.floor(35 * e());
     for (let t = 0; t < m; t++) {
         const t = new THREE.Mesh(new THREE.PlaneGeometry(200 + 300 * e(), 100 + 150 * e()), new THREE.MeshBasicMaterial({
             map: p,
@@ -604,9 +704,14 @@ function initSky() {
             opacity: .6 + .3 * e(),
             side: THREE.DoubleSide
         }));
-        t.position.set(8e3 * (e() - .5), 200 + 150 * e(), 8e3 * (e() - .5)), t.rotation.y = e() * Math.PI * 2, clouds.add(t)
+        t.position.set(8e3 * (e() - .5), 180 + 180 * e(), 8e3 * (e() - .5));
+        t.rotation.x = -Math.PI / 2;
+        t.rotation.z = e() * Math.PI * 2;
+        t.userData.clearColor = t.material.color.clone();
+        t.userData.clearOpacity = t.material.opacity;
+        clouds.add(t);
     }
-    scene.add(clouds)
+    scene.add(clouds);
 }
 
 // Night follows the local clock and the primary sun's offset; usable before the first updateSky.
@@ -645,9 +750,42 @@ function updateSky(e) {
     })), stars.visible = true, stars.children.forEach(starsObject => {
         starsObject.material.opacity = isNight || inSpace ? 1 : .16;
     }), stars.rotation.y += .005 * e, clouds.children.forEach((t => {
-        t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3)
+        t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3);
+        t.material.color.copy(t.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .65);
+        t.material.opacity = t.userData.clearOpacity * (1 + weatherIntensity * .2);
     }));
     clouds.visible = !inSpace;
+    if (weatherEnabled) {
+        weatherTimer += e;
+        if (weatherTimer >= weatherDuration) {
+            weatherTimer = 0;
+            weatherDuration = 75 + weatherRandom() * 150;
+            weatherTarget = weatherRandom() < .42 ? .55 + weatherRandom() * .35 : 0;
+        }
+        weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, e * .08);
+    }
+    if (weatherParticles) {
+        weatherParticles.visible = weatherEnabled && !inSpace && weatherIntensity > .08;
+        weatherParticles.material.opacity = weatherIntensity * .65;
+        weatherParticles.position.copy(camera.position);
+        if (weatherParticles.visible) {
+            const positions = weatherParticles.geometry.attributes.position.array;
+            for (let i = 0; i < weatherFallSpeeds.length; i++) {
+                const offset = i * 6;
+                positions[offset + 1] -= weatherFallSpeeds[i] * e;
+                positions[offset + 4] = positions[offset + 1] - 1.8;
+                positions[offset] += e * 3;
+                positions[offset + 3] = positions[offset];
+                if (positions[offset + 1] < -12) {
+                    positions[offset] = positions[offset + 3] = (weatherRandom() - .5) * 56;
+                    positions[offset + 1] = 28 + weatherRandom() * 24;
+                    positions[offset + 4] = positions[offset + 1] - 1.8;
+                    positions[offset + 2] = positions[offset + 5] = (weatherRandom() - .5) * 56;
+                }
+            }
+            weatherParticles.geometry.attributes.position.needsUpdate = true;
+        }
+    }
     const r = Math.max(0, n);
 
     let targetTransition = 0;

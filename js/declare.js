@@ -85,16 +85,19 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         2: {
             name: "Grass",
             color: "#3fb34f",
+            textureStyle: "grass",
             strength: 1
         },
         3: {
             name: "Dirt",
             color: "#7a4f29",
+            textureStyle: "dirt",
             strength: 2
         },
         4: {
             name: "Stone",
             color: "#9aa0a6",
+            textureStyle: "stone",
             strength: 4,
             requiresPick: !0
         },
@@ -113,11 +116,13 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         7: {
             name: "Wood",
             color: "#8b5a33",
+            textureStyle: "bark",
             strength: 4
         },
         8: {
             name: "Leaves",
             color: "#2f8f46",
+            textureStyle: "leaves",
             strength: 1,
             noShadow: true
         },
@@ -129,6 +134,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         10: {
             name: "Snow",
             color: "#ffffff",
+            textureStyle: "snow",
             strength: 1
         },
         11: {
@@ -149,6 +155,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         14: {
             name: "Moss",
             color: "#507d43",
+            textureStyle: "moss",
             strength: 1
         },
         15: {
