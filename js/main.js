@@ -976,7 +976,11 @@ function createLaserGunMesh(toolId) {
         innerGroup.add(limb);
         const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.9, 0.015), stringMat);
         innerGroup.add(bowString);
-        innerGroup.rotation.set(-Math.PI/2, 0, Math.PI/2 + Math.PI/4);
+        // reduce the angle by 15 degrees: 135 - 15 = 120
+        // and also rotate 180 degrees so string is behind the player not in front of them
+        // 120 + 180 = 300 degrees.
+        // 300 degrees in radians: 300 * Math.PI / 180 = 5 * Math.PI / 3
+        innerGroup.rotation.set(-Math.PI/2, 0, 5 * Math.PI / 3);
         group.add(innerGroup);
         group.userData.isBow = true;
         group.userData.bowString = bowString;
@@ -1035,7 +1039,11 @@ function laserGunGripMatrix(toolId, w, skinned, out) {
         const restY = skinned ? .02 : -.20;
         const aimY = skinned ? -.04 : 0.10;
         laserGunTmpVec.set(0, restY + (aimY - restY) * w, restZ * (1 - w));
-        laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(Math.PI / 2 - Math.PI / 2 * w, 0, -Math.PI/4 * w));
+
+        // Since the innerGroup was flipped 180 (for the string direction),
+        // we flip the grip's base orientation by 180 around Y, and invert the Z aim angle
+        // to maintain the correct forward-pointing direction.
+        laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(Math.PI / 2 - Math.PI / 2 * w, Math.PI, Math.PI/4 * w));
         return out.compose(laserGunTmpVec, laserGunTmpQuat, laserGunTmpScale);
     }
     const restZ = toolId === 133 ? (skinned ? -.24 : -.36) : (skinned ? -.14 : -.26);
@@ -1137,9 +1145,13 @@ function poseFirstPersonLaserGun(w, recoil) {
     let restEulerX = 1.05;
     if (bow) restEulerX = 0; // Don't tip bow
     const restQuat = laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(restEulerX, .25, .15));
+    if (bow) restQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI)); // adjust for 180 flip
+
     const distance = gun.userData.aimDistance || 20;
     const aimDir = new THREE.Vector3(-aimX, -aimY, -distance - aimZ).normalize();
     gun.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
+    if (bow) gun.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI)); // adjust for 180 flip
+
     gun.quaternion.slerpQuaternions(restQuat, gun.quaternion.clone(), w);
 
     if (bow && gun.userData.bowString) {
