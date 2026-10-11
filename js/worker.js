@@ -484,6 +484,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                     riverLevel = SEA_LEVEL + 6;
                     const riverbedTarget = riverLevel - 22;
                     height -= Math.floor(riverFactor * Math.max(31, height - riverbedTarget));
+                    if (riverFactor > 0.85) height = Math.min(height, riverbedTarget);
                 }
             }
             if (oceanWeight > 0.001) {
