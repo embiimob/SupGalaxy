@@ -1922,6 +1922,7 @@ function setupDataChannel(e, t) {
                     break;
                 case "laser_fired_batch":
                 case "laser_fired":
+                case "arrow_shot":
                 case "item_dropped":
                 case "item_picked_up":
                     if (isHost) {
@@ -1932,11 +1933,11 @@ function setupDataChannel(e, t) {
                             }
                         }
                     }
-                    if (s.type === "laser_fired" || s.type === "laser_fired_batch") {
+                    if (s.type === "laser_fired" || s.type === "laser_fired_batch" || s.type === "arrow_shot") {
                         laserQueue.push(s);
                     } else if (s.type === "item_dropped") {
                         if (!droppedItems.some((item => item.id === s.dropId))) {
-                            createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper);
+                            createDroppedItemOrb(s.dropId, new THREE.Vector3(s.position.x, s.position.y, s.position.z), s.blockId, s.originSeed, s.dropper, s.count || 1);
                         }
                     } else if (s.type === "item_picked_up") {
                         const f = droppedItems.findIndex((e => e.id === s.dropId));

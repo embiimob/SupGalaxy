@@ -61,7 +61,8 @@ const ELITE_MOB_TYPES = {
         day: false, night: true,
         hp: 20, score: 40, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 1.1, hitRadius: 1.3,
-        drop: { id: 124, count: 1, chance: 0.5 }
+        drop: { id: 179, count: 1, chance: 0.1 },
+        drops2: { id: 178, count: 3, chance: 0.6 }
     },
     dust_vulture: {
         name: "Dust Vulture",
@@ -71,7 +72,7 @@ const ELITE_MOB_TYPES = {
         hp: 12, score: 30, maxCount: 4, worldMax: 4, wideRange: true, spawnChance: 0.4, spawnAltitude: 18,
         roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
-        drop: { id: 176, count: 2, chance: 0.6 }
+        drop: { id: 180, count: 1, chance: 0.6 }
     },
     crater_hopper: {
         name: "Crater Hopper",
@@ -3004,12 +3005,28 @@ function getEliteDrop(def) {
 function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
     spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
-    const drop = getEliteDrop(def);
-    if (!drop || !killer || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
-    if (killer === userName) {
-        addToInventory(drop.id, drop.count, worldSeed);
-        addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
-    } else {
-        sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
-    }
+
+    // Process drops dynamically for the killer
+    const drop1 = getEliteDrop(def);
+    const drop2 = def.drops2;
+
+    const tryDrop = (dropDef) => {
+        if (!dropDef || !killer || Math.random() > dropDef.chance || !BLOCKS[dropDef.id]) return;
+
+        let count = dropDef.count;
+        // For arrows, make it drop 1-3 randomly if count is 3
+        if (dropDef.id === 178) {
+            count = Math.floor(Math.random() * count) + 1;
+        }
+
+        const dropId = `${userName}-drop-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const pos = mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0));
+
+        if (typeof createDroppedItemOrb === "function") {
+             createDroppedItemOrb(dropId, pos, dropDef.id, worldSeed, userName, count);
+        }
+    };
+
+    tryDrop(drop1);
+    tryDrop(drop2);
 }
