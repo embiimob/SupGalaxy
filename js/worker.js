@@ -441,6 +441,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
     }));
     const noise = makeNoise(worldSeed);
     const blockNoise = makeNoise(worldSeed + '_block');
+    const desertBluffNoise = makeNoise(worldSeed + '_desert_bluffs');
+    const desertMountainNoise = makeNoise(worldSeed + '_desert_mountains');
     const riverNoise = makeNoise(worldSeed + '_rivers');
     const canyonNoise = makeNoise(worldSeed + '_canyons');
     const oceanNoise = makeNoise(worldSeed + '_oceans');
@@ -472,6 +474,18 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             const oceanValue = fbm(oceanNoise, nx * oceanNoiseScale, nz * oceanNoiseScale, 4, 0.58);
             const oceanWeight = archetype.biomeModifications.noWater ? 0 : 1 - smoothTerrainStep(0.4, 0.56, oceanValue);
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
+            let desertBluffFactor = 0;
+            let desertMountainFactor = 0;
+            if (archetype.terrainGenerator === 'generateDesertTerrain') {
+                const bluffRegion = fbm(desertBluffNoise, nx * 0.0015, nz * 0.0015, 4, 0.55);
+                const mountainRegion = fbm(desertMountainNoise, nx * 0.0011, nz * 0.0011, 4, 0.55);
+                const mountainRidgeNoise = fbm(desertMountainNoise, nx * 0.008, nz * 0.008, 4, 0.55);
+                const mountainRidge = Math.pow(1 - Math.abs(mountainRidgeNoise * 2 - 1), 2);
+                desertBluffFactor = smoothTerrainStep(0.62, 0.65, bluffRegion);
+                desertMountainFactor = smoothTerrainStep(0.61, 0.76, mountainRegion);
+                height += Math.floor(desertBluffFactor * 24);
+                height += Math.floor(desertMountainFactor * (40 + mountainRidge * 32));
+            }
             let riverLevel = SEA_LEVEL;
             let riverFactor = 0;
             if (archetype.biomeModifications.levelTwoTerrain) {
@@ -532,6 +546,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
                         ((isOcean && height >= waterLevel - 5 && height <= waterLevel + 2) ||
                             (riverFactor > 0.25 && height >= riverLevel - 4 && height <= riverLevel + 2))) {
                         id = 5;
+                    } else if (desertMountainFactor > 0.25) {
+                        id = 4;
                     } else {
                         var blockN = fbm(blockNoise, nx * 0.1, nz * 0.1, 3, 0.6);
                         var paletteIndex = Math.floor(blockN * biome.palette.length);
@@ -549,7 +565,10 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             }
             else if (height >= waterLevel && archetype.flora.includes('trees') && biome.key === 'forest' && chunkRnd() < biome.featureDensity) placeTree(chunkData, lx, height + 1, lz, chunkRnd);
             else if (height >= waterLevel && archetype.flora.includes('flowers') && biome.key === 'plains' && chunkRnd() < biome.featureDensity) placeFlower(chunkData, lx, height + 1, lz, wx, wz);
-            else if (height >= waterLevel && archetype.flora.includes('cactus') && biome.key === 'desert' && chunkRnd() < biome.featureDensity) placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+            else if (height >= waterLevel && archetype.flora.includes('cactus') && biome.key === 'desert' &&
+                desertBluffFactor < 0.1 && desertMountainFactor < 0.1 && chunkRnd() < biome.featureDensity) {
+                placeCactus(chunkData, lx, height + 1, lz, chunkRnd);
+            }
         }
     }
     if (!archetype.biomeModifications.noWater) addSeaweedPatches(chunkData, worldSeed, baseX, baseZ, SEA_LEVEL + 32, 48);
