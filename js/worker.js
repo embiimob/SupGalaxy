@@ -439,10 +439,11 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
         palette: archetype.biomeModifications.lushFlora && biome.key === 'plains' ? [2, 2, 2, 3, 4, 13, 15] :
             archetype.biomeModifications.lushFlora && biome.key === 'forest' ? [2, 2, 14, 14, 3, 4] : biome.palette
     }));
+    const isDesertTerrain = archetype.terrainGenerator === 'generateDesertTerrain';
     const noise = makeNoise(worldSeed);
     const blockNoise = makeNoise(worldSeed + '_block');
-    const desertBluffNoise = makeNoise(worldSeed + '_desert_bluffs');
-    const desertMountainNoise = makeNoise(worldSeed + '_desert_mountains');
+    const desertBluffNoise = isDesertTerrain ? makeNoise(worldSeed + '_desert_bluffs') : null;
+    const desertMountainNoise = isDesertTerrain ? makeNoise(worldSeed + '_desert_mountains') : null;
     const riverNoise = makeNoise(worldSeed + '_rivers');
     const canyonNoise = makeNoise(worldSeed + '_canyons');
     const oceanNoise = makeNoise(worldSeed + '_oceans');
@@ -476,7 +477,7 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
             var height = Math.floor(20 + elevation * 38 + localN * 8 * roughness);
             let desertBluffFactor = 0;
             let desertMountainFactor = 0;
-            if (archetype.terrainGenerator === 'generateDesertTerrain') {
+            if (isDesertTerrain) {
                 const bluffRegion = fbm(desertBluffNoise, nx * 0.0015, nz * 0.0015, 4, 0.55);
                 const mountainRegion = fbm(desertMountainNoise, nx * 0.0011, nz * 0.0011, 4, 0.55);
                 const mountainRidgeNoise = fbm(desertMountainNoise, nx * 0.008, nz * 0.008, 4, 0.55);
