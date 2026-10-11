@@ -1019,6 +1019,7 @@ function createBowMesh() {
     muzzle.position.z = -1.29;
     bow.add(limb, bowstring, arrow, muzzle);
     bow.userData.bowstring = bowstring;
+    bow.userData.limb = limb;
     bow.userData.nockedArrow = arrow;
     bow.userData.muzzle = muzzle;
     return bow;
@@ -1312,6 +1313,8 @@ function updateHeldBowPose(avatar) {
     arm.updateMatrix();
     const rig = avatar.userData.customAvatar;
     bow.visible = !rig?.ambientPlaying;
+    bow.userData.limb.position.x = .28;
+    bow.userData.bowstring.position.z = .08;
     if (rig?.rightHand) {
         rig.rightHand.getWorldPosition(bow.userData.handPosition);
         avatar.worldToLocal(bow.userData.handPosition);
