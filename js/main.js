@@ -950,19 +950,19 @@ const arrowProjectileMeshPool = [];
 
 function createArrowMesh() {
     const arrow = new THREE.Group();
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .95, 6),
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, 1.35, 6),
         new THREE.MeshStandardMaterial({ color: 0x9b7047, roughness: .8 }));
     shaft.rotation.x = Math.PI / 2;
-    shaft.position.z = -.26;
+    shaft.position.z = -.38;
     const head = new THREE.Mesh(new THREE.ConeGeometry(.055, .16, 6),
         new THREE.MeshStandardMaterial({ color: 0xc7cbd0, metalness: .45, roughness: .5 }));
     head.rotation.x = -Math.PI / 2;
-    head.position.z = -.7;
+    head.position.z = -.98;
     arrow.add(shaft, head);
     for (let i = 0; i < 3; i++) {
         const feather = new THREE.Mesh(new THREE.BoxGeometry(.09, .018, .17),
             new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: .9 }));
-        feather.position.z = .23;
+        feather.position.z = .34;
         feather.rotation.z = i * Math.PI * 2 / 3;
         arrow.add(feather);
     }
@@ -1016,7 +1016,7 @@ function createBowMesh() {
     arrow.position.z = -.23;
     arrow.visible = false;
     const muzzle = new THREE.Object3D();
-    muzzle.position.z = -.995;
+    muzzle.position.z = -1.29;
     bow.add(limb, bowstring, arrow, muzzle);
     bow.userData.bowstring = bowstring;
     bow.userData.nockedArrow = arrow;
@@ -1035,7 +1035,7 @@ function updateBowDrawPose(bow, draw) {
     bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
     bow.userData.nockedArrow.position.z = -.23 + pull;
-    bow.userData.muzzle.position.z = -.995 + pull;
+    bow.userData.muzzle.position.z = -1.29 + pull;
 }
 
 function getBowDrawProgress(now = performance.now()) {
@@ -1331,7 +1331,7 @@ var firstPersonBow = null;
 function poseFirstPersonBow(direction = null) {
     if (!firstPersonBow) return;
     const widen = Math.max(1, camera.aspect / (16 / 9));
-    firstPersonBow.position.set(.22 * widen, -.05, -.28);
+    firstPersonBow.position.set(.42 * widen, -.05, -.28);
     if (direction) {
         const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
         const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
