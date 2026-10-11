@@ -432,7 +432,6 @@ async function applySaveFile(e, t, o) {
         selectedHotIndex = 0;
         selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
         initHotbar();
-        grantBowTestKit();
         updateHotbarUI();
         console.log("[LOGIN] Creating ChunkManager from session");
         chunkManager = new ChunkManager(worldSeed);
@@ -1684,12 +1683,6 @@ function addToInventory(e, t, o = null) {
                 originSeed: a
             }, (t -= o) <= 0) return void updateHotbarUI()
         } addMessage("Inventory full"), updateHotbarUI()
-}
-
-function grantBowTestKit() {
-    if (!INVENTORY.some(item => item && item.id === 179)) addToInventory(179, 1, worldSeed);
-    const arrowCount = INVENTORY.reduce((total, item) => total + (item && item.id === 178 ? item.count : 0), 0);
-    if (arrowCount < 64) addToInventory(178, 64 - arrowCount, worldSeed);
 }
 
 function hexToRgb(e) {
@@ -5957,7 +5950,7 @@ async function startGame({ serverLogin = false } = {}) {
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), grantBowTestKit(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 

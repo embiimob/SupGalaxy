@@ -235,7 +235,7 @@ Spawn, explore, build, fight, survive.
 | Save | `X` | — |
 | **Open Chat** | **`/`** | **📢 button** |
 
-Each login currently includes a temporary bow and 64 arrows for testing.
+New players start with 7 torches and a red laser gun.
 
 **Tips:**  
 - 2 sand → 4 glass  
