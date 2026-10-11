@@ -431,7 +431,8 @@ function generateStandardTerrain(chunkData, chunkKey, archetype, worldSeed) {
         ...biome,
         heightScale: Math.max(0.1, biome.heightScale + (biomeRnd() - 0.5) * biome.heightScale * 0.5),
         roughness: Math.max(0.1, biome.roughness + (biomeRnd() - 0.5) * biome.roughness * 0.5),
-        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5) * (archetype.biomeModifications.lushFlora ? 2 : 1),
+        featureDensity: Math.max(0.005, biome.featureDensity + (biomeRnd() - 0.5) * biome.featureDensity * 0.5) *
+            (archetype.biomeModifications.lushFlora ? 2 : 1) * (biome.key === 'forest' && archetype.flora.includes('trees') ? 0.9 : 1),
         palette: archetype.biomeModifications.lushFlora && biome.key === 'plains' ? [2, 2, 2, 3, 4, 13, 15] :
             archetype.biomeModifications.lushFlora && biome.key === 'forest' ? [2, 2, 14, 14, 3, 4] : biome.palette
     }));
