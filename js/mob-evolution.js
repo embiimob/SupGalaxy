@@ -49,7 +49,7 @@ const MOB_PROJECTILE_STYLES = {
 };
 
 // Laser guns: red, green and blue. Holding one counts as "armed" for provoke: "armed" mobs.
-const ARMED_ITEM_IDS = new Set([121, 126, 133]);
+const ARMED_ITEM_IDS = new Set([121, 126, 133, 179]);
 const ELITE_PROVOKE_MS = 30000;
 
 const ELITE_MOB_TYPES = {
@@ -71,7 +71,8 @@ const ELITE_MOB_TYPES = {
         hp: 12, score: 30, maxCount: 4, worldMax: 4, wideRange: true, spawnChance: 0.4, spawnAltitude: 18,
         roost: { minDistance: 58, maxDistance: 76, radius: 12, alertRange: 26, leash: 40 },
         hitCenterY: 0, hitRadius: 1.5,
-        drop: { id: 176, count: 2, chance: 0.6 }
+        drop: { id: 176, count: 2, chance: 0.6 },
+        extraDrops: [{ id: 180, count: 1, chance: 0.6 }]
     },
     crater_hopper: {
         name: "Crater Hopper",
@@ -3004,12 +3005,15 @@ function getEliteDrop(def) {
 function onEliteMobDeath(mob, killer) {
     const def = getEliteMobDef(mob.type);
     spawnEliteBurst(mob.pos.clone().add(new THREE.Vector3(0, def.hitCenterY, 0)), getEliteBurstColor(mob.type));
-    const drop = getEliteDrop(def);
-    if (!drop || !killer || Math.random() > drop.chance || !BLOCKS[drop.id]) return;
-    if (killer === userName) {
-        addToInventory(drop.id, drop.count, worldSeed);
-        addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
-    } else {
-        sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
+    if (!killer) return;
+    const drops = [getEliteDrop(def), ...(def.extraDrops || [])];
+    for (const drop of drops) {
+        if (!drop || Math.random() > drop.chance || !BLOCKS[drop.id]) continue;
+        if (killer === userName) {
+            addToInventory(drop.id, drop.count, worldSeed);
+            addMessage(`${def.name} dropped ${drop.count} ${BLOCKS[drop.id].name}!`, 2500);
+        } else {
+            sendToPlayer(killer, { type: "add_to_inventory", blockId: drop.id, count: drop.count, originSeed: worldSeed });
+        }
     }
 }

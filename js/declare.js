@@ -732,6 +732,25 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             itemOnly: !0,
             craftingItem: !0,
             bone: !0
+        },
+        178: {
+            name: "Arrow",
+            color: "#e6dcc0",
+            itemOnly: !0
+        },
+        179: {
+            name: "Bow",
+            color: "#8b5a33",
+            itemOnly: !0,
+            hand_attachable: !0,
+            bow: !0,
+            breakChance: 1 / 500
+        },
+        180: {
+            name: "Feather",
+            color: "#f5f1e8",
+            itemOnly: !0,
+            craftingItem: !0
         }
     },
     BIOMES = [{
@@ -779,6 +798,14 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         id: "blue_iron_pick",
         out: { id: 175, count: 1 },
         requires: { 16: 1, 174: 1, 134: 1 }
+    }, {
+        id: "bow",
+        out: { id: 179, count: 1 },
+        requires: { 7: 3, 176: 1 }
+    }, {
+        id: "arrows",
+        out: { id: 178, count: 4 },
+        requires: { 180: 1, 7: 1, 4: 1 }
     }, {
         id: "glass",
         out: {
