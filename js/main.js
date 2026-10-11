@@ -1029,9 +1029,15 @@ function updateBowDrawPose(bow, draw) {
     if (!bow) return;
     const pull = .48 * draw;
     const stringPositions = bow.userData.bowstring.geometry.attributes.position;
-    stringPositions.setXYZ(0, 0, .56, 0);
-    stringPositions.setXYZ(1, 0, 0, pull);
-    stringPositions.setXYZ(2, 0, -.56, 0);
+    if (bow.userData.thirdPerson) {
+        stringPositions.setXYZ(0, 0, 0, .56);
+        stringPositions.setXYZ(1, 0, 0, pull);
+        stringPositions.setXYZ(2, 0, 0, -.56);
+    } else {
+        stringPositions.setXYZ(0, 0, .56, 0);
+        stringPositions.setXYZ(1, 0, 0, pull);
+        stringPositions.setXYZ(2, 0, -.56, 0);
+    }
     stringPositions.needsUpdate = true;
     bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
@@ -1297,6 +1303,7 @@ function updateHeldBow(avatar, toolId) {
     if (selectedBow) {
         const bow = createBowMesh();
         bow.userData.toolId = selectedBow;
+        bow.userData.thirdPerson = true;
         bow.userData.handPosition = new THREE.Vector3();
         bow.matrixAutoUpdate = false;
         avatar.add(bow);
@@ -1313,8 +1320,8 @@ function updateHeldBowPose(avatar) {
     arm.updateMatrix();
     const rig = avatar.userData.customAvatar;
     bow.visible = !rig?.ambientPlaying;
-    bow.userData.limb.position.x = .28;
-    bow.userData.bowstring.position.z = .08;
+    bow.userData.limb.position.x = 0;
+    bow.userData.limb.rotation.x = Math.PI / 2;
     if (rig?.rightHand) {
         rig.rightHand.getWorldPosition(bow.userData.handPosition);
         avatar.worldToLocal(bow.userData.handPosition);
