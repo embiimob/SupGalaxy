@@ -1006,17 +1006,19 @@ function createBowMesh() {
         new THREE.Vector3(0, .56, 0)
     ]), 24, .035, 6, false), wood);
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .32, 8), wood);
-    const upperString = new THREE.Mesh(new THREE.BoxGeometry(.014, .58, .014), stringMaterial);
-    const lowerString = new THREE.Mesh(new THREE.BoxGeometry(.014, .58, .014), stringMaterial);
-    upperString.position.y = .27;
-    lowerString.position.y = -.27;
+    const stringGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, .56, 0),
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -.56, 0)
+    ]);
+    const bowstring = new THREE.Line(stringGeometry, stringMaterial);
     const arrow = createArrowMesh();
-    arrow.position.z = -.08;
+    arrow.position.z = -.24;
     arrow.visible = false;
     const muzzle = new THREE.Object3D();
-    muzzle.position.z = -.66;
-    bow.add(limb, grip, upperString, lowerString, arrow, muzzle);
-    bow.userData.stringSegments = [upperString, lowerString];
+    muzzle.position.z = -.2;
+    bow.add(limb, grip, bowstring, arrow, muzzle);
+    bow.userData.bowstring = bowstring;
     bow.userData.nockedArrow = arrow;
     bow.userData.muzzle = muzzle;
     return bow;
@@ -1025,14 +1027,13 @@ function createBowMesh() {
 function updateBowDrawPose(bow, draw) {
     if (!bow) return;
     const pull = .34 * draw;
-    bow.userData.stringSegments[0].position.z = pull / 2;
-    bow.userData.stringSegments[1].position.z = pull / 2;
-    const angle = Math.atan2(pull, .56);
-    bow.userData.stringSegments[0].rotation.x = -angle;
-    bow.userData.stringSegments[1].rotation.x = angle;
+    const stringPositions = bow.userData.bowstring.geometry.attributes.position;
+    stringPositions.setXYZ(1, 0, 0, pull);
+    stringPositions.needsUpdate = true;
+    bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
-    bow.userData.nockedArrow.position.z = -.08 + pull;
-    bow.userData.muzzle.position.z = -.66 + pull;
+    bow.userData.nockedArrow.position.z = -.24 + pull;
+    bow.userData.muzzle.position.z = -.2 + pull;
 }
 
 function getBowDrawProgress(now = performance.now()) {
@@ -1293,10 +1294,6 @@ function updateHeldBow(avatar, toolId) {
     if (selectedBow) {
         const bow = createBowMesh();
         bow.userData.toolId = selectedBow;
-        bow.userData.gripMatrix = new THREE.Matrix4().compose(
-            new THREE.Vector3(0, -.34, 0),
-            new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)),
-            new THREE.Vector3(1, 1, 1));
         bow.userData.handPosition = new THREE.Vector3();
         bow.matrixAutoUpdate = false;
         avatar.add(bow);
@@ -1311,15 +1308,18 @@ function updateHeldBowPose(avatar) {
     const arm = avatar.children[5];
     if (!arm) return;
     arm.updateMatrix();
-    bow.matrix.multiplyMatrices(arm.matrix, bow.userData.gripMatrix);
     const rig = avatar.userData.customAvatar;
     bow.visible = !rig?.ambientPlaying;
     if (rig?.rightHand) {
         rig.rightHand.getWorldPosition(bow.userData.handPosition);
         avatar.worldToLocal(bow.userData.handPosition);
-        laserGunTmpVec.setFromMatrixPosition(bow.matrix).sub(arm.position).add(bow.userData.handPosition);
-        bow.matrix.setPosition(laserGunTmpVec);
+    } else {
+        bow.userData.handPosition.set(0, -.42, 0).applyMatrix4(arm.matrix);
     }
+    const pitch = avatar === avatarGroup ? player.pitch : (userPositions[avatar.userData.avatarUser]?.targetPitch || 0);
+    bow.matrix.compose(bow.userData.handPosition,
+        laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(pitch, 0, 0)),
+        laserGunTmpScale);
     updateBowDrawPose(bow, avatar === avatarGroup ? getBowDrawProgress() : (avatar.userData.bowDrawProgress || 0));
     bow.matrixWorldNeedsUpdate = true;
 }

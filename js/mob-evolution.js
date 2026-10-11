@@ -61,7 +61,8 @@ const ELITE_MOB_TYPES = {
         day: false, night: true,
         hp: 20, score: 40, maxCount: 3, spawnChance: 0.35,
         hitCenterY: 1.1, hitRadius: 1.3,
-        drop: { id: 124, count: 1, chance: 0.5 }
+        drop: { id: 178, count: 3, chance: 1 },
+        extraDrops: [{ id: 179, count: 1, chance: 0.35 }]
     },
     dust_vulture: {
         name: "Dust Vulture",
