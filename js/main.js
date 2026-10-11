@@ -1328,7 +1328,7 @@ function updateHeldBowPose(avatar) {
     } else {
         bow.userData.handPosition.set(0, -.42, 0).applyMatrix4(arm.matrix);
     }
-    bow.userData.handPosition.x += .45;
+    bow.userData.handPosition.x += .225;
     const pitch = avatar === avatarGroup ? player.pitch : (userPositions[avatar.userData.avatarUser]?.targetPitch || 0);
     bow.matrix.compose(bow.userData.handPosition,
         laserGunTmpQuat.setFromEuler(laserGunTmpEuler.set(pitch, 0, 0)),
