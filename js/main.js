@@ -1005,18 +1005,18 @@ function createBowMesh() {
         new THREE.Vector3(-.24, .3, 0),
         new THREE.Vector3(0, .56, 0)
     ]), 24, .035, 6, false), wood);
-    limb.position.z = -.22;
+    limb.position.z = 0;
     const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, .56, -.22),
-        new THREE.Vector3(0, 0, -.22),
-        new THREE.Vector3(0, -.56, -.22)
+        new THREE.Vector3(0, .56, 0),
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -.56, 0)
     ]);
     const bowstring = new THREE.Line(stringGeometry, stringMaterial);
     const arrow = createArrowMesh();
-    arrow.position.z = -.435;
+    arrow.position.z = -.23;
     arrow.visible = false;
     const muzzle = new THREE.Object3D();
-    muzzle.position.z = -1.215;
+    muzzle.position.z = -.995;
     bow.add(limb, bowstring, arrow, muzzle);
     bow.userData.bowstring = bowstring;
     bow.userData.nockedArrow = arrow;
@@ -1028,14 +1028,14 @@ function updateBowDrawPose(bow, draw) {
     if (!bow) return;
     const pull = .48 * draw;
     const stringPositions = bow.userData.bowstring.geometry.attributes.position;
-    stringPositions.setXYZ(0, 0, .56, -.22);
-    stringPositions.setXYZ(1, 0, 0, -.22 + pull);
-    stringPositions.setXYZ(2, 0, -.56, -.22);
+    stringPositions.setXYZ(0, 0, .56, 0);
+    stringPositions.setXYZ(1, 0, 0, pull);
+    stringPositions.setXYZ(2, 0, -.56, 0);
     stringPositions.needsUpdate = true;
     bow.userData.bowstring.geometry.computeBoundingSphere();
     bow.userData.nockedArrow.visible = draw > 0;
-    bow.userData.nockedArrow.position.z = -.435 + pull;
-    bow.userData.muzzle.position.z = -1.215 + pull;
+    bow.userData.nockedArrow.position.z = -.23 + pull;
+    bow.userData.muzzle.position.z = -.995 + pull;
 }
 
 function getBowDrawProgress(now = performance.now()) {
@@ -1331,7 +1331,7 @@ var firstPersonBow = null;
 function poseFirstPersonBow(direction = null) {
     if (!firstPersonBow) return;
     const widen = Math.max(1, camera.aspect / (16 / 9));
-    firstPersonBow.position.set(.36 * widen, -.18, -.48);
+    firstPersonBow.position.set(.55 * widen, -.16, -.28);
     if (direction) {
         const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
         const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
