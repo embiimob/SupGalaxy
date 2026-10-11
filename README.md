@@ -14,6 +14,7 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 - Worlds derived from simple keyword seeds (`space`, `FLOWER🌼`, `Love`)  
 - Cosmic biomes: Vulcan fields, lunar ranges, massive giants, vast deserts  
 - Procedural stars, sun(s) & moon(s) per world  
+- Earth and Massive feature wider biome regions, rivers, beaches, deeper canyons, rugged mountain ranges, richer foliage, layered clouds and seeded rainstorms
 
 ### 🛠 Craft, Build, Survive
 - Mine, place, craft, explore  

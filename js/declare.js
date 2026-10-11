@@ -95,6 +95,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         4: {
             name: "Stone",
             color: "#9aa0a6",
+            textureStyle: "stone",
             strength: 4,
             requiresPick: !0
         },
@@ -129,6 +130,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         10: {
             name: "Snow",
             color: "#ffffff",
+            textureStyle: "snow",
             strength: 1
         },
         11: {
