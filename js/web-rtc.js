@@ -1281,6 +1281,10 @@ function setupDataChannel(e, t) {
 
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
+                    l.bowDrawActive = s.bowDrawActive === true;
+                    l.bowDrawProgress = l.bowDrawActive && Number.isFinite(s.bowDrawProgress)
+                        ? Math.max(0, Math.min(1, s.bowDrawProgress))
+                        : 0;
                     if (Number.isFinite(s.score)) l.score = s.score;
                     if (Number.isFinite(s.health)) l.health = s.health;
                     if (Array.isArray(s.petIds)) l.petIds = s.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);

@@ -432,6 +432,7 @@ async function applySaveFile(e, t, o) {
         selectedHotIndex = 0;
         selectedBlockId = INVENTORY[0] ? INVENTORY[0].id : null;
         initHotbar();
+        grantBowTestKit();
         updateHotbarUI();
         console.log("[LOGIN] Creating ChunkManager from session");
         chunkManager = new ChunkManager(worldSeed);
@@ -772,8 +773,18 @@ function initThree() {
             }, 500);
         }
     }));
-    renderer.domElement.addEventListener("pointerup", clearPointerHold);
-    renderer.domElement.addEventListener("pointerleave", clearPointerHold);
+    renderer.domElement.addEventListener("pointerup", (e) => {
+        clearPointerHold();
+        releaseBowShot();
+    });
+    renderer.domElement.addEventListener("pointercancel", () => {
+        clearPointerHold();
+        cancelBowDraw();
+    });
+    renderer.domElement.addEventListener("pointerleave", () => {
+        clearPointerHold();
+        cancelBowDraw();
+    });
 
     renderer.domElement.addEventListener("wheel", (function (e) {
         if (e.preventDefault(), "first" === cameraMode) {
@@ -819,6 +830,7 @@ function initThree() {
         mouseLocked = document.pointerLockElement === renderer.domElement, document.getElementById("crosshair").style.display = mouseLocked && "first" === cameraMode ? "block" : "none"
         if (!mouseLocked && typeof clearPointerHold === 'function') {
             clearPointerHold();
+            cancelBowDraw();
         }
     })), renderer.domElement.addEventListener("mousemove", (function (e) {
         if ("first" === cameraMode && mouseLocked) {
@@ -934,6 +946,86 @@ function createPickaxeMesh(toolId) {
     return group;
 }
 
+const arrowProjectileMeshPool = [];
+
+function createArrowMesh() {
+    const arrow = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .72, 6),
+        new THREE.MeshStandardMaterial({ color: 0x9b7047, roughness: .8 }));
+    shaft.rotation.x = Math.PI / 2;
+    shaft.position.z = -.12;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(.055, .16, 6),
+        new THREE.MeshStandardMaterial({ color: 0xc7cbd0, metalness: .45, roughness: .5 }));
+    head.rotation.x = -Math.PI / 2;
+    head.position.z = -.56;
+    arrow.add(shaft, head);
+    for (let i = 0; i < 3; i++) {
+        const feather = new THREE.Mesh(new THREE.BoxGeometry(.09, .018, .17),
+            new THREE.MeshStandardMaterial({ color: 0xf5f1e8, roughness: .9 }));
+        feather.position.z = .23;
+        feather.rotation.z = i * Math.PI * 2 / 3;
+        arrow.add(feather);
+    }
+    return arrow;
+}
+
+function getArrowProjectileMesh() {
+    let arrow = arrowProjectileMeshPool.find(candidate => !candidate.inUse);
+    if (!arrow) {
+        arrow = createArrowMesh();
+        arrowProjectileMeshPool.push(arrow);
+        scene.add(arrow);
+    }
+    arrow.inUse = true;
+    arrow.visible = true;
+    return arrow;
+}
+
+function createBowMesh() {
+    const bow = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a33, roughness: .72 });
+    const stringMaterial = new THREE.MeshBasicMaterial({ color: 0xf5f5f5 });
+    const limb = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -.56, 0),
+        new THREE.Vector3(.24, -.3, 0),
+        new THREE.Vector3(.28, 0, 0),
+        new THREE.Vector3(.24, .3, 0),
+        new THREE.Vector3(0, .56, 0)
+    ]), 24, .035, 6, false), wood);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .32, 8), wood);
+    const upperString = new THREE.Mesh(new THREE.BoxGeometry(.014, .58, .014), stringMaterial);
+    const lowerString = new THREE.Mesh(new THREE.BoxGeometry(.014, .58, .014), stringMaterial);
+    upperString.position.y = .27;
+    lowerString.position.y = -.27;
+    const arrow = createArrowMesh();
+    arrow.position.z = -.08;
+    arrow.visible = false;
+    const muzzle = new THREE.Object3D();
+    muzzle.position.z = -.66;
+    bow.add(limb, grip, upperString, lowerString, arrow, muzzle);
+    bow.userData.stringSegments = [upperString, lowerString];
+    bow.userData.nockedArrow = arrow;
+    bow.userData.muzzle = muzzle;
+    return bow;
+}
+
+function updateBowDrawPose(bow, draw) {
+    if (!bow) return;
+    const pull = .34 * draw;
+    bow.userData.stringSegments[0].position.z = pull / 2;
+    bow.userData.stringSegments[1].position.z = pull / 2;
+    const angle = Math.atan2(pull, .56);
+    bow.userData.stringSegments[0].rotation.x = -angle;
+    bow.userData.stringSegments[1].rotation.x = angle;
+    bow.userData.nockedArrow.visible = draw > 0;
+    bow.userData.nockedArrow.position.z = -.08 + pull;
+    bow.userData.muzzle.position.z = -.66 + pull;
+}
+
+function getBowDrawProgress(now = performance.now()) {
+    return player.bowDrawStart ? Math.min(1, Math.max(0, (now - player.bowDrawStart) / 700)) : 0;
+}
+
 // Gun-local frame: grip at the origin, barrel along -Z above the grip (+Y).
 var LASER_GUN_MUZZLES = {
     121: new THREE.Vector3(0, .09, -.47),
@@ -1041,6 +1133,12 @@ function applyLaserGunArmAim(avatar, pitch) {
     if (!w || !avatar.children[5]) return;
     const arm = avatar.children[5];
     arm.rotation.x += (laserGunArmAngle(pitch) - arm.rotation.x) * w;
+}
+
+function applyBowArmAim(avatar, pitch) {
+    if (avatar?.heldBow && avatar.children[5]) {
+        avatar.children[5].rotation.x = laserGunArmAngle(pitch);
+    }
 }
 
 function updateHeldLaserGun(avatar, toolId) {
@@ -1169,11 +1267,163 @@ function prepareLaserShot(toolId) {
     };
 }
 
+function updateHeldBow(avatar, toolId) {
+    if (!avatar) return;
+    const selectedBow = toolId === 179 ? 179 : null;
+    if (avatar === avatarGroup && !selectedBow) player.bowDrawStart = null;
+    if ((avatar.heldBow?.userData.toolId || null) === selectedBow) return;
+    if (avatar.heldBow) {
+        avatar.heldBow.parent.remove(avatar.heldBow);
+        disposeObject(avatar.heldBow);
+        avatar.heldBow = null;
+    }
+    if (selectedBow) {
+        const bow = createBowMesh();
+        bow.userData.toolId = selectedBow;
+        bow.userData.gripMatrix = new THREE.Matrix4().compose(
+            new THREE.Vector3(0, -.34, 0),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)),
+            new THREE.Vector3(1, 1, 1));
+        bow.userData.handPosition = new THREE.Vector3();
+        bow.matrixAutoUpdate = false;
+        avatar.add(bow);
+        avatar.heldBow = bow;
+        updateHeldBowPose(avatar);
+    }
+}
+
+function updateHeldBowPose(avatar) {
+    const bow = avatar?.heldBow;
+    if (!bow) return;
+    const arm = avatar.children[5];
+    if (!arm) return;
+    arm.updateMatrix();
+    bow.matrix.multiplyMatrices(arm.matrix, bow.userData.gripMatrix);
+    const rig = avatar.userData.customAvatar;
+    bow.visible = !rig?.ambientPlaying;
+    if (rig?.rightHand) {
+        rig.rightHand.getWorldPosition(bow.userData.handPosition);
+        avatar.worldToLocal(bow.userData.handPosition);
+        laserGunTmpVec.setFromMatrixPosition(bow.matrix).sub(arm.position).add(bow.userData.handPosition);
+        bow.matrix.setPosition(laserGunTmpVec);
+    }
+    updateBowDrawPose(bow, avatar === avatarGroup ? getBowDrawProgress() : (avatar.userData.bowDrawProgress || 0));
+    bow.matrixWorldNeedsUpdate = true;
+}
+
+var firstPersonBow = null;
+
+function poseFirstPersonBow(direction = null) {
+    if (!firstPersonBow) return;
+    const widen = Math.max(1, camera.aspect / (16 / 9));
+    firstPersonBow.position.set(.58 * widen, -.34, -.82);
+    if (direction) {
+        const cameraRotation = camera.getWorldQuaternion(new THREE.Quaternion()).invert();
+        const localDirection = direction.clone().applyQuaternion(cameraRotation).normalize();
+        firstPersonBow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), localDirection);
+    } else {
+        firstPersonBow.quaternion.identity();
+    }
+    firstPersonBow.updateMatrixWorld(true);
+}
+
+function updateFirstPersonBow(now = performance.now()) {
+    if (!camera) return;
+    const toolId = selectedBlockId === 179 ? 179 : null;
+    if ((firstPersonBow?.userData.toolId || null) !== toolId) {
+        if (firstPersonBow) {
+            firstPersonBow.parent.remove(firstPersonBow);
+            disposeObject(firstPersonBow);
+            firstPersonBow = null;
+        }
+        if (toolId) {
+            firstPersonBow = createBowMesh();
+            firstPersonBow.userData.toolId = toolId;
+            firstPersonBow.scale.setScalar(1.2);
+            firstPersonBow.traverse(object => {
+                if (!object.isMesh) return;
+                object.renderOrder = 1000;
+                object.frustumCulled = false;
+                object.material.transparent = true;
+                object.material.depthTest = false;
+                object.material.depthWrite = false;
+            });
+            camera.add(firstPersonBow);
+        }
+    }
+    if (!firstPersonBow) return;
+    firstPersonBow.visible = cameraMode === "first" && !isDying && !deathScreenShown &&
+        player.health > 0 && !avatarGroup?.userData.customAvatar?.ambientPlaying;
+    poseFirstPersonBow();
+    const draw = getBowDrawProgress(now);
+    updateBowDrawPose(firstPersonBow, draw);
+    if (draw > 0) {
+        const target = camera.getWorldPosition(new THREE.Vector3())
+            .addScaledVector(camera.getWorldDirection(new THREE.Vector3()), 32);
+        const origin = firstPersonBow.userData.muzzle.getWorldPosition(new THREE.Vector3());
+        poseFirstPersonBow(getBowLaunchDirection(origin, target, 21 + draw * 9, 9.8));
+    }
+}
+
+function getBowAimTarget() {
+    const origin = camera.getWorldPosition(new THREE.Vector3());
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    const target = new THREE.Vector3();
+    let distance = .5;
+    for (; distance < 64; distance += .25) {
+        target.copy(origin).addScaledVector(direction, distance);
+        if (isSolid(getBlockAt(Math.floor(target.x), Math.floor(target.y), Math.floor(target.z)))) break;
+    }
+    return origin.addScaledVector(direction, distance);
+}
+
+function getBowLaunchDirection(from, to, speed, gravity) {
+    const dx = to.x - from.x, dz = to.z - from.z, dy = to.y - from.y;
+    const horizontal = Math.max(.001, Math.hypot(dx, dz));
+    const speedSquared = speed * speed;
+    const discriminant = speedSquared * speedSquared -
+        gravity * (gravity * horizontal * horizontal + 2 * dy * speedSquared);
+    const angle = discriminant >= 0
+        ? Math.atan((speedSquared - Math.sqrt(discriminant)) / (gravity * horizontal))
+        : Math.atan2(dy, horizontal);
+    return new THREE.Vector3(dx / horizontal * Math.cos(angle), Math.sin(angle), dz / horizontal * Math.cos(angle)).normalize();
+}
+
+function prepareBowShot(power) {
+    const speed = 21 + power * 9;
+    const gravity = 9.8;
+    const target = getBowAimTarget();
+    updateFirstPersonBow();
+    updateBowDrawPose(firstPersonBow, power);
+    poseFirstPersonBow();
+    firstPersonBow.updateMatrixWorld(true);
+    const origin = firstPersonBow.userData.muzzle.getWorldPosition(new THREE.Vector3());
+    const direction = getBowLaunchDirection(origin, target, speed, gravity);
+    poseFirstPersonBow(direction);
+    firstPersonBow.updateMatrixWorld(true);
+    firstPersonBow.userData.muzzle.getWorldPosition(origin);
+    const launchDirection = getBowLaunchDirection(origin, target, speed, gravity);
+    updateHeldBowPose(avatarGroup);
+    updateBowDrawPose(avatarGroup.heldBow, power);
+    avatarGroup.updateMatrixWorld(true);
+    const remoteOrigin = avatarGroup.heldBow.userData.muzzle.getWorldPosition(new THREE.Vector3());
+    return {
+        origin,
+        direction: launchDirection,
+        remoteOrigin,
+        remoteDirection: getBowLaunchDirection(remoteOrigin, target, speed, gravity),
+        speed,
+        gravity,
+        damage: Math.round(4 + power * 8)
+    };
+}
+
 var firstPersonPickaxe = null;
 
 function updateFirstPersonPickaxe(now) {
     if (!camera) return;
     updateFirstPersonLaserGun(now);
+    updateFirstPersonBow(now);
     const toolId = BLOCKS[selectedBlockId]?.pickaxe ? selectedBlockId : null;
     if ((firstPersonPickaxe?.userData.toolId || null) !== toolId) {
         if (firstPersonPickaxe) {
@@ -1246,6 +1496,7 @@ function updateHeldPickaxe(avatar, toolId, sourcePosition) {
     avatar.userData.heldBlockId = toolId;
     updateAvatarHeldLight(avatar, sourcePosition);
     updateHeldLaserGun(avatar, toolId);
+    updateHeldBow(avatar, toolId);
     const selectedPick = BLOCKS[toolId]?.pickaxe ? toolId : null;
     if ((avatar.heldPickaxe?.userData.toolId || null) === selectedPick) return;
     if (avatar.heldPickaxe) {
@@ -1270,6 +1521,7 @@ function updateHeldPickaxe(avatar, toolId, sourcePosition) {
 function updateHeldPickaxePose(avatar) {
     updateAvatarHeldLight(avatar);
     updateHeldLaserGunPose(avatar);
+    updateHeldBowPose(avatar);
     if (!avatar?.heldPickaxe) return;
     const arm = avatar.children[5];
     arm.updateMatrix();
@@ -1406,6 +1658,12 @@ function addToInventory(e, t, o = null) {
                 originSeed: a
             }, (t -= o) <= 0) return void updateHotbarUI()
         } addMessage("Inventory full"), updateHotbarUI()
+}
+
+function grantBowTestKit() {
+    if (!INVENTORY.some(item => item && item.id === 179)) addToInventory(179, 1, worldSeed);
+    const arrowCount = INVENTORY.reduce((total, item) => total + (item && item.id === 178 ? item.count : 0), 0);
+    if (arrowCount < 64) addToInventory(178, 64 - arrowCount, worldSeed);
 }
 
 function hexToRgb(e) {
@@ -1778,14 +2036,17 @@ function releaseProjectileMesh(mesh) {
     }
 }
 
-function createProjectile(e, t, o, a, n = "red", damageSource = null) {
+function createProjectile(e, t, o, a, n = "red", damageSource = null, options = {}) {
     damageSource = getBlockDamageSource(t, damageSource);
-    const mobStyle = typeof MOB_PROJECTILE_STYLES !== "undefined" && Object.prototype.hasOwnProperty.call(MOB_PROJECTILE_STYLES, n) ? MOB_PROJECTILE_STYLES[n] : null;
+    const isPlayerArrow = n === "player_arrow";
+    const styleName = isPlayerArrow ? "arrow" : n;
+    const mobStyle = typeof MOB_PROJECTILE_STYLES !== "undefined" && Object.prototype.hasOwnProperty.call(MOB_PROJECTILE_STYLES, styleName) ? MOB_PROJECTILE_STYLES[styleName] : null;
     if (mobStyle) {
-        const mesh = getProjectileMesh(mobStyle.color),
+        const mesh = styleName === "arrow" ? getArrowProjectileMesh() : getProjectileMesh(mobStyle.color),
             quaternion = new THREE.Quaternion;
         quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), a.clone().normalize()), mesh.quaternion.copy(quaternion), mesh.position.copy(o);
-        mesh.scale.set(mobStyle.scale[0], mobStyle.scale[1], mobStyle.scale[2]);
+        if (styleName === "arrow") mesh.scale.setScalar(1.1);
+        else mesh.scale.set(mobStyle.scale[0], mobStyle.scale[1], mobStyle.scale[2]);
         const light = mobStyle.light ? getProjectileLight(mobStyle.color) : null;
         light && light.position.copy(mesh.position);
         projectiles.push({
@@ -1793,12 +2054,14 @@ function createProjectile(e, t, o, a, n = "red", damageSource = null) {
             user: t,
             damageSource,
             mesh,
-            velocity: a.clone().normalize().multiplyScalar(mobStyle.speed),
+            velocity: a.clone().normalize().multiplyScalar(options.speed || mobStyle.speed),
             createdAt: Date.now(),
             light,
-            mobStyle: n,
-            gravity: mobStyle.gravity || 0,
-            damage: mobStyle.damage,
+            mobStyle: isPlayerArrow ? null : n,
+            isArrow: styleName === "arrow",
+            isPlayerArrow: isPlayerArrow,
+            gravity: options.gravity ?? mobStyle.gravity ?? 0,
+            damage: options.damage ?? mobStyle.damage,
             hitRadius: mobStyle.hitRadius,
             color: mobStyle.color,
             label: mobStyle.label
@@ -2885,15 +3148,62 @@ function dropSelectedItem(dropAll = false) {
 }
 
 let lastPointerDownTime = 0;
-function queueLaserShot(id, position, direction, color) {
+function queueLaserShot(id, position, direction, color, options = {}) {
     laserFireQueue.push({
         id: id,
         user: userName,
         world: worldName,
         position: { x: position.x, y: position.y, z: position.z },
         direction: { x: direction.x, y: direction.y, z: direction.z },
-        color: color
+        color: color,
+        ...options
     });
+}
+
+function cancelBowDraw() {
+    if (player.bowDrawStart == null) return;
+    player.bowDrawStart = null;
+    updateHeldBowPose(avatarGroup);
+    updateFirstPersonBow();
+}
+
+function releaseBowShot() {
+    if (player.bowDrawStart == null) return;
+    const now = performance.now();
+    const drawStart = player.bowDrawStart;
+    player.bowDrawStart = null;
+    if (selectedBlockId !== 179 || player.health <= 0 || isDying || deathScreenShown) {
+        updateHeldBowPose(avatarGroup);
+        updateFirstPersonBow(now);
+        return;
+    }
+    if (now - (player.lastBowFireTime || 0) < 180) return;
+    const arrowIndex = INVENTORY.findIndex(item => item && item.id === 178 && item.count > 0);
+    if (arrowIndex < 0) {
+        addMessage("No arrows to fire!", 1200);
+        updateHeldBowPose(avatarGroup);
+        updateFirstPersonBow(now);
+        return;
+    }
+    const power = Math.max(.2, Math.min(1, (now - drawStart) / 700));
+    const shot = prepareBowShot(power);
+    const id = `${userName}-${Date.now()}-${Math.floor(Math.random() * 1e6)}-arrow`;
+    markLaserGunAim(avatarGroup, now, true);
+    INVENTORY[arrowIndex].count--;
+    if (INVENTORY[arrowIndex].count <= 0) INVENTORY[arrowIndex] = null;
+    const bowItem = INVENTORY[selectedHotIndex];
+    if (bowItem && bowItem.id === 179 && Math.random() < (BLOCKS[179].breakChance || 0)) {
+        bowItem.count--;
+        if (bowItem.count <= 0) INVENTORY[selectedHotIndex] = null;
+        addMessage("Your bow broke!", 2000);
+    }
+    updateHotbarUI();
+    player.lastBowFireTime = now;
+    const options = { speed: shot.speed, gravity: shot.gravity, damage: shot.damage };
+    createProjectile(id, userName, shot.origin.clone(), shot.direction.clone(), "player_arrow", null, options);
+    queueLaserShot(id, shot.remoteOrigin, shot.remoteDirection, "player_arrow", options);
+    updateFirstPersonBow(now);
+    updateHeldBowPose(avatarGroup);
 }
 
 function useSelectedPickaxe() {
@@ -2924,6 +3234,18 @@ function onPointerDown(e) {
     e.preventDefault();
     const t = INVENTORY[selectedHotIndex];
     if (2 === e.button && t && BLOCKS[t.id] && BLOCKS[t.id].hand_attachable) return void dropSelectedItem();
+    if (t && t.id === 179) {
+        if (e.button !== 0) return;
+        if (!INVENTORY.some(item => item && item.id === 178 && item.count > 0)) {
+            addMessage("No arrows to fire!", 1200);
+            return;
+        }
+        if (player.bowDrawStart == null) player.bowDrawStart = now;
+        markLaserGunAim(avatarGroup, now, false);
+        updateHeldBowPose(avatarGroup);
+        updateFirstPersonBow(now);
+        return;
+    }
     if (t && 121 === t.id) {
         const e = Date.now();
         if (e - (player.lastFireTime || 0) < 1e3) return;
@@ -5605,7 +5927,7 @@ async function startGame({ serverLogin = false } = {}) {
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), grantBowTestKit(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 
@@ -6167,6 +6489,7 @@ function updateAvatarAnimation(e, t) {
         avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
     } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
     applyLaserGunArmAim(avatarGroup, player.pitch);
+    applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
 }
@@ -6570,14 +6893,18 @@ function runGameFrame(e) {
         }
         const petIds = getPetSaveData().map(pet => pet.id),
             petIdsKey = JSON.stringify(petIds),
-            petsChanged = lastSentPosition.petIdsKey !== petIdsKey;
+            petsChanged = lastSentPosition.petIdsKey !== petIdsKey,
+            bowDrawProgress = getBowDrawProgress(e),
+            bowDrawActive = selectedBlockId === 179 && player.bowDrawStart != null,
+            bowStateChanged = lastSentPosition.bowDrawActive !== bowDrawActive,
+            bowProgressChanged = bowDrawActive && Math.abs(bowDrawProgress - (lastSentPosition.bowDrawProgress || 0)) >= .08;
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             activeMovement = Math.hypot(player.x - lastSentPosition.x - ufoCarrySinceLastMove.x,
                 player.y - lastSentPosition.y - ufoCarrySinceLastMove.y,
                 player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged)) {
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || bowProgressChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Passive transport and looking around do not reset idle time.
             if (activeMovement || isAttacking) {
@@ -6591,7 +6918,9 @@ function runGameFrame(e) {
                 yaw: player.yaw,
                 pitch: player.pitch,
                 selectedBlockId: selectedBlockId,
-                petIdsKey: petIdsKey
+                petIdsKey: petIdsKey,
+                bowDrawProgress: bowDrawProgress,
+                bowDrawActive: bowDrawActive
             };
             ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
@@ -6606,6 +6935,8 @@ function runGameFrame(e) {
                 isMoving: o,
                 isAttacking: isAttacking,
                 selectedBlockId: selectedBlockId,
+                bowDrawProgress: bowDrawProgress,
+                bowDrawActive: bowDrawActive,
                 petIds: petIds,
                 score: Number(player.score) || 0,
                 timestamp: Date.now()
@@ -6647,7 +6978,11 @@ function runGameFrame(e) {
                     const e = .5 * Math.sin(.005 * t);
                     v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e
                 } else v.children[0].rotation.x = 0, v.children[1].rotation.x = 0, v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
-                if (!e.isDying) applyLaserGunArmAim(v, e.targetPitch);
+                v.userData.bowDrawProgress = e.bowDrawActive ? (e.bowDrawProgress || 0) : 0;
+                if (!e.isDying) {
+                    applyLaserGunArmAim(v, e.targetPitch);
+                    applyBowArmAim(v, e.targetPitch);
+                }
                 updateHeldPickaxePose(v);
                 if (e.isDying) {
                     const o = 1500,
@@ -6786,7 +7121,7 @@ function runGameFrame(e) {
                     if (t.user !== userName) {
                         const shooter = playerAvatars.get(t.user);
                         if (shooter) shooter.userData.laserFireTime = performance.now();
-                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color, t.damageSource);
+                        createProjectile(t.id, t.user, new THREE.Vector3(t.position.x, t.position.y, t.position.z), new THREE.Vector3(t.direction.x, t.direction.y, t.direction.z), t.color, t.damageSource, t);
                         if (t.color === "blue" && !playedBlueSoundThisFrame) {
                             const fireAudioTemplate = document.getElementById('ufoCannonFire');
                             if (fireAudioTemplate) {
@@ -6799,7 +7134,7 @@ function runGameFrame(e) {
             } else if (e.user !== userName) {
                 const shooter = playerAvatars.get(e.user);
                 if (shooter) shooter.userData.laserFireTime = performance.now();
-                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color, e.damageSource);
+                createProjectile(e.id, e.user, new THREE.Vector3(e.position.x, e.position.y, e.position.z), new THREE.Vector3(e.direction.x, e.direction.y, e.direction.z), e.color, e.damageSource, e);
                 if (e.color === "blue" && !playedBlueSoundThisFrame) {
                     const fireAudioTemplate = document.getElementById('ufoCannonFire');
                     if (fireAudioTemplate) {
@@ -6833,6 +7168,13 @@ function runGameFrame(e) {
                 const r = Math.floor(stepPos.z);
 
                 // 1. BLOCK COLLISION LOGIC (Done first so lasers stop at walls instead of hitting players through them)
+                if (isSolid(getBlockAt(a, n, r)) && o.isPlayerArrow) {
+                    createBlockParticles(a, n, r, getBlockAt(a, n, r));
+                    releaseProjectileMesh(o.mesh);
+                    projectiles.splice(e, 1);
+                    s = !0;
+                    break;
+                }
                 if (isSolid(getBlockAt(a, n, r)) && o.mobStyle) {
                     // Elite mob projectiles shatter on terrain without destroying blocks (light-free burst).
                     spawnEliteBurst(stepPos, o.color, 5);
@@ -6904,7 +7246,7 @@ function runGameFrame(e) {
                         }
                     }
 
-                    createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
+                    if (!o.isPlayerArrow) createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                     createBlockParticles(a, n, r, getBlockAt(a, n, r));
                     releaseProjectileMesh(o.mesh);
                     releaseProjectileLight(o.light);
@@ -6946,14 +7288,14 @@ function runGameFrame(e) {
                         if (o.user === userName) {
                             lastMoveTime = performance.now(); window.lastMoveTime = lastMoveTime;
                         }
-                        const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                        const damage = o.damage || (o.isBlue ? 15 : (o.isGreen ? 10 : 5));
                         // Only the shooter reports the hit so damage is applied exactly once by the mob's authority.
                         if (o.user === userName) sendProjectileMobDamage(mob, damage, o.user);
                         else {
                             const shooterMob = mobs.find(shooterMob => shooterMob.id === o.user);
                             if (shooterMob) sendMobDamageFromMob(mob, shooterMob, damage);
                         }
-                        createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
+                        if (!o.isPlayerArrow) createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);
@@ -6972,9 +7314,9 @@ function runGameFrame(e) {
                     if (o.user !== userName) { // Can't be hit by your own projectile
                         const hostPlayerPos = new THREE.Vector3(player.x, player.y + player.height / 2, player.z);
                         // Make blue laser slightly more forgiving
-                        const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                        const hitThreshold = o.isPlayerArrow ? o.hitRadius : (o.isBlue ? 2.5 : 1.5);
                         if (stepPos.distanceTo(hostPlayerPos) < hitThreshold) {
-                            const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                            const damage = o.damage || (o.isBlue ? 15 : (o.isGreen ? 10 : 5));
                             player.health -= damage;
                             document.getElementById("health").innerText = player.health;
                             updateHealthBar();
@@ -7000,9 +7342,9 @@ function runGameFrame(e) {
                             }
                             remotePlayerPos.y += player.height / 2; // Adjust to player center
 
-                            const hitThreshold = o.isBlue ? 2.5 : 1.5;
+                            const hitThreshold = o.isPlayerArrow ? o.hitRadius : (o.isBlue ? 2.5 : 1.5);
                             if (stepPos.distanceTo(remotePlayerPos) < hitThreshold) {
-                                const damage = o.isBlue ? 15 : (o.isGreen ? 10 : 5);
+                                const damage = o.damage || (o.isBlue ? 15 : (o.isGreen ? 10 : 5));
                                 sendToPlayer(username, {
                                     type: 'player_damage',
                                     damage: damage,
@@ -7016,7 +7358,7 @@ function runGameFrame(e) {
 
                     // If any player was hit, destroy the projectile
                     if (hitPlayer) {
-                        createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
+                        if (!o.isPlayerArrow) createLaserImpactLight(stepPos, o.isBlue ? 0x0000ff : (o.isGreen ? 0x00ff00 : 0xff0000));
                         releaseProjectileMesh(o.mesh);
                         releaseProjectileLight(o.light);
                         projectiles.splice(e, 1);
