@@ -67,7 +67,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // MAX_LOADED_CHUNKS: Hard cap on total chunks to prevent memory issues and crashes
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
-    MAX_LOADED_CHUNKS = 420,
+    MAX_LOADED_CHUNKS = 600,
+    MAX_MOVING_LOADED_CHUNKS = 840,
+    CHUNK_EVICTION_IDLE_MS = 750,
+    CHUNK_EVICTIONS_PER_UPDATE = 2,
     // Horizontal distance (blocks) within which other players' avatars are drawn.
     REMOTE_PLAYER_VIEW_DISTANCE = 64,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
