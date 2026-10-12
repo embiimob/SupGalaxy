@@ -381,7 +381,9 @@ function getEliteSpawnPosition(type, anchor) {
     }
     if (x === null) return null;
     if (def.flying) {
-        const y = Math.min(MAX_HEIGHT - 8, chunkManager.getSurfaceY(x, z) + def.spawnAltitude);
+        const waterSurfaceY = findWaterColumnSurfaceY(x, z);
+        const groundY = chunkManager.getSurfaceY(x, z);
+        const y = Math.min(MAX_HEIGHT - 8, Math.max(groundY, waterSurfaceY === null ? groundY : waterSurfaceY) + def.spawnAltitude);
         return { x, y, z };
     }
     return { x, y: null, z };
@@ -409,7 +411,9 @@ function getEliteRoostSpawnPosition(type, def, anchor) {
     const angle = Math.random() * Math.PI * 2;
     const x = modWrap(roost.x + Math.cos(angle) * def.roost.radius, MAP_SIZE);
     const z = modWrap(roost.z + Math.sin(angle) * def.roost.radius, MAP_SIZE);
-    const y = Math.min(MAX_HEIGHT - 8, roost.y + def.spawnAltitude);
+    const waterSurfaceY = findWaterColumnSurfaceY(x, z);
+    const y = Math.min(MAX_HEIGHT - 8,
+        Math.max(roost.y, waterSurfaceY === null ? roost.y : waterSurfaceY) + def.spawnAltitude);
     return { x, y, z, roost: { x: roost.x, y: roost.y, z: roost.z }, isNewRoost };
 }
 
@@ -1602,8 +1606,14 @@ function buildDeepWarden(mob, variant) {
 function updateEliteMob(mob, dt) {
     const now = Date.now();
     mob.animationTime += dt;
+    const def = getEliteMobDef(mob.type);
+    const aquatic = !!def.aquatic;
+    const flying = !!def.flying;
     if (isMobAuthority(mob)) {
         if (!mob.stateSince) mob.stateSince = now;
+        const wasInWater = !aquatic && !flying && isMobInWater(mob);
+        const originalSpeed = mob.speed;
+        if (wasInWater && Number.isFinite(mob.speed)) mob.speed *= 0.5;
         const petTransport = mob.type === "timber_wolf" && updatePlayerPetTransport(mob, dt);
         if (!petTransport) applyEliteKnockback(mob, dt);
         if (mob.type === "bone_archer") thinkBoneArcher(mob, dt, now);
@@ -1622,6 +1632,14 @@ function updateEliteMob(mob, dt) {
         else if (mob.type === "stone_colossus") thinkStoneColossus(mob, dt, now);
         else if (mob.type === "timber_wolf" && !petTransport) thinkTimberWolf(mob, dt, now);
         else if (mob.type === "deep_warden") thinkDeepWarden(mob, dt, now);
+        mob.speed = originalSpeed;
+        if (!aquatic && !flying && isMobInWater(mob)) {
+            const column = getMobWaterColumn(mob);
+            if (column) {
+                const targetY = column.topY + 0.25;
+                mob.pos.y += Math.max(-dt * 1.5, Math.min(dt * 1.5, targetY - mob.pos.y));
+            }
+        }
         queueEliteMobUpdate(mob);
     } else {
         if (mob.lastUpdateTime > 0) {
@@ -1632,6 +1650,7 @@ function updateEliteMob(mob, dt) {
             mob.pos.copy(mob.targetPos);
         }
     }
+    mob.isSwimming = !aquatic && !flying && isMobInWater(mob);
     if (mob.aiState !== mob.lastAnimatedState) {
         mob.stateChangedAt = now;
         mob.lastAnimatedState = mob.aiState;
@@ -1641,7 +1660,7 @@ function updateEliteMob(mob, dt) {
     for (const material of mob.flashMaterials) {
         material.emissive.setHex(flashing ? 0xaa0000 : material.userData.baseEmissive);
     }
-    mob.mesh.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+    mob.mesh.position.set(mob.pos.x, mob.pos.y + (mob.isSwimming ? Math.sin(mob.animationTime * 4) * 0.06 : 0), mob.pos.z);
 }
 
 function setEliteState(mob, state, now) {
@@ -1782,7 +1801,10 @@ function callSentinelReinforcement(mob, target) {
     const angle = Math.random() * Math.PI * 2;
     const x = modWrap(target.x + Math.cos(angle) * 24, MAP_SIZE);
     const z = modWrap(target.z + Math.sin(angle) * 24, MAP_SIZE);
-    const reinforcement = spawnMobAndBroadcast("sentinel_drone", x, z, Math.min(MAX_HEIGHT - 8, chunkManager.getSurfaceY(x, z) + 10));
+    const waterSurfaceY = findWaterColumnSurfaceY(x, z);
+    const groundY = chunkManager.getSurfaceY(x, z);
+    const spawnY = Math.min(MAX_HEIGHT - 8, Math.max(groundY, waterSurfaceY === null ? groundY : waterSurfaceY) + 10);
+    const reinforcement = spawnMobAndBroadcast("sentinel_drone", x, z, spawnY);
     if (reinforcement) {
         reinforcement.isReinforcement = true;
         reinforcement.aiState = "ALERT";
@@ -1801,7 +1823,9 @@ function moveEliteFlyer(mob, goal, maxSpeed, clearance, response, dt) {
     const next = mob.pos.clone().addScaledVector(mob.flyVelocity, dt);
     next.x = modWrap(next.x, MAP_SIZE);
     next.z = modWrap(next.z, MAP_SIZE);
-    const ground = chunkManager.getSurfaceY(next.x, next.z) + 1;
+    const waterSurfaceY = findWaterColumnSurfaceY(next.x, next.z);
+    const ground = Math.max(chunkManager.getSurfaceY(next.x, next.z) + 1,
+        waterSurfaceY === null ? 0 : waterSurfaceY);
     if (next.y < ground + clearance) {
         next.y = Math.min(mob.pos.y + 8 * dt, ground + clearance);
         if (mob.flyVelocity.y < 0) mob.flyVelocity.y = 0;

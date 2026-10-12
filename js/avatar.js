@@ -441,9 +441,9 @@ function stripAvatarRootMotion(clip, rootName) {
 }
 
 function updateAvatarMotionState(rig, dt, state) {
-    rig.amplitude += ((state.moving ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
+    rig.amplitude += ((state.moving || state.swimming ? 1 : 0) - rig.amplitude) * Math.min(1, dt * 8);
     rig.air += ((state.airborne ? 1 : 0) - rig.air) * Math.min(1, dt * 10);
-    rig.phase += dt * (state.sprint ? 13 : 8) * rig.amplitude;
+    rig.phase += dt * (state.swimming ? 7 : state.sprint ? 13 : 8) * rig.amplitude;
     return Math.sin(rig.phase) * rig.amplitude * (1 - rig.air);
 }
 
@@ -533,7 +533,7 @@ function createGltfAvatarRig(gltf) {
         const air = rig.air;
         const attack = avatarAttackSwing(state);
         const ctrl = rig.controllers;
-        const active = state.moving || state.airborne || state.attack >= 0 || state.gunAim > 0;
+        const active = state.moving || state.swimming || state.airborne || state.attack >= 0 || state.gunAim > 0;
         if (active) {
             rig.idleTime = 0;
             if (rig.ambientPlaying) {
@@ -564,14 +564,14 @@ function createGltfAvatarRig(gltf) {
         if (!rig.ambientPlaying) ctrlList.forEach(c => c.bone.quaternion.copy(c.baseQ));
         if (ctrl && !rig.ambientPlaying) {
             // Gameplay always uses the standard skeletal cycle, regardless of the embedded clip's name or pose.
-            const walk = swing;
+            const walk = state.swimming ? Math.sin(rig.phase) * 0.8 : swing;
             const weight = 1;
-            blendAvatarBone(ctrl.leftLeg, 0.6 * walk + 0.7 * air, weight);
-            blendAvatarBone(ctrl.rightLeg, -0.6 * walk + 0.35 * air, weight);
-            blendAvatarBone(ctrl.leftKnee, -0.9 * Math.max(0, -walk) - 1.1 * air, weight);
-            blendAvatarBone(ctrl.rightKnee, -0.9 * Math.max(0, walk) - 0.6 * air, weight);
-            blendAvatarBone(ctrl.leftArm, -0.5 * walk + 0.6 * air, weight);
-            blendAvatarBone(ctrl.rightArm, 0.5 * walk + 0.6 * air, weight);
+            blendAvatarBone(ctrl.leftLeg, (state.swimming ? 0.4 : 0.6) * walk + 0.7 * air, weight);
+            blendAvatarBone(ctrl.rightLeg, (state.swimming ? -0.4 : -0.6) * walk + 0.35 * air, weight);
+            blendAvatarBone(ctrl.leftKnee, (state.swimming ? -0.55 : -0.9) * Math.max(0, -walk) - 1.1 * air, weight);
+            blendAvatarBone(ctrl.rightKnee, (state.swimming ? -0.55 : -0.9) * Math.max(0, walk) - 0.6 * air, weight);
+            blendAvatarBone(ctrl.leftArm, (state.swimming ? -0.9 : -0.5) * walk + 0.6 * air, weight);
+            blendAvatarBone(ctrl.rightArm, (state.swimming ? 0.9 : 0.5) * walk + 0.6 * air, weight);
             blendAvatarBone(ctrl.leftForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
             blendAvatarBone(ctrl.rightForeArm, 0.25 * rig.amplitude * (1 - air) + 0.5 * air, weight);
             blendAvatarBone(ctrl.head, 0, 1);
@@ -596,7 +596,8 @@ function createGltfAvatarRig(gltf) {
         } else if (!ctrl) {
             rig.pivot.position.y = Math.abs(swing) * 0.06;
             rig.pivot.rotation.z = swing * 0.06;
-            rig.pivot.rotation.x = -0.3 * (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : attack) + 0.12 * air;
+            rig.pivot.rotation.x = (state.swimming ? -0.18 : 0) -
+                0.3 * (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : attack) + 0.12 * air;
         } else {
             rig.pivot.position.y = 0;
         }
@@ -769,14 +770,15 @@ function buildVoxAvatarRig(buffer) {
         const swing = updateAvatarMotionState(rig, dt, state);
         const air = rig.air;
         const attack = avatarAttackSwing(state);
-        if (parts.legL) parts.legL.rotation.x = -0.6 * swing - 0.6 * air;
-        if (parts.legR) parts.legR.rotation.x = 0.6 * swing - 0.3 * air;
-        if (parts.armL) parts.armL.rotation.x = 0.5 * swing - 0.7 * air - 0.4 * attack;
-        if (parts.armR) parts.armR.rotation.x = -0.5 * swing - 0.7 * air -
+        const gait = state.swimming ? Math.sin(rig.phase) * 0.8 : swing;
+        if (parts.legL) parts.legL.rotation.x = -(state.swimming ? 0.4 : 0.6) * gait - 0.6 * air;
+        if (parts.legR) parts.legR.rotation.x = (state.swimming ? 0.4 : 0.6) * gait - 0.3 * air;
+        if (parts.armL) parts.armL.rotation.x = (state.swimming ? -0.9 : 0.5) * gait - 0.7 * air - 0.4 * attack;
+        if (parts.armR) parts.armR.rotation.x = (state.swimming ? 0.9 : -0.5) * gait - 0.7 * air -
             (state.pickaxe ? pickaxeArmAttackSwing(state.attack) : 1.6 * attack);
         if (parts.armR && state.gunAim > 0) parts.armR.rotation.x += (-laserGunArmAngle(state.pitch) - parts.armR.rotation.x) * state.gunAim;
         if (parts.head) parts.head.rotation.x = -clampAvatarPitch(state.pitch);
-        if (parts.body) parts.body.rotation.x = parts.armR ? 0 : 0.25 * attack;
+        if (parts.body) parts.body.rotation.x = state.swimming ? -0.18 : parts.armR ? 0 : 0.25 * attack;
         rig.pivot.position.y = Math.abs(swing) * 0.05;
     };
     return rig;
@@ -889,6 +891,7 @@ function updateCustomAvatars(dt, now, localMoving) {
         if (group === avatarGroup) {
             state = {
                 moving: localMoving,
+                swimming: !!window.playerInWater,
                 sprint: isSprinting,
                 pitch: player.pitch,
                 airborne: !player.onGround,
@@ -905,6 +908,7 @@ function updateCustomAvatars(dt, now, localMoving) {
             group.userData.avatarVy = (group.userData.avatarVy || 0) * 0.7 + vy * 0.3;
             state = {
                 moving: !!position.isMoving,
+                swimming: !!position.isSwimming,
                 sprint: false,
                 pitch: position.targetPitch,
                 airborne: Math.abs(group.userData.avatarVy) > 1.5,

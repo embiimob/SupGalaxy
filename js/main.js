@@ -6498,6 +6498,30 @@ function restoreWorldStoneData(targetWorldName) {
     }
 }
 
+function animateAvatarMotion(group, time, moving, swimming) {
+    if (swimming) {
+        const phase = time * 0.006;
+        group.children[0].rotation.x = 0.55 * Math.sin(phase);
+        group.children[1].rotation.x = -0.55 * Math.sin(phase);
+        group.children[4].rotation.x = 0.85 * Math.sin(phase + Math.PI);
+        group.children[5].rotation.x = 0.85 * Math.sin(phase);
+        group.children[2].rotation.x = -0.12;
+    } else if (moving) {
+        const swing = .5 * Math.sin(.005 * time);
+        group.children[0].rotation.x = swing;
+        group.children[1].rotation.x = -swing;
+        group.children[4].rotation.x = -swing;
+        group.children[5].rotation.x = swing;
+        group.children[2].rotation.x = 0;
+    } else {
+        group.children[0].rotation.x = 0;
+        group.children[1].rotation.x = 0;
+        group.children[4].rotation.x = 0;
+        group.children[5].rotation.x = 0;
+        group.children[2].rotation.x = 0;
+    }
+}
+
 function updateAvatarAnimation(e, t) {
     if (!avatarGroup) return;
     if (isAttacking) {
@@ -6507,10 +6531,7 @@ function updateAvatarAnimation(e, t) {
             avatarGroup.children[4].rotation.x = avatarGroup.heldPickaxe ? .2 * e : e,
                 avatarGroup.children[5].rotation.x = avatarGroup.heldPickaxe ? pickaxeArmAttackSwing(t / 500) : e
         } else isAttacking = !1, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0
-    } else if (t) {
-        const t = .5 * Math.sin(.005 * e);
-        avatarGroup.children[0].rotation.x = t, avatarGroup.children[1].rotation.x = -t, avatarGroup.children[4].rotation.x = -t, avatarGroup.children[5].rotation.x = t
-    } else avatarGroup.children[0].rotation.x = 0, avatarGroup.children[1].rotation.x = 0, avatarGroup.children[4].rotation.x = 0, avatarGroup.children[5].rotation.x = 0;
+    } else animateAvatarMotion(avatarGroup, e, t, !!window.playerInWater);
     applyLaserGunArmAim(avatarGroup, player.pitch);
     applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
@@ -6627,7 +6648,8 @@ function runGameFrame(e) {
             requestAnimationFrame(gameLoop);
             return;
         }
-        const inWater = getBlockAt(player.x, player.y + 0.5, player.z) === 6 && getBlockAt(player.x, player.y + 1.5, player.z) === 6;
+        const inWater = isWaterBlock(getBlockAt(player.x, player.y + 0.5, player.z)) &&
+            isWaterBlock(getBlockAt(player.x, player.y + 1.5, player.z));
         window.playerInWater = inWater;
         const waterOverlay = document.getElementById("waterOverlay");
         if (waterOverlay) {
@@ -6920,6 +6942,7 @@ function runGameFrame(e) {
             bowDrawProgress = getBowDrawProgress(e),
             bowDrawActive = selectedBlockId === 179 && player.bowDrawStart != null,
             bowStateChanged = lastSentPosition.bowDrawActive !== bowDrawActive,
+            swimmingChanged = lastSentPosition.isSwimming !== inWater,
             bowProgressChanged = bowDrawActive && Math.abs(bowDrawProgress - (lastSentPosition.bowDrawProgress || 0)) >= .08;
         const I = Math.hypot(player.x - lastSentPosition.x, player.y - lastSentPosition.y, player.z - lastSentPosition.z) > .1,
             activeMovement = Math.hypot(player.x - lastSentPosition.x - ufoCarrySinceLastMove.x,
@@ -6927,7 +6950,7 @@ function runGameFrame(e) {
                 player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || bowProgressChanged)) {
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Passive transport and looking around do not reset idle time.
             if (activeMovement || isAttacking) {
@@ -6943,7 +6966,8 @@ function runGameFrame(e) {
                 selectedBlockId: selectedBlockId,
                 petIdsKey: petIdsKey,
                 bowDrawProgress: bowDrawProgress,
-                bowDrawActive: bowDrawActive
+                bowDrawActive: bowDrawActive,
+                isSwimming: inWater
             };
             ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
@@ -6957,6 +6981,7 @@ function runGameFrame(e) {
                 pitch: player.pitch,
                 isMoving: o,
                 isAttacking: isAttacking,
+                isSwimming: inWater,
                 selectedBlockId: selectedBlockId,
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
@@ -6997,10 +7022,7 @@ function runGameFrame(e) {
                         e.localAnimStartTime = null;
                         v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
                     }
-                } else if (e.isMoving) {
-                    const e = .5 * Math.sin(.005 * t);
-                    v.children[0].rotation.x = e, v.children[1].rotation.x = -e, v.children[4].rotation.x = -e, v.children[5].rotation.x = e
-                } else v.children[0].rotation.x = 0, v.children[1].rotation.x = 0, v.children[4].rotation.x = 0, v.children[5].rotation.x = 0;
+                } else animateAvatarMotion(v, t, !!e.isMoving, !!e.isSwimming);
                 v.userData.bowDrawProgress = e.bowDrawActive ? (e.bowDrawProgress || 0) : 0;
                 if (!e.isDying) {
                     applyLaserGunArmAim(v, e.targetPitch);
