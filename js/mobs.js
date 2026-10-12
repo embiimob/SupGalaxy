@@ -2,6 +2,7 @@
 // manageMobs spawns or despawns a mob changes the light count and forces three.js to recompile
 // every lit material, which stalls rendering for a frame each management tick.
 let mobGlowTexture = null;
+const mobWaterColumnCache = new Map();
 const wolfTameRequests = new Map();
 const wolfTamePending = new Map();
 const wolfTameUnacknowledged = new Map();
@@ -342,30 +343,45 @@ function sendWolfAuthorityMessage(mob, message) {
     return false;
 }
 
-function tryTameWolf(mob) {
-    if (mob.type !== "timber_wolf") return false;
-    if (wolfTamePending.size) {
-        addMessage("Waiting for the wolf to eat its bone…", 1200);
-        return true;
-    }
-    const bone = INVENTORY[selectedHotIndex];
-    if (!bone || bone.id !== 176 || !(bone.count > 0) || selectedBlockId !== 176) return true;
-    if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
-    const requestId = `${userName}:${wolfTameSession}:${++wolfTameSequence}`;
-    const request = { type: "wolf_tame_request", id: mob.id, owner: userName, username: userName, requestId, world: worldName };
-    if (!isMobAuthority(mob) && !sendWolfAuthorityMessage(mob, request)) return true;
-    bone.count--;
-    if (bone.count <= 0) INVENTORY[selectedHotIndex] = null;
-    updateHotbarUI();
-    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isAuthority() ? userName : peers.keys().next().value),
-        startedAt: Date.now(), sentAt: Date.now() });
-    if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId);
+function applyWolfMobKillReward(wolfId) {
+    const wolf = mobs.find(mob => mob.id === wolfId && mob.type === "timber_wolf" &&
+        mob.petOwner === userName && mob.hp > 0 && isMobAuthority(mob));
+    if (!wolf) return false;
+    wolf.hp += 10;
+    wolf.maxHp = Math.max(Number.isFinite(wolf.maxHp) ? wolf.maxHp : wolf.hp, wolf.hp);
+    wolf.feedRevision = (wolf.feedRevision || 0) + 1;
+    queueEliteMobUpdate(wolf);
+    player.pets = sanitizePetData(getPetSaveData());
     return true;
 }
 
-function handleWolfTameRequest(mob, owner, requestId) {
+function tryTameWolf(mob) {
+    if (mob.type !== "timber_wolf") return false;
+    if (wolfTamePending.size) {
+        addMessage("Waiting for the wolf to eat…", 1200);
+        return true;
+    }
+    const food = INVENTORY[selectedHotIndex];
+    const foodId = food?.id;
+    if (!food || ![137, 138, 176].includes(foodId) || !(food.count > 0) || selectedBlockId !== foodId) return true;
+    if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
+    const requestId = `${userName}:${wolfTameSession}:${++wolfTameSequence}`;
+    const request = { type: "wolf_tame_request", id: mob.id, owner: userName, username: userName,
+        requestId, foodId, world: worldName };
+    if (!isMobAuthority(mob) && !sendWolfAuthorityMessage(mob, request)) return true;
+    food.count--;
+    if (food.count <= 0) INVENTORY[selectedHotIndex] = null;
+    updateHotbarUI();
+    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isAuthority() ? userName : peers.keys().next().value),
+        startedAt: Date.now(), sentAt: Date.now() });
+    if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId, foodId);
+    return true;
+}
+
+function handleWolfTameRequest(mob, owner, requestId, foodId = 176) {
     if (typeof owner !== "string" ||
-        typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`)) return;
+        typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`) ||
+        ![137, 138, 176].includes(foodId)) return;
     const key = `${owner}|${requestId}`;
     let result = wolfTameRequests.get(key);
     if (!result) {
@@ -445,8 +461,7 @@ function handleWolfTameResult(message) {
 function findPlayerPetPosition(petId, index = 0) {
     const centerX = player.x + (player.width || 0.8) / 2;
     const centerZ = player.z + (player.depth || 0.8) / 2;
-    let fallback = null;
-    for (const radius of [2, 3, 1, 4, 0]) {
+    for (const radius of [2, 3, 1, 4, 6, 8, 12, 0]) {
         const steps = radius ? 8 : 1;
         for (let step = 0; step < steps; step++) {
             const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
@@ -474,12 +489,12 @@ function findPlayerPetPosition(petId, index = 0) {
                     Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) < 1.5)) continue;
                 const position = { x, y, z };
                 const block = getBlockAt(x, y, z);
-                if (isSolid(getBlockAt(x, y - 0.2, z)) || block === 6 || block === 136) return position;
-                if (!fallback) fallback = position;
+                if (isSolid(getBlockAt(x, y - 0.2, z)) && !isWaterBlock(block) &&
+                    !isWaterBlock(getBlockAt(x, y + 0.4, z)) && !findWaterColumn(x, z)) return position;
             }
         }
     }
-    return fallback;
+    return null;
 }
 
 function petPositionBlocked(x, y, z) {
@@ -564,9 +579,12 @@ function updatePlayerPetTransport(mob, dt) {
         if (ride.hull) ride.local.copy(hull.mesh.worldToLocal(mob.pos.clone()));
     } else {
         if (!petPositionBlocked(nx, mob.pos.y, nz)) {
-            mob.pos.x = nx;
-            mob.pos.z = nz;
-            mob.isMoving = step > 0;
+            const entersWater = isMobInWater({ pos: { x: nx, y: mob.pos.y, z: nz } });
+            if (!entersWater || mob.wolfChasingMob) {
+                mob.pos.x = nx;
+                mob.pos.z = nz;
+                mob.isMoving = step > 0;
+            }
         }
         // Share the owner's actual gravity displacement, including terrain-generation pauses.
         // Once the owner lands, finish any remaining height difference with normal gravity.
@@ -723,6 +741,106 @@ function createMobGlowSprite(color, size, opacity = 1) {
 
 function isAquaticMobType(type) {
     return type === "fish_rare" || type === "fish_school" || type === "whale";
+}
+
+function isWaterBlock(blockId) {
+    return blockId === 6 || blockId === 136;
+}
+
+function findWaterColumn(x, z) {
+    x = modWrap(Math.floor(x), MAP_SIZE);
+    z = modWrap(Math.floor(z), MAP_SIZE);
+    const key = `${x},${z}`;
+    const cached = mobWaterColumnCache.get(key);
+    if (cached && Date.now() < cached.expiresAt) return cached.column;
+    let topY = -1;
+    for (let y = MAX_HEIGHT - 1; y >= 0; y--) {
+        if (isWaterBlock(getBlockAt(x, y, z))) {
+            topY = y;
+            break;
+        }
+    }
+    if (topY < 0) {
+        mobWaterColumnCache.set(key, { column: null, expiresAt: Date.now() + 500 });
+        if (mobWaterColumnCache.size > 2048) {
+            mobWaterColumnCache.delete(mobWaterColumnCache.keys().next().value);
+        }
+        return null;
+    }
+    let bottomY = topY;
+    while (bottomY > 0 && isWaterBlock(getBlockAt(x, bottomY - 1, z))) bottomY--;
+    const column = { topY, bottomY, surfaceY: topY + 1 };
+    mobWaterColumnCache.set(key, { column, expiresAt: Date.now() + 500 });
+    if (mobWaterColumnCache.size > 2048) {
+        mobWaterColumnCache.delete(mobWaterColumnCache.keys().next().value);
+    }
+    return column;
+}
+
+function getMobWaterColumn(mob) {
+    const x = modWrap(Math.floor(mob.pos.x), MAP_SIZE);
+    const z = modWrap(Math.floor(mob.pos.z), MAP_SIZE);
+    if (mob.waterColumnX !== x || mob.waterColumnZ !== z || Date.now() >= (mob.waterColumnExpires || 0)) {
+        mob.waterColumnX = x;
+        mob.waterColumnZ = z;
+        mob.waterColumn = findWaterColumn(x, z);
+        mob.waterColumnExpires = Date.now() + 500;
+    }
+    return mob.waterColumn;
+}
+
+function isMobInWater(mob) {
+    const x = modWrap(Math.floor(mob.pos.x), MAP_SIZE);
+    const z = modWrap(Math.floor(mob.pos.z), MAP_SIZE);
+    const startY = Math.max(0, Math.floor(mob.pos.y));
+    for (let y = startY; y <= Math.min(MAX_HEIGHT - 1, startY + 1); y++) {
+        if (isWaterBlock(getBlockAt(x, y, z))) return true;
+    }
+    return false;
+}
+
+function isFlyingMobType(type) {
+    return type === "bee" || (isEliteMobType(type) && getEliteMobDef(type).flying);
+}
+
+function updateMobWaterMovement(mob, delta) {
+    if (isAquaticMobType(mob.type) ||
+        (isEliteMobType(mob.type) && getEliteMobDef(mob.type).aquatic) ||
+        isFlyingMobType(mob.type)) {
+        mob.isSwimming = false;
+        return false;
+    }
+    const inWater = isMobInWater(mob);
+    mob.isSwimming = inWater;
+    if (!inWater) return false;
+    const column = getMobWaterColumn(mob);
+    if (!column) return false;
+    const staysOnBottom = mob.type === "crawley" || mob.type === "grub";
+    const targetY = staysOnBottom ? column.bottomY + 1 : column.topY + 0.25;
+    mob.pos.y += Math.max(-delta * 1.5, Math.min(delta * 1.5, targetY - mob.pos.y));
+    return true;
+}
+
+function findWaterColumnSurfaceY(x, z) {
+    const column = findWaterColumn(x, z);
+    return column ? column.surfaceY : null;
+}
+
+function findDryMobSpawnPosition(x, z) {
+    const originX = x;
+    const originZ = z;
+    for (let attempt = 0; attempt < 16; attempt++) {
+        if (attempt > 0) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 8 + Math.random() * 24;
+            x = modWrap(originX + Math.cos(angle) * distance, MAP_SIZE);
+            z = modWrap(originZ + Math.sin(angle) * distance, MAP_SIZE);
+        }
+        if (!findWaterColumn(x, z)) {
+            return { x, z, y: chunkManager.getSurfaceY(x, z) + 1 };
+        }
+    }
+    return null;
 }
 
 function findAquaticSpawnPosition(x, z, type) {
@@ -1503,6 +1621,19 @@ function manageMobs() {
                     spawnZ = eliteSpawn.z;
                     spawnY = eliteSpawn.y;
                     if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
+                } else if (type === "bee") {
+                    const drySpawn = findDryMobSpawnPosition(spawnX, spawnZ);
+                    if (!drySpawn) continue;
+                    spawnX = drySpawn.x;
+                    spawnZ = drySpawn.z;
+                    spawnY = drySpawn.y;
+                }
+                if (type === "timber_wolf") {
+                    const drySpawn = findDryMobSpawnPosition(spawnX, spawnZ);
+                    if (!drySpawn) continue;
+                    spawnX = drySpawn.x;
+                    spawnZ = drySpawn.z;
+                    spawnY = drySpawn.y;
                 }
                 const newMob = spawnMobAndBroadcast(type, spawnX, spawnZ, spawnY);
                 if (waterSurfaceY !== null) newMob.waterSurfaceY = waterSurfaceY;
@@ -1876,6 +2007,7 @@ Mob.prototype.update = function (t) {
         this.mesh.leftWing.rotation.z = .5 * Math.sin(this.animationTime);
         this.mesh.rightWing.rotation.z = -.5 * Math.sin(this.animationTime);
     }
+    const inWaterAtStart = isMobInWater(this);
     // Determine if we should run the local simulation logic (spawner) or client interpolation logic
     const isLocalSpawner = isMobAuthority(this);
 
@@ -2689,6 +2821,8 @@ Mob.prototype.update = function (t) {
                             );
                             flightHeight = Math.max(flightHeight, surfaceY + clearance);
                         }
+                        const waterSurfaceY = findWaterColumnSurfaceY(sampleX, sampleZ);
+                        if (waterSurfaceY !== null) flightHeight = Math.max(flightHeight, waterSurfaceY + clearance);
                     }
                 }
                 this.beeFlightHeight = flightHeight;
@@ -2718,8 +2852,9 @@ Mob.prototype.update = function (t) {
         if (i && o > .01) {
             const e = i.x - this.pos.x,
                 s = i.z - this.pos.z,
-                a = e / o * this.speed,
-                n = s / o * this.speed,
+                movementSpeed = this.speed * (inWaterAtStart && !isFlyingMobType(this.type) ? 0.5 : 1),
+                a = e / o * movementSpeed,
+                n = s / o * movementSpeed,
                 r = modWrap(this.pos.x + a * t * 60, MAP_SIZE),
                 l = modWrap(this.pos.z + n * t * 60, MAP_SIZE);
             if ("grub" === this.type || "crawley" === this.type) {
@@ -2746,11 +2881,11 @@ Mob.prototype.update = function (t) {
                         this.wanderDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
                     }
                 }
-                const e = 0.5 * this.speed;
+                const e = 0.5 * this.speed * (inWaterAtStart && !isFlyingMobType(this.type) ? 0.5 : 1);
                 s = this.pos.x + (this.wanderDir ? this.wanderDir.x : 0) * e * t * 60;
                 i = this.pos.z + (this.wanderDir ? this.wanderDir.z : 0) * e * t * 60;
             } else {
-                const e = .5 * this.speed;
+                const e = .5 * this.speed * (inWaterAtStart && !isFlyingMobType(this.type) ? 0.5 : 1);
                 s = modWrap(this.pos.x + Math.sin(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
                 i = modWrap(this.pos.z + Math.cos(.001 * Date.now() + this.mesh.id) * e * t * 60, MAP_SIZE);
             }
@@ -2792,6 +2927,11 @@ Mob.prototype.update = function (t) {
                  this.mesh.quaternion.slerp((new THREE.Quaternion).setFromAxisAngle(new THREE.Vector3(0, 1, 0), e), .05);
             }
         }
+        updateMobWaterMovement(this, t);
+        if (this.type === "bee") {
+            const waterColumn = getMobWaterColumn(this);
+            if (waterColumn) this.pos.y = Math.max(this.pos.y, waterColumn.surfaceY + 4);
+        }
         this.mesh.position.set(this.pos.x, this.pos.y + ("crawley" === this.type ? 0.45 : 0), this.pos.z);
         const a = this.pos.distanceTo(this.lastSentPos) > .1,
             n = this.mesh.quaternion.angleTo(this.lastSentQuaternion) > .01;
@@ -2818,6 +2958,7 @@ Mob.prototype.update = function (t) {
             this.lastSentSpawner = this.spawner;
         }
     }
+    if (!isLocalSpawner) this.isSwimming = isMobInWater(this);
     if ("grub" === this.type) {
         const e = "EATING_CACTUS" === this.aiState,
             s = (this.isMoving ? 8 : 4) / 2;
@@ -2833,6 +2974,18 @@ Mob.prototype.update = function (t) {
                 i = Math.floor(e / 2);
             t.rotation.x = Math.sin(this.animationTime - .5 * i) * s * .8
         })) : this.legs.forEach((t => t.rotation.x = 0))
+    } else if ("spider" === this.type && this.mesh.legs) {
+        if (this.isSwimming) {
+            this.animationTime += 7 * t;
+            this.mesh.legs.forEach((leg, index) => {
+                const side = index % 2 === 0 ? 1 : -1;
+                leg.rotation.x = Math.sin(this.animationTime + Math.floor(index / 2) * Math.PI / 2) * side * 0.9;
+            });
+            this.mesh.rotation.x = Math.sin(this.animationTime * 0.5) * 0.08;
+        } else {
+            this.mesh.legs.forEach(leg => { leg.rotation.x = 0; });
+            this.mesh.rotation.x = 0;
+        }
     } else "crawley" === this.type && this.mesh.legs && (this.isMoving ? (this.animationTime += 6 * t, this.mesh.position.y += .025 * Math.sin(2 * this.animationTime), this.mesh.legs.forEach(((t, e) => {
         const s = e % 2 == 0 ? 1 : -1;
         t.rotation.x = Math.sin(this.animationTime + Math.floor(e / 2) * Math.PI / 3) * s * .8
@@ -2894,8 +3047,10 @@ Mob.prototype.update = function (t) {
             issuer.position = { x: this.pos.x, y: this.pos.y, z: this.pos.z };
         }
     }
+    let wolfRewardId = null;
     if (typeof t === "string" && t.startsWith("wolf:")) {
         const wolf = mobs.find(mob => mob.type === "timber_wolf" && `wolf:${mob.id}` === t);
+        if (wolf?.petOwner) wolfRewardId = wolf.id;
         t = wolf?.petOwner || null;
     }
     if (this.petOwner === userName) removePlayerPet(this.id);
@@ -2936,6 +3091,9 @@ Mob.prototype.update = function (t) {
         return;
     }
     const isFish = this.type === "fish_rare" || this.type === "fish_school";
+    if (wolfRewardId !== null && t === userName) {
+        applyWolfMobKillReward(wolfRewardId);
+    }
     if (isFish && t !== "whale") {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
         if (t === userName) {
@@ -2998,6 +3156,7 @@ Mob.prototype.update = function (t) {
             type: "add_score",
             target: t,
             amount: e,
+            ...(wolfRewardId !== null ? { wolfRewardId } : {}),
             world: worldName
         };
         if (dedicatedServer) {

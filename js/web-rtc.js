@@ -1231,7 +1231,7 @@ function setupDataChannel(e, t) {
                             if (typeof e.world === "string") o.world = e.world;
                             if (Number.isFinite(e.health)) o.health = e.health;
                             if (Array.isArray(e.petIds)) o.petIds = e.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
-                            (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
+                            (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.isSwimming = e.isSwimming === true, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
                             if (playerAvatars.has(t)) {
                                 const avatar = playerAvatars.get(t);
@@ -1289,7 +1289,7 @@ function setupDataChannel(e, t) {
                     if (Number.isFinite(s.health)) l.health = s.health;
                     if (Array.isArray(s.petIds)) l.petIds = s.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
 
-                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
+                    s.timestamp > l.lastTimestamp && (l.prevX = l.targetX, l.prevY = l.targetY, l.prevZ = l.targetZ, l.prevYaw = l.targetYaw, l.prevPitch = l.targetPitch, l.targetX = s.x, l.targetY = s.y, l.targetZ = s.z, l.targetYaw = s.yaw, l.targetPitch = s.pitch, l.isMoving = s.isMoving, l.isSwimming = s.isSwimming === true, l.lastUpdate = performance.now(), l.lastTimestamp = s.timestamp, (s.isMoving || Math.hypot(s.x - l.prevX, s.y - l.prevY, s.z - l.prevZ) > 0.1 || s.isAttacking) && (l.lastMoveTime = performance.now()));
 
                     if (playerAvatars.has(n)) {
                         const avatar = playerAvatars.get(n);
@@ -1463,7 +1463,7 @@ function setupDataChannel(e, t) {
                     const wolf = mobs.find(mob => mob.id === s.id && mob.type === "timber_wolf");
                     if (!wolf) break;
                     if (isMobAuthority(wolf)) {
-                        handleWolfTameRequest(wolf, n, s.requestId);
+                        handleWolfTameRequest(wolf, n, s.requestId, s.foodId ?? 176);
                     } else if (isHost) {
                         const authority = peers.get(wolf.spawner);
                         if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
@@ -1833,6 +1833,7 @@ function setupDataChannel(e, t) {
                         }
                         break;
                     }
+                    if (s.wolfRewardId !== undefined) applyWolfMobKillReward(s.wolfRewardId);
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
                     // Broadcast new score to host so it updates all clients
                     if (!isHost) {
