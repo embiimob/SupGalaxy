@@ -1833,7 +1833,7 @@ function setupDataChannel(e, t) {
                         }
                         break;
                     }
-                    if (s.wolfRewardId !== undefined) applyWolfFishKillReward(s.wolfRewardId);
+                    if (s.wolfRewardId !== undefined) applyWolfMobKillReward(s.wolfRewardId);
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
                     // Broadcast new score to host so it updates all clients
                     if (!isHost) {

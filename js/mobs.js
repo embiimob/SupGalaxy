@@ -343,7 +343,7 @@ function sendWolfAuthorityMessage(mob, message) {
     return false;
 }
 
-function applyWolfFishKillReward(wolfId) {
+function applyWolfMobKillReward(wolfId) {
     const wolf = mobs.find(mob => mob.id === wolfId && mob.type === "timber_wolf" &&
         mob.petOwner === userName && mob.hp > 0 && isMobAuthority(mob));
     if (!wolf) return false;
@@ -3091,8 +3091,8 @@ Mob.prototype.update = function (t) {
         return;
     }
     const isFish = this.type === "fish_rare" || this.type === "fish_school";
-    if (wolfRewardId !== null && isAquaticMobType(this.type) && t === userName) {
-        applyWolfFishKillReward(wolfRewardId);
+    if (wolfRewardId !== null && t === userName) {
+        applyWolfMobKillReward(wolfRewardId);
     }
     if (isFish && t !== "whale") {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
@@ -3156,7 +3156,7 @@ Mob.prototype.update = function (t) {
             type: "add_score",
             target: t,
             amount: e,
-            ...(wolfRewardId !== null && isAquaticMobType(this.type) ? { wolfRewardId } : {}),
+            ...(wolfRewardId !== null ? { wolfRewardId } : {}),
             world: worldName
         };
         if (dedicatedServer) {
