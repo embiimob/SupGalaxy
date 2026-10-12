@@ -446,8 +446,7 @@ function handleWolfTameResult(message) {
 function findPlayerPetPosition(petId, index = 0) {
     const centerX = player.x + (player.width || 0.8) / 2;
     const centerZ = player.z + (player.depth || 0.8) / 2;
-    let fallback = null;
-    for (const radius of [2, 3, 1, 4, 0]) {
+    for (const radius of [2, 3, 1, 4, 6, 8, 12, 0]) {
         const steps = radius ? 8 : 1;
         for (let step = 0; step < steps; step++) {
             const angle = index * Math.PI * 2 / 3 + step * Math.PI / 4;
@@ -475,12 +474,12 @@ function findPlayerPetPosition(petId, index = 0) {
                     Math.hypot(mob.pos.x - x, mob.pos.y - y, mob.pos.z - z) < 1.5)) continue;
                 const position = { x, y, z };
                 const block = getBlockAt(x, y, z);
-                if (isSolid(getBlockAt(x, y - 0.2, z)) || block === 6 || block === 136) return position;
-                if (!fallback) fallback = position;
+                if (isSolid(getBlockAt(x, y - 0.2, z)) && !isWaterBlock(block) &&
+                    !isWaterBlock(getBlockAt(x, y + 0.4, z)) && !findWaterColumn(x, z)) return position;
             }
         }
     }
-    return fallback;
+    return null;
 }
 
 function petPositionBlocked(x, y, z) {
@@ -565,9 +564,12 @@ function updatePlayerPetTransport(mob, dt) {
         if (ride.hull) ride.local.copy(hull.mesh.worldToLocal(mob.pos.clone()));
     } else {
         if (!petPositionBlocked(nx, mob.pos.y, nz)) {
-            mob.pos.x = nx;
-            mob.pos.z = nz;
-            mob.isMoving = step > 0;
+            const entersWater = isMobInWater({ pos: { x: nx, y: mob.pos.y, z: nz } });
+            if (!entersWater || mob.wolfChasingMob) {
+                mob.pos.x = nx;
+                mob.pos.z = nz;
+                mob.isMoving = step > 0;
+            }
         }
         // Share the owner's actual gravity displacement, including terrain-generation pauses.
         // Once the owner lands, finish any remaining height difference with normal gravity.
@@ -1604,7 +1606,7 @@ function manageMobs() {
                     spawnZ = eliteSpawn.z;
                     spawnY = eliteSpawn.y;
                     if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
-                } else if (type === "bee") {
+                } else if (type === "bee" || type === "timber_wolf") {
                     const drySpawn = findDryMobSpawnPosition(spawnX, spawnZ);
                     if (!drySpawn) continue;
                     spawnX = drySpawn.x;

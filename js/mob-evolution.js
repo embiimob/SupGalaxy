@@ -626,6 +626,8 @@ function stepEliteOnGround(mob, dirX, dirZ, distance) {
         else if (!checkCollisionWithBlock(nx, ny + 2, nz)) ny += 2;
         else return false;
     }
+    if (mob.type === "timber_wolf" && !mob.wolfChasingMob &&
+        isMobInWater({ pos: { x: nx, y: ny, z: nz } })) return false;
     mob.pos.set(nx, ny, nz);
     return true;
 }
@@ -1615,6 +1617,7 @@ function updateEliteMob(mob, dt) {
         const originalSpeed = mob.speed;
         if (wasInWater && Number.isFinite(mob.speed)) mob.speed *= 0.5;
         const petTransport = mob.type === "timber_wolf" && updatePlayerPetTransport(mob, dt);
+        if (petTransport) mob.wolfChasingMob = false;
         if (!petTransport) applyEliteKnockback(mob, dt);
         if (mob.type === "bone_archer") thinkBoneArcher(mob, dt, now);
         else if (mob.type === "sentinel_drone") thinkSentinelDrone(mob, dt, now);
@@ -2482,12 +2485,14 @@ function thinkStoneColossus(mob, dt, now) {
 // Veloren wolf: runs in loose packs, circles its prey to find an opening, then lunges in for a bite
 // and darts back out. A badly wounded wolf breaks off and flees.
 function thinkTimberWolf(mob, dt, now) {
+    mob.wolfChasingMob = false;
     if (mob.aiState === "LUNGE") {
+        const target = findEliteTarget(mob, 6, 4);
+        mob.wolfChasingMob = !!target?.mob;
         const step = stepEliteOnGround(mob, mob.lungeDir.x, mob.lungeDir.z, 11 * dt);
         mob.pos.y += mob.lungeVy * dt;
         mob.lungeVy -= 22 * dt;
         if (mob.lungeVy < 0) settleEliteOnGround(mob, dt);
-        const target = findEliteTarget(mob, 6, 4);
         if (target && !mob.bit && Math.hypot(target.x - mob.pos.x, target.z - mob.pos.z) < 1.5) {
             mob.bit = true;
             dispatchEliteAttack(mob, {
@@ -2504,6 +2509,7 @@ function thinkTimberWolf(mob, dt, now) {
     }
     settleEliteOnGround(mob, dt);
     const target = findEliteTarget(mob, mob.petOwner ? 32 : 22, 8);
+    mob.wolfChasingMob = !!target?.mob;
     let move = null;
     if (!mob.petOwner && mob.hp <= mob.maxHp * 0.3 && target) {
         setEliteState(mob, "FLEE", now);
