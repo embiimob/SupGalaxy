@@ -4,7 +4,7 @@ function Chunk(e, t) {
 }
 
 function ChunkManager(e) {
-    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.lastPlayerX = null, this.lastPlayerZ = null, this.lastPlayerMovementTime = 0, this.pendingDistantUnload = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
+    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.lastPlayerX = null, this.lastPlayerY = null, this.lastPlayerZ = null, this.lastPlayerMovementTime = 0, this.pendingDistantUnload = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
 }
 
 function createFusionReactorMaterial(seed, blockId) {
@@ -876,18 +876,20 @@ Chunk.prototype.idx = function (e, t, o) {
             i.generated || this.generateChunk(i), l++, setTimeout(e.bind(this), 33)
         }
     }).call(this)
-}, ChunkManager.prototype.update = function (e, t, o) {
+}, ChunkManager.prototype.update = function (e, t, o, playerY) {
     const now = performance.now();
-    if (this.lastPlayerX === null || this.lastPlayerZ === null) {
+    if (this.lastPlayerX === null || this.lastPlayerY === null || this.lastPlayerZ === null) {
         this.lastPlayerX = e;
+        this.lastPlayerY = playerY;
         this.lastPlayerZ = t;
         this.lastPlayerMovementTime = now;
     } else {
         const dx = Math.abs(modWrap(e - this.lastPlayerX, MAP_SIZE)),
             dz = Math.abs(modWrap(t - this.lastPlayerZ, MAP_SIZE)),
             wrappedDx = Math.min(dx, MAP_SIZE - dx),
-            wrappedDz = Math.min(dz, MAP_SIZE - dz);
-        if (wrappedDx * wrappedDx + wrappedDz * wrappedDz > .0001) {
+            wrappedDz = Math.min(dz, MAP_SIZE - dz),
+            dy = typeof playerY === 'number' ? playerY - this.lastPlayerY : 0;
+        if (wrappedDx * wrappedDx + wrappedDz * wrappedDz + dy * dy > .0001) {
             this.lastPlayerMovementTime = now;
             if (this.pendingDistantUnload) {
                 this.pendingDistantUnload.playerX = e;
@@ -895,6 +897,7 @@ Chunk.prototype.idx = function (e, t, o) {
             }
         }
         this.lastPlayerX = e;
+        this.lastPlayerY = playerY;
         this.lastPlayerZ = t;
     }
     const playerIsMoving = now - this.lastPlayerMovementTime < CHUNK_EVICTION_IDLE_MS;
