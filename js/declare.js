@@ -64,7 +64,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     // INITIAL_LOAD_RADIUS: Maximum number of chunks to render around the player (reduced by ~20% for performance)
     // LOAD_RADIUS: Reduced radius used during sprinting to improve performance
     // currentLoadRadius: Dynamic radius that switches between INITIAL and LOAD based on player state
-    // MAX_LOADED_CHUNKS: Hard cap on total chunks to prevent memory issues and crashes
+    // MAX_LOADED_CHUNKS: Normal retention cap after the player stops moving
+    // MAX_MOVING_LOADED_CHUNKS: Safety cap while distant chunk eviction is deferred
     INITIAL_LOAD_RADIUS = 7,
     LOAD_RADIUS = 3,
     MAX_LOADED_CHUNKS = 600,
