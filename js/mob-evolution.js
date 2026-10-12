@@ -2512,6 +2512,7 @@ function thinkTimberWolf(mob, dt, now) {
     mob.wolfChasingMob = !!target?.mob;
     let move = null;
     if (!mob.petOwner && mob.hp <= mob.maxHp * 0.3 && target) {
+        mob.wolfChasingMob = false;
         setEliteState(mob, "FLEE", now);
         move = { x: mob.pos.x - target.x, z: mob.pos.z - target.z, speed: mob.speed * 1.15 };
         faceEliteMob(mob, move.x, move.z, 8, dt);

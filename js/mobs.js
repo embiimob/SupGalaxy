@@ -1606,7 +1606,14 @@ function manageMobs() {
                     spawnZ = eliteSpawn.z;
                     spawnY = eliteSpawn.y;
                     if (Number.isFinite(eliteSpawn.waterSurfaceY)) waterSurfaceY = eliteSpawn.waterSurfaceY;
-                } else if (type === "bee" || type === "timber_wolf") {
+                } else if (type === "bee") {
+                    const drySpawn = findDryMobSpawnPosition(spawnX, spawnZ);
+                    if (!drySpawn) continue;
+                    spawnX = drySpawn.x;
+                    spawnZ = drySpawn.z;
+                    spawnY = drySpawn.y;
+                }
+                if (type === "timber_wolf") {
                     const drySpawn = findDryMobSpawnPosition(spawnX, spawnZ);
                     if (!drySpawn) continue;
                     spawnX = drySpawn.x;
