@@ -3356,7 +3356,8 @@ function onPointerDown(e) {
         if (mobId) {
             const mob = mobs.find((t => t.id === mobId));
             if (mob) {
-                if (e.button === 0 && INVENTORY[selectedHotIndex]?.id === 176 && mob.type === "timber_wolf") {
+                if (e.button === 0 && [137, 138, 176].includes(INVENTORY[selectedHotIndex]?.id) &&
+                    mob.type === "timber_wolf") {
                     animateAttack();
                     tryTameWolf(mob);
                     return;

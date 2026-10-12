@@ -1463,7 +1463,7 @@ function setupDataChannel(e, t) {
                     const wolf = mobs.find(mob => mob.id === s.id && mob.type === "timber_wolf");
                     if (!wolf) break;
                     if (isMobAuthority(wolf)) {
-                        handleWolfTameRequest(wolf, n, s.requestId);
+                        handleWolfTameRequest(wolf, n, s.requestId, s.foodId ?? 176);
                     } else if (isHost) {
                         const authority = peers.get(wolf.spawner);
                         if (authority?.dc?.readyState === "open") authority.dc.send(JSON.stringify(s));
@@ -1833,6 +1833,7 @@ function setupDataChannel(e, t) {
                         }
                         break;
                     }
+                    if (s.wolfRewardId !== undefined) applyWolfFishKillReward(s.wolfRewardId);
                     player.score += s.amount || 0, document.getElementById("score").innerText = player.score, addMessage(`+${s.amount} score`, 1500);
                     // Broadcast new score to host so it updates all clients
                     if (!isHost) {

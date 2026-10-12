@@ -343,30 +343,45 @@ function sendWolfAuthorityMessage(mob, message) {
     return false;
 }
 
-function tryTameWolf(mob) {
-    if (mob.type !== "timber_wolf") return false;
-    if (wolfTamePending.size) {
-        addMessage("Waiting for the wolf to eat its bone…", 1200);
-        return true;
-    }
-    const bone = INVENTORY[selectedHotIndex];
-    if (!bone || bone.id !== 176 || !(bone.count > 0) || selectedBlockId !== 176) return true;
-    if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
-    const requestId = `${userName}:${wolfTameSession}:${++wolfTameSequence}`;
-    const request = { type: "wolf_tame_request", id: mob.id, owner: userName, username: userName, requestId, world: worldName };
-    if (!isMobAuthority(mob) && !sendWolfAuthorityMessage(mob, request)) return true;
-    bone.count--;
-    if (bone.count <= 0) INVENTORY[selectedHotIndex] = null;
-    updateHotbarUI();
-    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isAuthority() ? userName : peers.keys().next().value),
-        startedAt: Date.now(), sentAt: Date.now() });
-    if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId);
+function applyWolfFishKillReward(wolfId) {
+    const wolf = mobs.find(mob => mob.id === wolfId && mob.type === "timber_wolf" &&
+        mob.petOwner === userName && mob.hp > 0 && isMobAuthority(mob));
+    if (!wolf) return false;
+    wolf.hp += 10;
+    wolf.maxHp = Math.max(Number.isFinite(wolf.maxHp) ? wolf.maxHp : wolf.hp, wolf.hp);
+    wolf.feedRevision = (wolf.feedRevision || 0) + 1;
+    queueEliteMobUpdate(wolf);
+    player.pets = sanitizePetData(getPetSaveData());
     return true;
 }
 
-function handleWolfTameRequest(mob, owner, requestId) {
+function tryTameWolf(mob) {
+    if (mob.type !== "timber_wolf") return false;
+    if (wolfTamePending.size) {
+        addMessage("Waiting for the wolf to eat…", 1200);
+        return true;
+    }
+    const food = INVENTORY[selectedHotIndex];
+    const foodId = food?.id;
+    if (!food || ![137, 138, 176].includes(foodId) || !(food.count > 0) || selectedBlockId !== foodId) return true;
+    if (Math.hypot(mob.pos.x - player.x, mob.pos.y - player.y, mob.pos.z - player.z) > 6) return true;
+    const requestId = `${userName}:${wolfTameSession}:${++wolfTameSequence}`;
+    const request = { type: "wolf_tame_request", id: mob.id, owner: userName, username: userName,
+        requestId, foodId, world: worldName };
+    if (!isMobAuthority(mob) && !sendWolfAuthorityMessage(mob, request)) return true;
+    food.count--;
+    if (food.count <= 0) INVENTORY[selectedHotIndex] = null;
+    updateHotbarUI();
+    wolfTamePending.set(requestId, { request, authority: mob.spawner || (isAuthority() ? userName : peers.keys().next().value),
+        startedAt: Date.now(), sentAt: Date.now() });
+    if (isMobAuthority(mob)) handleWolfTameRequest(mob, userName, requestId, foodId);
+    return true;
+}
+
+function handleWolfTameRequest(mob, owner, requestId, foodId = 176) {
     if (typeof owner !== "string" ||
-        typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`)) return;
+        typeof requestId !== "string" || requestId.length > 300 || !requestId.startsWith(`${owner}:`) ||
+        ![137, 138, 176].includes(foodId)) return;
     const key = `${owner}|${requestId}`;
     let result = wolfTameRequests.get(key);
     if (!result) {
@@ -3032,8 +3047,10 @@ Mob.prototype.update = function (t) {
             issuer.position = { x: this.pos.x, y: this.pos.y, z: this.pos.z };
         }
     }
+    let wolfRewardId = null;
     if (typeof t === "string" && t.startsWith("wolf:")) {
         const wolf = mobs.find(mob => mob.type === "timber_wolf" && `wolf:${mob.id}` === t);
+        if (wolf?.petOwner) wolfRewardId = wolf.id;
         t = wolf?.petOwner || null;
     }
     if (this.petOwner === userName) removePlayerPet(this.id);
@@ -3074,6 +3091,9 @@ Mob.prototype.update = function (t) {
         return;
     }
     const isFish = this.type === "fish_rare" || this.type === "fish_school";
+    if (wolfRewardId !== null && isAquaticMobType(this.type) && t === userName) {
+        applyWolfFishKillReward(wolfRewardId);
+    }
     if (isFish && t !== "whale") {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
         if (t === userName) {
@@ -3136,6 +3156,7 @@ Mob.prototype.update = function (t) {
             type: "add_score",
             target: t,
             amount: e,
+            ...(wolfRewardId !== null && isAquaticMobType(this.type) ? { wolfRewardId } : {}),
             world: worldName
         };
         if (dedicatedServer) {
