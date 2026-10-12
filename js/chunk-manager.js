@@ -4,7 +4,7 @@ function Chunk(e, t) {
 }
 
 function ChunkManager(e) {
-    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
+    console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.lastPlayerX = null, this.lastPlayerY = null, this.lastPlayerZ = null, this.lastPlayerMovementTime = 0, this.pendingDistantUnload = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
 }
 
 function createFusionReactorMaterial(seed, blockId) {
@@ -876,7 +876,31 @@ Chunk.prototype.idx = function (e, t, o) {
             i.generated || this.generateChunk(i), l++, setTimeout(e.bind(this), 33)
         }
     }).call(this)
-}, ChunkManager.prototype.update = function (e, t, o) {
+}, ChunkManager.prototype.update = function (e, t, o, playerY) {
+    const now = performance.now();
+    if (this.lastPlayerX === null || this.lastPlayerY === null || this.lastPlayerZ === null) {
+        this.lastPlayerX = e;
+        this.lastPlayerY = playerY;
+        this.lastPlayerZ = t;
+        this.lastPlayerMovementTime = now;
+    } else {
+        const dx = Math.abs(modWrap(e - this.lastPlayerX, MAP_SIZE)),
+            dz = Math.abs(modWrap(t - this.lastPlayerZ, MAP_SIZE)),
+            wrappedDx = Math.min(dx, MAP_SIZE - dx),
+            wrappedDz = Math.min(dz, MAP_SIZE - dz),
+            dy = typeof playerY === 'number' ? playerY - this.lastPlayerY : 0;
+        if (wrappedDx * wrappedDx + wrappedDz * wrappedDz + dy * dy > .0001) {
+            this.lastPlayerMovementTime = now;
+            if (this.pendingDistantUnload) {
+                this.pendingDistantUnload.playerX = e;
+                this.pendingDistantUnload.playerZ = t;
+            }
+        }
+        this.lastPlayerX = e;
+        this.lastPlayerY = playerY;
+        this.lastPlayerZ = t;
+    }
+    const playerIsMoving = now - this.lastPlayerMovementTime < CHUNK_EVICTION_IDLE_MS;
     var a = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
         n = Math.floor(modWrap(t, MAP_SIZE) / CHUNK_SIZE);
     a === this.lastPcx && n === this.lastPcz || (this.lastPcx = a, this.lastPcz = n);
@@ -924,44 +948,75 @@ Chunk.prototype.idx = function (e, t, o) {
             this.preloadChunks(h, f, 2)
         }
     
-    // Use global MAX_LOADED_CHUNKS cap as primary bound, with dynamic threshold as secondary
-    // Dynamic limit formula: (chunks in square area) * 10 (exploration headroom) * 3 (multiplayer factor)
-    // This allows smooth chunk loading during exploration while respecting the hard cap
+    // Keep additional headroom while moving, then trim toward the normal cap after movement stops.
     const dynamicLimit = (2 * currentLoadRadius + 1) * (2 * currentLoadRadius + 1) * 10 * 3;
-    const g = Math.min(dynamicLimit, MAX_LOADED_CHUNKS);
-    if (this.chunks.size > g) {
-        let e = Array.from(this.chunks.values());
-        e.sort(((e, t) => {
-            const o = Math.hypot(e.cx - a, e.cz - n);
-            return Math.hypot(t.cx - a, t.cz - n) - o
-        }));
-        for (let t = 0; t < e.length && this.chunks.size > g; t++) {
-            const o = e[t];
-            if (!c.has(o.key)) {
-                o.mesh && (meshGroup.remove(o.mesh), disposeObject(o.mesh));
-                for (let e = smokeParticles.length - 1; e >= 0; e--) {
-                    const t = smokeParticles[e];
-                    t.userData.chunkKey === o.key && (scene.remove(t), disposeObject(t), smokeParticles.splice(e, 1))
-                }
-                // Clean up volcanoes associated with this chunk
-                for (let e = volcanoes.length - 1; e >= 0; e--) {
-                    if (volcanoes[e].chunkKey === o.key) {
-                        volcanoes.splice(e, 1);
-                    }
-                }
-                const e = o.cx * CHUNK_SIZE,
-                    t = o.cz * CHUNK_SIZE;
-                for (let a = 0; a < CHUNK_SIZE; a++)
-                    for (let n = 0; n < CHUNK_SIZE; n++)
-                        for (let r = 0; r < MAX_HEIGHT; r++) {
-                            const s = o.get(a, r, n);
-                            if (BLOCKS[s] && BLOCKS[s].light) {
-                                const o = `${modWrap(e + a, MAP_SIZE)},${r},${modWrap(t + n, MAP_SIZE)}`;
-                                torchRegistry.delete(o)
-                            }
-                        }
-                this.chunks.delete(o.key)
+    const normalLimit = Math.min(dynamicLimit, MAX_LOADED_CHUNKS),
+        evictionLimit = playerIsMoving ? MAX_MOVING_LOADED_CHUNKS : normalLimit,
+        chunksToKeep = new Set();
+    if (!playerIsMoving && this.pendingDistantUnload) {
+        const pending = this.pendingDistantUnload,
+            pendingX = Math.floor(modWrap(pending.playerX, MAP_SIZE) / CHUNK_SIZE),
+            pendingZ = Math.floor(modWrap(pending.playerZ, MAP_SIZE) / CHUNK_SIZE),
+            radiusSq = pending.radius * pending.radius;
+        for (let dx = -pending.radius; dx <= pending.radius; dx++)
+            for (let dz = -pending.radius; dz <= pending.radius; dz++)
+                if (dx * dx + dz * dz <= radiusSq)
+                    chunksToKeep.add(makeChunkKey(worldName, modWrap(pendingX + dx, CHUNKS_PER_SIDE), modWrap(pendingZ + dz, CHUNKS_PER_SIDE)));
+    }
+    const chunkDistanceSq = chunk => {
+        const dx = Math.abs(chunk.cx - a),
+            dz = Math.abs(chunk.cz - n),
+            wrappedDx = Math.min(dx, CHUNKS_PER_SIDE - dx),
+            wrappedDz = Math.min(dz, CHUNKS_PER_SIDE - dz);
+        return wrappedDx * wrappedDx + wrappedDz * wrappedDz;
+    };
+    const removeChunk = chunk => {
+        if (chunk.mesh) {
+            meshGroup.remove(chunk.mesh);
+            disposeObject(chunk.mesh);
+            chunk.mesh = null;
+        }
+        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+            const particle = smokeParticles[i];
+            if (particle.userData.chunkKey === chunk.key) {
+                scene.remove(particle);
+                disposeObject(particle);
+                smokeParticles.splice(i, 1);
             }
+        }
+        for (let i = volcanoes.length - 1; i >= 0; i--)
+            if (volcanoes[i].chunkKey === chunk.key) volcanoes.splice(i, 1);
+        const startX = chunk.cx * CHUNK_SIZE,
+            startZ = chunk.cz * CHUNK_SIZE;
+        for (let x = 0; x < CHUNK_SIZE; x++)
+            for (let z = 0; z < CHUNK_SIZE; z++)
+                for (let y = 0; y < MAX_HEIGHT; y++) {
+                    const blockId = chunk.get(x, y, z);
+                    if (BLOCKS[blockId] && BLOCKS[blockId].light)
+                        torchRegistry.delete(`${modWrap(startX + x, MAP_SIZE)},${y},${modWrap(startZ + z, MAP_SIZE)}`);
+                }
+        this.chunks.delete(chunk.key);
+    };
+    let evictionBudget = CHUNK_EVICTIONS_PER_UPDATE;
+    if (chunksToKeep.size) {
+        const distantChunks = Array.from(this.chunks.values())
+            .filter(chunk => !c.has(chunk.key) && !chunksToKeep.has(chunk.key))
+            .sort((left, right) => chunkDistanceSq(right) - chunkDistanceSq(left));
+        for (const chunk of distantChunks) {
+            if (evictionBudget <= 0) break;
+            removeChunk(chunk);
+            evictionBudget--;
+        }
+        if (distantChunks.length <= CHUNK_EVICTIONS_PER_UPDATE) this.pendingDistantUnload = null;
+    }
+    if (evictionBudget > 0 && this.chunks.size > evictionLimit) {
+        const distantChunks = Array.from(this.chunks.values())
+            .filter(chunk => !c.has(chunk.key))
+            .sort((left, right) => chunkDistanceSq(right) - chunkDistanceSq(left));
+        for (const chunk of distantChunks) {
+            if (evictionBudget <= 0 || this.chunks.size <= evictionLimit) break;
+            removeChunk(chunk);
+            evictionBudget--;
         }
     }
     for (const e of c) {
@@ -971,91 +1026,16 @@ Chunk.prototype.idx = function (e, t, o) {
     };
 
 /**
- * Immediately unloads all chunks that are beyond the specified radius from the player's current position.
- * This is called after teleportation to ensure previously visited areas are cleaned up and don't appear
- * as tiny objects on the horizon.
+ * Schedules distant chunk cleanup after teleportation, once the player has stopped moving.
  * @param {number} playerX - The player's current X position
  * @param {number} playerZ - The player's current Z position
  * @param {number} radius - The maximum chunk distance to keep (defaults to currentLoadRadius)
  */
 ChunkManager.prototype.unloadDistantChunks = function(playerX, playerZ, radius) {
-    // Validate radius parameter: use currentLoadRadius if not provided or invalid
     if (typeof radius !== 'number' || radius <= 0 || !isFinite(radius)) {
         radius = currentLoadRadius;
     }
-    const pcx = Math.floor(modWrap(playerX, MAP_SIZE) / CHUNK_SIZE);
-    const pcz = Math.floor(modWrap(playerZ, MAP_SIZE) / CHUNK_SIZE);
-    
-    // Build a set of chunk keys that should remain loaded using circular distance check
-    const chunksToKeep = new Set();
-    const radiusSq = radius * radius;
-    for (let dx = -radius; dx <= radius; dx++) {
-        for (let dz = -radius; dz <= radius; dz++) {
-            // Circular filter: only keep chunks within circular radius
-            if (dx * dx + dz * dz <= radiusSq) {
-                const cx = modWrap(pcx + dx, CHUNKS_PER_SIDE);
-                const cz = modWrap(pcz + dz, CHUNKS_PER_SIDE);
-                chunksToKeep.add(makeChunkKey(worldName, cx, cz));
-            }
-        }
-    }
-    
-    // Find and remove all chunks that are outside the radius
-    const chunksToRemove = [];
-    for (const [key, chunk] of this.chunks) {
-        if (!chunksToKeep.has(key)) {
-            chunksToRemove.push(chunk);
-        }
-    }
-    
-    // Unload the distant chunks
-    for (const chunk of chunksToRemove) {
-        // Remove the mesh from the scene
-        if (chunk.mesh) {
-            meshGroup.remove(chunk.mesh);
-            disposeObject(chunk.mesh);
-            chunk.mesh = null;
-        }
-        
-        // Clean up smoke particles associated with this chunk
-        for (let i = smokeParticles.length - 1; i >= 0; i--) {
-            const particle = smokeParticles[i];
-            if (particle.userData.chunkKey === chunk.key) {
-                scene.remove(particle);
-                disposeObject(particle);
-                smokeParticles.splice(i, 1);
-            }
-        }
-        
-        // Clean up volcanoes associated with this chunk
-        for (let i = volcanoes.length - 1; i >= 0; i--) {
-            if (volcanoes[i].chunkKey === chunk.key) {
-                volcanoes.splice(i, 1);
-            }
-        }
-        
-        // Clean up torch registry entries for this chunk
-        const chunkStartX = chunk.cx * CHUNK_SIZE;
-        const chunkStartZ = chunk.cz * CHUNK_SIZE;
-        for (let x = 0; x < CHUNK_SIZE; x++) {
-            for (let z = 0; z < CHUNK_SIZE; z++) {
-                for (let y = 0; y < MAX_HEIGHT; y++) {
-                    const blockId = chunk.get(x, y, z);
-                    if (BLOCKS[blockId] && BLOCKS[blockId].light) {
-                        const torchKey = `${modWrap(chunkStartX + x, MAP_SIZE)},${y},${modWrap(chunkStartZ + z, MAP_SIZE)}`;
-                        torchRegistry.delete(torchKey);
-                    }
-                }
-            }
-        }
-        
-        // Remove the chunk from the manager
-        this.chunks.delete(chunk.key);
-    }
-    
-    if (chunksToRemove.length > 0) {
-        console.log(`[ChunkManager] Unloaded ${chunksToRemove.length} distant chunk(s)`);
-    }
+    this.pendingDistantUnload = { playerX, playerZ, radius };
 };
 
 function makeChunkKey(e, t, o) {
