@@ -91,7 +91,7 @@ Other blocks retain their existing strengths; the Blue Iron Pick halves their re
 
 ### 🏰 Building Blocks: Stairs, Doors & Castles
 
-Directional blocks (doors, stairs, portcullis) face the way your camera is looking when you place them.
+Directional blocks (doors, stairs, portcullis, chairs, beds, couches, and window panes) face the way your camera is looking when you place them.
 
 | Block | Recipe | Notes |
 |-------|--------|-------|
@@ -114,12 +114,16 @@ Directional blocks (doors, stairs, portcullis) face the way your camera is looki
 | Rose Stained Glass | 2 Glass + 1 Flower → 2 | Tinted castle windows. |
 | Bed | 4 Wooden Planks + 2 Red Stained Glass → 1 | Two blocks long. Right-click to lie down; the pose is shared with other players. |
 | Chair | 4 Wooden Planks → 1 | Right-click to sit. |
+| Stone Chair | 4 Castle Stone Bricks → 1 | Directional stone seat. |
+| Iron Chair | 4 Iron Ore → 1 | Directional metal seat. |
 | Couch | 4 Wooden Planks + 2 Rose Stained Glass → 1 | Two blocks long. Right-click to sit. |
 | Window Panes | 2 matching glass blocks → 4 | Clear, red, blue, green, yellow, and rose panes; face the direction you're looking. |
 | Village Plaster, Timber Frame, Thatch Roof, Cobblestone Path | Clay/wood/leaves/cobblestone recipes | Mix and match these blocks to build village homes and paths. |
 | Castle Flagstone, Pillar, Iron Bars | Castle bricks, stone, and iron recipes | Additional floors, supports, and defensive details. |
 
-Beds and couches reserve two adjacent floor blocks when placed. Sitting or lying down is cancelled when you move.
+Crafting recipes are grouped into collapsed **Tools & Weapons**, **Construction & Furniture**, and **Raw Materials** sections. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
+
+Beds and couches reserve two adjacent floor blocks when placed. Furniture faces the direction you look when placing it; sitting or lying down is cancelled when you move.
 
 ---
 

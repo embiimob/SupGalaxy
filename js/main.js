@@ -1943,10 +1943,9 @@ function getRecipeCategory(recipe) {
     }
     const blockId = recipe.out.id;
     if (block?.model || blockId === 120 || blockId === 129 || blockId === 131 ||
-        blockId >= 100 && blockId <= 117 ||
+        blockId >= 100 && blockId <= 108 || blockId >= 114 && blockId <= 119 ||
         blockId >= 139 && blockId <= 171 ||
-        blockId >= 181 && blockId <= 255 ||
-        [105, 106, 107, 108, 109, 110, 118, 119].includes(blockId)) {
+        blockId >= 181 && blockId <= 255) {
         return "construction";
     }
     return "raw";
@@ -3688,10 +3687,10 @@ function interactWithFurniture(anchor) {
         player.activity === "sit" ? "You sit down." : "You stand up.", 1200);
 }
 
-function applyFurniturePose(avatar, activity, facing, activityBaseY) {
+function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw = 0) {
     if (!avatar) return;
     if (!activity) {
-        avatar.rotation.z = 0;
+        avatar.rotation.set(0, defaultYaw, 0);
         return;
     }
     const direction = Number.isInteger(facing) ? ((facing % 4) + 4) % 4 : 0;
@@ -6732,7 +6731,7 @@ function updateAvatarAnimation(e, t) {
     applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
-    applyFurniturePose(avatarGroup, player.activity, player.activityFacing, player.activityBaseY);
+    applyFurniturePose(avatarGroup, player.activity, player.activityFacing, player.activityBaseY, player.yaw);
 }
 
 function initMinimap() {
@@ -7238,7 +7237,7 @@ function runGameFrame(e) {
                     applyBowArmAim(v, e.targetPitch);
                 }
                 updateHeldPickaxePose(v);
-                applyFurniturePose(v, e.activity, e.activityFacing, e.activityBaseY);
+                applyFurniturePose(v, e.activity, e.activityFacing, e.activityBaseY, e.targetYaw);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,
