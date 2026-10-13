@@ -1283,6 +1283,98 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             139: 3,
             106: 1
         }
+    }, {
+        id: "iron_door",
+        out: { id: 181, count: 1 },
+        requires: { 124: 4 }
+    }, {
+        id: "stone_door",
+        out: { id: 189, count: 1 },
+        requires: { 139: 5 }
+    }, {
+        id: "iron_stairs",
+        out: { id: 197, count: 4 },
+        requires: { 124: 6 }
+    }, {
+        id: "marble_stairs",
+        out: { id: 201, count: 4 },
+        requires: { 109: 6 }
+    }, {
+        id: "bed",
+        out: { id: 205, count: 1 },
+        requires: { 129: 4, 101: 2 }
+    }, {
+        id: "chair",
+        out: { id: 213, count: 1 },
+        requires: { 129: 4 }
+    }, {
+        id: "couch",
+        out: { id: 217, count: 1 },
+        requires: { 129: 4, 152: 2 }
+    }, {
+        id: "clear_window_panes",
+        out: { id: 225, count: 4 },
+        requires: { 100: 2 }
+    }, {
+        id: "red_window_panes",
+        out: { id: 226, count: 4 },
+        requires: { 101: 2 }
+    }, {
+        id: "blue_window_panes",
+        out: { id: 227, count: 4 },
+        requires: { 102: 2 }
+    }, {
+        id: "green_window_panes",
+        out: { id: 228, count: 4 },
+        requires: { 103: 2 }
+    }, {
+        id: "yellow_window_panes",
+        out: { id: 229, count: 4 },
+        requires: { 104: 2 }
+    }, {
+        id: "rose_window_panes",
+        out: { id: 230, count: 4 },
+        requires: { 152: 2 }
+    }, {
+        id: "village_plaster",
+        out: { id: 231, count: 4 },
+        requires: { 13: 2, 5: 1 }
+    }, {
+        id: "village_timber_frame",
+        out: { id: 232, count: 4 },
+        requires: { 7: 2, 129: 2 }
+    }, {
+        id: "thatch_roof",
+        out: { id: 233, count: 4 },
+        requires: { 8: 4, 129: 1 }
+    }, {
+        id: "cobblestone_path",
+        out: { id: 234, count: 4 },
+        requires: { 119: 3, 15: 1 }
+    }, {
+        id: "flower_box",
+        out: { id: 235, count: 2 },
+        requires: { 129: 3, 12: 1 }
+    }, {
+        id: "castle_flagstone",
+        out: { id: 236, count: 4 },
+        requires: { 139: 3, 15: 1 }
+    }, {
+        id: "castle_pillar",
+        out: { id: 237, count: 2 },
+        requires: { 139: 4 }
+    }, {
+        id: "castle_iron_bars",
+        out: { id: 238, count: 4 },
+        requires: { 124: 4 }
+    }, {
+        id: "castle_arch_stone",
+        out: { id: 239, count: 4 },
+        requires: { 139: 4, 109: 1 }
+    }, {
+        id: "castle_banner",
+        out: { id: 240, count: 1 },
+        requires: { 129: 1, 152: 2 }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
