@@ -57,6 +57,16 @@ function fishItemIdForType(type) {
     return type === "fish_rare" ? 137 : type === "fish_school" ? 138 : null;
 }
 
+
+function formatDisplaySeed(originSeed) {
+    if (!originSeed) return "";
+    let displaySeed = String(originSeed);
+    if (displaySeed.startsWith(MASTER_WORLD_KEY)) {
+        displaySeed = displaySeed.substring(MASTER_WORLD_KEY.length);
+    }
+    return displaySeed.substring(0, 8);
+}
+
 function consumeFishInventoryItem(type, originSeed) {
     const itemId = fishItemIdForType(type);
     const seed = originSeed || worldSeed;
@@ -1652,7 +1662,7 @@ function updateHotbarUI() {
         if (a && BLOCKS[a]) {
             displayName = BLOCKS[a].name;
             if (o.originSeed && o.originSeed !== worldSeed) {
-                displayName += " " + o.originSeed;
+                displayName += " " + formatDisplaySeed(o.originSeed);
             }
         }
         e.style.background = "rgba(" + r.join(",") + ", " + (a ? .45 : .2) + ")", e.querySelector(".hot-label").innerText = displayName, e.querySelector(".hot-count").innerText = n > 0 ? n : "", e.classList.toggle("active", t === selectedHotIndex)
@@ -1928,7 +1938,7 @@ function createInventorySlot(e) {
         var a = BLOCKS[o.id] ? hexToRgb(BLOCKS[o.id].color) : [128, 128, 128];
         let displayName = BLOCKS[o.id] ? BLOCKS[o.id].name.substring(0, 6) : "Unknown";
         if (o.originSeed && o.originSeed !== worldSeed) {
-            displayName += " " + o.originSeed.substring(0, 4);
+            displayName += " " + formatDisplaySeed(o.originSeed);
         }
         if (t.style.backgroundColor = `rgba(${a.join(",")}, 0.6)`, t.innerText = displayName, o.count > 1) {
             var n = document.createElement("div");
@@ -2283,7 +2293,7 @@ function createChestInventorySlot(index) {
         slot.style.backgroundColor = `rgba(${color.join(",")}, 0.6)`;
         let displayName = BLOCKS[item.id] ? BLOCKS[item.id].name.substring(0, 6) : "???";
         if (item.originSeed && item.originSeed !== worldSeed) {
-            displayName += " " + item.originSeed.substring(0, 4);
+            displayName += " " + formatDisplaySeed(item.originSeed);
         }
         slot.innerText = displayName;
         if (item.count > 1) {
@@ -3954,11 +3964,11 @@ function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = f
                 if (breaker === userName) {
                     const dropId = n.dropId || a;
                     addToInventory(dropId, 1, l);
-                    addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${l}` : ""));
+                    addMessage("Picked up " + (BLOCKS[a] ? BLOCKS[a].name : a) + (l ? ` from ${formatDisplaySeed(l)}` : ""));
 
                     if (a === 8 && Math.random() < 0.1) { // 1/10 chance on leaves
                         addToInventory(135, 5, l);
-                        addMessage("Found 5 Tree Seeds" + (l ? ` from ${l}` : ""));
+                        addMessage("Found 5 Tree Seeds" + (l ? ` from ${formatDisplaySeed(l)}` : ""));
                     }
 
                     safePlayAudioAt(soundBreak, { x: e, y: t, z: o });
@@ -4184,7 +4194,7 @@ function placeBlockAt(e, t, o, a) {
                         if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
-                            addMessage(`Placed ${BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId} from ${n.originSeed}`);
+                            addMessage(`Placed ${BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId} from ${formatDisplaySeed(n.originSeed)}`);
                         } else {
                             addMessage("Placed " + (BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId));
                         }
