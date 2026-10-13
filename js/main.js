@@ -2794,10 +2794,13 @@ async function createMagicianStoneScreen(stoneData) {
 
         // invisible mesh for occlusion/raycasting
         const material = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            blending: THREE.NoBlending,
-            opacity: 0,
-            side: THREE.DoubleSide
+            blending: THREE.CustomBlending,
+            blendEquation: THREE.AddEquation,
+            blendSrc: THREE.ZeroFactor,
+            blendDst: THREE.ZeroFactor,
+            side: THREE.DoubleSide,
+            transparent: true,
+            depthWrite: true
         });
         screenMesh = new THREE.Mesh(planeGeometry, material);
         screenMesh.add(css3dObject);

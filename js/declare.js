@@ -1797,7 +1797,10 @@ function getMagicianStoneEmbedUrl(url) {
         }
         if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
             const channel = parsed.pathname.slice(1).split('/')[0];
-            if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname || 'localhost'}&autoplay=true&muted=true`;
+            if (channel) {
+                const hostname = window.location.hostname || 'localhost';
+                return `https://player.twitch.tv/?channel=${channel}&parent=${hostname === '' ? 'localhost' : hostname}&parent=localhost&parent=127.0.0.1&parent=supgalaxy.org&autoplay=true&muted=true`;
+            }
             return '';
         }
     } catch(e) {}
