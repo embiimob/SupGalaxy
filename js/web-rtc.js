@@ -1233,6 +1233,7 @@ function setupDataChannel(e, t) {
                             if (Array.isArray(e.petIds)) o.petIds = e.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
                             o.activity = ["sit", "lie"].includes(e.activity) ? e.activity : null;
                             o.activityFacing = Number.isInteger(e.activityFacing) ? ((e.activityFacing % 4) + 4) % 4 : 0;
+                            o.activityBaseY = Number.isFinite(e.activityBaseY) ? e.activityBaseY : null;
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.isSwimming = e.isSwimming === true, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
                             if (playerAvatars.has(t)) {
@@ -1285,6 +1286,7 @@ function setupDataChannel(e, t) {
                     l.selectedBlockId = s.selectedBlockId;
                     l.activity = ["sit", "lie"].includes(s.activity) ? s.activity : null;
                     l.activityFacing = Number.isInteger(s.activityFacing) ? ((s.activityFacing % 4) + 4) % 4 : 0;
+                    l.activityBaseY = Number.isFinite(s.activityBaseY) ? s.activityBaseY : null;
                     l.bowDrawActive = s.bowDrawActive === true;
                     l.bowDrawProgress = l.bowDrawActive && Number.isFinite(s.bowDrawProgress)
                         ? Math.max(0, Math.min(1, s.bowDrawProgress))

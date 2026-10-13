@@ -410,7 +410,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         130: {
             name: "Crafting Table",
             color: "#8b5a33",
-            strength: 2
+            strength: 2,
+            itemOnly: !0
         },
         131: {
             name: "Chest",
@@ -806,24 +807,20 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         228: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         229: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         230: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        231: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        232: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        233: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
-        234: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        235: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        236: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
-        237: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        238: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        239: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
-        240: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        241: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        242: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        231: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 0, furnitureKind: "sit", strength: 8 },
+        232: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 1, furnitureKind: "sit", strength: 8 },
+        233: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 2, furnitureKind: "sit", strength: 8 },
+        234: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 3, furnitureKind: "sit", strength: 8 },
+        235: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 0, furnitureKind: "sit", strength: 8 },
+        236: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 1, furnitureKind: "sit", strength: 8 },
+        237: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 2, furnitureKind: "sit", strength: 8 },
+        238: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 3, furnitureKind: "sit", strength: 8 },
+        239: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        240: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        241: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        242: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
         243: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        244: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        245: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
-        246: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        247: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
-        248: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        244: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
         249: { name: "Village Plaster", color: "#d6c8a8", textureStyle: "limestone", strength: 2 },
         250: { name: "Village Timber Frame", color: "#704425", textureStyle: "beam", strength: 3 },
         251: { name: "Thatch Roof", color: "#b99a58", textureStyle: "thatch", strength: 2 },
@@ -1152,15 +1149,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             7: 1
         }
     }, {
-        id: "crafting_table",
-        out: {
-            id: 130,
-            count: 1
-        },
-        requires: {
-            129: 4
-        }
-    }, {
         id: "chest",
         out: {
             id: 131,
@@ -1321,6 +1309,14 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         id: "chair",
         out: { id: 213, count: 1 },
         requires: { 129: 4 }
+    }, {
+        id: "stone_chair",
+        out: { id: 231, count: 1 },
+        requires: { 139: 4 }
+    }, {
+        id: "iron_chair",
+        out: { id: 235, count: 1 },
+        requires: { 124: 4 }
     }, {
         id: "couch",
         out: { id: 217, count: 1 },

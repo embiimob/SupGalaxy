@@ -218,6 +218,30 @@ function createBlockTexture(e, t) {
                 r.fillRect(Math.floor(s() * a), Math.floor(s() * a), 1 + Math.floor(s() * 2), 1);
             }
         }
+    } else if (style === "thatch") {
+        r.fillStyle = colorAt(.62);
+        r.fillRect(0, 0, a, a);
+        for (let row = 0; row < a; row += 8) {
+            r.fillStyle = colorAt(.78);
+            r.fillRect(0, row, a, 2);
+            for (let x = -2; x < a + 2; x += 2) {
+                const sway = (s() - .5) * 3;
+                r.beginPath();
+                r.moveTo(x, row + 1);
+                r.quadraticCurveTo(x + sway, row + 4, x + (s() - .5) * 2, row + 8);
+                r.strokeStyle = colorAt(.72 + s() * .45);
+                r.lineWidth = s() > .78 ? 2 : 1;
+                r.stroke();
+            }
+            r.beginPath();
+            r.moveTo(0, row + 7);
+            for (let x = 0; x <= a; x += 4) {
+                r.quadraticCurveTo(x + 2, row + 9 + s(), x + 4, row + 7);
+            }
+            r.strokeStyle = colorAt(.48);
+            r.lineWidth = 2;
+            r.stroke();
+        }
     } else if (style === "sand") {
         r.fillStyle = colorAt(.98);
         r.fillRect(0, 0, a, a);

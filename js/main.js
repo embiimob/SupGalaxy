@@ -1824,6 +1824,23 @@ function openCrafting() {
     craftModal.style.display = "flex"; // Use flex as per new CSS
     const recipeList = document.getElementById("recipeList");
     recipeList.innerHTML = "";
+    const categories = [
+        { id: "tools", title: "Tools & Weapons" },
+        { id: "construction", title: "Construction & Furniture" },
+        { id: "raw", title: "Raw Materials" }
+    ];
+    const categoryLists = new Map();
+    for (const category of categories) {
+        const details = document.createElement("details");
+        details.className = "recipe-category";
+        const summary = document.createElement("summary");
+        summary.textContent = category.title;
+        const recipes = document.createElement("div");
+        recipes.className = "recipe-category-items";
+        details.append(summary, recipes);
+        recipeList.appendChild(details);
+        categoryLists.set(category.id, { details, recipes });
+    }
 
     // Tally current inventory
     const inventoryCounts = {};
@@ -1912,8 +1929,27 @@ function openCrafting() {
         recipeItem.appendChild(preview);
         recipeItem.appendChild(info);
         recipeItem.appendChild(statusDiv);
-        recipeList.appendChild(recipeItem);
+        categoryLists.get(getRecipeCategory(recipe)).recipes.appendChild(recipeItem);
     }
+    for (const { details, recipes } of categoryLists.values()) {
+        if (!recipes.childElementCount) details.remove();
+    }
+}
+
+function getRecipeCategory(recipe) {
+    const block = BLOCKS[recipe.out.id];
+    if (block?.itemOnly || [121, 126, 127, 128, 133, 174, 175, 178, 179].includes(recipe.out.id)) {
+        return "tools";
+    }
+    const blockId = recipe.out.id;
+    if (block?.model || blockId === 120 || blockId === 129 || blockId === 131 ||
+        blockId >= 100 && blockId <= 117 ||
+        blockId >= 139 && blockId <= 171 ||
+        blockId >= 181 && blockId <= 255 ||
+        [105, 106, 107, 108, 109, 110, 118, 119].includes(blockId)) {
+        return "construction";
+    }
+    return "raw";
 }
 
 function toggleInventory() {
@@ -3573,10 +3609,7 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
         const blockId = getBlockAt(x, y, z);
 
-        if (blockId === 130) { // Crafting Table
-            openCrafting();
-            return;
-        } else if (blockId === 131) { // Chest
+        if (blockId === 131) { // Chest
             openChest(x, y, z);
             return;
         }
@@ -3628,13 +3661,22 @@ function interactWithFurniture(anchor) {
     if (!anchor || !["sit", "lie"].includes(anchor.kind)) return;
     if (player.activity === anchor.kind) {
         player.activity = null;
+        player.activityBaseY = null;
     } else {
         player.activity = anchor.kind;
         player.activityFacing = anchor.facing || 0;
-        player.x = anchor.x + .1;
+        const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][player.activityFacing];
+        if (anchor.kind === "lie") {
+            player.x = anchor.x + .1 + heading[0] * 1.1;
+            player.z = anchor.z + .1 + heading[1] * 1.1;
+            player.activityBaseY = anchor.y + .58;
+        } else {
+            player.x = anchor.x + .1;
+            player.z = anchor.z + .1;
+            player.activityBaseY = null;
+        }
         player.y = anchor.y;
-        player.z = anchor.z + .1;
-        player.yaw = player.activityFacing * Math.PI / 2;
+        player.yaw = Math.PI + player.activityFacing * Math.PI / 2;
         player.vx = player.vy = player.vz = 0;
         player.onGround = true;
         lastSentPosition.x = player.x;
@@ -3646,23 +3688,32 @@ function interactWithFurniture(anchor) {
         player.activity === "sit" ? "You sit down." : "You stand up.", 1200);
 }
 
-function applyFurniturePose(avatar, activity, facing) {
+function applyFurniturePose(avatar, activity, facing, activityBaseY) {
     if (!avatar) return;
-    if (activity && Number.isFinite(facing)) avatar.rotation.y = facing * Math.PI / 2;
-    avatar.rotation.z = activity === "lie" ? Math.PI / 2 : 0;
-    if (activity === "lie") avatar.position.y += .65;
+    if (!activity) {
+        avatar.rotation.z = 0;
+        return;
+    }
+    const direction = Number.isInteger(facing) ? ((facing % 4) + 4) % 4 : 0;
+    if (activity === "lie") {
+        const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][direction];
+        const head = new THREE.Vector3(-heading[0], 0, -heading[1]);
+        const down = new THREE.Vector3(0, -1, 0);
+        const right = new THREE.Vector3().crossVectors(head, down).normalize();
+        avatar.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, head, down));
+        avatar.position.y = Number.isFinite(activityBaseY)
+            ? activityBaseY
+            : avatar.position.y + .58;
+    } else {
+        avatar.rotation.set(0, Math.PI + direction * Math.PI / 2, 0);
+        avatar.position.y += .28;
+    }
     if (avatar.children[0] && avatar.children[1]) {
-        avatar.children[0].rotation.x = activity === "sit" ? -1.15 : 0;
-        avatar.children[1].rotation.x = activity === "sit" ? -1.15 : 0;
+        avatar.children[0].rotation.x = activity === "sit" ? 1.05 : 0;
+        avatar.children[1].rotation.x = activity === "sit" ? 1.05 : 0;
     }
     if (avatar.children[2]) {
-        avatar.children[2].rotation.x = activity === "sit" ? .12 : 0;
-        avatar.children[2].position.y = activity === "sit" ? .72 : .9692307692307692;
-    }
-    if (avatar.children[3]) avatar.children[3].position.y = activity === "sit" ? 1.15 : 1.5923076923076922;
-    if (avatar.children[4] && avatar.children[5]) {
-        avatar.children[4].position.y = activity === "sit" ? .72 : .9692307692307692;
-        avatar.children[5].position.y = activity === "sit" ? .72 : .9692307692307692;
+        avatar.children[2].rotation.x = activity === "sit" ? -.12 : 0;
     }
 }
 
@@ -4381,14 +4432,16 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 201) return [201, 202, 203, 204][facing];
     if (blockId === 205) return [205, 206, 207, 208][facing];
     if (blockId === 213) return [213, 214, 215, 216][facing];
+    if (blockId === 231) return [231, 232, 233, 234][facing];
+    if (blockId === 235) return [235, 236, 237, 238][facing];
     if (blockId === 217) return [217, 218, 219, 220][facing];
     const paneVariants = {
-        225: [225, 231, 232, 233],
-        226: [226, 234, 235, 236],
-        227: [227, 237, 238, 239],
-        228: [228, 240, 241, 242],
-        229: [229, 243, 244, 245],
-        230: [230, 246, 247, 248]
+        225: [225, 239, 225, 239],
+        226: [226, 240, 226, 240],
+        227: [227, 241, 227, 241],
+        228: [228, 242, 228, 242],
+        229: [229, 243, 229, 243],
+        230: [230, 244, 230, 244]
     };
     if (paneVariants[blockId]) return paneVariants[blockId][facing];
     return blockId;
@@ -4397,7 +4450,7 @@ function getOrientedBuildBlockId(blockId, facing) {
 function getFurnitureFootprint(blockId, x, z) {
     const block = BLOCKS[blockId];
     if (!block?.furniturePartId) return null;
-    const offsets = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+    const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     const [dx, dz] = offsets[block.facing || 0];
     return { x: x + dx, z: z + dz, blockId: block.furniturePartId };
 }
@@ -4405,7 +4458,7 @@ function getFurnitureFootprint(blockId, x, z) {
 function getFurnitureAnchorForPart(blockId, x, z) {
     const block = BLOCKS[blockId];
     if (!block?.furniturePart) return null;
-    const offsets = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+    const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     const [dx, dz] = offsets[block.facing || 0];
     const anchorId = block.furnitureType === "bed" ? 205 + (block.facing || 0) : 217 + (block.facing || 0);
     return { x: x - dx, z: z - dz, blockId: anchorId };
@@ -6679,7 +6732,7 @@ function updateAvatarAnimation(e, t) {
     applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
-    applyFurniturePose(avatarGroup, player.activity, player.activityFacing);
+    applyFurniturePose(avatarGroup, player.activity, player.activityFacing, player.activityBaseY);
 }
 
 function initMinimap() {
@@ -7012,7 +7065,7 @@ function runGameFrame(e) {
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
-        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l, player.y), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
+        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), avatarGroup.rotation.y = player.yaw, "first" === cameraMode && camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l, player.y), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
             if (e.type !== "ufo_saucer") updateMobSafely(e, t)
         })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
         meshGroup.visible = player.y < 3000;
@@ -7094,9 +7147,13 @@ function runGameFrame(e) {
                 player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (player.activity && activeMovement) player.activity = null;
+        if (player.activity && Math.hypot(player.x - lastSentPosition.x, player.z - lastSentPosition.z) > .1) {
+            player.activity = null;
+            player.activityBaseY = null;
+        }
         const activityChanged = lastSentPosition.activity !== (player.activity || null);
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged || activityChanged)) {
+        const activityFacingChanged = lastSentPosition.activityFacing !== (player.activityFacing || 0);
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged || activityChanged || activityFacingChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Passive transport and looking around do not reset idle time.
             if (activeMovement || isAttacking) {
@@ -7114,7 +7171,9 @@ function runGameFrame(e) {
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
                 isSwimming: inWater,
-                activity: player.activity || null
+                activity: player.activity || null,
+                activityFacing: player.activityFacing || 0,
+                activityBaseY: player.activityBaseY
             };
             ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
@@ -7134,6 +7193,7 @@ function runGameFrame(e) {
                 bowDrawActive: bowDrawActive,
                 activity: player.activity || null,
                 activityFacing: player.activityFacing || 0,
+                activityBaseY: player.activityBaseY,
                 petIds: petIds,
                 score: Number(player.score) || 0,
                 timestamp: Date.now()
@@ -7178,7 +7238,7 @@ function runGameFrame(e) {
                     applyBowArmAim(v, e.targetPitch);
                 }
                 updateHeldPickaxePose(v);
-                applyFurniturePose(v, e.activity, e.activityFacing);
+                applyFurniturePose(v, e.activity, e.activityFacing, e.activityBaseY);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,

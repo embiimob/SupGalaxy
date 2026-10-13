@@ -496,6 +496,10 @@ Chunk.prototype.idx = function (e, t, o) {
                     } : null;
                     if (BLOCKS[w].model === "furniture_part") continue;
                     model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
+                    if (BLOCKS[w].model === "chair") model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
+                    if (BLOCKS[w].model === "bed" || BLOCKS[w].model === "couch") {
+                        model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2 - Math.PI / 2;
+                    }
                     if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
                         lowerStep.position.y = .25;
@@ -535,7 +539,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         const seat = new THREE.Mesh(new THREE.BoxGeometry(.82, .16, .82), modelMaterial);
                         seat.position.y = .48;
                         const back = new THREE.Mesh(new THREE.BoxGeometry(.82, .72, .14), modelMaterial);
-                        back.position.set(0, .88, .34);
+                        back.position.set(0, .88, -.34);
                         model.add(seat, back);
                         for (const x of [-.32, .32]) {
                             for (const z of [-.3, .3]) {
@@ -565,7 +569,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.62, .18, .72), fabric);
                         cushion.position.set(.5, .54, -.04);
                         const back = new THREE.Mesh(new THREE.BoxGeometry(1.72, .62, .18), fabric);
-                        back.position.set(.5, .78, .34);
+                        back.position.set(.5, .78, -.34);
                         model.add(frame, cushion, back);
                         for (const x of [-.38, 1.38]) {
                             const arm = new THREE.Mesh(new THREE.BoxGeometry(.18, .5, .88), fabric);
