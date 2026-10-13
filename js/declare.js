@@ -1798,8 +1798,21 @@ function getMagicianStoneEmbedUrl(url) {
         if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
             const channel = parsed.pathname.slice(1).split('/')[0];
             if (channel) {
-                const hostname = window.location.hostname || 'localhost';
-                return `https://player.twitch.tv/?channel=${channel}&parent=${hostname === '' ? 'localhost' : hostname}&parent=localhost&parent=127.0.0.1&parent=supgalaxy.org&autoplay=true&muted=true`;
+                let parents = [];
+                try {
+                    if (window.location.hostname) parents.push(window.location.hostname);
+                    if (window.ancestorOrigins) {
+                        for (let i = 0; i < window.ancestorOrigins.length; i++) {
+                            parents.push(new URL(window.ancestorOrigins[i]).hostname);
+                        }
+                    } else if (window !== window.top && document.referrer) {
+                        parents.push(new URL(document.referrer).hostname);
+                    }
+                } catch(e) {}
+                parents.push('localhost', '127.0.0.1', 'supgalaxy.org');
+                parents = [...new Set(parents.filter(Boolean))];
+                const parentQuery = parents.map(p => `parent=${p}`).join('&');
+                return `https://player.twitch.tv/?channel=${channel}&${parentQuery}&autoplay=true&muted=true`;
             }
             return '';
         }
