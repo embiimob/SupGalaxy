@@ -464,7 +464,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 3
         },
         146: {
-            name: "Oak Door",
+            name: "Door Oak",
             color: "#704425",
             transparent: !0,
             model: "door_closed",
@@ -474,7 +474,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         147: {
-            name: "Oak Door (Open)",
+            name: "Door Oak (Open)",
             color: "#704425",
             transparent: !0,
             model: "door_open",
@@ -485,7 +485,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         154: {
-            name: "Oak Door",
+            name: "Door Oak",
             color: "#704425",
             transparent: !0,
             model: "door_closed",
@@ -495,7 +495,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         155: {
-            name: "Oak Door (Open)",
+            name: "Door Oak (Open)",
             color: "#704425",
             transparent: !0,
             model: "door_open",
@@ -506,7 +506,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         156: {
-            name: "Oak Door",
+            name: "Door Oak",
             color: "#704425",
             transparent: !0,
             model: "door_closed",
@@ -516,7 +516,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         157: {
-            name: "Oak Door (Open)",
+            name: "Door Oak (Open)",
             color: "#704425",
             transparent: !0,
             model: "door_open",
@@ -527,7 +527,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         158: {
-            name: "Oak Door",
+            name: "Door Oak",
             color: "#704425",
             transparent: !0,
             model: "door_closed",
@@ -537,7 +537,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         159: {
-            name: "Oak Door (Open)",
+            name: "Door Oak (Open)",
             color: "#704425",
             transparent: !0,
             model: "door_open",
@@ -548,7 +548,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         148: {
-            name: "Oak Stairs",
+            name: "Stairs Oak",
             color: "#8b5a33",
             transparent: !0,
             model: "stairs",
@@ -557,7 +557,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         149: {
-            name: "Castle Stone Stairs",
+            name: "Stairs Castle Stone",
             color: "#72777d",
             transparent: !0,
             model: "stairs",
@@ -567,7 +567,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             breakable: !0
         },
         160: {
-            name: "Oak Stairs",
+            name: "Stairs Oak",
             color: "#8b5a33",
             transparent: !0,
             model: "stairs",
@@ -576,7 +576,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         161: {
-            name: "Oak Stairs",
+            name: "Stairs Oak",
             color: "#8b5a33",
             transparent: !0,
             model: "stairs",
@@ -585,7 +585,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         162: {
-            name: "Oak Stairs",
+            name: "Stairs Oak",
             color: "#8b5a33",
             transparent: !0,
             model: "stairs",
@@ -594,7 +594,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 2
         },
         163: {
-            name: "Castle Stone Stairs",
+            name: "Stairs Castle Stone",
             color: "#72777d",
             transparent: !0,
             model: "stairs",
@@ -604,7 +604,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             breakable: !0
         },
         164: {
-            name: "Castle Stone Stairs",
+            name: "Stairs Castle Stone",
             color: "#72777d",
             transparent: !0,
             model: "stairs",
@@ -614,7 +614,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             breakable: !0
         },
         165: {
-            name: "Castle Stone Stairs",
+            name: "Stairs Castle Stone",
             color: "#72777d",
             transparent: !0,
             model: "stairs",
@@ -757,30 +757,30 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             itemOnly: !0,
             craftingItem: !0
         },
-        181: { name: "Iron Door", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 0, openId: 182, strength: 5, doorBase: !0 },
-        182: { name: "Iron Door (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 0, closedId: 181, doorOpen: !0, strength: 5, doorBase: !0 },
-        183: { name: "Iron Door", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 1, openId: 184, strength: 5, doorBase: !0 },
-        184: { name: "Iron Door (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 1, closedId: 183, doorOpen: !0, strength: 5, doorBase: !0 },
-        185: { name: "Iron Door", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 2, openId: 186, strength: 5, doorBase: !0 },
-        186: { name: "Iron Door (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 2, closedId: 185, doorOpen: !0, strength: 5, doorBase: !0 },
-        187: { name: "Iron Door", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 3, openId: 188, strength: 5, doorBase: !0 },
-        188: { name: "Iron Door (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 3, closedId: 187, doorOpen: !0, strength: 5, doorBase: !0 },
-        189: { name: "Stone Door", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 0, openId: 190, strength: 30, doorBase: !0 },
-        190: { name: "Stone Door (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 0, closedId: 189, doorOpen: !0, strength: 30, doorBase: !0 },
-        191: { name: "Stone Door", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 1, openId: 192, strength: 30, doorBase: !0 },
-        192: { name: "Stone Door (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 1, closedId: 191, doorOpen: !0, strength: 30, doorBase: !0 },
-        193: { name: "Stone Door", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 2, openId: 194, strength: 30, doorBase: !0 },
-        194: { name: "Stone Door (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 2, closedId: 193, doorOpen: !0, strength: 30, doorBase: !0 },
-        195: { name: "Stone Door", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 3, openId: 196, strength: 30, doorBase: !0 },
-        196: { name: "Stone Door (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 3, closedId: 195, doorOpen: !0, strength: 30, doorBase: !0 },
-        197: { name: "Iron Stairs", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 0, strength: 5 },
-        198: { name: "Iron Stairs", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 1, strength: 5 },
-        199: { name: "Iron Stairs", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 2, strength: 5 },
-        200: { name: "Iron Stairs", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 3, strength: 5 },
-        201: { name: "Marble Stairs", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 0, strength: 3 },
-        202: { name: "Marble Stairs", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 1, strength: 3 },
-        203: { name: "Marble Stairs", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 2, strength: 3 },
-        204: { name: "Marble Stairs", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 3, strength: 3 },
+        181: { name: "Door Iron", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 0, openId: 182, strength: 5, doorBase: !0 },
+        182: { name: "Door Iron (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 0, closedId: 181, doorOpen: !0, strength: 5, doorBase: !0 },
+        183: { name: "Door Iron", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 1, openId: 184, strength: 5, doorBase: !0 },
+        184: { name: "Door Iron (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 1, closedId: 183, doorOpen: !0, strength: 5, doorBase: !0 },
+        185: { name: "Door Iron", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 2, openId: 186, strength: 5, doorBase: !0 },
+        186: { name: "Door Iron (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 2, closedId: 185, doorOpen: !0, strength: 5, doorBase: !0 },
+        187: { name: "Door Iron", color: "#a8adb2", transparent: !0, model: "door_closed", textureStyle: "metal", facing: 3, openId: 188, strength: 5, doorBase: !0 },
+        188: { name: "Door Iron (Open)", color: "#a8adb2", transparent: !0, model: "door_open", textureStyle: "metal", facing: 3, closedId: 187, doorOpen: !0, strength: 5, doorBase: !0 },
+        189: { name: "Door Stone", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 0, openId: 190, strength: 30, doorBase: !0 },
+        190: { name: "Door Stone (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 0, closedId: 189, doorOpen: !0, strength: 30, doorBase: !0 },
+        191: { name: "Door Stone", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 1, openId: 192, strength: 30, doorBase: !0 },
+        192: { name: "Door Stone (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 1, closedId: 191, doorOpen: !0, strength: 30, doorBase: !0 },
+        193: { name: "Door Stone", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 2, openId: 194, strength: 30, doorBase: !0 },
+        194: { name: "Door Stone (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 2, closedId: 193, doorOpen: !0, strength: 30, doorBase: !0 },
+        195: { name: "Door Stone", color: "#858b91", transparent: !0, model: "door_closed", textureStyle: "stone_bricks", facing: 3, openId: 196, strength: 30, doorBase: !0 },
+        196: { name: "Door Stone (Open)", color: "#858b91", transparent: !0, model: "door_open", textureStyle: "stone_bricks", facing: 3, closedId: 195, doorOpen: !0, strength: 30, doorBase: !0 },
+        197: { name: "Stairs Iron", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 0, strength: 5 },
+        198: { name: "Stairs Iron", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 1, strength: 5 },
+        199: { name: "Stairs Iron", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 2, strength: 5 },
+        200: { name: "Stairs Iron", color: "#a8adb2", transparent: !0, model: "stairs", textureStyle: "metal", facing: 3, strength: 5 },
+        201: { name: "Stairs Marble", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 0, strength: 3 },
+        202: { name: "Stairs Marble", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 1, strength: 3 },
+        203: { name: "Stairs Marble", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 2, strength: 3 },
+        204: { name: "Stairs Marble", color: "#f0f0f0", transparent: !0, model: "stairs", textureStyle: "marble", facing: 3, strength: 3 },
         205: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 0, furnitureKind: "lie", furniturePartId: 209, strength: 3 },
         206: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 1, furnitureKind: "lie", furniturePartId: 210, strength: 3 },
         207: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 2, furnitureKind: "lie", furniturePartId: 211, strength: 3 },
@@ -789,10 +789,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         210: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 1, strength: 3 },
         211: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 2, strength: 3 },
         212: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 3, strength: 3 },
-        213: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 0, furnitureKind: "sit", strength: 3 },
-        214: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 1, furnitureKind: "sit", strength: 3 },
-        215: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 2, furnitureKind: "sit", strength: 3 },
-        216: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 3, furnitureKind: "sit", strength: 3 },
+        213: { name: "Chair Oak", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 0, furnitureKind: "sit", strength: 3 },
+        214: { name: "Chair Oak", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 1, furnitureKind: "sit", strength: 3 },
+        215: { name: "Chair Oak", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 2, furnitureKind: "sit", strength: 3 },
+        216: { name: "Chair Oak", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 3, furnitureKind: "sit", strength: 3 },
         217: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 0, furnitureKind: "sit", furniturePartId: 221, strength: 3 },
         218: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 1, furnitureKind: "sit", furniturePartId: 222, strength: 3 },
         219: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 2, furnitureKind: "sit", furniturePartId: 223, strength: 3 },
@@ -801,26 +801,26 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         222: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 1, strength: 3 },
         223: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 2, strength: 3 },
         224: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 3, strength: 3 },
-        225: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        226: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        227: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        228: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        229: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        230: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        231: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 0, furnitureKind: "sit", strength: 8 },
-        232: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 1, furnitureKind: "sit", strength: 8 },
-        233: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 2, furnitureKind: "sit", strength: 8 },
-        234: { name: "Stone Chair", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 3, furnitureKind: "sit", strength: 8 },
-        235: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 0, furnitureKind: "sit", strength: 8 },
-        236: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 1, furnitureKind: "sit", strength: 8 },
-        237: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 2, furnitureKind: "sit", strength: 8 },
-        238: { name: "Iron Chair", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 3, furnitureKind: "sit", strength: 8 },
-        239: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        240: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        241: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        242: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        243: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
-        244: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        225: { name: "Window Pane Clear", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        226: { name: "Window Pane Red", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        227: { name: "Window Pane Blue", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        228: { name: "Window Pane Green", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        229: { name: "Window Pane Yellow", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        230: { name: "Window Pane Rose", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
+        231: { name: "Chair Stone", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 0, furnitureKind: "sit", strength: 8 },
+        232: { name: "Chair Stone", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 1, furnitureKind: "sit", strength: 8 },
+        233: { name: "Chair Stone", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 2, furnitureKind: "sit", strength: 8 },
+        234: { name: "Chair Stone", color: "#9aa0a6", transparent: !0, model: "chair", textureStyle: "stone_bricks", facing: 3, furnitureKind: "sit", strength: 8 },
+        235: { name: "Chair Iron", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 0, furnitureKind: "sit", strength: 8 },
+        236: { name: "Chair Iron", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 1, furnitureKind: "sit", strength: 8 },
+        237: { name: "Chair Iron", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 2, furnitureKind: "sit", strength: 8 },
+        238: { name: "Chair Iron", color: "#a8adb2", transparent: !0, model: "chair", textureStyle: "metal", facing: 3, furnitureKind: "sit", strength: 8 },
+        239: { name: "Window Pane Clear", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        240: { name: "Window Pane Red", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        241: { name: "Window Pane Blue", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        242: { name: "Window Pane Green", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        243: { name: "Window Pane Yellow", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        244: { name: "Window Pane Rose", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
         249: { name: "Village Plaster", color: "#d6c8a8", textureStyle: "limestone", strength: 2 },
         250: { name: "Village Timber Frame", color: "#704425", textureStyle: "beam", strength: 3 },
         251: { name: "Thatch Roof", color: "#b99a58", textureStyle: "thatch", strength: 2 },
@@ -1069,15 +1069,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         },
         requires: {
             100: 2
-        }
-    }, {
-        id: "sandstone",
-        out: {
-            id: 118,
-            count: 2
-        },
-        requires: {
-            5: 2
         }
     }, {
         id: "cobblestone",
