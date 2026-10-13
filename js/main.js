@@ -4121,6 +4121,17 @@ function placeBlockAt(e, t, o, a) {
                     for (var s of mobs)
                         if (Math.abs(s.pos.x - e) < .9 && Math.abs(s.pos.y - t) < .9 && Math.abs(s.pos.z - o) < .9) return void addMessage("Cannot place inside mob");
 
+                    // Local ownership check for fast-fail and alert
+                    var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
+                        l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
+                        d = makeChunkKey(worldName, i, l);
+                    if (!checkChunkOwnership(d, userName)) {
+                        const owner = getChunkOwnerName(d) || 'another user';
+                        addMessage(`You cannot place here. Chunk is owned by ${owner}.`, 3000);
+                        console.log(`[Ownership] Block place denied at chunk ${d}`);
+                        return;
+                    }
+
                     // Special handling for Magician's Stone
                     if (a === 127) {
                         const playerDirection = new THREE.Vector3();
@@ -4176,17 +4187,6 @@ function placeBlockAt(e, t, o, a) {
                         chestData.mesh = meshData.mesh;
                         chestData.lid = meshData.lid;
                         chests[key] = chestData;
-                    }
-
-                    // Local ownership check for fast-fail and alert
-                    var i = Math.floor(modWrap(e, MAP_SIZE) / CHUNK_SIZE),
-                        l = Math.floor(modWrap(o, MAP_SIZE) / CHUNK_SIZE),
-                        d = makeChunkKey(worldName, i, l);
-                    if (!checkChunkOwnership(d, userName)) {
-                        const owner = getChunkOwnerName(d) || 'another user';
-                        addMessage(`You cannot place here. Chunk is owned by ${owner}.`, 3000);
-                        console.log(`[Ownership] Block place denied at chunk ${d}`);
-                        return;
                     }
 
                     // Host-authoritative: only host mutates directly, clients send requests
