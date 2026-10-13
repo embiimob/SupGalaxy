@@ -221,6 +221,9 @@ function detectMagicianStoneExtensionFromBuffer(buffer) {
 
 async function resolveMagicianStoneSource(input) {
     const raw = String(input || '').trim();
+    if (typeof isEmbedStream === 'function' && isEmbedStream(raw)) {
+        return { url: raw, extension: 'embed', storedUrl: raw, isObjkt: false };
+    }
     const resolved = await resolveAvatarSource(raw);
     const isObjkt = resolved.isObjkt === true;
     let url = resolved.url;

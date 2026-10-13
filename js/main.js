@@ -2386,42 +2386,7 @@ function isBlockStillValid(x, y, z, expectedBlockId) {
 }
 
 
-function isEmbedStream(url) {
-    try {
-        const parsed = new URL(url);
-        const host = parsed.hostname.toLowerCase();
-        return host === 'youtube.com' || host.endsWith('.youtube.com') ||
-               host === 'youtu.be' ||
-               host === 'twitch.tv' || host.endsWith('.twitch.tv');
-    } catch (e) {
-        return false;
-    }
-}
 
-function getMagicianStoneEmbedUrl(url) {
-    try {
-        const parsed = new URL(url);
-        const host = parsed.hostname.toLowerCase();
-        if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
-            let videoId = '';
-            if (host === 'youtu.be') {
-                videoId = parsed.pathname.slice(1);
-            } else if (parsed.pathname.startsWith('/live/')) {
-                videoId = parsed.pathname.slice(6).split('/')[0];
-            } else {
-                videoId = parsed.searchParams.get('v');
-            }
-            if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
-            return '';
-        }
-        if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
-            const channel = parsed.pathname.slice(1).split('/')[0];
-            if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname || 'localhost'}&autoplay=true&muted=true`;
-            return '';
-        }
-    } catch(e) {}
-    return '';
-}
 function getMagicianStoneMediaUrl(source) {
     let parsed;
     try {
