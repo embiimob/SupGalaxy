@@ -295,7 +295,7 @@ const BLOCKS = {
         252: { name: 'Cobblestone Path', color: '#85817a' },
         253: { name: 'Castle Flagstone', color: '#8d9297' },
         254: { name: 'Castle Pillar', color: '#72777d' },
-        255: { name: 'Castle Iron Bars', color: '#454c53' },
+        255: { name: 'Castle Iron Bars', color: '#454c53', transparent: true },
         177: { name: 'Fusion Reactor', color: '#42e8ff', strength: 4, fusionReactor: true },
         128: { name: "Calligraphy Stone", color: "#D4AF37" },
         139: { name: 'Castle Stone Bricks', color: '#72777d' },

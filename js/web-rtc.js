@@ -2542,13 +2542,18 @@ function setupDataChannel(e, t) {
                     if (isAuthority(s.world || worldName)) {
                         console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
                         const blockDefinition = BLOCKS[s.blockId];
-                        const furnitureFootprint = typeof getFurnitureFootprint === "function"
+                        const validPlacementCoordinates = Number.isInteger(s.x) && Number.isInteger(s.y) &&
+                            Number.isInteger(s.z) && s.y >= 0 && s.y < MAX_HEIGHT;
+                        const furnitureFootprint = validPlacementCoordinates && typeof getFurnitureFootprint === "function"
                             ? getFurnitureFootprint(s.blockId, s.x, s.z)
                             : null;
-                        const placementHasClearance = blockDefinition && blockDefinition.model === "door_closed"
-                            ? s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR
-                            : Boolean(blockDefinition) && (!furnitureFootprint ||
-                                [BLOCK_AIR, 6].includes(getBlockAt(furnitureFootprint.x, s.y, furnitureFootprint.z)));
+                        const anchorIsClear = validPlacementCoordinates &&
+                            [BLOCK_AIR, 6].includes(getBlockAt(s.x, s.y, s.z));
+                        const placementHasClearance = anchorIsClear && blockDefinition && !blockDefinition.itemOnly &&
+                            (blockDefinition.model === "door_closed"
+                                ? s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR
+                                : !furnitureFootprint ||
+                                    [BLOCK_AIR, 6].includes(getBlockAt(furnitureFootprint.x, s.y, furnitureFootprint.z)));
 
                         // Validate ownership
                         const placeChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);

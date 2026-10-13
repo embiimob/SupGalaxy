@@ -4027,7 +4027,7 @@ function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = f
                         z: furnitureFootprint.z,
                         blockId: furnitureFootprint.blockId,
                         replacementBlockId: BLOCK_AIR,
-                        username: breaker || userName,
+                        username: null,
                         world: worldName
                     });
                     for (const [, peer] of peers.entries()) {

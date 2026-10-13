@@ -468,6 +468,7 @@ Chunk.prototype.idx = function (e, t, o) {
                 continue;
             }
             if (BLOCKS[w] && BLOCKS[w].model) {
+                if (BLOCKS[w].model === "furniture_part") continue;
                 const modelMaterial = new THREE.MeshStandardMaterial({
                     map: createBlockTexture(b, w),
                     side: THREE.DoubleSide,
@@ -502,24 +503,31 @@ Chunk.prototype.idx = function (e, t, o) {
                         upperStep.position.set(0, .75, .25);
                         model.add(lowerStep, upperStep);
                     } else if (BLOCKS[w].model === "window_pane") {
-                        const glassMaterial = new THREE.MeshStandardMaterial({
-                            color: new THREE.Color(BLOCKS[w].color),
-                            transparent: true,
-                            opacity: .48,
-                            roughness: .12,
-                            side: THREE.DoubleSide
-                        });
-                        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x473321, roughness: .85 });
-                        const pane = new THREE.Mesh(new THREE.BoxGeometry(.78, .78, .045), glassMaterial);
+                        modelMaterial.color.set(BLOCKS[w].color);
+                        modelMaterial.transparent = true;
+                        modelMaterial.opacity = .48;
+                        modelMaterial.roughness = .12;
+                        const pane = new THREE.Mesh(new THREE.BoxGeometry(.78, .78, .045), modelMaterial);
                         pane.position.y = .5;
                         model.add(pane);
                         for (const x of [-.42, .42]) {
-                            const upright = new THREE.Mesh(new THREE.BoxGeometry(.07, .94, .09), frameMaterial);
+                            const upright = new THREE.Mesh(new THREE.BoxGeometry(.07, .94, .09), trimMaterial);
                             upright.position.set(x, .5, 0);
                             model.add(upright);
                         }
                         for (const y of [.06, .94]) {
-                            const rail = new THREE.Mesh(new THREE.BoxGeometry(.9, .07, .09), frameMaterial);
+                            const rail = new THREE.Mesh(new THREE.BoxGeometry(.9, .07, .09), trimMaterial);
+                            rail.position.y = y;
+                            model.add(rail);
+                        }
+                    } else if (BLOCKS[w].model === "castle_bars") {
+                        for (const x of [-.36, -.12, .12, .36]) {
+                            const upright = new THREE.Mesh(new THREE.BoxGeometry(.07, 1, .07), modelMaterial);
+                            upright.position.set(x, .5, 0);
+                            model.add(upright);
+                        }
+                        for (const y of [.12, .88]) {
+                            const rail = new THREE.Mesh(new THREE.BoxGeometry(.84, .08, .08), modelMaterial);
                             rail.position.y = y;
                             model.add(rail);
                         }

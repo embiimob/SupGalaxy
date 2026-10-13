@@ -830,8 +830,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         252: { name: "Cobblestone Path", color: "#85817a", textureStyle: "stone", strength: 4 },
         253: { name: "Castle Flagstone", color: "#8d9297", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
         254: { name: "Castle Pillar", color: "#72777d", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
-        255: { name: "Castle Iron Bars", color: "#454c53", textureStyle: "metal", strength: 5 }
-        }
+        255: { name: "Castle Iron Bars", color: "#454c53", transparent: !0, model: "castle_bars", textureStyle: "metal", strength: 5 }
     },
     BIOMES = [{
         key: "plains",
