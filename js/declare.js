@@ -755,7 +755,48 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             color: "#f5f1e8",
             itemOnly: !0,
             craftingItem: !0
-        }
+        },
+
+        181: { name: "Grass Seed", texture: "grass_seed", itemOnly: !0, craftingItem: !0 },
+
+        // ----- CITY SCENE -----
+        182: { name: "Bed", texture: "wool_white", type: "solid", textureStyle: "bed", transparent: !0, customMesh: "bed" },
+        183: { name: "Couch", texture: "wool_red", type: "solid", textureStyle: "couch", transparent: !0, customMesh: "couch" },
+        184: { name: "Chair", texture: "wood_planks", type: "solid", textureStyle: "chair", transparent: !0, customMesh: "chair" },
+        185: { name: "Office Plant", texture: "leaves", type: "solid", textureStyle: "office_plant", transparent: !0, customMesh: "office_plant" },
+        186: { name: "Concrete", texture: "stone", type: "solid" },
+        187: { name: "Concrete Stairs", texture: "stone", type: "solid", textureStyle: "stairs", dropId: 187 },
+        188: { name: "Concrete Stairs (W)", texture: "stone", type: "solid", textureStyle: "stairs", dropId: 187, facing: 'W' },
+        189: { name: "Concrete Stairs (E)", texture: "stone", type: "solid", textureStyle: "stairs", dropId: 187, facing: 'E' },
+        190: { name: "Concrete Stairs (S)", texture: "stone", type: "solid", textureStyle: "stairs", dropId: 187, facing: 'S' },
+        191: { name: "Concrete Door (Bottom)", texture: "iron_door_bottom", type: "solid", textureStyle: "door_bottom", dropId: 193, transparent: !0 },
+        192: { name: "Concrete Door (Top)", texture: "iron_door_top", type: "solid", textureStyle: "door_top", dropId: 193, transparent: !0 },
+        193: { name: "Concrete Door", type: "item", placeId: 191 },
+        194: { name: "Large Window", texture: "glass", type: "solid", transparent: !0 },
+
+        // ----- VILLAGE SCENE -----
+        195: { name: "Thatch Roof", texture: "hay_block", type: "solid", textureStyle: "thatch", customMesh: "thatch" },
+        196: { name: "Wood Door (Bottom)", texture: "door_wood_bottom", type: "solid", textureStyle: "door_bottom", dropId: 198, transparent: !0 },
+        197: { name: "Wood Door (Top)", texture: "door_wood_top", type: "solid", textureStyle: "door_top", dropId: 198, transparent: !0 },
+        198: { name: "Wood Door", type: "item", placeId: 196 },
+        199: { name: "Wood Stairs", texture: "wood_planks", type: "solid", textureStyle: "stairs", dropId: 199 },
+        200: { name: "Wood Stairs (W)", texture: "wood_planks", type: "solid", textureStyle: "stairs", dropId: 199, facing: 'W' },
+        201: { name: "Wood Stairs (E)", texture: "wood_planks", type: "solid", textureStyle: "stairs", dropId: 199, facing: 'E' },
+        202: { name: "Wood Stairs (S)", texture: "wood_planks", type: "solid", textureStyle: "stairs", dropId: 199, facing: 'S' },
+        203: { name: "Small Window", texture: "glass_pane", type: "solid", transparent: !0 },
+        204: { name: "Hay Bale", texture: "hay_block", type: "solid" },
+
+        // ----- CASTLE EXPANSION -----
+        205: { name: "Stone Brick Stairs", texture: "stonebrick", type: "solid", textureStyle: "stairs", dropId: 205 },
+        206: { name: "Stone Brick Stairs (W)", texture: "stonebrick", type: "solid", textureStyle: "stairs", dropId: 205, facing: 'W' },
+        207: { name: "Stone Brick Stairs (E)", texture: "stonebrick", type: "solid", textureStyle: "stairs", dropId: 205, facing: 'E' },
+        208: { name: "Stone Brick Stairs (S)", texture: "stonebrick", type: "solid", textureStyle: "stairs", dropId: 205, facing: 'S' },
+        209: { name: "Iron Door (Bottom)", texture: "iron_door_bottom", type: "solid", textureStyle: "door_bottom", dropId: 211, transparent: !0 },
+        210: { name: "Iron Door (Top)", texture: "iron_door_top", type: "solid", textureStyle: "door_top", dropId: 211, transparent: !0 },
+        211: { name: "Iron Door", type: "item", placeId: 209 },
+        212: { name: "Iron Bars", texture: "iron_bars", type: "solid", transparent: !0 },
+        213: { name: "Flag", texture: "wool_red", type: "solid" }
+
     },
     BIOMES = [{
         key: "plains",
@@ -794,22 +835,52 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         roughness: .2,
         featureDensity: .04
     }],
-    RECIPES = [{
+    RECIPES = [
+
+        // ----- CITY -----
+        { id: "bed", out: { id: 182, count: 1 }, requires: { 5: 3 }, category: "City" },
+        { id: "couch", out: { id: 183, count: 1 }, requires: { 5: 4 }, category: "City" },
+        { id: "chair", out: { id: 184, count: 1 }, requires: { 5: 2 }, category: "City" },
+        { id: "office_plant", out: { id: 185, count: 1 }, requires: { 8: 1, 3: 1 }, category: "City" },
+        { id: "concrete", out: { id: 186, count: 4 }, requires: { 1: 2, 12: 2 }, category: "City" },
+        { id: "concrete_stairs", out: { id: 187, count: 4 }, requires: { 186: 6 }, category: "City" },
+        { id: "concrete_door", out: { id: 193, count: 1 }, requires: { 186: 6 }, category: "City" },
+        { id: "large_window", out: { id: 194, count: 4 }, requires: { 100: 6 }, category: "City" },
+
+        // ----- VILLAGE -----
+        { id: "thatch_roof", out: { id: 195, count: 4 }, requires: { 204: 4 }, category: "Village" },
+        { id: "hay_bale", out: { id: 204, count: 1 }, requires: { 181: 9 }, category: "Village" },
+        { id: "wood_door", out: { id: 198, count: 1 }, requires: { 5: 6 }, category: "Village" },
+        { id: "wood_stairs", out: { id: 199, count: 4 }, requires: { 5: 6 }, category: "Village" },
+        { id: "small_window", out: { id: 203, count: 4 }, requires: { 100: 2 }, category: "Village" },
+
+        // ----- CASTLE -----
+        { id: "stone_brick_stairs", out: { id: 205, count: 4 }, requires: { 31: 6 }, category: "Castle" },
+        { id: "iron_door_item", out: { id: 211, count: 1 }, requires: { 151: 6 }, category: "Castle" },
+        { id: "iron_bars", out: { id: 212, count: 8 }, requires: { 151: 6 }, category: "Castle" },
+        { id: "flag", out: { id: 213, count: 1 }, requires: { 38: 1 }, category: "Castle" },
+
+        // ----- OTHERS -----
+{
         id: "iron_pick",
         out: { id: 174, count: 1 },
         requires: { 124: 1, 5: 1, 120: 1, 7: 1 }
+    , category: "Tools & Weapons"
     }, {
         id: "blue_iron_pick",
         out: { id: 175, count: 1 },
         requires: { 16: 1, 174: 1, 134: 1 }
+    , category: "Tools & Weapons"
     }, {
         id: "bow",
         out: { id: 179, count: 1 },
         requires: { 7: 3, 176: 1 }
+    , category: "Tools & Weapons"
     }, {
         id: "arrows",
         out: { id: 178, count: 4 },
         requires: { 180: 1, 7: 1, 4: 1 }
+    , category: "Basic"
     }, {
         id: "glass",
         out: {
@@ -820,6 +891,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             5: 2,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "stained_red",
         out: {
@@ -830,6 +902,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             12: 1
         }
+    , category: "Building"
     }, {
         id: "stained_blue",
         out: {
@@ -840,6 +913,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             116: 1
         }
+    , category: "Building"
     }, {
         id: "stained_green",
         out: {
@@ -850,6 +924,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             8: 1
         }
+    , category: "Building"
     }, {
         id: "stained_yellow",
         out: {
@@ -860,6 +935,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             5: 1
         }
+    , category: "Building"
     }, {
         id: "brick",
         out: {
@@ -870,6 +946,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             13: 2,
             4: 1
         }
+    , category: "Building"
     }, {
         id: "polished_brick",
         out: {
@@ -879,6 +956,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             105: 4
         }
+    , category: "Building"
     }, {
         id: "smooth_stone",
         out: {
@@ -888,6 +966,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             4: 4
         }
+    , category: "Basic"
     }, {
         id: "concrete",
         out: {
@@ -898,6 +977,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             4: 2,
             5: 2
         }
+    , category: "Basic"
     }, {
         id: "polished_wood",
         out: {
@@ -907,6 +987,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             7: 2
         }
+    , category: "Basic"
     }, {
         id: "marble",
         out: {
@@ -917,6 +998,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             4: 3,
             10: 1
         }
+    , category: "Basic"
     }, {
         id: "obsidian",
         out: {
@@ -929,6 +1011,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requiresOffWorld: {
             4: 2
         }
+    , category: "Basic"
     }, {
         id: "crystal_blue",
         out: {
@@ -939,6 +1022,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             116: 1
         }
+    , category: "Building"
     }, {
         id: "crystal_purple",
         out: {
@@ -949,6 +1033,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "crystal_green",
         out: {
@@ -959,6 +1044,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             8: 1
         }
+    , category: "Building"
     }, {
         id: "light_block",
         out: {
@@ -969,6 +1055,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "glow_brick",
         out: {
@@ -979,6 +1066,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             105: 1,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "dark_glass",
         out: {
@@ -989,6 +1077,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 1,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "glass_tile",
         out: {
@@ -998,6 +1087,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             100: 2
         }
+    , category: "Building"
     }, {
         id: "sandstone",
         out: {
@@ -1007,6 +1097,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             5: 2
         }
+    , category: "Basic"
     }, {
         id: "cobblestone",
         out: {
@@ -1016,6 +1107,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             4: 4
         }
+    , category: "Basic"
     }, {
         id: "torch",
         out: {
@@ -1026,6 +1118,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             11: 1,
             8: 1
         }
+    , category: "Basic"
     }, {
         id: "laser_gun",
         out: {
@@ -1037,6 +1130,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             11: 1,
             106: 1
         }
+    , category: "Tools & Weapons"
     }, {
         id: "green_laser_gun",
         out: {
@@ -1048,6 +1142,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             113: 1,
             16: 1
         }
+    , category: "Tools & Weapons"
     }, {
         id: "magicians_stone",
         out: {
@@ -1057,6 +1152,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             5: 4
         }
+    , category: "Basic"
     }, {
         id: "calligraphy_stone",
         out: {
@@ -1067,6 +1163,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             4: 2,
             11: 2
         }
+    , category: "Building"
     }, {
         id: "wooden_planks",
         out: {
@@ -1076,6 +1173,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             7: 1
         }
+    , category: "Basic"
     }, {
         id: "crafting_table",
         out: {
@@ -1085,6 +1183,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             129: 4
         }
+    , category: "Basic"
     }, {
         id: "chest",
         out: {
@@ -1094,6 +1193,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             129: 8
         }
+    , category: "Building"
     }, {
         id: "castle_stone_bricks",
         out: {
@@ -1104,6 +1204,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             4: 3,
             105: 1
         }
+    , category: "Building"
     }, {
         id: "mossy_castle_bricks",
         out: {
@@ -1114,6 +1215,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             139: 3,
             14: 1
         }
+    , category: "Basic"
     }, {
         id: "chiseled_limestone",
         out: {
@@ -1124,6 +1226,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             109: 2,
             11: 1
         }
+    , category: "Basic"
     }, {
         id: "polished_limestone",
         out: {
@@ -1134,6 +1237,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             106: 3,
             5: 1
         }
+    , category: "Basic"
     }, {
         id: "red_roof_tile",
         out: {
@@ -1144,6 +1248,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             105: 2,
             13: 1
         }
+    , category: "Building"
     }, {
         id: "slate_roof_tile",
         out: {
@@ -1154,6 +1259,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             119: 2,
             11: 1
         }
+    , category: "Basic"
     }, {
         id: "oak_support_beam",
         out: {
@@ -1164,6 +1270,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             7: 2,
             129: 2
         }
+    , category: "Basic"
     }, {
         id: "oak_door",
         out: {
@@ -1174,6 +1281,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             129: 5,
             124: 1
         }
+    , category: "Basic"
     }, {
         id: "oak_stairs",
         out: {
@@ -1183,6 +1291,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             129: 6
         }
+    , category: "Basic"
     }, {
         id: "castle_stone_stairs",
         out: {
@@ -1192,6 +1301,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: {
             139: 6
         }
+    , category: "Basic"
     }, {
         id: "portcullis",
         out: {
@@ -1202,6 +1312,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             124: 4,
             11: 1
         }
+    , category: "Building"
     }, {
         id: "rose_stained_glass",
         out: {
@@ -1212,6 +1323,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             100: 2,
             12: 1
         }
+    , category: "Building"
     }, {
         id: "battlement_stone",
         out: {
@@ -1222,6 +1334,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             139: 3,
             106: 1
         }
+    , category: "Basic"
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),

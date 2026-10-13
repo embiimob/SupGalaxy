@@ -340,7 +340,7 @@ Chunk.prototype.idx = function (e, t, o) {
         for (var c = 0; c < CHUNK_SIZE; c++)
             for (var u = 0; u < MAX_HEIGHT; u++) {
                 if (!(w = e.get(d, u, c)) || w === BLOCK_AIR) continue;
-                if (w === 131) continue; // Skip mesh generation for Chest
+                if (w === 131) continue;
                 for (var p = modWrap(r + d, MAP_SIZE), m = modWrap(s + c, MAP_SIZE), y = i + d, h = l + c, f = [{
                     x: 1,
                     y: 0,
@@ -374,7 +374,7 @@ Chunk.prototype.idx = function (e, t, o) {
                         E |= (1 << v);
                     }
                 }
-                if (!E && !(BLOCKS[w] && BLOCKS[w].model)) continue;
+                if (!E && !(BLOCKS[w] && BLOCKS[w].model) && !(BLOCKS[w] && BLOCKS[w].customMesh)) continue;
                 const t = `${p},${u},${m}`,
                     a = getCurrentWorldState().foreignBlockOrigins.get(t) || worldSeed,
                     n = `${w}-${a}`;
@@ -465,6 +465,100 @@ Chunk.prototype.idx = function (e, t, o) {
                 seaweedMesh.castShadow = false;
                 seaweedMesh.receiveShadow = false;
                 I.add(seaweedMesh);
+                continue;
+            }
+
+            if (Number(w) === 182 || Number(w) === 183 || Number(w) === 184 || Number(w) === 185) {
+                // Determine dimensions based on type
+                let geometries = [];
+                const blockTexture = createBlockTexture(b, w);
+
+                for (const B of e.positions) {
+                    let group = new THREE.Group();
+
+                    if (Number(w) === 182) { // Bed
+                        // Mattress
+                        let mattress = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 1.9));
+                        mattress.position.set(B.x + 0.5, B.y + 0.3, B.z + 0.5);
+                        geometries.push(mattress);
+                        // Pillow
+                        let pillow = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.4));
+                        pillow.position.set(B.x + 0.5, B.y + 0.55, B.z + 0.1);
+                        geometries.push(pillow);
+                        // Legs
+                        const legGeom = new THREE.BoxGeometry(0.1, 0.2, 0.1);
+                        const offsets = [[0.1, 0.1], [0.9, 0.1], [0.1, 1.9], [0.9, 1.9]];
+                        for(let off of offsets) {
+                            let leg = new THREE.Mesh(legGeom);
+                            leg.position.set(B.x + off[0], B.y + 0.1, B.z - 0.45 + off[1]);
+                            geometries.push(leg);
+                        }
+                    } else if (Number(w) === 183) { // Couch
+                        let base = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.4, 0.8));
+                        base.position.set(B.x + 0.5, B.y + 0.2, B.z + 0.5);
+                        geometries.push(base);
+
+                        let back = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.2));
+                        back.position.set(B.x + 0.5, B.y + 0.7, B.z + 0.2);
+                        geometries.push(back);
+                    } else if (Number(w) === 184) { // Chair
+                        let seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.6));
+                        seat.position.set(B.x + 0.5, B.y + 0.45, B.z + 0.5);
+                        geometries.push(seat);
+
+                        let back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.1));
+                        back.position.set(B.x + 0.5, B.y + 0.75, B.z + 0.25);
+                        geometries.push(back);
+
+                        const legGeom = new THREE.BoxGeometry(0.1, 0.4, 0.1);
+                        const offsets = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
+                        for(let off of offsets) {
+                            let leg = new THREE.Mesh(legGeom);
+                            leg.position.set(B.x + off[0], B.y + 0.2, B.z + off[1]);
+                            geometries.push(leg);
+                        }
+                    } else if (Number(w) === 185) { // Office Plant
+                        let pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.4, 8));
+                        pot.position.set(B.x + 0.5, B.y + 0.2, B.z + 0.5);
+                        geometries.push(pot);
+
+                        let leaves = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6));
+                        leaves.position.set(B.x + 0.5, B.y + 0.7, B.z + 0.5);
+                        geometries.push(leaves);
+                    }
+                }
+
+                if (geometries.length > 0) {
+                    const material = new THREE.MeshStandardMaterial({ map: blockTexture });
+                    for(let geom of geometries) {
+                        geom.updateMatrix();
+                        geom.material = material;
+                        geom.castShadow = true;
+                        geom.receiveShadow = true;
+                        I.add(geom);
+                    }
+                }
+                continue;
+            }
+            if (Number(w) === 195) { // Thatch Roof
+                let geometries = [];
+                const blockTexture = createBlockTexture(b, w);
+                for (const B of e.positions) {
+                    let roof = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1, 4));
+                    roof.position.set(B.x + 0.5, B.y + 0.5, B.z + 0.5);
+                    roof.rotation.y = Math.PI / 4;
+                    geometries.push(roof);
+                }
+                if (geometries.length > 0) {
+                    const material = new THREE.MeshStandardMaterial({ map: blockTexture });
+                    for(let geom of geometries) {
+                        geom.updateMatrix();
+                        geom.material = material;
+                        geom.castShadow = true;
+                        geom.receiveShadow = true;
+                        I.add(geom);
+                    }
+                }
                 continue;
             }
             if (BLOCKS[w] && BLOCKS[w].model) {

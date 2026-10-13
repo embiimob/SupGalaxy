@@ -383,6 +383,20 @@
             padding-bottom: 20px; /* Ensure bottom items are visible */
         }
 
+
+        details {
+            background: #0d1620;
+            border-radius: 6px;
+            padding: 5px;
+            margin-bottom: 8px;
+        }
+
+        details summary {
+            outline: none;
+            user-select: none;
+            padding: 5px;
+        }
+
         .recipe-item {
             display: flex;
             align-items: center;

@@ -1844,78 +1844,114 @@ function openCrafting() {
         }
     }
 
-
+    const categories = {};
     for (const recipe of RECIPES) {
-        let canCraft = true;
-        const ingredients = [];
+        const cat = recipe.category || "Misc";
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(recipe);
+    }
 
-        for (const reqId in recipe.requires) {
-            const requiredAmount = recipe.requires[reqId];
-            const hasAmount = totalInventoryCounts[reqId] || 0;
-            if (hasAmount < requiredAmount) {
-                canCraft = false;
-            }
-            ingredients.push(`${BLOCKS[reqId].name} x${requiredAmount} (Have: ${hasAmount})`);
-        }
+    for (const catName of Object.keys(categories).sort()) {
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = catName;
+        summary.style.cursor = "pointer";
+        summary.style.fontWeight = "bold";
+        summary.style.marginBottom = "5px";
+        summary.style.fontSize = "16px";
 
-        if (recipe.requiresOffWorld) {
-            for (const reqId in recipe.requiresOffWorld) {
-                const requiredAmount = recipe.requiresOffWorld[reqId];
-                const hasAmount = offWorldInventoryCounts[reqId] || 0;
+        details.appendChild(summary);
+        const listDiv = document.createElement("div");
+        listDiv.style.marginLeft = "10px";
+
+        for (const recipe of categories[catName]) {
+            let canCraft = true;
+            const ingredients = [];
+
+            for (const reqId in recipe.requires) {
+                const requiredAmount = recipe.requires[reqId];
+                const hasAmount = totalInventoryCounts[reqId] || 0;
                 if (hasAmount < requiredAmount) {
                     canCraft = false;
                 }
+                ingredients.push(`${BLOCKS[reqId] ? BLOCKS[reqId].name : 'Unknown'} x${requiredAmount} (Have: ${hasAmount})`);
             }
+
+            if (recipe.requiresOffWorld) {
+                for (const reqId in recipe.requiresOffWorld) {
+                    const requiredAmount = recipe.requiresOffWorld[reqId];
+                    const hasAmount = offWorldInventoryCounts[reqId] || 0;
+                    if (hasAmount < requiredAmount) {
+                        canCraft = false;
+                    }
+                }
+            }
+
+            const recipeItem = document.createElement("div");
+            recipeItem.className = "recipe-item";
+
+            const preview = document.createElement("div");
+            preview.className = "recipe-preview";
+            if (BLOCKS[recipe.out.id]) {
+                preview.style.backgroundColor = BLOCKS[recipe.out.id].color;
+            }
+
+            const info = document.createElement("div");
+            info.className = "recipe-info";
+
+            const name = document.createElement("div");
+            name.className = "recipe-name";
+            if (BLOCKS[recipe.out.id]) {
+                name.innerText = `${BLOCKS[recipe.out.id].name} x${recipe.out.count}`;
+            } else {
+                name.innerText = `Unknown x${recipe.out.count}`;
+            }
+
+            const ingredientsDiv = document.createElement("div");
+            ingredientsDiv.className = "recipe-ingredients";
+            ingredientsDiv.innerText = "Requires: " + ingredients.join(", ");
+
+            const statusDiv = document.createElement("div");
+            statusDiv.className = "recipe-status";
+
+            const statusText = document.createElement("div");
+            statusText.className = "status-text";
+            statusText.innerText = canCraft ? "Craftable" : "Not Craftable";
+            statusText.classList.add(canCraft ? "status-craftable" : "status-not-craftable");
+
+            info.appendChild(name);
+            info.appendChild(ingredientsDiv);
+            statusDiv.appendChild(statusText);
+
+            if (canCraft) {
+                const craftButton = document.createElement("button");
+                craftButton.innerText = "Craft";
+                craftButton.onclick = () => {
+                    if (typeof initiateCraft === 'function') {
+                        initiateCraft(recipe);
+                    }
+                    // Refresh the crafting menu after attempting a craft
+                    openCrafting();
+                    // Optional: auto-open the details that was just crafted
+                    const cats = document.querySelectorAll('#recipeList details');
+                    for (let d of cats) {
+                        if (d.querySelector('summary').textContent === catName) {
+                            d.open = true;
+                        }
+                    }
+                };
+                statusDiv.appendChild(craftButton);
+            }
+
+            recipeItem.appendChild(preview);
+            recipeItem.appendChild(info);
+            recipeItem.appendChild(statusDiv);
+            listDiv.appendChild(recipeItem);
         }
-
-        const recipeItem = document.createElement("div");
-        recipeItem.className = "recipe-item";
-
-        const preview = document.createElement("div");
-        preview.className = "recipe-preview";
-        preview.style.backgroundColor = BLOCKS[recipe.out.id].color;
-
-        const info = document.createElement("div");
-        info.className = "recipe-info";
-
-        const name = document.createElement("div");
-        name.className = "recipe-name";
-        name.innerText = `${BLOCKS[recipe.out.id].name} x${recipe.out.count}`;
-
-        const ingredientsDiv = document.createElement("div");
-        ingredientsDiv.className = "recipe-ingredients";
-        ingredientsDiv.innerText = "Requires: " + ingredients.join(", ");
-
-        const statusDiv = document.createElement("div");
-        statusDiv.className = "recipe-status";
-
-        const statusText = document.createElement("div");
-        statusText.className = "status-text";
-        statusText.innerText = canCraft ? "Craftable" : "Not Craftable";
-        statusText.classList.add(canCraft ? "status-craftable" : "status-not-craftable");
-
-        info.appendChild(name);
-        info.appendChild(ingredientsDiv);
-        statusDiv.appendChild(statusText);
-
-        if (canCraft) {
-            const craftButton = document.createElement("button");
-            craftButton.innerText = "Craft";
-            craftButton.onclick = () => {
-                initiateCraft(recipe);
-                // Refresh the crafting menu after attempting a craft
-                openCrafting();
-            };
-            statusDiv.appendChild(craftButton);
-        }
-
-        recipeItem.appendChild(preview);
-        recipeItem.appendChild(info);
-        recipeItem.appendChild(statusDiv);
-        recipeList.appendChild(recipeItem);
+        details.appendChild(listDiv);
+        recipeList.appendChild(details);
     }
 }
-
 function toggleInventory() {
     var e = document.getElementById("inventoryModal"),
         t = "block" === e.style.display;
@@ -3573,9 +3609,70 @@ function onPointerDown(e) {
         } else if (blockId === 131) { // Chest
             openChest(x, y, z);
             return;
+        } else if (blockId === 182) { // Bed
+            player.isLaying = true;
+            player.isSitting = false;
+            player.x = x + 0.5;
+            player.y = y + 0.6;
+            player.z = z + 0.5;
+            player.vx = 0; player.vy = 0; player.vz = 0;
+            return;
+        } else if (blockId === 183 || blockId === 184) { // Couch or Chair
+            player.isSitting = true;
+            player.isLaying = false;
+            player.x = x + 0.5;
+            player.y = y + 0.6;
+            player.z = z + 0.5;
+            player.vx = 0; player.vy = 0; player.vz = 0;
+            return;
         }
 
-        placeBlockAt(Math.floor(i.x + .5 * l.x), Math.floor(i.y + .5 * l.y), Math.floor(i.z + .5 * l.z), selectedBlockId)
+
+        const px = Math.floor(i.x + .5 * l.x);
+        const py = Math.floor(i.y + .5 * l.y);
+        const pz = Math.floor(i.z + .5 * l.z);
+        let blockToPlace = selectedBlockId;
+
+        // Handle Doors (Item IDs 193, 198, 211) -> Place bottom and top
+        if (selectedBlockId === 193 || selectedBlockId === 198 || selectedBlockId === 211) {
+            let bottomId = BLOCKS[selectedBlockId].placeId; // e.g. 191
+            let topId = bottomId + 1; // e.g. 192
+
+            // Check if space above is clear
+            if (getBlockAt(px, py + 1, pz) === BLOCK_AIR) {
+                placeBlockAt(px, py, pz, bottomId);
+                placeBlockAt(px, py + 1, pz, topId);
+            } else {
+                addMessage("Not enough space to place door.");
+            }
+            return;
+        }
+
+        // Handle Stairs (Base IDs 187, 199, 205) -> Determine facing
+        if (selectedBlockId === 187 || selectedBlockId === 199 || selectedBlockId === 205) {
+            // Get player yaw to determine direction
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            const angle = Math.atan2(direction.x, direction.z);
+
+            // Convert angle to NSEW
+            if (angle > -Math.PI/4 && angle <= Math.PI/4) {
+                // Facing South
+                blockToPlace = selectedBlockId + 3; // e.g. 190
+            } else if (angle > Math.PI/4 && angle <= 3*Math.PI/4) {
+                // Facing East
+                blockToPlace = selectedBlockId + 2; // e.g. 189
+            } else if (angle > -3*Math.PI/4 && angle <= -Math.PI/4) {
+                // Facing West
+                blockToPlace = selectedBlockId + 1; // e.g. 188
+            } else {
+                // Facing North (Default)
+                blockToPlace = selectedBlockId;
+            }
+        }
+
+        placeBlockAt(px, py, pz, blockToPlace);
+
     }
 }
 
@@ -4827,6 +4924,13 @@ function registerKeyEvents() {
         }
         
         const t = e.key.toLowerCase();
+
+        // Reset sitting/laying if movement keys are pressed
+        if (["w", "a", "s", "d"].includes(t) && (player.isSitting || player.isLaying)) {
+            player.isSitting = false;
+            player.isLaying = false;
+            player.y += 0.5;
+        }
         if ("w" === t && !keys[t]) {
             const e = performance.now();
             e - lastWPress < 300 && addMessage((isSprinting = !isSprinting) ? "Sprinting enabled" : "Sprinting disabled", 1500), lastWPress = e
@@ -4857,6 +4961,11 @@ function registerKeyEvents() {
 }
 
 function playerJump() {
+    if (player.isSitting || player.isLaying) {
+        player.isSitting = false;
+        player.isLaying = false;
+        player.y += 0.5; // Bump them up a little bit to clear the block
+    }
     if (!window.playerInWater && player.onGround) {
         player.vy = isSprinting ? 25.5 : 8.5;
         player.onGround = !1;
@@ -5961,7 +6070,7 @@ async function startGame({ serverLogin = false } = {}) {
     }, INVENTORY[1] = {
         id: 121,
         count: 1
-    }, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
+    }, INVENTORY[2] = {id: 182, count: 1}, INVENTORY[3] = {id: 183, count: 1}, INVENTORY[4] = {id: 184, count: 1}, INVENTORY[5] = {id: 185, count: 1}, INVENTORY[6] = {id: 186, count: 1}, INVENTORY[7] = {id: 187, count: 1}, INVENTORY[8] = {id: 191, count: 1}, INVENTORY[9] = {id: 194, count: 1}, INVENTORY[10] = {id: 195, count: 1}, INVENTORY[11] = {id: 196, count: 1}, INVENTORY[12] = {id: 199, count: 1}, INVENTORY[13] = {id: 203, count: 1}, INVENTORY[14] = {id: 205, count: 1}, INVENTORY[15] = {id: 209, count: 1}, INVENTORY[16] = {id: 212, count: 1}, INVENTORY[17] = {id: 213, count: 1}, isNight = computeIsNightNow(), selectedHotIndex = isNight ? 0 : Math.max(0, INVENTORY.findIndex((item, index) => index < 9 && !item)), selectedBlockId = isNight ? 120 : null, initHotbar(), updateHotbarUI(), console.log("[LOGIN] Creating ChunkManager"), chunkManager = new ChunkManager(worldSeed), populateSpawnChunks(), console.log("[LOGIN] Calculating spawn point");
     var homeSpawn = calculateSpawnPoint(r),
         s = homeSpawn;
 
