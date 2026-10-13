@@ -95,13 +95,13 @@ Directional blocks (doors, stairs, portcullis, chairs, beds, couches, and window
 
 | Block | Recipe | Notes |
 |-------|--------|-------|
-| Oak Door | 5 Wooden Planks + 1 Iron Ore → 1 | Two blocks tall. **Right-click** to open/close; it won't close on top of a player. Toggles sync in multiplayer and respect chunk ownership. |
-| Iron Door | 4 Iron Ore → 1 | Two blocks tall; right-click to open/close. |
-| Stone Door | 5 Castle Stone Bricks → 1 | Two blocks tall; right-click to open/close. |
-| Oak Stairs | 6 Wooden Planks → 4 | Walk up them without jumping. |
-| Castle Stone Stairs | 6 Castle Stone Bricks → 4 | Stone variant of stairs. |
-| Iron Stairs | 6 Iron Ore → 4 | Directional metal stairs. |
-| Marble Stairs | 6 Marble → 4 | Pale decorative stairs. |
+| Door Oak | 5 Wooden Planks + 1 Iron Ore → 1 | Two blocks tall. **Right-click** to open/close; it won't close on top of a player. Toggles sync in multiplayer and respect chunk ownership. |
+| Door Iron | 4 Iron Ore → 1 | Two blocks tall; right-click to open/close. |
+| Door Stone | 5 Castle Stone Bricks → 1 | Two blocks tall; right-click to open/close. |
+| Stairs Oak | 6 Wooden Planks → 4 | Walk up them without jumping. |
+| Stairs Castle Stone | 6 Castle Stone Bricks → 4 | Stone variant of stairs. |
+| Stairs Iron | 6 Iron Ore → 4 | Directional metal stairs. |
+| Stairs Marble | 6 Marble → 4 | Pale decorative stairs. |
 | Portcullis | 4 Iron Ore + 1 Coal → 1 | See-through iron gate grid. |
 | Castle Stone Bricks | 3 Stone + 1 Brick → 4 | Core castle wall block. |
 | Mossy Castle Bricks | 3 Castle Stone Bricks + 1 Moss → 4 | Weathered walls. |
@@ -113,15 +113,15 @@ Directional blocks (doors, stairs, portcullis, chairs, beds, couches, and window
 | Oak Support Beam | 2 Wood + 2 Wooden Planks → 4 | Timber framing. |
 | Rose Stained Glass | 2 Glass + 1 Flower → 2 | Tinted castle windows. |
 | Bed | 4 Wooden Planks + 2 Red Stained Glass → 1 | Two blocks long. Right-click to lie down; the pose is shared with other players. |
-| Chair | 4 Wooden Planks → 1 | Right-click to sit. |
-| Stone Chair | 4 Castle Stone Bricks → 1 | Directional stone seat. |
-| Iron Chair | 4 Iron Ore → 1 | Directional metal seat. |
+| Chair Oak | 4 Wooden Planks → 1 | Right-click to sit. |
+| Chair Stone | 4 Castle Stone Bricks → 1 | Directional stone seat. |
+| Chair Iron | 4 Iron Ore → 1 | Directional metal seat. |
 | Couch | 4 Wooden Planks + 2 Rose Stained Glass → 1 | Two blocks long. Right-click to sit. |
 | Window Panes | 2 matching glass blocks → 4 | Clear, red, blue, green, yellow, and rose panes; face the direction you're looking. |
 | Village Plaster, Timber Frame, Thatch Roof, Cobblestone Path | Clay/wood/leaves/cobblestone recipes | Mix and match these blocks to build village homes and paths. |
 | Castle Flagstone, Pillar, Iron Bars | Castle bricks, stone, and iron recipes | Additional floors, supports, and defensive details. |
 
-Crafting recipes are grouped into collapsed **Tools & Weapons**, **Construction & Furniture**, and **Raw Materials** sections. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
+Crafting recipes are grouped alphabetically into collapsed **Construction & Furniture**, **Raw Materials**, and **Tools & Weapons** sections; recipes are alphabetized by item name within each section. Glass, stained glass, dark glass, glass tiles, and rose stained glass are in Raw Materials; window panes remain in Construction & Furniture. Torches, glow bricks, and light blocks are in Tools & Weapons. Sandstone is mined in desert biomes and is no longer craftable. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
 
 Beds and couches reserve two adjacent floor blocks when placed. Furniture faces the direction you look when placing it; sitting or lying down is cancelled when you move.
 
