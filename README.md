@@ -121,7 +121,7 @@ Directional blocks (doors, stairs, portcullis, chairs, beds, couches, and window
 | Village Plaster, Timber Frame, Thatch Roof, Cobblestone Path | Clay/wood/leaves/cobblestone recipes | Mix and match these blocks to build village homes and paths. |
 | Castle Flagstone, Pillar, Iron Bars | Castle bricks, stone, and iron recipes | Additional floors, supports, and defensive details. |
 
-Crafting recipes are grouped alphabetically into collapsed **Construction & Furniture**, **Raw Materials**, and **Tools & Weapons** sections; recipes are alphabetized by item name within each section. Glass, stained glass, dark glass, glass tiles, and rose stained glass are in Raw Materials; window panes remain in Construction & Furniture. Torches, glow bricks, and light blocks are in Tools & Weapons. Sandstone is mined in desert biomes and is no longer craftable. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
+Crafting recipes are grouped alphabetically into collapsed **Construction & Furniture**, **Raw Materials**, and **Tools & Weapons** sections; recipes are alphabetized by item name within each section. Glass, stained glass, dark glass, glass tiles, and rose stained glass are in Raw Materials; window panes remain in Construction & Furniture. Torches, glow bricks, and light blocks are in Tools & Weapons. Sandstone, Obsidian, and blue, purple, and green crystals are mined and are no longer craftable. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
 
 Beds and couches reserve two adjacent floor blocks when placed. Furniture faces the direction you look when placing it; sitting or lying down is cancelled when you move.
 

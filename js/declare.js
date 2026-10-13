@@ -990,48 +990,6 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             10: 1
         }
     }, {
-        id: "obsidian",
-        out: {
-            id: 110,
-            count: 1
-        },
-        requires: {
-            4: 4
-        },
-        requiresOffWorld: {
-            4: 2
-        }
-    }, {
-        id: "crystal_blue",
-        out: {
-            id: 111,
-            count: 1
-        },
-        requires: {
-            100: 1,
-            116: 1
-        }
-    }, {
-        id: "crystal_purple",
-        out: {
-            id: 112,
-            count: 1
-        },
-        requires: {
-            100: 1,
-            11: 1
-        }
-    }, {
-        id: "crystal_green",
-        out: {
-            id: 113,
-            count: 1
-        },
-        requires: {
-            100: 1,
-            8: 1
-        }
-    }, {
         id: "light_block",
         out: {
             id: 114,
