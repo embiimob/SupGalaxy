@@ -3531,6 +3531,12 @@ function onPointerDown(e) {
             toggleCastleDoor(hitObject.userData.doorAnchor);
             return;
         }
+        hitObject = s.object;
+        while (hitObject && !hitObject.userData.furnitureAnchor) hitObject = hitObject.parent;
+        if (hitObject && hitObject.userData.furnitureAnchor) {
+            interactWithFurniture(hitObject.userData.furnitureAnchor);
+            return;
+        }
     }
     if (0 === e.button) {
         animateAttack();
@@ -3615,6 +3621,48 @@ function toggleCastleDoor(anchor) {
             }
         }
         addMessage(BLOCKS[nextBlockId].doorOpen ? "Opening door..." : "Closing door...", 1200);
+    }
+}
+
+function interactWithFurniture(anchor) {
+    if (!anchor || !["sit", "lie"].includes(anchor.kind)) return;
+    if (player.activity === anchor.kind) {
+        player.activity = null;
+    } else {
+        player.activity = anchor.kind;
+        player.activityFacing = anchor.facing || 0;
+        player.x = anchor.x + .1;
+        player.y = anchor.y;
+        player.z = anchor.z + .1;
+        player.yaw = player.activityFacing * Math.PI / 2;
+        player.vx = player.vy = player.vz = 0;
+        player.onGround = true;
+        lastSentPosition.x = player.x;
+        lastSentPosition.y = player.y;
+        lastSentPosition.z = player.z;
+        lastSentPosition.yaw = player.yaw;
+    }
+    addMessage(player.activity === "lie" ? "You lie down." :
+        player.activity === "sit" ? "You sit down." : "You stand up.", 1200);
+}
+
+function applyFurniturePose(avatar, activity, facing) {
+    if (!avatar) return;
+    if (activity && Number.isFinite(facing)) avatar.rotation.y = facing * Math.PI / 2;
+    avatar.rotation.z = activity === "lie" ? Math.PI / 2 : 0;
+    if (activity === "lie") avatar.position.y += .65;
+    if (avatar.children[0] && avatar.children[1]) {
+        avatar.children[0].rotation.x = activity === "sit" ? -1.15 : 0;
+        avatar.children[1].rotation.x = activity === "sit" ? -1.15 : 0;
+    }
+    if (avatar.children[2]) {
+        avatar.children[2].rotation.x = activity === "sit" ? .12 : 0;
+        avatar.children[2].position.y = activity === "sit" ? .72 : .9692307692307692;
+    }
+    if (avatar.children[3]) avatar.children[3].position.y = activity === "sit" ? 1.15 : 1.5923076923076922;
+    if (avatar.children[4] && avatar.children[5]) {
+        avatar.children[4].position.y = activity === "sit" ? .72 : .9692307692307692;
+        avatar.children[5].position.y = activity === "sit" ? .72 : .9692307692307692;
     }
 }
 
@@ -3859,7 +3907,15 @@ function applyBlueLaserDamage(cx, cy, cz, user, damageSource = null) {
 
 function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = false, toolId = null, laserColor = null, damageSource = null) {
     damageSource = getBlockDamageSource(breaker, damageSource);
-    const a = getBlockAt(e, t, o);
+    let a = getBlockAt(e, t, o);
+    const furnitureAnchor = getFurnitureAnchorForPart(a, e, o);
+    if (furnitureAnchor) {
+        const anchorX = modWrap(furnitureAnchor.x, MAP_SIZE);
+        const anchorZ = modWrap(furnitureAnchor.z, MAP_SIZE);
+        if (getBlockAt(anchorX, t, anchorZ) === furnitureAnchor.blockId) {
+            return removeBlockAt(anchorX, t, anchorZ, breaker, damageAmount, silent, toolId, laserColor, damageSource);
+        }
+    }
     if (!a || a === BLOCK_AIR || a === 6) return;
 
     const n = BLOCKS[a] || { strength: 1 };
@@ -3959,6 +4015,26 @@ function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = f
             const replacementBlockId = a === 136 ? 6 : BLOCK_AIR;
             chunkManager.setBlockGlobal(e, t, o, replacementBlockId, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
+            const furnitureFootprint = getFurnitureFootprint(a, e, o);
+            if (furnitureFootprint && getBlockAt(furnitureFootprint.x, t, furnitureFootprint.z) === furnitureFootprint.blockId) {
+                chunkManager.setBlockGlobal(furnitureFootprint.x, t, furnitureFootprint.z, BLOCK_AIR, true, null, 'local');
+                worldState.foreignBlockOrigins.delete(`${furnitureFootprint.x},${t},${furnitureFootprint.z}`);
+                if (isAuthority()) {
+                    const footprintBreak = JSON.stringify({
+                        type: "block_break",
+                        x: furnitureFootprint.x,
+                        y: t,
+                        z: furnitureFootprint.z,
+                        blockId: furnitureFootprint.blockId,
+                        replacementBlockId: BLOCK_AIR,
+                        username: breaker || userName,
+                        world: worldName
+                    });
+                    for (const [, peer] of peers.entries()) {
+                        if (peer.dc && peer.dc.readyState === "open") peer.dc.send(footprintBreak);
+                    }
+                }
+            }
 
             if (!silent) {
                 if (breaker === userName) {
@@ -4110,11 +4186,21 @@ function placeBlockAt(e, t, o, a) {
                 const below = getBlockAt(e, t - 1, o);
                 if (below === 6 || below === BLOCK_AIR) return void addMessage("Seaweed must be planted on the ocean floor or another seaweed.", 2000);
             }
-            if (a === 146 && (t + 1 >= MAX_HEIGHT || getBlockAt(e, t + 1, o) !== BLOCK_AIR)) {
-                return void addMessage("Oak doors need two clear blocks of height.", 2000);
+            if (BLOCKS[placedBlockId]?.doorBase && (t + 1 >= MAX_HEIGHT || getBlockAt(e, t + 1, o) !== BLOCK_AIR)) {
+                return void addMessage(`${BLOCKS[a].name} needs two clear blocks of height.`, 2000);
+            }
+            const furnitureFootprint = getFurnitureFootprint(placedBlockId, e, o);
+            if (furnitureFootprint) {
+                if (t >= MAX_HEIGHT || ![BLOCK_AIR, 6].includes(getBlockAt(furnitureFootprint.x, t, furnitureFootprint.z))) {
+                    return void addMessage(`${BLOCKS[a].name} needs two clear blocks of floor space.`, 2000);
+                }
+                const partChunk = makeChunkKey(worldName,
+                    Math.floor(modWrap(furnitureFootprint.x, MAP_SIZE) / CHUNK_SIZE),
+                    Math.floor(modWrap(furnitureFootprint.z, MAP_SIZE) / CHUNK_SIZE));
+                if (!checkChunkOwnership(partChunk, userName)) return void addMessage("Furniture cannot cross into another player's chunk.", 2000);
             }
             if (r === BLOCK_AIR || 6 === r)
-                if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
+                if (checkCollisionWithPlayer(e, t, o) || furnitureFootprint && checkCollisionWithPlayer(furnitureFootprint.x, t, furnitureFootprint.z)) addMessage("Cannot place inside player");
                 else {
                     lastMoveTime = performance.now();
                     window.lastMoveTime = lastMoveTime;
@@ -4191,9 +4277,10 @@ function placeBlockAt(e, t, o, a) {
 
                     // Host-authoritative: only host mutates directly, clients send requests
                     if (isAuthority() || peers.size === 0) {
-                        if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
+                        if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), furnitureFootprint && chunkManager.setBlockGlobal(furnitureFootprint.x, t, furnitureFootprint.z, furnitureFootprint.blockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
+                            if (furnitureFootprint) getCurrentWorldState().foreignBlockOrigins.set(`${furnitureFootprint.x},${t},${furnitureFootprint.z}`, n.originSeed);
                             addMessage(`Placed ${BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId} from ${formatDisplaySeed(n.originSeed)}`);
                         } else {
                             addMessage("Placed " + (BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId));
@@ -4233,6 +4320,16 @@ function placeBlockAt(e, t, o, a) {
                             for (const [, peer] of peers.entries()) {
                                 if (peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(placeMsg);
+                                    if (furnitureFootprint) peer.dc.send(JSON.stringify({
+                                        type: 'block_place',
+                                        x: furnitureFootprint.x,
+                                        y: t,
+                                        z: furnitureFootprint.z,
+                                        blockId: furnitureFootprint.blockId,
+                                        username: userName,
+                                        world: worldName,
+                                        originSeed: n.originSeed
+                                    }));
                                 }
                             }
                         }
@@ -4245,6 +4342,7 @@ function placeBlockAt(e, t, o, a) {
                             z: o,
                             blockId: placedBlockId,
                             inventoryBlockId: a,
+                            furniturePart: furnitureFootprint,
                             username: userName,
                             world: worldName,
                             originSeed: n.originSeed
@@ -4277,7 +4375,40 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 149) return [149, 163, 164, 165][facing];
     if (blockId === 129) return [129, 166, 167, 168][facing];
     if (blockId === 150 || blockId === 151) return [151, 169, 170, 171][facing];
+    if (blockId === 181) return [181, 183, 185, 187][facing];
+    if (blockId === 189) return [189, 191, 193, 195][facing];
+    if (blockId === 197) return [197, 198, 199, 200][facing];
+    if (blockId === 201) return [201, 202, 203, 204][facing];
+    if (blockId === 205) return [205, 206, 207, 208][facing];
+    if (blockId === 213) return [213, 214, 215, 216][facing];
+    if (blockId === 217) return [217, 218, 219, 220][facing];
+    const paneVariants = {
+        225: [225, 231, 232, 233],
+        226: [226, 234, 235, 236],
+        227: [227, 237, 238, 239],
+        228: [228, 240, 241, 242],
+        229: [229, 243, 244, 245],
+        230: [230, 246, 247, 248]
+    };
+    if (paneVariants[blockId]) return paneVariants[blockId][facing];
     return blockId;
+}
+
+function getFurnitureFootprint(blockId, x, z) {
+    const block = BLOCKS[blockId];
+    if (!block?.furniturePartId) return null;
+    const offsets = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+    const [dx, dz] = offsets[block.facing || 0];
+    return { x: x + dx, z: z + dz, blockId: block.furniturePartId };
+}
+
+function getFurnitureAnchorForPart(blockId, x, z) {
+    const block = BLOCKS[blockId];
+    if (!block?.furniturePart) return null;
+    const offsets = [[1, 0], [0, -1], [-1, 0], [0, 1]];
+    const [dx, dz] = offsets[block.facing || 0];
+    const anchorId = block.furnitureType === "bed" ? 205 + (block.facing || 0) : 217 + (block.facing || 0);
+    return { x: x - dx, z: z - dz, blockId: anchorId };
 }
 
 function checkCollisionWithPlayer(e, t, o) {
@@ -4407,7 +4538,8 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e && !(BLOCKS[e] && BLOCKS[e].doorOpen)
+    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e &&
+        !(BLOCKS[e] && (BLOCKS[e].doorOpen || BLOCKS[e].furnitureKind || BLOCKS[e].furniturePart))
 }
 
 function checkCollisionWithBlock(e, t, o) {
@@ -6547,6 +6679,7 @@ function updateAvatarAnimation(e, t) {
     applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
+    applyFurniturePose(avatarGroup, player.activity, player.activityFacing);
 }
 
 function initMinimap() {
@@ -6961,7 +7094,9 @@ function runGameFrame(e) {
                 player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged)) {
+        if (player.activity && activeMovement) player.activity = null;
+        const activityChanged = lastSentPosition.activity !== (player.activity || null);
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged || activityChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Passive transport and looking around do not reset idle time.
             if (activeMovement || isAttacking) {
@@ -6978,7 +7113,8 @@ function runGameFrame(e) {
                 petIdsKey: petIdsKey,
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
-                isSwimming: inWater
+                isSwimming: inWater,
+                activity: player.activity || null
             };
             ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
@@ -6996,6 +7132,8 @@ function runGameFrame(e) {
                 selectedBlockId: selectedBlockId,
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
+                activity: player.activity || null,
+                activityFacing: player.activityFacing || 0,
                 petIds: petIds,
                 score: Number(player.score) || 0,
                 timestamp: Date.now()
@@ -7040,6 +7178,7 @@ function runGameFrame(e) {
                     applyBowArmAim(v, e.targetPitch);
                 }
                 updateHeldPickaxePose(v);
+                applyFurniturePose(v, e.activity, e.activityFacing);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,

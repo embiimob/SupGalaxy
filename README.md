@@ -96,8 +96,12 @@ Directional blocks (doors, stairs, portcullis) face the way your camera is looki
 | Block | Recipe | Notes |
 |-------|--------|-------|
 | Oak Door | 5 Wooden Planks + 1 Iron Ore → 1 | Two blocks tall. **Right-click** to open/close; it won't close on top of a player. Toggles sync in multiplayer and respect chunk ownership. |
+| Iron Door | 4 Iron Ore → 1 | Two blocks tall; right-click to open/close. |
+| Stone Door | 5 Castle Stone Bricks → 1 | Two blocks tall; right-click to open/close. |
 | Oak Stairs | 6 Wooden Planks → 4 | Walk up them without jumping. |
 | Castle Stone Stairs | 6 Castle Stone Bricks → 4 | Stone variant of stairs. |
+| Iron Stairs | 6 Iron Ore → 4 | Directional metal stairs. |
+| Marble Stairs | 6 Marble → 4 | Pale decorative stairs. |
 | Portcullis | 4 Iron Ore + 1 Coal → 1 | See-through iron gate grid. |
 | Castle Stone Bricks | 3 Stone + 1 Brick → 4 | Core castle wall block. |
 | Mossy Castle Bricks | 3 Castle Stone Bricks + 1 Moss → 4 | Weathered walls. |
@@ -108,6 +112,14 @@ Directional blocks (doors, stairs, portcullis) face the way your camera is looki
 | Slate Roof Tile | 2 Cobblestone + 1 Coal → 4 | Roofing. |
 | Oak Support Beam | 2 Wood + 2 Wooden Planks → 4 | Timber framing. |
 | Rose Stained Glass | 2 Glass + 1 Flower → 2 | Tinted castle windows. |
+| Bed | 4 Wooden Planks + 2 Red Stained Glass → 1 | Two blocks long. Right-click to lie down; the pose is shared with other players. |
+| Chair | 4 Wooden Planks → 1 | Right-click to sit. |
+| Couch | 4 Wooden Planks + 2 Rose Stained Glass → 1 | Two blocks long. Right-click to sit. |
+| Window Panes | 2 matching glass blocks → 4 | Clear, red, blue, green, yellow, and rose panes; face the direction you're looking. |
+| Village Plaster, Timber Frame, Thatch Roof, Cobblestone Path | Clay/wood/leaves/cobblestone recipes | Mix and match these blocks to build village homes and paths. |
+| Castle Flagstone, Pillar, Iron Bars | Castle bricks, stone, and iron recipes | Additional floors, supports, and defensive details. |
+
+Beds and couches reserve two adjacent floor blocks when placed. Sitting or lying down is cancelled when you move.
 
 ---
 

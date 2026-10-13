@@ -486,6 +486,14 @@ Chunk.prototype.idx = function (e, t, o) {
                         y: B.y,
                         z: modWrap(B.z, MAP_SIZE)
                     } : null;
+                    model.userData.furnitureAnchor = BLOCKS[w].furnitureKind ? {
+                        x: modWrap(B.x, MAP_SIZE),
+                        y: B.y,
+                        z: modWrap(B.z, MAP_SIZE),
+                        kind: BLOCKS[w].furnitureKind,
+                        facing: BLOCKS[w].facing || 0
+                    } : null;
+                    if (BLOCKS[w].model === "furniture_part") continue;
                     model.rotation.y = (BLOCKS[w].facing || 0) * Math.PI / 2;
                     if (BLOCKS[w].model === "stairs") {
                         const lowerStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, 1), modelMaterial);
@@ -493,6 +501,69 @@ Chunk.prototype.idx = function (e, t, o) {
                         const upperStep = new THREE.Mesh(new THREE.BoxGeometry(1, .5, .5), modelMaterial);
                         upperStep.position.set(0, .75, .25);
                         model.add(lowerStep, upperStep);
+                    } else if (BLOCKS[w].model === "window_pane") {
+                        const glassMaterial = new THREE.MeshStandardMaterial({
+                            color: new THREE.Color(BLOCKS[w].color),
+                            transparent: true,
+                            opacity: .48,
+                            roughness: .12,
+                            side: THREE.DoubleSide
+                        });
+                        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x473321, roughness: .85 });
+                        const pane = new THREE.Mesh(new THREE.BoxGeometry(.78, .78, .045), glassMaterial);
+                        pane.position.y = .5;
+                        model.add(pane);
+                        for (const x of [-.42, .42]) {
+                            const upright = new THREE.Mesh(new THREE.BoxGeometry(.07, .94, .09), frameMaterial);
+                            upright.position.set(x, .5, 0);
+                            model.add(upright);
+                        }
+                        for (const y of [.06, .94]) {
+                            const rail = new THREE.Mesh(new THREE.BoxGeometry(.9, .07, .09), frameMaterial);
+                            rail.position.y = y;
+                            model.add(rail);
+                        }
+                    } else if (BLOCKS[w].model === "chair") {
+                        const seat = new THREE.Mesh(new THREE.BoxGeometry(.82, .16, .82), modelMaterial);
+                        seat.position.y = .48;
+                        const back = new THREE.Mesh(new THREE.BoxGeometry(.82, .72, .14), modelMaterial);
+                        back.position.set(0, .88, .34);
+                        model.add(seat, back);
+                        for (const x of [-.32, .32]) {
+                            for (const z of [-.3, .3]) {
+                                const leg = new THREE.Mesh(new THREE.BoxGeometry(.12, .48, .12), modelMaterial);
+                                leg.position.set(x, .24, z);
+                                model.add(leg);
+                            }
+                        }
+                    } else if (BLOCKS[w].model === "bed") {
+                        const base = new THREE.Mesh(new THREE.BoxGeometry(1.82, .24, .88), modelMaterial);
+                        base.position.set(.5, .22, 0);
+                        const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xb65555, roughness: .9 });
+                        const mattress = new THREE.Mesh(new THREE.BoxGeometry(1.7, .2, .82), mattressMaterial);
+                        mattress.position.set(.5, .44, 0);
+                        const pillow = new THREE.Mesh(new THREE.BoxGeometry(.35, .12, .64), new THREE.MeshStandardMaterial({ color: 0xf2e7d5 }));
+                        pillow.position.set(-.22, .6, 0);
+                        model.add(base, mattress, pillow);
+                        for (const x of [-.38, 1.38]) {
+                            const board = new THREE.Mesh(new THREE.BoxGeometry(.12, .58, .98), modelMaterial);
+                            board.position.set(x, .38, 0);
+                            model.add(board);
+                        }
+                    } else if (BLOCKS[w].model === "couch") {
+                        const frame = new THREE.Mesh(new THREE.BoxGeometry(1.82, .34, .88), modelMaterial);
+                        frame.position.set(.5, .28, 0);
+                        const fabric = new THREE.MeshStandardMaterial({ color: 0x547c9b, roughness: .92 });
+                        const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.62, .18, .72), fabric);
+                        cushion.position.set(.5, .54, -.04);
+                        const back = new THREE.Mesh(new THREE.BoxGeometry(1.72, .62, .18), fabric);
+                        back.position.set(.5, .78, .34);
+                        model.add(frame, cushion, back);
+                        for (const x of [-.38, 1.38]) {
+                            const arm = new THREE.Mesh(new THREE.BoxGeometry(.18, .5, .88), fabric);
+                            arm.position.set(x, .62, 0);
+                            model.add(arm);
+                        }
                     } else if (BLOCKS[w].model === "portcullis") {
                         const heavyGate = true;
                         const rodWidth = .09;

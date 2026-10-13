@@ -784,10 +784,10 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         206: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 1, furnitureKind: "lie", furniturePartId: 210, strength: 3 },
         207: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 2, furnitureKind: "lie", furniturePartId: 211, strength: 3 },
         208: { name: "Bed", color: "#b65555", transparent: !0, model: "bed", textureStyle: "planks", facing: 3, furnitureKind: "lie", furniturePartId: 212, strength: 3 },
-        209: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        210: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        211: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        212: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
+        209: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 0, strength: 3 },
+        210: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 1, strength: 3 },
+        211: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 2, strength: 3 },
+        212: { name: "Bed Footprint", color: "#b65555", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "bed", facing: 3, strength: 3 },
         213: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 0, furnitureKind: "sit", strength: 3 },
         214: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 1, furnitureKind: "sit", strength: 3 },
         215: { name: "Chair", color: "#8b5a33", transparent: !0, model: "chair", textureStyle: "planks", facing: 2, furnitureKind: "sit", strength: 3 },
@@ -796,26 +796,41 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         218: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 1, furnitureKind: "sit", furniturePartId: 222, strength: 3 },
         219: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 2, furnitureKind: "sit", furniturePartId: 223, strength: 3 },
         220: { name: "Couch", color: "#547c9b", transparent: !0, model: "couch", textureStyle: "planks", facing: 3, furnitureKind: "sit", furniturePartId: 224, strength: 3 },
-        221: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        222: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        223: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
-        224: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, strength: 3 },
+        221: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 0, strength: 3 },
+        222: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 1, strength: 3 },
+        223: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 2, strength: 3 },
+        224: { name: "Couch Footprint", color: "#547c9b", transparent: !0, model: "furniture_part", itemOnly: !0, furniturePart: !0, furnitureType: "couch", facing: 3, strength: 3 },
         225: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         226: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         227: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         228: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         229: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
         230: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", strength: 2 },
-        231: { name: "Village Plaster", color: "#d6c8a8", textureStyle: "limestone", strength: 2 },
-        232: { name: "Village Timber Frame", color: "#704425", textureStyle: "beam", strength: 3 },
-        233: { name: "Thatch Roof", color: "#b99a58", textureStyle: "thatch", strength: 2 },
-        234: { name: "Cobblestone Path", color: "#85817a", textureStyle: "stone", strength: 4 },
-        235: { name: "Flower Box", color: "#8b5a33", textureStyle: "planks", strength: 2 },
-        236: { name: "Castle Flagstone", color: "#8d9297", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
-        237: { name: "Castle Pillar", color: "#72777d", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
-        238: { name: "Castle Iron Bars", color: "#454c53", textureStyle: "metal", strength: 5 },
-        239: { name: "Castle Arch Stone", color: "#72777d", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
-        240: { name: "Castle Banner", color: "#913b42", textureStyle: "cloth", strength: 2 }
+        231: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        232: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        233: { name: "Clear Window Pane", color: "#b3e6ff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        234: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        235: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        236: { name: "Red Window Pane", color: "#ff4b4b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        237: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        238: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        239: { name: "Blue Window Pane", color: "#4b6bff", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        240: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        241: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        242: { name: "Green Window Pane", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        243: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        244: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        245: { name: "Yellow Window Pane", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        246: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        247: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 2, strength: 2 },
+        248: { name: "Rose Window Pane", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 3, strength: 2 },
+        249: { name: "Village Plaster", color: "#d6c8a8", textureStyle: "limestone", strength: 2 },
+        250: { name: "Village Timber Frame", color: "#704425", textureStyle: "beam", strength: 3 },
+        251: { name: "Thatch Roof", color: "#b99a58", textureStyle: "thatch", strength: 2 },
+        252: { name: "Cobblestone Path", color: "#85817a", textureStyle: "stone", strength: 4 },
+        253: { name: "Castle Flagstone", color: "#8d9297", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
+        254: { name: "Castle Pillar", color: "#72777d", textureStyle: "stone_bricks", strength: 30, breakable: !0 },
+        255: { name: "Castle Iron Bars", color: "#454c53", textureStyle: "metal", strength: 5 }
         }
     },
     BIOMES = [{
@@ -1337,44 +1352,32 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         requires: { 152: 2 }
     }, {
         id: "village_plaster",
-        out: { id: 231, count: 4 },
+        out: { id: 249, count: 4 },
         requires: { 13: 2, 5: 1 }
     }, {
         id: "village_timber_frame",
-        out: { id: 232, count: 4 },
+        out: { id: 250, count: 4 },
         requires: { 7: 2, 129: 2 }
     }, {
         id: "thatch_roof",
-        out: { id: 233, count: 4 },
+        out: { id: 251, count: 4 },
         requires: { 8: 4, 129: 1 }
     }, {
         id: "cobblestone_path",
-        out: { id: 234, count: 4 },
+        out: { id: 252, count: 4 },
         requires: { 119: 3, 15: 1 }
     }, {
-        id: "flower_box",
-        out: { id: 235, count: 2 },
-        requires: { 129: 3, 12: 1 }
-    }, {
         id: "castle_flagstone",
-        out: { id: 236, count: 4 },
+        out: { id: 253, count: 4 },
         requires: { 139: 3, 15: 1 }
     }, {
         id: "castle_pillar",
-        out: { id: 237, count: 2 },
+        out: { id: 254, count: 2 },
         requires: { 139: 4 }
     }, {
         id: "castle_iron_bars",
-        out: { id: 238, count: 4 },
+        out: { id: 255, count: 4 },
         requires: { 124: 4 }
-    }, {
-        id: "castle_arch_stone",
-        out: { id: 239, count: 4 },
-        requires: { 139: 4, 109: 1 }
-    }, {
-        id: "castle_banner",
-        out: { id: 240, count: 1 },
-        requires: { 129: 1, 152: 2 }
     }],
     raycaster = new THREE.Raycaster,
     pointer = new THREE.Vector2(0, 0),
