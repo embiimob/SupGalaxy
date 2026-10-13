@@ -33,7 +33,7 @@ function laserGunArmAngle(pitch) {
     return Math.PI / 2 + Math.max(-1.2, Math.min(1.2, pitch || 0));
 }
 
-var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
+var scene, camera, renderer, css3dRenderer, controls, meshGroup, chunkManager, sun, moon, stars, clouds, emberTexture, knownWorlds = new Map,
     knownUsers = new Map,
     keywordCache = new Map,
     processedMessages = new Set,
@@ -1663,6 +1663,12 @@ function cleanupMagicianStone(stone, key) {
     if (stone.colliderMesh) {
         disposeObject(stone.colliderMesh);
         stone.colliderMesh = null;
+    }
+
+    // Remove and dispose the 3D mesh
+    if (stone.css3dObject) {
+        if (stone.css3dObject.parent) stone.css3dObject.parent.remove(stone.css3dObject);
+        if (stone.css3dObject.element && stone.css3dObject.element.parentNode) stone.css3dObject.element.parentNode.removeChild(stone.css3dObject.element);
     }
 
     // Remove and dispose the 3D mesh

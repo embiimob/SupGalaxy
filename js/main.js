@@ -753,8 +753,19 @@ function initThree() {
     document.body.appendChild(waterOverlay);
 
     console.log("[initThree] Starting"), (scene = new THREE.Scene).background = new THREE.Color(8900331), console.log("[initThree] Scene created"), (camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .1, 4e4)).position.set(0, 34, 0), console.log("[initThree] Camera created"), (renderer = new THREE.WebGLRenderer({
-        antialias: !0
-    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap, document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
+        antialias: !0, alpha: true // Need alpha true so the CSS3DRenderer behind can be seen through punched holes
+    })).setSize(innerWidth, innerHeight), renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)), renderer.shadowMap.enabled = true, renderer.shadowMap.type = THREE.PCFSoftShadowMap,
+    renderer.domElement.style.position = 'absolute',
+    renderer.domElement.style.top = '0',
+    renderer.domElement.style.zIndex = '2', // Put WebGL over CSS3D
+    document.body.appendChild(renderer.domElement), console.log("[initThree] Renderer created and appended"),
+    (css3dRenderer = new THREE.CSS3DRenderer()).setSize(innerWidth, innerHeight),
+    css3dRenderer.domElement.style.position = 'absolute',
+    css3dRenderer.domElement.style.top = '0',
+    css3dRenderer.domElement.style.pointerEvents = 'none',
+    css3dRenderer.domElement.style.zIndex = '1', // Put CSS3D under WebGL
+    document.body.appendChild(css3dRenderer.domElement),
+    console.log("[initThree] CSS3DRenderer created and appended"), (controls = new THREE.OrbitControls(camera, renderer.domElement)).enableDamping = !0, controls.maxPolarAngle = Math.PI / 2, controls.minDistance = 2, controls.maxDistance = 400, controls.enabled = !1, console.log("[initThree] Controls created");
     scene.add(camera);
     warmLaserLightPools();
     scene.add(new THREE.AmbientLight(16777215, .2));
@@ -846,7 +857,7 @@ function initThree() {
             player.yaw -= .002 * e.movementX, player.pitch -= .002 * e.movementY, player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch)), camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), avatarGroup && avatarGroup.children[3].rotation.set(player.pitch, 0, 0)
         }
     })), window.addEventListener("resize", (function () {
-        camera.aspect = innerWidth / innerHeight, camera.updateProjectionMatrix(), renderer.setSize(innerWidth, innerHeight), updateMinimap()
+        camera.aspect = innerWidth / innerHeight, camera.updateProjectionMatrix(), renderer.setSize(innerWidth, innerHeight), css3dRenderer && css3dRenderer.setSize(innerWidth, innerHeight), updateMinimap()
     })), createAndSetupAvatar(userName, !0)
 }
 
@@ -2374,6 +2385,43 @@ function isBlockStillValid(x, y, z, expectedBlockId) {
     return true;
 }
 
+
+function isEmbedStream(url) {
+    try {
+        const parsed = new URL(url);
+        const host = parsed.hostname.toLowerCase();
+        return host === 'youtube.com' || host.endsWith('.youtube.com') ||
+               host === 'youtu.be' ||
+               host === 'twitch.tv' || host.endsWith('.twitch.tv');
+    } catch (e) {
+        return false;
+    }
+}
+
+function getMagicianStoneEmbedUrl(url) {
+    try {
+        const parsed = new URL(url);
+        const host = parsed.hostname.toLowerCase();
+        if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
+            let videoId = '';
+            if (host === 'youtu.be') {
+                videoId = parsed.pathname.slice(1);
+            } else if (parsed.pathname.startsWith('/live/')) {
+                videoId = parsed.pathname.slice(6).split('/')[0];
+            } else {
+                videoId = parsed.searchParams.get('v');
+            }
+            if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+            return '';
+        }
+        if (host === 'twitch.tv' || host.endsWith('.twitch.tv')) {
+            const channel = parsed.pathname.slice(1).split('/')[0];
+            if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname || 'localhost'}&autoplay=true&muted=true`;
+            return '';
+        }
+    } catch(e) {}
+    return '';
+}
 function getMagicianStoneMediaUrl(source) {
     let parsed;
     try {
@@ -2745,7 +2793,12 @@ async function createMagicianStoneScreen(stoneData) {
             return;
         }
     }
-    if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(fileExtension) ||
+    const isEmbed = isEmbedStream(url);
+    const embedUrl = getMagicianStoneEmbedUrl(url);
+    const isValidEmbed = isEmbed && embedUrl !== '';
+    if (isValidEmbed) {
+        stoneData.mediaObjectUrl = url;
+    } else if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(fileExtension) ||
         MAGICIAN_STONE_VIDEO_EXTENSIONS.includes(fileExtension) ||
         MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
         try {
@@ -2759,8 +2812,31 @@ async function createMagicianStoneScreen(stoneData) {
     }
     const planeGeometry = new THREE.PlaneGeometry(width, height);
     let texture;
+    let screenMesh;
 
-    if (fileExtension === 'gif') {
+    if (isValidEmbed) {
+        const iframe = document.createElement('iframe');
+        iframe.src = getMagicianStoneEmbedUrl(url);
+        iframe.style.width = (width * 100) + 'px';
+        iframe.style.height = (height * 100) + 'px';
+        iframe.style.border = '0';
+        iframe.allow = 'autoplay; encrypted-media';
+        iframe.style.pointerEvents = 'auto'; // allow interaction through css3drenderer
+
+        const css3dObject = new THREE.CSS3DObject(iframe);
+        css3dObject.scale.set(1/100, 1/100, 1/100);
+        stoneData.css3dObject = css3dObject;
+
+        // invisible mesh for occlusion/raycasting
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            blending: THREE.NoBlending,
+            opacity: 0,
+            side: THREE.DoubleSide
+        });
+        screenMesh = new THREE.Mesh(planeGeometry, material);
+        screenMesh.add(css3dObject);
+    } else if (fileExtension === 'gif') {
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 256;
@@ -2905,17 +2981,17 @@ async function createMagicianStoneScreen(stoneData) {
         return;
     }
 
-    let screenMesh;
-
-    if (MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
-        screenMesh = createMusicSymbolMesh();
-    } else {
-        const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
-        if (texture) {
-            material.map = texture;
-            material.needsUpdate = true;
+    if (!screenMesh) {
+        if (MAGICIAN_STONE_AUDIO_EXTENSIONS.includes(fileExtension)) {
+            screenMesh = createMusicSymbolMesh();
+        } else {
+            const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true });
+            if (texture) {
+                material.map = texture;
+                material.needsUpdate = true;
+            }
+            screenMesh = new THREE.Mesh(planeGeometry, material);
         }
-        screenMesh = new THREE.Mesh(planeGeometry, material);
     }
 
     // Orientation and Position
@@ -6635,7 +6711,7 @@ function runGameFrame(e) {
             const e = (n - t) / o;
             avatarGroup.position.y -= .05 * e
         }
-        return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"), renderer.render(scene, camera), void requestAnimationFrame(gameLoop)
+        return r >= 1 && (isDying = !1, deathScreenShown = !0, document.getElementById("deathScreen").style.display = "flex"), renderer.render(scene, camera), css3dRenderer && css3dRenderer.render(scene, camera), void requestAnimationFrame(gameLoop)
     }
     var t = Math.min(.06, (e - lastFrame) / 1e3);
     if (window.globalWaterTime) {
@@ -6647,7 +6723,7 @@ function runGameFrame(e) {
             updateMobSafely(e, t)
         })), updateSky(t), updateMinimap();
         var o = document.getElementById("score");
-        o && (o.innerText = player.score), renderer.render(scene, camera)
+        o && (o.innerText = player.score), renderer.render(scene, camera), css3dRenderer && css3dRenderer.render(scene, camera)
     } else {
         // Flight transforms must be current before either the owner or their pets ride them.
         for (const mob of [...mobs]) {
@@ -6655,7 +6731,7 @@ function runGameFrame(e) {
         }
         carryUfoRider();
         if (enforceAltitudeLimit()) {
-            renderer.render(scene, camera);
+            renderer.render(scene, camera), css3dRenderer && css3dRenderer.render(scene, camera);
             requestAnimationFrame(gameLoop);
             return;
         }
@@ -6801,7 +6877,7 @@ function runGameFrame(e) {
         }
         checkCollision(player.x, player.y, player.z) && (pushPlayerOut() || ((Date.now() - (window.lastChunkLoadTime || 0) < 2000) ? (player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Stuck in block, respawned")) : null));
         if (enforceAltitudeLimit()) {
-            renderer.render(scene, camera);
+            renderer.render(scene, camera), css3dRenderer && css3dRenderer.render(scene, camera);
             requestAnimationFrame(gameLoop);
             return;
         }
@@ -7574,7 +7650,7 @@ function runGameFrame(e) {
                 }
             }
         }
-        renderer.render(scene, camera)
+        renderer.render(scene, camera), css3dRenderer && css3dRenderer.render(scene, camera)
     }
     requestAnimationFrame(gameLoop)
 }
@@ -8021,14 +8097,27 @@ document.getElementById('magicianStoneUrl').addEventListener('input', async func
             }
             let mediaUrl = resolved.url;
             if (mediaUrl.startsWith('IPFS:')) mediaUrl = await resolveIPFS(mediaUrl);
-            mediaUrl = await getMagicianStoneDisplayUrl(mediaUrl);
+            const isEmbed = isEmbedStream(mediaUrl);
+            const embedUrl = isEmbed ? getMagicianStoneEmbedUrl(mediaUrl) : '';
+            const isValidEmbed = isEmbed && embedUrl !== '';
+
+            if (!isValidEmbed) {
+                mediaUrl = await getMagicianStoneDisplayUrl(mediaUrl);
+            }
             if (request !== magicianStonePreviewRequest) {
                 if (mediaUrl.startsWith('blob:')) URL.revokeObjectURL(mediaUrl);
                 return;
             }
             magicianStonePreviewMediaUrl = mediaUrl.startsWith('blob:') ? mediaUrl : null;
             previewContainer.innerHTML = '';
-            if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(extension)) {
+            if (isValidEmbed) {
+                const iframe = document.createElement('iframe');
+                iframe.src = embedUrl;
+                iframe.className = 'magician-stone-preview-media';
+                iframe.style.border = '0';
+                iframe.allow = 'autoplay; encrypted-media';
+                previewContainer.appendChild(iframe);
+            } else if (MAGICIAN_STONE_IMAGE_EXTENSIONS.includes(extension)) {
                 const img = document.createElement('img');
                 img.className = 'magician-stone-preview-media';
                 img.alt = 'Magician’s Stone media preview';
