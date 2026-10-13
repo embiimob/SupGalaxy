@@ -3098,7 +3098,7 @@ Mob.prototype.update = function (t) {
         const fishItemId = this.type === "fish_rare" ? 137 : 138;
         if (t === userName) {
             addToInventory(fishItemId, 1, this.originSeed);
-            addMessage(`Caught ${BLOCKS[fishItemId].name} from ${this.originSeed}!`, 2500);
+            addMessage(`Caught ${BLOCKS[fishItemId].name} from ${formatDisplaySeed(this.originSeed)}!`, 2500);
         } else if (t) {
             sendToPlayer(t, {
                 type: "add_to_inventory",
