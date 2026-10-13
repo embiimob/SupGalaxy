@@ -1825,9 +1825,9 @@ function openCrafting() {
     const recipeList = document.getElementById("recipeList");
     recipeList.innerHTML = "";
     const categories = [
-        { id: "tools", title: "Tools & Weapons" },
         { id: "construction", title: "Construction & Furniture" },
-        { id: "raw", title: "Raw Materials" }
+        { id: "raw", title: "Raw Materials" },
+        { id: "tools", title: "Tools & Weapons" }
     ];
     const categoryLists = new Map();
     for (const category of categories) {
@@ -1862,7 +1862,10 @@ function openCrafting() {
     }
 
 
-    for (const recipe of RECIPES) {
+    const sortedRecipes = [...RECIPES].sort((a, b) =>
+        (BLOCKS[a.out.id]?.name || "").localeCompare(BLOCKS[b.out.id]?.name || "")
+    );
+    for (const recipe of sortedRecipes) {
         let canCraft = true;
         const ingredients = [];
 
@@ -1938,10 +1941,13 @@ function openCrafting() {
 
 function getRecipeCategory(recipe) {
     const block = BLOCKS[recipe.out.id];
-    if (block?.itemOnly || [121, 126, 127, 128, 133, 174, 175, 178, 179].includes(recipe.out.id)) {
+    const blockId = recipe.out.id;
+    if ([100, 101, 102, 103, 104, 116, 117, 152].includes(blockId)) {
+        return "raw";
+    }
+    if (block?.itemOnly || [114, 115, 120, 121, 126, 127, 128, 133, 174, 175, 178, 179].includes(blockId)) {
         return "tools";
     }
-    const blockId = recipe.out.id;
     if (block?.model || blockId === 120 || blockId === 129 || blockId === 131 ||
         blockId >= 100 && blockId <= 108 || blockId >= 114 && blockId <= 119 ||
         blockId >= 139 && blockId <= 171 ||
