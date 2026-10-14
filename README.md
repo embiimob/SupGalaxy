@@ -63,14 +63,14 @@ Real-time text chat with all connected players via WebRTC. Press `/` to open cha
 - **Honey** — restores +5 HP  
 - **Night Crawlers (Night)** — hunt honey & smash hives  
 - **Torches** — repel night creatures with light  
-- **Red Laser Gun** — deals 5 damage per shot (no ammo needed)
-- **Green Laser Gun** — deals 10 damage per shot, fires two blasts at once (consumes Emerald)
+- **Laser Gun Red** — deals 5 damage per shot (no ammo needed)
+- **Laser Gun Green** — deals 10 damage per shot, fires two blasts at once (consumes Emerald)
 
 ### ⛏ Mining and Picks
 
 Select a pick in the hotbar and **left-click** to mine or attack (mobile: ⚔ or tap).
 
-| Block | Hands / Iron Pick | Blue Iron Pick |
+| Block | Hands / Iron Pick | Iron Pick Blue |
 |-------|-------------------|----------------|
 | Grass, Moss | 1 hit | 1 hit |
 | Dirt, Sand, Glass (including stained glass and glass tiles) | 2 hits | 1 hit |
@@ -84,7 +84,7 @@ Select a pick in the hotbar and **left-click** to mine or attack (mobile: ⚔ or
 Other blocks retain their existing strengths; the Blue Iron Pick halves their required hits, rounded up.
 
 - **Iron Pick:** craft with 1 Iron Ore + 1 Sand + 1 Torch + 1 Wood. Each left-click use has a **1 in 500** chance of breaking one pick; melee damage is **double** normal damage.
-- **Blue Iron Pick:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
+- **Iron Pick Blue:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
   Its glowing head lights the mining area with the same blue light as Blue Calcite, in first person, third person, and multiplayer.
 - Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
 - **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** mine an area, and one blast breaks any breakable block (including castle bricks). Obsidian resists and needs 4 blasts. Bedrock and chunk ownership protections remain in effect.
@@ -121,7 +121,7 @@ Directional blocks (doors, stairs, portcullis, chairs, beds, couches, and window
 | Village Plaster, Timber Frame, Thatch Roof, Cobblestone Path | Clay/wood/leaves/cobblestone recipes | Mix and match these blocks to build village homes and paths. |
 | Castle Flagstone, Pillar, Iron Bars | Castle bricks, stone, and iron recipes | Additional floors, supports, and defensive details. |
 
-Crafting recipes are grouped alphabetically into collapsed **Construction & Furniture**, **Raw Materials**, and **Tools & Weapons** sections; recipes are alphabetized by item name within each section. Glass, stained glass, dark glass, glass tiles, and rose stained glass are in Raw Materials; window panes remain in Construction & Furniture. Torches, glow bricks, and light blocks are in Tools & Weapons. Sandstone, Obsidian, and blue, purple, and green crystals are mined and are no longer craftable. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
+Crafting recipes are grouped alphabetically into collapsed **Construction & Furniture**, **Raw Materials**, and **Tools & Weapons** sections; recipes are alphabetized by item name within each section. Glass, stained glass, dark glass, glass tiles, rose stained glass, Brick, Polished Brick, Smooth Stone, Concrete, and Polished Limestone are in Raw Materials; window panes remain in Construction & Furniture. Torches, glow bricks, and light blocks are in Tools & Weapons. Sandstone, Obsidian, and blue, purple, and green crystals are mined and are no longer craftable. The crafting table block is no longer craftable or placeable; press `C` to open crafting.
 
 Beds and couches reserve two adjacent floor blocks when placed. Furniture faces the direction you look when placing it; sitting or lying down is cancelled when you move.
 
