@@ -4454,11 +4454,11 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 189) return [189, 191, 193, 195][facing];
     if (blockId === 197) return [197, 198, 199, 200][facing];
     if (blockId === 201) return [201, 202, 203, 204][facing];
-    if (blockId === 205) return [205, 206, 207, 208][facing];
-    if (blockId === 213) return [213, 214, 215, 216][facing];
-    if (blockId === 231) return [231, 232, 233, 234][facing];
-    if (blockId === 235) return [235, 236, 237, 238][facing];
-    if (blockId === 217) return [217, 218, 219, 220][facing];
+    if (blockId >= 205 && blockId <= 208) return [205, 206, 207, 208][facing];
+    if (blockId >= 213 && blockId <= 216) return [213, 214, 215, 216][facing];
+    if (blockId >= 217 && blockId <= 220) return [217, 218, 219, 220][facing];
+    if (blockId >= 231 && blockId <= 234) return [231, 232, 233, 234][facing];
+    if (blockId >= 235 && blockId <= 238) return [235, 236, 237, 238][facing];
     const paneVariants = {
         225: [225, 239, 225, 239],
         226: [226, 240, 226, 240],
