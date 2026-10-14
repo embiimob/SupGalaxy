@@ -6842,6 +6842,8 @@ function initMinimap() {
 var fpsSampleStart = 0, fpsFrameCount = 0;
 const playerCollisionBox = new THREE.Box3();
 const objectCollisionBox = new THREE.Box3();
+const playerCollisionCenter = new THREE.Vector3();
+const playerCollisionSize = new THREE.Vector3();
 
 // A frame that throws never reaches its trailing requestAnimationFrame, which used to freeze the
 // scene permanently while workers kept loading chunks. Log the error and keep the loop alive instead.
@@ -7078,7 +7080,9 @@ function runGameFrame(e) {
         restoreModelPerformancePlayer();
         for (const e of mobs)
             if ("grub" === e.type && Date.now() - lastDamageTime > 1e3) {
-                playerCollisionBox.setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth));
+                playerCollisionCenter.set(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2);
+                playerCollisionSize.set(player.width, player.height, player.depth);
+                playerCollisionBox.setFromCenterAndSize(playerCollisionCenter, playerCollisionSize);
                 objectCollisionBox.setFromObject(e.mesh);
                 playerCollisionBox.intersectsBox(objectCollisionBox) && (player.health = Math.max(0, player.health - 2), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a Grub! HP: " + player.health, 1e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             } if (player.y < -10 && (player.x = modWrap(player.x, MAP_SIZE), player.z = modWrap(player.z, MAP_SIZE), player.y = chunkManager.getSurfaceY(player.x, player.z) + 1, player.vy = 0, player.onGround = !0, addMessage("Fell off world, respawned")), isAuthority() || 0 === peers.size) {
@@ -7088,8 +7092,8 @@ function runGameFrame(e) {
         // Check for damage from magician stones
         if (isAuthority() || 0 === peers.size) {
             const playerBox = playerCollisionBox.setFromCenterAndSize(
-                new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
-                new THREE.Vector3(player.width, player.height, player.depth)
+                playerCollisionCenter.set(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2),
+                playerCollisionSize.set(player.width, player.height, player.depth)
             );
             
             // Check each magician stone for damage - allow only one damage source per frame
@@ -7370,9 +7374,11 @@ function runGameFrame(e) {
             } else if ("boulder" === a.type) updateBoulder(a, t);
             else a.velocity.y -= gravity * t, a.mesh.position.add(a.velocity.clone().multiplyScalar(t));
             if ("boulder" === a.type && 4 === a.mass) {
-                const t = (new THREE.Box3).setFromCenterAndSize(new THREE.Vector3(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2), new THREE.Vector3(player.width, player.height, player.depth)),
-                    o = (new THREE.Box3).setFromObject(a.mesh);
-                t.intersectsBox(o) && Date.now() - lastDamageTime > 1e3 && (player.health = Math.max(0, player.health - 10), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a boulder! -10 HP", 2e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
+                playerCollisionCenter.set(player.x + player.width / 2, player.y + player.height / 2, player.z + player.depth / 2);
+                playerCollisionSize.set(player.width, player.height, player.depth);
+                playerCollisionBox.setFromCenterAndSize(playerCollisionCenter, playerCollisionSize);
+                objectCollisionBox.setFromObject(a.mesh);
+                playerCollisionBox.intersectsBox(objectCollisionBox) && Date.now() - lastDamageTime > 1e3 && (player.health = Math.max(0, player.health - 10), lastDamageTime = Date.now(), document.getElementById("health").innerText = player.health, updateHealthBar(), addMessage("Hit by a boulder! -10 HP", 2e3), flashDamageEffect(), player.health <= 0 && handlePlayerDeath())
             }
             (a.mesh.position.y < -10 || Date.now() - a.createdAt > ("boulder" === a.type ? 45e3 : 15e3)) && (scene.remove(a.mesh), disposeObject(a.mesh), eruptedBlocks.splice(o, 1))
         }
