@@ -1793,7 +1793,7 @@ function completeCraft(e, t) {
         }
     }
     const d = getCraftOriginSeed(a);
-    addToInventory(e.out.id, e.out.count, d), addMessage("Crafted " + BLOCKS[e.out.id].name), craftingState = null, document.getElementById("craftModal").style.display = "none", isPromptOpen = !1, toggleInventory(), updateHotbarUI()
+    addToInventory(e.out.id, e.out.count, d), addMessage("Crafted " + BLOCKS[e.out.id].name),     craftingState = null, toggleInventory(), updateHotbarUI(), openCrafting()
 }
 
 function initiateCraft(e) {
@@ -1824,6 +1824,23 @@ function openCrafting() {
     craftModal.style.display = "flex"; // Use flex as per new CSS
     const recipeList = document.getElementById("recipeList");
     recipeList.innerHTML = "";
+    const categories = [
+        { id: "construction", title: "Construction & Furniture" },
+        { id: "raw", title: "Raw Materials" },
+        { id: "tools", title: "Tools & Weapons" }
+    ];
+    const categoryLists = new Map();
+    for (const category of categories) {
+        const details = document.createElement("details");
+        details.className = "recipe-category";
+        const summary = document.createElement("summary");
+        summary.textContent = category.title;
+        const recipes = document.createElement("div");
+        recipes.className = "recipe-category-items";
+        details.append(summary, recipes);
+        recipeList.appendChild(details);
+        categoryLists.set(category.id, { details, recipes });
+    }
 
     // Tally current inventory
     const inventoryCounts = {};
@@ -1845,7 +1862,10 @@ function openCrafting() {
     }
 
 
-    for (const recipe of RECIPES) {
+    const sortedRecipes = [...RECIPES].sort((a, b) =>
+        (BLOCKS[a.out.id]?.name || "").localeCompare(BLOCKS[b.out.id]?.name || "")
+    );
+    for (const recipe of sortedRecipes) {
         let canCraft = true;
         const ingredients = [];
 
@@ -1903,8 +1923,7 @@ function openCrafting() {
             craftButton.innerText = "Craft";
             craftButton.onclick = () => {
                 initiateCraft(recipe);
-                // Refresh the crafting menu after attempting a craft
-                openCrafting();
+                if (!craftingState) openCrafting();
             };
             statusDiv.appendChild(craftButton);
         }
@@ -1912,8 +1931,29 @@ function openCrafting() {
         recipeItem.appendChild(preview);
         recipeItem.appendChild(info);
         recipeItem.appendChild(statusDiv);
-        recipeList.appendChild(recipeItem);
+        categoryLists.get(getRecipeCategory(recipe)).recipes.appendChild(recipeItem);
     }
+    for (const { details, recipes } of categoryLists.values()) {
+        if (!recipes.childElementCount) details.remove();
+    }
+}
+
+function getRecipeCategory(recipe) {
+    const block = BLOCKS[recipe.out.id];
+    const blockId = recipe.out.id;
+    if ([100, 101, 102, 103, 104, 105, 106, 107, 116, 117, 142, 152, 172].includes(blockId)) {
+        return "raw";
+    }
+    if (block?.itemOnly || [114, 115, 120, 121, 126, 127, 128, 133, 174, 175, 178, 179].includes(blockId)) {
+        return "tools";
+    }
+    if (block?.model || blockId === 120 || blockId === 129 || blockId === 131 ||
+        blockId >= 100 && blockId <= 108 || blockId >= 114 && blockId <= 119 ||
+        blockId >= 139 && blockId <= 171 ||
+        blockId >= 181 && blockId <= 255) {
+        return "construction";
+    }
+    return "raw";
 }
 
 function toggleInventory() {
@@ -3531,6 +3571,12 @@ function onPointerDown(e) {
             toggleCastleDoor(hitObject.userData.doorAnchor);
             return;
         }
+        hitObject = s.object;
+        while (hitObject && !hitObject.userData.furnitureAnchor) hitObject = hitObject.parent;
+        if (hitObject && hitObject.userData.furnitureAnchor) {
+            interactWithFurniture(hitObject.userData.furnitureAnchor);
+            return;
+        }
     }
     if (0 === e.button) {
         animateAttack();
@@ -3567,10 +3613,7 @@ function onPointerDown(e) {
         const z = Math.floor(i.z - .5 * l.z);
         const blockId = getBlockAt(x, y, z);
 
-        if (blockId === 130) { // Crafting Table
-            openCrafting();
-            return;
-        } else if (blockId === 131) { // Chest
+        if (blockId === 131) { // Chest
             openChest(x, y, z);
             return;
         }
@@ -3615,6 +3658,66 @@ function toggleCastleDoor(anchor) {
             }
         }
         addMessage(BLOCKS[nextBlockId].doorOpen ? "Opening door..." : "Closing door...", 1200);
+    }
+}
+
+function interactWithFurniture(anchor) {
+    if (!anchor || !["sit", "lie"].includes(anchor.kind)) return;
+    if (player.activity === anchor.kind) {
+        player.activity = null;
+        player.activityBaseY = null;
+    } else {
+        player.activity = anchor.kind;
+        player.activityFacing = anchor.facing || 0;
+        const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][player.activityFacing];
+        if (anchor.kind === "lie") {
+            player.x = anchor.x + .1 + heading[0] * 1.1;
+            player.z = anchor.z + .1 + heading[1] * 1.1;
+            player.activityBaseY = anchor.y + .58;
+        } else {
+            player.x = anchor.x + .1;
+            player.z = anchor.z + .1;
+            player.activityBaseY = null;
+        }
+        player.y = anchor.y;
+        player.yaw = Math.PI + player.activityFacing * Math.PI / 2;
+        player.vx = player.vy = player.vz = 0;
+        player.onGround = true;
+        lastSentPosition.x = player.x;
+        lastSentPosition.y = player.y;
+        lastSentPosition.z = player.z;
+        lastSentPosition.yaw = player.yaw;
+    }
+    addMessage(player.activity === "lie" ? "You lie down." :
+        player.activity === "sit" ? "You sit down." : "You stand up.", 1200);
+}
+
+function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw = 0) {
+    if (!avatar) return;
+    if (!activity) {
+        avatar.rotation.set(0, defaultYaw, 0);
+        return;
+    }
+    const direction = Number.isInteger(facing) ? ((facing % 4) + 4) % 4 : 0;
+    if (activity === "lie") {
+        const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][direction];
+        const head = new THREE.Vector3(-heading[0], 0, -heading[1]);
+        const down = new THREE.Vector3(0, -1, 0);
+        const right = new THREE.Vector3().crossVectors(head, down).normalize();
+        avatar.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, head, down));
+        avatar.position.y = Number.isFinite(activityBaseY)
+            ? activityBaseY
+            : avatar.position.y + .58;
+    } else {
+        avatar.rotation.set(0, Math.PI + direction * Math.PI / 2, 0);
+        avatar.position.y += .28;
+    }
+    if (avatar.children[0] && avatar.children[1]) {
+        avatar.children[0].rotation.x = activity === "sit" ? 1.05 : 0;
+        avatar.children[1].rotation.x = activity === "sit" ? 1.05 : 0;
+    }
+    if (avatar.children[2]) {
+        avatar.children[2].rotation.x = activity === "sit" ? -.12 : 0;
     }
 }
 
@@ -3859,7 +3962,15 @@ function applyBlueLaserDamage(cx, cy, cz, user, damageSource = null) {
 
 function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = false, toolId = null, laserColor = null, damageSource = null) {
     damageSource = getBlockDamageSource(breaker, damageSource);
-    const a = getBlockAt(e, t, o);
+    let a = getBlockAt(e, t, o);
+    const furnitureAnchor = getFurnitureAnchorForPart(a, e, o);
+    if (furnitureAnchor) {
+        const anchorX = modWrap(furnitureAnchor.x, MAP_SIZE);
+        const anchorZ = modWrap(furnitureAnchor.z, MAP_SIZE);
+        if (getBlockAt(anchorX, t, anchorZ) === furnitureAnchor.blockId) {
+            return removeBlockAt(anchorX, t, anchorZ, breaker, damageAmount, silent, toolId, laserColor, damageSource);
+        }
+    }
     if (!a || a === BLOCK_AIR || a === 6) return;
 
     const n = BLOCKS[a] || { strength: 1 };
@@ -3959,6 +4070,26 @@ function removeBlockAt(e, t, o, breaker = userName, damageAmount = 1, silent = f
             const replacementBlockId = a === 136 ? 6 : BLOCK_AIR;
             chunkManager.setBlockGlobal(e, t, o, replacementBlockId, true, null, 'local');
             if (l) worldState.foreignBlockOrigins.delete(r);
+            const furnitureFootprint = getFurnitureFootprint(a, e, o);
+            if (furnitureFootprint && getBlockAt(furnitureFootprint.x, t, furnitureFootprint.z) === furnitureFootprint.blockId) {
+                chunkManager.setBlockGlobal(furnitureFootprint.x, t, furnitureFootprint.z, BLOCK_AIR, true, null, 'local');
+                worldState.foreignBlockOrigins.delete(`${furnitureFootprint.x},${t},${furnitureFootprint.z}`);
+                if (isAuthority()) {
+                    const footprintBreak = JSON.stringify({
+                        type: "block_break",
+                        x: furnitureFootprint.x,
+                        y: t,
+                        z: furnitureFootprint.z,
+                        blockId: furnitureFootprint.blockId,
+                        replacementBlockId: BLOCK_AIR,
+                        username: null,
+                        world: worldName
+                    });
+                    for (const [, peer] of peers.entries()) {
+                        if (peer.dc && peer.dc.readyState === "open") peer.dc.send(footprintBreak);
+                    }
+                }
+            }
 
             if (!silent) {
                 if (breaker === userName) {
@@ -4110,11 +4241,21 @@ function placeBlockAt(e, t, o, a) {
                 const below = getBlockAt(e, t - 1, o);
                 if (below === 6 || below === BLOCK_AIR) return void addMessage("Seaweed must be planted on the ocean floor or another seaweed.", 2000);
             }
-            if (a === 146 && (t + 1 >= MAX_HEIGHT || getBlockAt(e, t + 1, o) !== BLOCK_AIR)) {
-                return void addMessage("Oak doors need two clear blocks of height.", 2000);
+            if (BLOCKS[placedBlockId]?.doorBase && (t + 1 >= MAX_HEIGHT || getBlockAt(e, t + 1, o) !== BLOCK_AIR)) {
+                return void addMessage(`${BLOCKS[a].name} needs two clear blocks of height.`, 2000);
+            }
+            const furnitureFootprint = getFurnitureFootprint(placedBlockId, e, o);
+            if (furnitureFootprint) {
+                if (t >= MAX_HEIGHT || ![BLOCK_AIR, 6].includes(getBlockAt(furnitureFootprint.x, t, furnitureFootprint.z))) {
+                    return void addMessage(`${BLOCKS[a].name} needs two clear blocks of floor space.`, 2000);
+                }
+                const partChunk = makeChunkKey(worldName,
+                    Math.floor(modWrap(furnitureFootprint.x, MAP_SIZE) / CHUNK_SIZE),
+                    Math.floor(modWrap(furnitureFootprint.z, MAP_SIZE) / CHUNK_SIZE));
+                if (!checkChunkOwnership(partChunk, userName)) return void addMessage("Furniture cannot cross into another player's chunk.", 2000);
             }
             if (r === BLOCK_AIR || 6 === r)
-                if (checkCollisionWithPlayer(e, t, o)) addMessage("Cannot place inside player");
+                if (checkCollisionWithPlayer(e, t, o) || furnitureFootprint && checkCollisionWithPlayer(furnitureFootprint.x, t, furnitureFootprint.z)) addMessage("Cannot place inside player");
                 else {
                     lastMoveTime = performance.now();
                     window.lastMoveTime = lastMoveTime;
@@ -4191,9 +4332,10 @@ function placeBlockAt(e, t, o, a) {
 
                     // Host-authoritative: only host mutates directly, clients send requests
                     if (isAuthority() || peers.size === 0) {
-                        if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
+                        if (chunkManager.setBlockGlobal(e, t, o, placedBlockId, !0, n.originSeed, 'local'), furnitureFootprint && chunkManager.setBlockGlobal(furnitureFootprint.x, t, furnitureFootprint.z, furnitureFootprint.blockId, !0, n.originSeed, 'local'), n.originSeed && n.originSeed !== worldSeed) {
                             const r = `${e},${t},${o}`;
                             getCurrentWorldState().foreignBlockOrigins.set(r, n.originSeed);
+                            if (furnitureFootprint) getCurrentWorldState().foreignBlockOrigins.set(`${furnitureFootprint.x},${t},${furnitureFootprint.z}`, n.originSeed);
                             addMessage(`Placed ${BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId} from ${formatDisplaySeed(n.originSeed)}`);
                         } else {
                             addMessage("Placed " + (BLOCKS[placedBlockId] ? BLOCKS[placedBlockId].name : placedBlockId));
@@ -4233,6 +4375,16 @@ function placeBlockAt(e, t, o, a) {
                             for (const [, peer] of peers.entries()) {
                                 if (peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(placeMsg);
+                                    if (furnitureFootprint) peer.dc.send(JSON.stringify({
+                                        type: 'block_place',
+                                        x: furnitureFootprint.x,
+                                        y: t,
+                                        z: furnitureFootprint.z,
+                                        blockId: furnitureFootprint.blockId,
+                                        username: userName,
+                                        world: worldName,
+                                        originSeed: n.originSeed
+                                    }));
                                 }
                             }
                         }
@@ -4245,6 +4397,7 @@ function placeBlockAt(e, t, o, a) {
                             z: o,
                             blockId: placedBlockId,
                             inventoryBlockId: a,
+                            furniturePart: furnitureFootprint,
                             username: userName,
                             world: worldName,
                             originSeed: n.originSeed
@@ -4277,7 +4430,42 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 149) return [149, 163, 164, 165][facing];
     if (blockId === 129) return [129, 166, 167, 168][facing];
     if (blockId === 150 || blockId === 151) return [151, 169, 170, 171][facing];
+    if (blockId === 181) return [181, 183, 185, 187][facing];
+    if (blockId === 189) return [189, 191, 193, 195][facing];
+    if (blockId === 197) return [197, 198, 199, 200][facing];
+    if (blockId === 201) return [201, 202, 203, 204][facing];
+    if (blockId === 205) return [205, 206, 207, 208][facing];
+    if (blockId === 213) return [213, 214, 215, 216][facing];
+    if (blockId === 231) return [231, 232, 233, 234][facing];
+    if (blockId === 235) return [235, 236, 237, 238][facing];
+    if (blockId === 217) return [217, 218, 219, 220][facing];
+    const paneVariants = {
+        225: [225, 239, 225, 239],
+        226: [226, 240, 226, 240],
+        227: [227, 241, 227, 241],
+        228: [228, 242, 228, 242],
+        229: [229, 243, 229, 243],
+        230: [230, 244, 230, 244]
+    };
+    if (paneVariants[blockId]) return paneVariants[blockId][facing];
     return blockId;
+}
+
+function getFurnitureFootprint(blockId, x, z) {
+    const block = BLOCKS[blockId];
+    if (!block?.furniturePartId) return null;
+    const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    const [dx, dz] = offsets[block.facing || 0];
+    return { x: x + dx, z: z + dz, blockId: block.furniturePartId };
+}
+
+function getFurnitureAnchorForPart(blockId, x, z) {
+    const block = BLOCKS[blockId];
+    if (!block?.furniturePart) return null;
+    const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    const [dx, dz] = offsets[block.facing || 0];
+    const anchorId = block.furnitureType === "bed" ? 205 + (block.facing || 0) : 217 + (block.facing || 0);
+    return { x: x - dx, z: z - dz, blockId: anchorId };
 }
 
 function checkCollisionWithPlayer(e, t, o) {
@@ -4407,7 +4595,8 @@ function respawnPlayer(e, t, o) {
 }
 
 function isSolid(e) {
-    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e && !(BLOCKS[e] && BLOCKS[e].doorOpen)
+    return 0 !== e && 6 !== e && 8 !== e && 12 !== e && 16 !== e && 136 !== e &&
+        !(BLOCKS[e] && (BLOCKS[e].doorOpen || BLOCKS[e].furnitureKind || BLOCKS[e].furniturePart))
 }
 
 function checkCollisionWithBlock(e, t, o) {
@@ -6547,6 +6736,7 @@ function updateAvatarAnimation(e, t) {
     applyBowArmAim(avatarGroup, player.pitch);
     updateHeldPickaxePose(avatarGroup);
     updateFirstPersonPickaxe(e);
+    applyFurniturePose(avatarGroup, player.activity, player.activityFacing, player.activityBaseY, player.yaw);
 }
 
 function initMinimap() {
@@ -6879,7 +7069,7 @@ function runGameFrame(e) {
                     m && (m.innerText = player.health), updateHealthBar(), addMessage("Health regenerated: " + player.health, 1e3)
                 }
         var y = Math.hypot(player.x - spawnPoint.x, player.z - spawnPoint.z);
-        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), "third" === cameraMode ? avatarGroup.rotation.y = player.yaw : camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l, player.y), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
+        document.getElementById("homeIcon").style.display = y > 10 ? "inline" : "none", avatarGroup.position.set(player.x + player.width / 2, player.y, player.z + player.depth / 2), avatarGroup.rotation.y = player.yaw, "first" === cameraMode && camera.rotation.set(player.pitch, player.yaw, 0, "YXZ"), updateAvatarAnimation(e, o), typeof updateCustomAvatars === "function" && updateCustomAvatars(t, e, o), chunkManager.update(player.x, player.z, l, player.y), lightManager.update(new THREE.Vector3(player.x, player.y, player.z)), maintainPlayerPets(), mobs.forEach((function (e) {
             if (e.type !== "ufo_saucer") updateMobSafely(e, t)
         })), updateEliteMobEffects(t), manageMobs(), manageVolcanoes(), manageTreeSeeds(), updateSky(t), stars && stars.position.copy(camera.position), clouds && clouds.position.copy(camera.position);
         meshGroup.visible = player.y < 3000;
@@ -6961,7 +7151,13 @@ function runGameFrame(e) {
                 player.z - lastSentPosition.z - ufoCarrySinceLastMove.z) > .1,
             k = Math.abs(player.yaw - lastSentPosition.yaw) > .01 || Math.abs(player.pitch - lastSentPosition.pitch) > .01,
             heldItemChanged = lastSentPosition.selectedBlockId !== selectedBlockId;
-        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged)) {
+        if (player.activity && Math.hypot(player.x - lastSentPosition.x, player.z - lastSentPosition.z) > .1) {
+            player.activity = null;
+            player.activityBaseY = null;
+        }
+        const activityChanged = lastSentPosition.activity !== (player.activity || null);
+        const activityFacingChanged = lastSentPosition.activityFacing !== (player.activityFacing || 0);
+        if (e - lastUpdateTime > 50 && (I || k || heldItemChanged || petsChanged || bowStateChanged || swimmingChanged || bowProgressChanged || activityChanged || activityFacingChanged)) {
             isSprinting && !previousIsSprinting ? (sprintStartPosition.set(player.x, player.y, player.z), currentLoadRadius = LOAD_RADIUS) : !isSprinting && previousIsSprinting && new THREE.Vector3(player.x, player.y, player.z).distanceTo(sprintStartPosition) > 100 && (currentLoadRadius = INITIAL_LOAD_RADIUS), previousIsSprinting = isSprinting, lastUpdateTime = e;
             // Passive transport and looking around do not reset idle time.
             if (activeMovement || isAttacking) {
@@ -6978,7 +7174,10 @@ function runGameFrame(e) {
                 petIdsKey: petIdsKey,
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
-                isSwimming: inWater
+                isSwimming: inWater,
+                activity: player.activity || null,
+                activityFacing: player.activityFacing || 0,
+                activityBaseY: player.activityBaseY
             };
             ufoCarrySinceLastMove.set(0, 0, 0);
             const t = {
@@ -6996,6 +7195,9 @@ function runGameFrame(e) {
                 selectedBlockId: selectedBlockId,
                 bowDrawProgress: bowDrawProgress,
                 bowDrawActive: bowDrawActive,
+                activity: player.activity || null,
+                activityFacing: player.activityFacing || 0,
+                activityBaseY: player.activityBaseY,
                 petIds: petIds,
                 score: Number(player.score) || 0,
                 timestamp: Date.now()
@@ -7040,6 +7242,7 @@ function runGameFrame(e) {
                     applyBowArmAim(v, e.targetPitch);
                 }
                 updateHeldPickaxePose(v);
+                applyFurniturePose(v, e.activity, e.activityFacing, e.activityBaseY, e.targetYaw);
                 if (e.isDying) {
                     const o = 1500,
                         a = 1e3,

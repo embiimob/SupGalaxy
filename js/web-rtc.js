@@ -1231,6 +1231,9 @@ function setupDataChannel(e, t) {
                             if (typeof e.world === "string") o.world = e.world;
                             if (Number.isFinite(e.health)) o.health = e.health;
                             if (Array.isArray(e.petIds)) o.petIds = e.petIds.filter(id => typeof id === "string" || Number.isFinite(id)).slice(0, 3);
+                            o.activity = ["sit", "lie"].includes(e.activity) ? e.activity : null;
+                            o.activityFacing = Number.isInteger(e.activityFacing) ? ((e.activityFacing % 4) + 4) % 4 : 0;
+                            o.activityBaseY = Number.isFinite(e.activityBaseY) ? e.activityBaseY : null;
                             (!s.timestamp || s.timestamp > (o.lastTimestamp || 0)) && (o.prevX = o.targetX, o.prevY = o.targetY, o.prevZ = o.targetZ, o.prevYaw = o.targetYaw, o.prevPitch = o.targetPitch, o.targetX = e.x, o.targetY = e.y, o.targetZ = e.z, o.targetYaw = e.yaw, o.targetPitch = e.pitch, o.isMoving = e.isMoving, o.isSwimming = e.isSwimming === true, o.lastUpdate = performance.now(), o.lastTimestamp = s.timestamp, (e.isMoving || Math.hypot(e.x - o.prevX, e.y - o.prevY, e.z - o.prevZ) > 0.1 || e.isAttacking) && (o.lastMoveTime = performance.now()), o.isAttacking = e.isAttacking, e.attackStartTime && e.attackStartTime !== o.attackStartTime && (o.attackStartTime = e.attackStartTime, o.localAnimStartTime = performance.now()))
 
                             if (playerAvatars.has(t)) {
@@ -1281,6 +1284,9 @@ function setupDataChannel(e, t) {
 
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
+                    l.activity = ["sit", "lie"].includes(s.activity) ? s.activity : null;
+                    l.activityFacing = Number.isInteger(s.activityFacing) ? ((s.activityFacing % 4) + 4) % 4 : 0;
+                    l.activityBaseY = Number.isFinite(s.activityBaseY) ? s.activityBaseY : null;
                     l.bowDrawActive = s.bowDrawActive === true;
                     l.bowDrawProgress = l.bowDrawActive && Number.isFinite(s.bowDrawProgress)
                         ? Math.max(0, Math.min(1, s.bowDrawProgress))
@@ -2538,22 +2544,45 @@ function setupDataChannel(e, t) {
                     if (isAuthority(s.world || worldName)) {
                         console.log(`[WebRTC] Host received block place request from ${s.username} at (${s.x}, ${s.y}, ${s.z})`);
                         const blockDefinition = BLOCKS[s.blockId];
-                        const placementHasClearance = blockDefinition && blockDefinition.model === "door_closed"
-                            ? s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR
-                            : Boolean(blockDefinition);
+                        const validPlacementCoordinates = Number.isInteger(s.x) && Number.isInteger(s.y) &&
+                            Number.isInteger(s.z) && s.y >= 0 && s.y < MAX_HEIGHT;
+                        const furnitureFootprint = validPlacementCoordinates && typeof getFurnitureFootprint === "function"
+                            ? getFurnitureFootprint(s.blockId, s.x, s.z)
+                            : null;
+                        const anchorIsClear = validPlacementCoordinates &&
+                            [BLOCK_AIR, 6].includes(getBlockAt(s.x, s.y, s.z));
+                        const placementHasClearance = anchorIsClear && blockDefinition && !blockDefinition.itemOnly &&
+                            (blockDefinition.model === "door_closed"
+                                ? s.y + 1 < MAX_HEIGHT && getBlockAt(s.x, s.y + 1, s.z) === BLOCK_AIR
+                                : !furnitureFootprint ||
+                                    [BLOCK_AIR, 6].includes(getBlockAt(furnitureFootprint.x, s.y, furnitureFootprint.z)));
 
                         // Validate ownership
                         const placeChunkX = Math.floor(modWrap(s.x, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkZ = Math.floor(modWrap(s.z, MAP_SIZE) / CHUNK_SIZE);
                         const placeChunkKey = makeChunkKey(s.world, placeChunkX, placeChunkZ);
+                        const partChunkKey = furnitureFootprint
+                            ? makeChunkKey(s.world,
+                                Math.floor(modWrap(furnitureFootprint.x, MAP_SIZE) / CHUNK_SIZE),
+                                Math.floor(modWrap(furnitureFootprint.z, MAP_SIZE) / CHUNK_SIZE))
+                            : placeChunkKey;
 
-                        if (placementHasClearance && isChunkMutationAllowed(placeChunkKey, s.username)) {
+                        if (placementHasClearance && isChunkMutationAllowed(placeChunkKey, s.username) &&
+                            isChunkMutationAllowed(partChunkKey, s.username)) {
                             // Allowed: place block and broadcast
                             chunkManager.setBlockGlobal(s.x, s.y, s.z, s.blockId, true, s.originSeed, 'network');
+                            if (furnitureFootprint) {
+                                chunkManager.setBlockGlobal(furnitureFootprint.x, s.y, furnitureFootprint.z,
+                                    furnitureFootprint.blockId, true, s.originSeed, 'network');
+                            }
 
                             if (s.originSeed && s.originSeed !== worldSeed) {
                                 const blockKey = `${s.x},${s.y},${s.z}`;
                                 getCurrentWorldState().foreignBlockOrigins.set(blockKey, s.originSeed);
+                                if (furnitureFootprint) {
+                                    getCurrentWorldState().foreignBlockOrigins.set(
+                                        `${furnitureFootprint.x},${s.y},${furnitureFootprint.z}`, s.originSeed);
+                                }
                             }
 
                             // Renew or establish ownership on edit
@@ -2622,6 +2651,16 @@ function setupDataChannel(e, t) {
                             for (const [peerName, peer] of peers.entries()) {
                                 if (peer.dc && peer.dc.readyState === 'open') {
                                     peer.dc.send(placeMsg);
+                                    if (furnitureFootprint) peer.dc.send(JSON.stringify({
+                                        type: 'block_place',
+                                        x: furnitureFootprint.x,
+                                        y: s.y,
+                                        z: furnitureFootprint.z,
+                                        blockId: furnitureFootprint.blockId,
+                                        username: s.username,
+                                        world: s.world,
+                                        originSeed: s.originSeed
+                                    }));
                                 }
                             }
                             console.log(`[Ownership] Block place allowed for ${s.username} at chunk ${placeChunkKey}`);
