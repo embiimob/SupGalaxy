@@ -3441,9 +3441,9 @@ function onPointerDown(e) {
         }
         return
     }
-    if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 122 === t.id) return player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 5), updateHealthBar(), addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
     if (0 === e.button && t && t.id === 245) {
-        player.health = Math.min(999, player.health + 10);
+        player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 10);
         updateHealthBar();
         addMessage("Ate Sashimi! +10 HP", 1500);
         t.count--;
@@ -3464,7 +3464,7 @@ function onPointerDown(e) {
     if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
         getCurrentWorldState().fishInventoryDirty = true;
         updateSaveChangesButton();
-        player.health = Math.min(999, player.health + 2);
+        player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 2);
         updateHealthBar();
         addMessage(`Ate ${BLOCKS[t.id].name}! +2 HP`, 1500);
         t.count--;
