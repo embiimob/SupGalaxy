@@ -7,6 +7,11 @@ var weatherParticles = null,
     weatherIntensity = 0,
     weatherTarget = 0,
     weatherSyncTimer = 0,
+    cloudWeatherRandom = null,
+    cloudWeatherTimer = 0,
+    cloudWeatherDuration = 0,
+    cloudWeatherIntensity = 0,
+    cloudWeatherTarget = 0,
     weatherPositions = null,
     weatherFallSpeeds = null,
     stormCloudColor = null,
@@ -598,6 +603,10 @@ function applyPlanetWeatherState(state) {
     weatherTarget = Math.max(0, Math.min(1, state.target));
     weatherTimer = Math.max(0, state.timer);
     weatherDuration = Math.max(.1, state.duration);
+    if (Number.isFinite(state.cloudTimer)) cloudWeatherTimer = Math.max(0, state.cloudTimer);
+    if (Number.isFinite(state.cloudDuration)) cloudWeatherDuration = Math.max(.1, state.cloudDuration);
+    if (Number.isFinite(state.cloudIntensity)) cloudWeatherIntensity = Math.max(0, Math.min(1, state.cloudIntensity));
+    if (Number.isFinite(state.cloudTarget)) cloudWeatherTarget = Math.max(0, Math.min(1, state.cloudTarget));
     if (weatherEnabled && !weatherParticles) createWeatherParticles();
     if (!weatherEnabled) {
         weatherIntensity = 0;
@@ -641,6 +650,11 @@ function initSky() {
     weatherIntensity = 0;
     weatherTarget = 0;
     weatherSyncTimer = 0;
+    cloudWeatherRandom = makeSeededRandom(worldSeed + "_cloud_weather");
+    cloudWeatherTimer = 0;
+    cloudWeatherDuration = 90 + cloudWeatherRandom() * 150;
+    cloudWeatherIntensity = cloudWeatherRandom() * .3;
+    cloudWeatherTarget = cloudWeatherRandom();
     stormCloudColor = new THREE.Color(0x73869a);
     const e = makeSeededRandom(worldSeed + "_sky"),
         t = e(),
@@ -754,26 +768,31 @@ function initSky() {
         t.rotation.z = e() * Math.PI * 2;
         t.userData.clearColor = t.material.color.clone();
         t.userData.clearOpacity = t.material.opacity;
-        t.userData.driftSpeed = 15 + 10 * e();
+        t.userData.driftSpeed = 6 + 8 * makeSeededRandom(worldSeed + "_legacy_cloud_speed_" + t.id)();
         clouds.add(t);
     }
     cloudFormations = new THREE.Group;
-    const cloudLobeGeometry = new THREE.SphereGeometry(1, 10, 8);
+    const cloudLobeGeometry = new THREE.SphereGeometry(1, 20, 12);
     for (let i = 0; i < Math.round(cloudCoverage * 24); i++) {
         const formation = new THREE.Group;
-        formation.position.set(220 * (e() - .5), 65 + 35 * e(), 220 * (e() - .5));
-        formation.userData.driftSpeed = 2 + 5 * e();
-        const lobeCount = 4 + Math.floor(4 * e());
+        formation.position.set(760 * (e() - .5), 105 + 60 * e(), 760 * (e() - .5));
+        formation.userData.driftSpeed = 1.5 + 3 * makeSeededRandom(worldSeed + "_cloud_speed_" + i)();
+        const lobeCount = 3 + Math.floor(3 * e());
         for (let j = 0; j < lobeCount; j++) {
             const lobeMaterial = new THREE.MeshStandardMaterial({
+                map: p,
                 color: skyProps.cloudColor.clone().lerp(new THREE.Color(0xffffff), .2 + .45 * e()),
-                roughness: 1
+                roughness: 1,
+                transparent: true,
+                opacity: .2 + .12 * e(),
+                depthWrite: false
             });
             const lobe = new THREE.Mesh(cloudLobeGeometry, lobeMaterial);
-            const scale = 9 + 14 * e();
-            lobe.position.set((e() - .5) * 34, e() * 6, (e() - .5) * 22);
-            lobe.scale.set(scale * (1 + .6 * e()), scale * (.45 + .35 * e()), scale);
+            const scale = 7 + 8 * e();
+            lobe.position.set((e() - .5) * 45, e() * 3, (e() - .5) * 32);
+            lobe.scale.set(scale * (1.2 + .5 * e()), scale * (.25 + .15 * e()), scale * (1 + .4 * e()));
             lobe.userData.clearColor = lobe.material.color.clone();
+            lobe.userData.clearOpacity = lobe.material.opacity;
             lobe.castShadow = true;
             lobe.receiveShadow = false;
             formation.add(lobe);
@@ -822,18 +841,30 @@ function updateSky(e) {
     }), stars.rotation.y += .005 * e, clouds.children.forEach((t => {
         if (t === cloudFormations) {
             t.children.forEach(formation => {
-                formation.position.x = modWrap(formation.position.x + e * formation.userData.driftSpeed + 110, 220) - 110;
-                formation.children.forEach(lobe => lobe.material.color.copy(lobe.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .4));
+                formation.position.x = modWrap(formation.position.x + e * formation.userData.driftSpeed + 380, 760) - 380;
+                formation.children.forEach(lobe => {
+                    lobe.material.color.copy(lobe.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .4);
+                    lobe.material.opacity = lobe.userData.clearOpacity * cloudWeatherIntensity;
+                });
             });
             return;
         }
         t.position.x = modWrap(t.position.x + e * t.userData.driftSpeed, 8e3);
         t.material.color.copy(t.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .65);
-        t.material.opacity = t.userData.clearOpacity * (1 + weatherIntensity * .2);
+        t.material.opacity = t.userData.clearOpacity * cloudWeatherIntensity * (1 + weatherIntensity * .2);
     }));
     clouds.visible = !inSpace;
     const hasWeatherPeers = typeof peers !== "undefined" && peers.size > 0;
     const isWeatherAuthority = !hasWeatherPeers || typeof isAuthority !== "function" || isAuthority(worldName);
+    if (isWeatherAuthority) {
+        cloudWeatherTimer += e;
+        if (cloudWeatherTimer >= cloudWeatherDuration) {
+            cloudWeatherTimer = 0;
+            cloudWeatherDuration = 90 + cloudWeatherRandom() * 180;
+            cloudWeatherTarget = cloudWeatherRandom() < .28 ? cloudWeatherRandom() * .12 : .2 + cloudWeatherRandom() * .8;
+        }
+    }
+    cloudWeatherIntensity += (cloudWeatherTarget - cloudWeatherIntensity) * Math.min(1, e * .035);
     if (weatherEnabled && isWeatherAuthority) {
         weatherTimer += e;
         if (weatherTimer >= weatherDuration) {
@@ -854,7 +885,11 @@ function updateSky(e) {
                 intensity: weatherIntensity,
                 target: weatherTarget,
                 timer: weatherTimer,
-                duration: weatherDuration
+                duration: weatherDuration,
+                cloudTimer: cloudWeatherTimer,
+                cloudDuration: cloudWeatherDuration,
+                cloudIntensity: cloudWeatherIntensity,
+                cloudTarget: cloudWeatherTarget
             });
             for (const peer of peers.values()) {
                 if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
