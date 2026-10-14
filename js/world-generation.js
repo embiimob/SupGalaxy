@@ -784,11 +784,11 @@ function initSky() {
                 color: skyProps.cloudColor.clone().lerp(new THREE.Color(0xffffff), .2 + .45 * e()),
                 roughness: 1,
                 transparent: true,
-                opacity: .2 + .12 * e(),
+                opacity: .25 + .12 * e(),
                 depthWrite: false
             });
             const lobe = new THREE.Mesh(cloudLobeGeometry, lobeMaterial);
-            const scale = 7 + 8 * e();
+            const scale = 10 + 10 * e();
             lobe.position.set((e() - .5) * 45, e() * 3, (e() - .5) * 32);
             lobe.scale.set(scale * (1.2 + .5 * e()), scale * (.25 + .15 * e()), scale * (1 + .4 * e()));
             lobe.userData.clearColor = lobe.material.color.clone();
