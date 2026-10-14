@@ -755,7 +755,7 @@ function initSky() {
     stars.add(u), scene.add(stars), clouds = new THREE.Group;
     const p = createCloudTexture(worldSeed),
         m = 55 + Math.floor(35 * e());
-    for (let t = 0; t < m; t++) {
+    for (let cloudIndex = 0; cloudIndex < m; cloudIndex++) {
         const t = new THREE.Mesh(new THREE.PlaneGeometry(200 + 300 * e(), 100 + 150 * e()), new THREE.MeshBasicMaterial({
             map: p,
             color: skyProps.cloudColor,
@@ -768,7 +768,7 @@ function initSky() {
         t.rotation.z = e() * Math.PI * 2;
         t.userData.clearColor = t.material.color.clone();
         t.userData.clearOpacity = t.material.opacity;
-        t.userData.driftSpeed = 6 + 8 * makeSeededRandom(worldSeed + "_legacy_cloud_speed_" + t.id)();
+        t.userData.driftSpeed = 6 + 8 * makeSeededRandom(worldSeed + "_legacy_cloud_speed_" + cloudIndex)();
         clouds.add(t);
     }
     cloudFormations = new THREE.Group;
@@ -851,7 +851,7 @@ function updateSky(e) {
         }
         t.position.x = modWrap(t.position.x + e * t.userData.driftSpeed, 8e3);
         t.material.color.copy(t.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .65);
-        t.material.opacity = t.userData.clearOpacity * cloudWeatherIntensity * (1 + weatherIntensity * .2);
+        t.material.opacity = Math.min(1, t.userData.clearOpacity * cloudWeatherIntensity * (1 + weatherIntensity * .2));
     }));
     clouds.visible = !inSpace;
     const hasWeatherPeers = typeof peers !== "undefined" && peers.size > 0;
