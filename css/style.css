@@ -624,11 +624,13 @@
             width: 100%;
         }
 
-        #healthBarInner.health-boosted,
         #health.health-boosted {
             color: #69c8ff;
-            background: #168cff;
             text-shadow: 0 0 6px #168cff, 0 0 12px #168cff;
+        }
+
+        #healthBarInner.health-boosted {
+            background: #168cff;
             box-shadow: 0 0 8px #168cff, 0 0 16px rgba(22, 140, 255, 0.75);
         }
 

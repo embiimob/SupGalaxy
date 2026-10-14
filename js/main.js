@@ -3452,10 +3452,11 @@ function onPointerDown(e) {
         return;
     }
     if (0 === e.button && t && t.id === 246) {
-        player.maxHealth = 9999;
+        const previousHealth = player.health;
+        if (player.health + 100 > 999) player.maxHealth = 9999;
         player.health = Math.min(player.maxHealth, player.health + 100);
         updateHealthBar();
-        addMessage("Consumed Liquid Blue! +100 HP; maximum HP increased to 9999", 2500);
+        addMessage(`Consumed Liquid Blue! +${player.health - previousHealth} HP${player.maxHealth > 999 ? "; maximum HP increased to 9999" : ""}`, 2500);
         t.count--;
         if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
         updateHotbarUI();
@@ -5611,7 +5612,7 @@ function updateHealthBar() {
     const isBoosted = player.maxHealth > 999;
     healthBar.classList.toggle("health-boosted", isBoosted);
     healthLabel.classList.toggle("health-boosted", isBoosted);
-    healthLabel.innerText = isBoosted ? `${player.health} / ${player.maxHealth}` : player.health;
+    healthLabel.innerText = player.health;
 }
 
 function updateSaveChangesButton() {
