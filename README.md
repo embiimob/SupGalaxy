@@ -81,13 +81,13 @@ Select a pick in the hotbar and **left-click** to mine or attack (mobile: ⚔ or
 | Obsidian | Cannot break | 4 hits |
 | Bedrock | Cannot break | Cannot break |
 
-Other blocks retain their existing strengths; the Blue Iron Pick halves their required hits, rounded up.
+Other blocks retain their existing strengths; the Iron Pick Blue halves their required hits, rounded up.
 
 - **Iron Pick:** craft with 1 Iron Ore + 1 Sand + 1 Torch + 1 Wood. Each left-click use has a **1 in 500** chance of breaking one pick; melee damage is **double** normal damage.
 - **Iron Pick Blue:** upgrade with 1 Lava + 1 Iron Pick + 1 Blue Calcite. Each left-click use has a **1 in 100** chance of breaking one pick; melee damage is **triple** normal damage.
   Its glowing head lights the mining area with the same blue light as Blue Calcite, in first person, third person, and multiplayer.
 - Breakage is rolled once per use, including misses and hits on protected blocks; the current swing still completes.
-- **Red lasers** can mine only blocks breakable by hand. **Green lasers** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** mine an area, and one blast breaks any breakable block (including castle bricks). Obsidian resists and needs 4 blasts. Bedrock and chunk ownership protections remain in effect.
+- **Laser Gun Red** can mine only blocks breakable by hand. **Laser Gun Green** can also mine Stone, Emerald, and Dark Glass, but not Obsidian. **Blue lasers** mine an area, and one blast breaks any breakable block (including castle bricks). Obsidian resists and needs 4 blasts. Bedrock and chunk ownership protections remain in effect.
 
 ### 🏰 Building Blocks: Stairs, Doors & Castles
 
