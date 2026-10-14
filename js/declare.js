@@ -821,6 +821,8 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         242: { name: "Window Pane Green", color: "#57c84d", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
         243: { name: "Window Pane Yellow", color: "#fff95b", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
         244: { name: "Window Pane Rose", color: "#d88ea2", transparent: !0, model: "window_pane", textureStyle: "glass", facing: 1, strength: 2 },
+        245: { name: "Sashimi", color: "#ff5f8f", itemOnly: !0, craftingItem: !0 },
+        246: { name: "Liquid Blue", color: "#4da6ff", itemOnly: !0, craftingItem: !0 },
         249: { name: "Village Plaster", color: "#d6c8a8", textureStyle: "limestone", strength: 2 },
         250: { name: "Village Timber Frame", color: "#704425", textureStyle: "beam", strength: 3 },
         251: { name: "Thatch Roof", color: "#b99a58", textureStyle: "thatch", strength: 2 },
@@ -867,6 +869,18 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         featureDensity: .04
     }],
     RECIPES = [{
+        id: "sashimi_tuna",
+        out: { id: 245, count: 1 },
+        requires: { 136: 1, 137: 1 }
+    }, {
+        id: "sashimi_iwashi",
+        out: { id: 245, count: 1 },
+        requires: { 136: 1, 138: 1 }
+    }, {
+        id: "liquid_blue",
+        out: { id: 246, count: 1 },
+        requires: { 122: 1, 134: 4 }
+    }, {
         id: "iron_pick",
         out: { id: 174, count: 1 },
         requires: { 124: 1, 5: 1, 120: 1, 7: 1 }
@@ -1339,6 +1353,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
         vz: 0,
         onGround: !1,
         health: 20,
+        maxHealth: 999,
         score: 0,
         width: .8,
         height: 1.8,

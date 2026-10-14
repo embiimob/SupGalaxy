@@ -432,7 +432,8 @@ async function applySaveFile(e, t, o) {
         player.x = t.profile.x;
         player.y = t.profile.y;
         player.z = t.profile.z;
-        player.health = t.profile.health;
+        player.maxHealth = t.profile.maxHealth === 9999 ? 9999 : 999;
+        player.health = Number.isFinite(t.profile.health) ? Math.min(player.maxHealth, t.profile.health) : 20;
         player.score = t.profile.score;
         INVENTORY = t.profile.inventory;
         restorePetSaveData(t.profile.pets);
@@ -3440,13 +3441,31 @@ function onPointerDown(e) {
         }
         return
     }
-    if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && t.id === 245) {
+        player.health = Math.min(999, player.health + 10);
+        updateHealthBar();
+        addMessage("Ate Sashimi! +10 HP", 1500);
+        t.count--;
+        if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
+    if (0 === e.button && t && t.id === 246) {
+        player.maxHealth = 9999;
+        player.health = Math.min(player.maxHealth, player.health + 100);
+        updateHealthBar();
+        addMessage("Consumed Liquid Blue! +100 HP; maximum HP increased to 9999", 2500);
+        t.count--;
+        if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
     if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
         getCurrentWorldState().fishInventoryDirty = true;
         updateSaveChangesButton();
         player.health = Math.min(999, player.health + 2);
         updateHealthBar();
-        document.getElementById("health").innerText = player.health;
         addMessage(`Ate ${BLOCKS[t.id].name}! +2 HP`, 1500);
         t.count--;
         if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
@@ -5242,6 +5261,7 @@ async function downloadHostSession() {
                 y: player.y,
                 z: player.z,
                 health: player.health,
+                maxHealth: player.maxHealth,
                 score: player.score,
                 inventory: INVENTORY,
                 pets: getPetSaveData(),
@@ -5340,7 +5360,7 @@ async function publishToTestnet() {
         chests: serializableChests,
         profile: {
             x: player.x, y: player.y, z: player.z,
-            health: player.health, score: player.score, inventory: INVENTORY,
+            health: player.health, maxHealth: player.maxHealth, score: player.score, inventory: INVENTORY,
             pets: getPetSaveData(),
             avatar: getAvatarSaveData()
         },
@@ -5529,6 +5549,7 @@ async function downloadSinglePlayerSession() {
             y: player.y,
             z: player.z,
             health: player.health,
+            maxHealth: player.maxHealth,
             score: player.score,
             inventory: INVENTORY,
             pets: getPetSaveData(),
@@ -5583,8 +5604,14 @@ function addMessage(e, t) {
 }
 
 function updateHealthBar() {
-    var e = Math.max(0, Math.min(1, player.health / 999));
-    document.getElementById("healthBarInner").style.width = 100 * e + "%"
+    const healthBar = document.getElementById("healthBarInner");
+    const healthLabel = document.getElementById("health");
+    var e = Math.max(0, Math.min(1, player.health / player.maxHealth));
+    healthBar.style.width = 100 * e + "%";
+    const isBoosted = player.maxHealth > 999;
+    healthBar.classList.toggle("health-boosted", isBoosted);
+    healthLabel.classList.toggle("health-boosted", isBoosted);
+    healthLabel.innerText = isBoosted ? `${player.health} / ${player.maxHealth}` : player.health;
 }
 
 function updateSaveChangesButton() {
