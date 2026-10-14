@@ -12,6 +12,20 @@ var weatherParticles = null,
     cloudWeatherDuration = 0,
     cloudWeatherIntensity = 0,
     cloudWeatherTarget = 0,
+    stormClouds = null,
+    stormRainParticles = null,
+    stormRainSpeeds = null,
+    stormCloudOverhead = false,
+    stormRainOverhead = false,
+    stormRandom = null,
+    lightningStormActive = false,
+    lightningTimer = 0,
+    lightningCheckInterval = 0,
+    lightningEventCounter = 0,
+    lightningFlash = 0,
+    lightningVisuals = [],
+    lightningEventIds = new Set,
+    cloudsEnabled = true,
     weatherPositions = null,
     weatherFallSpeeds = null,
     stormCloudColor = null,
@@ -588,6 +602,8 @@ function setPlanetWeatherEnabled(enabled) {
     if (!weatherEnabled) {
         weatherIntensity = 0;
         weatherTarget = 0;
+        lightningStormActive = false;
+        if (stormRainParticles) stormRainParticles.visible = false;
     } else if (!weatherParticles) {
         createWeatherParticles();
     }
@@ -607,6 +623,8 @@ function applyPlanetWeatherState(state) {
     if (Number.isFinite(state.cloudDuration)) cloudWeatherDuration = Math.max(.1, state.cloudDuration);
     if (Number.isFinite(state.cloudIntensity)) cloudWeatherIntensity = Math.max(0, Math.min(1, state.cloudIntensity));
     if (Number.isFinite(state.cloudTarget)) cloudWeatherTarget = Math.max(0, Math.min(1, state.cloudTarget));
+    if (typeof state.lightningStorm === "boolean") lightningStormActive = state.lightningStorm;
+    if (Number.isFinite(state.lightningTimer)) lightningTimer = Math.max(0, state.lightningTimer);
     if (weatherEnabled && !weatherParticles) createWeatherParticles();
     if (!weatherEnabled) {
         weatherIntensity = 0;
@@ -634,6 +652,133 @@ function createWeatherParticles() {
     weatherParticles = new THREE.LineSegments(geometry, material);
     weatherParticles.visible = false;
     scene.add(weatherParticles);
+    if (!stormRainParticles) {
+        const stormGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 6);
+        stormRainSpeeds = new Float32Array(count);
+        for (let i = 0; i < count; i++) {
+            const offset = i * 6;
+            positions[offset] = (weatherRandom() - .5) * 56;
+            positions[offset + 1] = weatherRandom() * 45;
+            positions[offset + 2] = (weatherRandom() - .5) * 56;
+            positions[offset + 3] = positions[offset];
+            positions[offset + 4] = positions[offset + 1] - 2.4;
+            positions[offset + 5] = positions[offset + 2];
+            stormRainSpeeds[i] = 36 + weatherRandom() * 20;
+        }
+        stormGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        stormRainParticles = new THREE.LineSegments(stormGeometry, new THREE.LineBasicMaterial({
+            color: 0xe0f3ff, transparent: true, opacity: 0, depthWrite: false
+        }));
+        stormRainParticles.visible = false;
+        scene.add(stormRainParticles);
+    }
+}
+
+function advanceWeatherParticles(particles, speeds, delta, lineLength) {
+    if (!particles || !particles.visible || !speeds) return;
+    const positions = particles.geometry.attributes.position.array;
+    for (let i = 0; i < speeds.length; i++) {
+        const offset = i * 6;
+        positions[offset + 1] -= speeds[i] * delta;
+        positions[offset + 4] = positions[offset + 1] - lineLength;
+        positions[offset] += delta * 3;
+        positions[offset + 3] = positions[offset];
+        if (positions[offset + 1] < -12) {
+            positions[offset] = positions[offset + 3] = (weatherRandom() - .5) * 56;
+            positions[offset + 1] = 28 + weatherRandom() * 24;
+            positions[offset + 4] = positions[offset + 1] - lineLength;
+            positions[offset + 2] = positions[offset + 5] = (weatherRandom() - .5) * 56;
+        }
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+}
+
+function triggerStormLightning() {
+    const candidates = [];
+    if (player && player.health > 0) {
+        candidates.push({ username: userName, x: player.x, y: player.y + (player.height || 1.8), z: player.z });
+    }
+    if (typeof peers !== "undefined" && typeof userPositions !== "undefined") {
+        for (const [username, peer] of peers.entries()) {
+            if (username === userName || !peer.dc || peer.dc.readyState !== "open") continue;
+            const position = userPositions[username];
+            if (!position || position.world !== worldName || position.health <= 0 ||
+                !Number.isFinite(position.targetX) || !Number.isFinite(position.targetY) ||
+                !Number.isFinite(position.targetZ) ||
+                (Number.isFinite(position.lastUpdate) && performance.now() - position.lastUpdate > 5000)) continue;
+            candidates.push({
+                username,
+                x: position.targetX,
+                y: position.targetY + 1.8,
+                z: position.targetZ
+            });
+        }
+    }
+    if (!candidates.length) return;
+    const target = candidates[Math.floor(stormRandom() * candidates.length)];
+    const strike = {
+        type: "storm_lightning",
+        id: `${worldName}_${Date.now()}_${lightningEventCounter++}`,
+        world: worldName,
+        target: target.username,
+        x: target.x,
+        y: target.y,
+        z: target.z
+    };
+    showStormLightning(strike);
+    if (target.username === userName) {
+        if (typeof applyStormLightningDamage === "function") applyStormLightningDamage();
+    } else if (typeof sendToPlayer === "function") {
+        sendToPlayer(target.username, { type: "player_damage", damage: 19, attacker: "lightning", world: worldName });
+    }
+    if (typeof peers !== "undefined") {
+        const message = JSON.stringify(strike);
+        for (const peer of peers.values()) {
+            if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+        }
+    }
+}
+
+function showStormLightning(strike) {
+    if (!strike || typeof strike.id !== "string" ||
+        ![strike.x, strike.y, strike.z].every(Number.isFinite) ||
+        lightningEventIds.has(strike.id)) return;
+    lightningEventIds.add(strike.id);
+    if (lightningEventIds.size > 64) lightningEventIds.delete(lightningEventIds.values().next().value);
+    const random = makeSeededRandom(strike.id);
+    const points = [new THREE.Vector3(strike.x, strike.y + 90, strike.z)];
+    for (let i = 1; i < 8; i++) {
+        points.push(new THREE.Vector3(
+            strike.x + (random() - .5) * 12,
+            strike.y + 90 - i * 12,
+            strike.z + (random() - .5) * 12
+        ));
+    }
+    points.push(new THREE.Vector3(strike.x, strike.y, strike.z));
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ color: 0xeaf7ff, transparent: true, opacity: 1 });
+    const line = new THREE.Line(geometry, material);
+    scene.add(line);
+    lightningVisuals.push({ line, lifetime: .34 });
+    lightningFlash = .5;
+    const thunder = document.getElementById("rumble1");
+    if (thunder) safePlayAudioAt(thunder, strike, maxAudioDistance, 1.25);
+}
+
+function updateStormLightningVisuals(delta) {
+    lightningFlash = Math.max(0, lightningFlash - delta * 2.5);
+    for (let i = lightningVisuals.length - 1; i >= 0; i--) {
+        const visual = lightningVisuals[i];
+        visual.lifetime -= delta;
+        visual.line.material.opacity = Math.max(0, visual.lifetime / .34);
+        if (visual.lifetime <= 0) {
+            scene.remove(visual.line);
+            visual.line.geometry.dispose();
+            visual.line.material.dispose();
+            lightningVisuals.splice(i, 1);
+        }
+    }
 }
 
 function initSky() {
@@ -642,6 +787,21 @@ function initSky() {
         weatherParticles.geometry.dispose();
         weatherParticles.material.dispose();
     }
+    if (stormRainParticles) {
+        scene.remove(stormRainParticles);
+        stormRainParticles.geometry.dispose();
+        stormRainParticles.material.dispose();
+    }
+    for (const visual of lightningVisuals) {
+        scene.remove(visual.line);
+        visual.line.geometry.dispose();
+        visual.line.material.dispose();
+    }
+    lightningVisuals = [];
+    stormRainParticles = null;
+    stormRainSpeeds = null;
+    stormClouds = null;
+    stormRainOverhead = false;
     weatherParticles = null;
     weatherEnabled = false;
     weatherRandom = makeSeededRandom(worldSeed + "_weather");
@@ -655,6 +815,14 @@ function initSky() {
     cloudWeatherDuration = 90 + cloudWeatherRandom() * 150;
     cloudWeatherIntensity = cloudWeatherRandom() * .3;
     cloudWeatherTarget = cloudWeatherRandom();
+    stormRandom = makeSeededRandom(worldSeed + "_lightning");
+    lightningStormActive = false;
+    lightningTimer = 0;
+    lightningCheckInterval = 12 + stormRandom() * 18;
+    lightningEventCounter = 0;
+    lightningEventIds.clear();
+    lightningFlash = 0;
+    cloudsEnabled = !worldArchetype || worldArchetype.name !== "Moon";
     stormCloudColor = new THREE.Color(0x73869a);
     const e = makeSeededRandom(worldSeed + "_sky"),
         t = e(),
@@ -800,6 +968,32 @@ function initSky() {
         cloudFormations.add(formation);
     }
     clouds.add(cloudFormations);
+    stormClouds = new THREE.Group;
+    const stormCloudCount = 16;
+    for (let i = 0; i < stormCloudCount; i++) {
+        const width = 260 + 220 * e();
+        const depth = 150 + 140 * e();
+        const stormCloud = new THREE.Mesh(
+            new THREE.PlaneGeometry(width, depth),
+            new THREE.MeshBasicMaterial({
+                map: p,
+                color: skyProps.cloudColor.clone().lerp(new THREE.Color(0x333541), .72),
+                transparent: true,
+                opacity: 0,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            })
+        );
+        stormCloud.position.set(900 * (e() - .5), 180 + 70 * e(), 900 * (e() - .5));
+        stormCloud.rotation.x = -Math.PI / 2;
+        stormCloud.rotation.z = e() * Math.PI * 2;
+        stormCloud.userData.width = width;
+        stormCloud.userData.depth = depth;
+        stormCloud.userData.driftSpeed = 4 + 5 * makeSeededRandom(worldSeed + "_storm_cloud_speed_" + i)();
+        stormCloud.userData.rainBearing = e() < .48;
+        stormClouds.add(stormCloud);
+    }
+    clouds.add(stormClouds);
     scene.add(clouds);
 }
 
@@ -816,6 +1010,7 @@ function computeIsNightNow() {
 }
 
 function updateSky(e) {
+    updateStormLightningVisuals(e);
     const t = new Date;
     const inSpace = player.y >= 5000;
     const o = (t.getHours() + t.getMinutes() / 60) / 24 * Math.PI * 2,
@@ -849,11 +1044,35 @@ function updateSky(e) {
             });
             return;
         }
+        if (t === stormClouds) {
+            t.children.forEach(stormCloud => {
+                stormCloud.position.x = modWrap(stormCloud.position.x + e * stormCloud.userData.driftSpeed + 450, 900) - 450;
+                stormCloud.visible = weatherEnabled && weatherIntensity > .04;
+                stormCloud.material.opacity = stormCloud.visible ? weatherIntensity * .78 : 0;
+            });
+            return;
+        }
         t.position.x = modWrap(t.position.x + e * t.userData.driftSpeed, 8e3);
         t.material.color.copy(t.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .65);
         t.material.opacity = Math.min(1, t.userData.clearOpacity * cloudWeatherIntensity * (1 + weatherIntensity * .2));
     }));
-    clouds.visible = !inSpace;
+    cloudsEnabled = !worldArchetype || worldArchetype.name !== "Moon";
+    clouds.visible = !inSpace && cloudsEnabled;
+    const playerCloudX = player.x - camera.position.x;
+    const playerCloudZ = player.z - camera.position.z;
+    stormCloudOverhead = false;
+    stormRainOverhead = false;
+    if (weatherEnabled && weatherIntensity > .08 && stormClouds) {
+        for (const stormCloud of stormClouds.children) {
+            if (
+            Math.abs(stormCloud.position.x - playerCloudX) < stormCloud.userData.width * .5 &&
+                Math.abs(stormCloud.position.z - playerCloudZ) < stormCloud.userData.depth * .5
+            ) {
+                stormCloudOverhead = true;
+                if (stormCloud.userData.rainBearing) stormRainOverhead = true;
+            }
+        }
+    }
     const hasWeatherPeers = typeof peers !== "undefined" && peers.size > 0;
     const isWeatherAuthority = !hasWeatherPeers || typeof isAuthority !== "function" || isAuthority(worldName);
     if (isWeatherAuthority) {
@@ -871,8 +1090,19 @@ function updateSky(e) {
             weatherTimer = 0;
             weatherDuration = 75 + weatherRandom() * 150;
             weatherTarget = weatherRandom() < .42 ? .55 + weatherRandom() * .35 : 0;
+            lightningStormActive = weatherTarget > .45 && stormRandom() < .18;
+            lightningTimer = 0;
+            lightningCheckInterval = 12 + stormRandom() * 18;
         }
         weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, e * .08);
+    }
+    if (weatherEnabled && isWeatherAuthority && lightningStormActive && weatherIntensity > .5) {
+        lightningTimer += e;
+        if (lightningTimer >= lightningCheckInterval) {
+            lightningTimer = 0;
+            lightningCheckInterval = 12 + stormRandom() * 18;
+            if (stormRandom() < .08) triggerStormLightning();
+        }
     }
     if (hasWeatherPeers && isWeatherAuthority) {
         weatherSyncTimer += e;
@@ -889,7 +1119,9 @@ function updateSky(e) {
                 cloudTimer: cloudWeatherTimer,
                 cloudDuration: cloudWeatherDuration,
                 cloudIntensity: cloudWeatherIntensity,
-                cloudTarget: cloudWeatherTarget
+                cloudTarget: cloudWeatherTarget,
+                lightningStorm: lightningStormActive,
+                lightningTimer
             });
             for (const peer of peers.values()) {
                 if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
@@ -900,23 +1132,13 @@ function updateSky(e) {
         weatherParticles.visible = weatherEnabled && !inSpace && !window.playerInWater && weatherIntensity > .08;
         weatherParticles.material.opacity = weatherIntensity * .65;
         weatherParticles.position.copy(camera.position);
-        if (weatherParticles.visible) {
-            const positions = weatherParticles.geometry.attributes.position.array;
-            for (let i = 0; i < weatherFallSpeeds.length; i++) {
-                const offset = i * 6;
-                positions[offset + 1] -= weatherFallSpeeds[i] * e;
-                positions[offset + 4] = positions[offset + 1] - 1.8;
-                positions[offset] += e * 3;
-                positions[offset + 3] = positions[offset];
-                if (positions[offset + 1] < -12) {
-                    positions[offset] = positions[offset + 3] = (weatherRandom() - .5) * 56;
-                    positions[offset + 1] = 28 + weatherRandom() * 24;
-                    positions[offset + 4] = positions[offset + 1] - 1.8;
-                    positions[offset + 2] = positions[offset + 5] = (weatherRandom() - .5) * 56;
-                }
-            }
-            weatherParticles.geometry.attributes.position.needsUpdate = true;
-        }
+        advanceWeatherParticles(weatherParticles, weatherFallSpeeds, e, 1.8);
+    }
+    if (stormRainParticles) {
+        stormRainParticles.visible = weatherEnabled && !inSpace && !window.playerInWater && stormRainOverhead;
+        stormRainParticles.material.opacity = stormRainParticles.visible ? weatherIntensity * .65 : 0;
+        stormRainParticles.position.copy(camera.position);
+        advanceWeatherParticles(stormRainParticles, stormRainSpeeds, e, 2.4);
     }
     const r = Math.max(0, n);
 
@@ -938,21 +1160,27 @@ function updateSky(e) {
     window.undergroundTransition += (targetTransition - window.undergroundTransition) * e * 5.0;
     let ug = window.undergroundTransition;
     for (const body of [...skyProps.suns, ...skyProps.moons]) {
-        body.light.intensity = body.baseIntensity * (1 - ug);
+        const stormDimming = stormCloudOverhead ? weatherIntensity * .18 : 0;
+        body.light.intensity = body.baseIntensity * (1 - ug) * (1 - stormDimming);
         body.light.castShadow = body.light.intensity > 0.02;
     }
 
+    const stormDimming = stormCloudOverhead ? weatherIntensity * .18 : 0;
+    const lightningBrightness = Math.min(1, lightningFlash * 5);
     let currentBgColor = (new THREE.Color).copy(skyProps.dayColor).lerp(skyProps.nightColor, 1 - r);
-    scene.background = inSpace ? new THREE.Color(0x000000) : currentBgColor.lerp(new THREE.Color(0x000000), ug);
+    scene.background = inSpace
+        ? new THREE.Color(0x000000)
+        : currentBgColor.lerp(new THREE.Color(0x000000), Math.min(1, ug + stormDimming))
+            .lerp(new THREE.Color(0xffffff), lightningBrightness);
     let s = (n - -.2) / .4;
     s = Math.max(0, Math.min(1, s));
     if (inSpace) s = 0;
     const i = scene.getObjectByProperty("type", "AmbientLight"),
         d = scene.getObjectByProperty("type", "HemisphereLight");
-    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug)), d) {
+    if (i && (i.intensity = (.01 + .19 * s) * (1 - ug) * (1 - stormDimming) + lightningBrightness * .8), d) {
         const e = .6,
             t = .02;
-        d.intensity = (t + (e - t) * s) * (1 - ug);
+        d.intensity = (t + (e - t) * s) * (1 - ug) * (1 - stormDimming) + lightningBrightness * .7;
     }
     for (let o = blockParticles.length - 1; o >= 0; o--) {
         const a = blockParticles[o];

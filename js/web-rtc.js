@@ -1248,6 +1248,12 @@ function setupDataChannel(e, t) {
                         applyPlanetWeatherState(s);
                     }
                     break;
+                case "storm_lightning":
+                    if (typeof s.world === "string" && s.world === worldName &&
+                        !isAuthority(s.world) && typeof showStormLightning === "function") {
+                        showStormLightning(s);
+                    }
+                    break;
                 case "player_respawn":
                     const c = s.username;
                     if (isHost) {
@@ -1822,6 +1828,8 @@ function setupDataChannel(e, t) {
                         const attacker = s.attacker || 'another player';
                         if (s.attacker === 'lava') {
                             addMessage("Burning in lava! HP: " + player.health, 1e3)
+                        } else if (s.attacker === "lightning") {
+                            addMessage("Struck by lightning! -19 HP", 2e3);
                         } else {
                             addMessage("Hit by " + attacker + "! HP: " + player.health, 1e3);
                         }
