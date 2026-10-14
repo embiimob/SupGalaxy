@@ -346,6 +346,7 @@ Chunk.prototype.idx = function (e, t, o) {
         const o = Math.min(32, Math.floor(t.lavaCount / 4)),
             a = createSmokeParticle(t.x, t.y, t.z, o);
         a.userData.chunkKey = e.key, a.userData.ambientSmoke = true,
+            a.userData.volcano = t,
             a.userData.ambientSmokePosition = { x: t.x, z: t.z },
             smokeParticles.push(a), scene.add(a)
     }

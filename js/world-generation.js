@@ -1378,7 +1378,7 @@ function createEruptionSmoke(e, t, o, a) {
 
 function handleBoulderEruption(e) {
     const t = createEruptionSmoke(e.volcano.x, e.volcano.y, e.volcano.z, 150);
-    t.userData.chunkKey = e.volcano.chunkKey, t.createdAt = Date.now(), smokeParticles.push(t), scene.add(t);
+    t.userData.chunkKey = e.volcano.chunkKey, t.userData.volcano = e.volcano, t.createdAt = Date.now(), smokeParticles.push(t), scene.add(t);
     const o = makeSeededRandom(e.seed),
         a = 10 + Math.floor(10 * o());
     for (let t = 0; t < a; t++) {
