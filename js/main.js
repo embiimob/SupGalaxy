@@ -1824,6 +1824,9 @@ function openCrafting() {
     const craftModal = document.getElementById("craftModal");
     craftModal.style.display = "flex"; // Use flex as per new CSS
     const recipeList = document.getElementById("recipeList");
+    const expandedCategories = new Set(
+        [...recipeList.querySelectorAll(".recipe-category[open]")].map(details => details.dataset.category)
+    );
     recipeList.innerHTML = "";
     const categories = [
         { id: "construction", title: "Construction & Furniture" },
@@ -1834,6 +1837,8 @@ function openCrafting() {
     for (const category of categories) {
         const details = document.createElement("details");
         details.className = "recipe-category";
+        details.dataset.category = category.id;
+        details.open = expandedCategories.has(category.id);
         const summary = document.createElement("summary");
         summary.textContent = category.title;
         const recipes = document.createElement("div");
@@ -3691,8 +3696,8 @@ function interactWithFurniture(anchor) {
         player.activityFacing = anchor.facing || 0;
         const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][player.activityFacing];
         if (anchor.kind === "lie") {
-            player.x = anchor.x + .1 + heading[0] * 1.1;
-            player.z = anchor.z + .1 + heading[1] * 1.1;
+            player.x = anchor.x + .1 + heading[0] * 1.5;
+            player.z = anchor.z + .1 + heading[1] * 1.5;
             player.activityBaseY = anchor.y + .58;
         } else {
             player.x = anchor.x + .1;
@@ -3714,6 +3719,24 @@ function interactWithFurniture(anchor) {
 
 function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw = 0) {
     if (!avatar) return;
+    let poseParts = avatar.userData.furniturePoseParts;
+    if (activity === "sit" && !poseParts) {
+        poseParts = avatar.userData.furniturePoseParts = avatar.children.slice(0, 6).map(part => ({
+            part,
+            geometry: part.geometry,
+            position: part.position.clone()
+        }));
+    }
+    if (poseParts && activity !== "sit") {
+        for (const posePart of poseParts) {
+            if (posePart.sittingGeometry) {
+                posePart.part.geometry = posePart.geometry;
+                posePart.sittingGeometry.dispose();
+                posePart.sittingGeometry = null;
+            }
+            posePart.part.position.copy(posePart.position);
+        }
+    }
     if (!activity) {
         avatar.rotation.set(0, defaultYaw, 0);
         return;
@@ -3730,11 +3753,21 @@ function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw 
             : avatar.position.y + .58;
     } else {
         avatar.rotation.set(0, Math.PI + direction * Math.PI / 2, 0);
-        avatar.position.y += .28;
+        for (const posePart of poseParts.slice(0, 2)) {
+            if (!posePart.sittingGeometry) {
+                posePart.sittingGeometry = posePart.geometry.clone();
+                posePart.sittingGeometry.computeBoundingBox();
+                const legLength = posePart.sittingGeometry.boundingBox.max.y - posePart.sittingGeometry.boundingBox.min.y;
+                posePart.sittingGeometry.translate(0, -legLength / 2, 0);
+                posePart.sitY = posePart.position.y * 2;
+            }
+            posePart.part.geometry = posePart.sittingGeometry;
+            posePart.part.position.y = posePart.sitY;
+        }
     }
     if (avatar.children[0] && avatar.children[1]) {
-        avatar.children[0].rotation.x = activity === "sit" ? 1.05 : 0;
-        avatar.children[1].rotation.x = activity === "sit" ? 1.05 : 0;
+        avatar.children[0].rotation.x = activity === "sit" ? Math.PI / 2 : 0;
+        avatar.children[1].rotation.x = activity === "sit" ? Math.PI / 2 : 0;
     }
     if (avatar.children[2]) {
         avatar.children[2].rotation.x = activity === "sit" ? -.12 : 0;
