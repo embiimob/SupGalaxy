@@ -6,9 +6,12 @@ var weatherParticles = null,
     weatherDuration = 0,
     weatherIntensity = 0,
     weatherTarget = 0,
+    weatherSyncTimer = 0,
     weatherPositions = null,
     weatherFallSpeeds = null,
-    stormCloudColor = null;
+    stormCloudColor = null,
+    cloudFormations = null,
+    cloudCoverage = 1;
 
 function makeSeededRandom(e) {
     for (var t = 2166136261, o = 0; o < e.length; o++) t = Math.imul(t ^ e.charCodeAt(o), 16777619) >>> 0;
@@ -586,6 +589,22 @@ function setPlanetWeatherEnabled(enabled) {
     if (weatherParticles) weatherParticles.visible = weatherEnabled && weatherIntensity > .25;
 }
 
+function applyPlanetWeatherState(state) {
+    if (!state || typeof state.enabled !== "boolean" ||
+        !Number.isFinite(state.intensity) || !Number.isFinite(state.target) ||
+        !Number.isFinite(state.timer) || !Number.isFinite(state.duration)) return;
+    weatherEnabled = state.enabled;
+    weatherIntensity = Math.max(0, Math.min(1, state.intensity));
+    weatherTarget = Math.max(0, Math.min(1, state.target));
+    weatherTimer = Math.max(0, state.timer);
+    weatherDuration = Math.max(.1, state.duration);
+    if (weatherEnabled && !weatherParticles) createWeatherParticles();
+    if (!weatherEnabled) {
+        weatherIntensity = 0;
+        weatherTarget = 0;
+    }
+}
+
 function createWeatherParticles() {
     const count = 180;
     const geometry = new THREE.BufferGeometry();
@@ -621,6 +640,7 @@ function initSky() {
     weatherDuration = 45 + weatherRandom() * 90;
     weatherIntensity = 0;
     weatherTarget = 0;
+    weatherSyncTimer = 0;
     stormCloudColor = new THREE.Color(0x73869a);
     const e = makeSeededRandom(worldSeed + "_sky"),
         t = e(),
@@ -634,6 +654,7 @@ function initSky() {
         suns: [],
         moons: []
     };
+    cloudCoverage = makeSeededRandom(worldSeed + "_cloud_coverage")();
     const r = 1 + Math.floor(3 * e());
     for (let t = 0; t < r; t++) {
         const t = 80 + 120 * e(),
@@ -725,7 +746,7 @@ function initSky() {
             map: p,
             color: skyProps.cloudColor,
             transparent: !0,
-            opacity: .6 + .3 * e(),
+            opacity: (.6 + .3 * e()) * cloudCoverage,
             side: THREE.DoubleSide
         }));
         t.position.set(8e3 * (e() - .5), 180 + 180 * e(), 8e3 * (e() - .5));
@@ -733,8 +754,33 @@ function initSky() {
         t.rotation.z = e() * Math.PI * 2;
         t.userData.clearColor = t.material.color.clone();
         t.userData.clearOpacity = t.material.opacity;
+        t.userData.driftSpeed = 15 + 10 * e();
         clouds.add(t);
     }
+    cloudFormations = new THREE.Group;
+    const cloudLobeGeometry = new THREE.SphereGeometry(1, 10, 8);
+    for (let i = 0; i < Math.round(cloudCoverage * 24); i++) {
+        const formation = new THREE.Group;
+        formation.position.set(220 * (e() - .5), 65 + 35 * e(), 220 * (e() - .5));
+        formation.userData.driftSpeed = 2 + 5 * e();
+        const lobeCount = 4 + Math.floor(4 * e());
+        for (let j = 0; j < lobeCount; j++) {
+            const lobeMaterial = new THREE.MeshStandardMaterial({
+                color: skyProps.cloudColor.clone().lerp(new THREE.Color(0xffffff), .2 + .45 * e()),
+                roughness: 1
+            });
+            const lobe = new THREE.Mesh(cloudLobeGeometry, lobeMaterial);
+            const scale = 9 + 14 * e();
+            lobe.position.set((e() - .5) * 34, e() * 6, (e() - .5) * 22);
+            lobe.scale.set(scale * (1 + .6 * e()), scale * (.45 + .35 * e()), scale);
+            lobe.userData.clearColor = lobe.material.color.clone();
+            lobe.castShadow = true;
+            lobe.receiveShadow = false;
+            formation.add(lobe);
+        }
+        cloudFormations.add(formation);
+    }
+    clouds.add(cloudFormations);
     scene.add(clouds);
 }
 
@@ -774,12 +820,21 @@ function updateSky(e) {
     })), stars.visible = true, stars.children.forEach(starsObject => {
         starsObject.material.opacity = isNight || inSpace ? 1 : .16;
     }), stars.rotation.y += .005 * e, clouds.children.forEach((t => {
-        t.position.x = modWrap(t.position.x + e * (15 + 10 * Math.random()), 8e3);
+        if (t === cloudFormations) {
+            t.children.forEach(formation => {
+                formation.position.x = modWrap(formation.position.x + e * formation.userData.driftSpeed + 110, 220) - 110;
+                formation.children.forEach(lobe => lobe.material.color.copy(lobe.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .4));
+            });
+            return;
+        }
+        t.position.x = modWrap(t.position.x + e * t.userData.driftSpeed, 8e3);
         t.material.color.copy(t.userData.clearColor).lerp(stormCloudColor, weatherIntensity * .65);
         t.material.opacity = t.userData.clearOpacity * (1 + weatherIntensity * .2);
     }));
     clouds.visible = !inSpace;
-    if (weatherEnabled) {
+    const hasWeatherPeers = typeof peers !== "undefined" && peers.size > 0;
+    const isWeatherAuthority = !hasWeatherPeers || typeof isAuthority !== "function" || isAuthority(worldName);
+    if (weatherEnabled && isWeatherAuthority) {
         weatherTimer += e;
         if (weatherTimer >= weatherDuration) {
             weatherTimer = 0;
@@ -788,8 +843,26 @@ function updateSky(e) {
         }
         weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, e * .08);
     }
+    if (hasWeatherPeers && isWeatherAuthority) {
+        weatherSyncTimer += e;
+        if (weatherSyncTimer >= 1) {
+            weatherSyncTimer = 0;
+            const message = JSON.stringify({
+                type: "weather_sync",
+                world: worldName,
+                enabled: weatherEnabled,
+                intensity: weatherIntensity,
+                target: weatherTarget,
+                timer: weatherTimer,
+                duration: weatherDuration
+            });
+            for (const peer of peers.values()) {
+                if (peer.dc && peer.dc.readyState === "open") peer.dc.send(message);
+            }
+        }
+    }
     if (weatherParticles) {
-        weatherParticles.visible = weatherEnabled && !inSpace && weatherIntensity > .08;
+        weatherParticles.visible = weatherEnabled && !inSpace && !window.playerInWater && weatherIntensity > .08;
         weatherParticles.material.opacity = weatherIntensity * .65;
         weatherParticles.position.copy(camera.position);
         if (weatherParticles.visible) {
@@ -818,10 +891,10 @@ function updateSky(e) {
         if (context.isUnderground) {
             if (!context.centerCovered || context.depth <= 2) {
                 targetTransition = 0.25;
-            } else if (context.depth >= 4) {
+            } else if (context.depth >= 5) {
                 targetTransition = 1.0;
             } else {
-                targetTransition = 0.25 + ((context.depth - 2) / 2.0) * 0.75;
+                targetTransition = 0.25 + ((context.depth - 2) / 3.0) * 0.75;
             }
         }
     }

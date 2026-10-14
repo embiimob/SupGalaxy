@@ -1242,6 +1242,12 @@ function setupDataChannel(e, t) {
                             }
                         }
                     break;
+                case "weather_sync":
+                    if (typeof s.world === "string" && s.world === worldName &&
+                        !isAuthority(s.world) && typeof applyPlanetWeatherState === "function") {
+                        applyPlanetWeatherState(s);
+                    }
+                    break;
                 case "player_respawn":
                     const c = s.username;
                     if (isHost) {
