@@ -7,6 +7,35 @@ function ChunkManager(e) {
     console.log("[WorldGen] Initializing ChunkManager with seed:", e), this.seed = e, this.noise = makeNoise(e), this.blockNoise = makeNoise(e + "_block"), this.chunks = new Map, this.lastPcx = null, this.lastPcz = null, this.lastPlayerX = null, this.lastPlayerY = null, this.lastPlayerZ = null, this.lastPlayerMovementTime = 0, this.pendingDistantUnload = null, this.pendingDeltas = new Map, console.log("[ChunkManager] Using existing meshGroup for chunk rendering")
 }
 
+function createSeededFurnitureFabricMaterial(seed, blockId, color) {
+    const random = makeSeededRandom(`${seed}_furniture_fabric_${blockId}`);
+    const fabricColor = new THREE.Color(color);
+    const hsl = fabricColor.getHSL({});
+    fabricColor.setHSL(
+        (hsl.h + (random() - .5) * .12 + 1) % 1,
+        Math.max(.25, Math.min(.9, hsl.s + (random() - .5) * .2)),
+        Math.max(.18, Math.min(.82, hsl.l + (random() - .5) * .24))
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 32;
+    const context = canvas.getContext("2d");
+    const shade = amount => fabricColor.clone().multiplyScalar(amount).getStyle();
+    context.fillStyle = shade(.9);
+    context.fillRect(0, 0, 32, 32);
+    for (let y = 0; y < 32; y += 4) {
+        context.fillStyle = shade(.78 + random() * .34);
+        context.fillRect(0, y, 32, 2);
+        for (let x = 0; x < 32; x += 4) {
+            context.fillStyle = shade(.72 + random() * .52);
+            context.fillRect(x, y + 2, 2, 2);
+        }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return new THREE.MeshStandardMaterial({ map: texture, roughness: .92 });
+}
+
 function createFusionReactorMaterial(seed, blockId) {
     const material = new THREE.MeshStandardMaterial({
         map: createBlockTexture(seed, blockId),
@@ -551,10 +580,10 @@ Chunk.prototype.idx = function (e, t, o) {
                     } else if (BLOCKS[w].model === "bed") {
                         const base = new THREE.Mesh(new THREE.BoxGeometry(1.82, .24, .88), modelMaterial);
                         base.position.set(.5, .22, 0);
-                        const mattressMaterial = new THREE.MeshStandardMaterial({ color: 0xb65555, roughness: .9 });
+                        const mattressMaterial = createSeededFurnitureFabricMaterial(b, 205, "#b65555");
                         const mattress = new THREE.Mesh(new THREE.BoxGeometry(1.7, .2, .82), mattressMaterial);
                         mattress.position.set(.5, .44, 0);
-                        const pillow = new THREE.Mesh(new THREE.BoxGeometry(.35, .12, .64), new THREE.MeshStandardMaterial({ color: 0xf2e7d5 }));
+                        const pillow = new THREE.Mesh(new THREE.BoxGeometry(.35, .12, .64), createSeededFurnitureFabricMaterial(b, 1205, "#f2e7d5"));
                         pillow.position.set(-.22, .6, 0);
                         model.add(base, mattress, pillow);
                         for (const x of [-.38, 1.38]) {
@@ -565,7 +594,7 @@ Chunk.prototype.idx = function (e, t, o) {
                     } else if (BLOCKS[w].model === "couch") {
                         const frame = new THREE.Mesh(new THREE.BoxGeometry(1.82, .34, .88), modelMaterial);
                         frame.position.set(.5, .28, 0);
-                        const fabric = new THREE.MeshStandardMaterial({ color: 0x547c9b, roughness: .92 });
+                        const fabric = createSeededFurnitureFabricMaterial(b, 217, "#547c9b");
                         const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.62, .18, .72), fabric);
                         cushion.position.set(.5, .54, -.04);
                         const back = new THREE.Mesh(new THREE.BoxGeometry(1.72, .62, .18), fabric);

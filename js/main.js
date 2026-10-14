@@ -1793,7 +1793,7 @@ function completeCraft(e, t) {
         }
     }
     const d = getCraftOriginSeed(a);
-    addToInventory(e.out.id, e.out.count, d), addMessage("Crafted " + BLOCKS[e.out.id].name), craftingState = null, document.getElementById("craftModal").style.display = "none", isPromptOpen = !1, toggleInventory(), updateHotbarUI()
+    addToInventory(e.out.id, e.out.count, d), addMessage("Crafted " + BLOCKS[e.out.id].name),     craftingState = null, toggleInventory(), updateHotbarUI(), openCrafting()
 }
 
 function initiateCraft(e) {
@@ -1923,8 +1923,7 @@ function openCrafting() {
             craftButton.innerText = "Craft";
             craftButton.onclick = () => {
                 initiateCraft(recipe);
-                // Refresh the crafting menu after attempting a craft
-                openCrafting();
+                if (!craftingState) openCrafting();
             };
             statusDiv.appendChild(craftButton);
         }
@@ -1942,7 +1941,7 @@ function openCrafting() {
 function getRecipeCategory(recipe) {
     const block = BLOCKS[recipe.out.id];
     const blockId = recipe.out.id;
-    if ([100, 101, 102, 103, 104, 116, 117, 152].includes(blockId)) {
+    if ([100, 101, 102, 103, 104, 105, 106, 107, 116, 117, 142, 152, 172].includes(blockId)) {
         return "raw";
     }
     if (block?.itemOnly || [114, 115, 120, 121, 126, 127, 128, 133, 174, 175, 178, 179].includes(blockId)) {

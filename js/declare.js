@@ -317,7 +317,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             strength: 1
         },
         121: {
-            name: "Laser Gun",
+            name: "Laser Gun Red",
             color: "#ff0000",
             hand_attachable: !0,
             strength: 1
@@ -380,7 +380,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             fusionReactor: true
         },
         126: {
-            name: "Green Laser Gun",
+            name: "Laser Gun Green",
             color: "#00ff00",
             hand_attachable: !0,
             strength: 1
@@ -723,7 +723,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
             meleeMultiplier: 2
         },
         175: {
-            name: "Blue Iron Pick",
+            name: "Iron Pick Blue",
             color: "#4da6ff",
             itemOnly: !0,
             hand_attachable: !0,
