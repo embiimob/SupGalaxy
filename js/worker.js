@@ -2097,7 +2097,10 @@ self.onmessage = async function(e) {
                     worldArchetype = data.archetype;
                     gravity = data.archetype.gravity;
                     if (typeof setPlanetWeatherEnabled === 'function') {
-                        setPlanetWeatherEnabled(data.archetype.name === 'Earth' || data.archetype.name === 'Massive');
+                        setPlanetWeatherEnabled(
+                            data.archetype.name === 'Earth' || data.archetype.name === 'Massive',
+                            data.archetype.name !== 'Moon'
+                        );
                     }
                     document.getElementById('worldLabel').textContent = `${worldName} (${worldArchetype.name})`;
                 }

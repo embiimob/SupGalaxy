@@ -1555,7 +1555,7 @@ const lightManager = {
         for (let offsetX = -1; offsetX <= 1; offsetX++) {
             for (let offsetZ = -1; offsetZ <= 1; offsetZ++) {
                 const surfaceY = this.getOpaqueSurfaceY(x + offsetX, z + offsetZ);
-                if (surfaceY > playerY + 1) {
+                if (surfaceY > playerY + 2) {
                     coveredColumns++;
                     nearestCeilingDepth = Math.min(nearestCeilingDepth, surfaceY - 1 - playerY);
                     if (offsetX === 0 && offsetZ === 0) centerCovered = true;

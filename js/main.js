@@ -3837,6 +3837,18 @@ function updateBlockDamageVisuals(x, y, z, hits) {
     safePlayAudioAt(soundElement, { x, y, z });
 }
 
+function applyStormLightningDamage() {
+    if (!player || player.health <= 0 || isDying || deathScreenShown || gameSessionEnded) return;
+    player.health = Math.max(0, player.health - 19);
+    lastDamageTime = Date.now();
+    const healthLabel = document.getElementById("health");
+    if (healthLabel) healthLabel.innerText = player.health;
+    updateHealthBar();
+    addMessage("Struck by lightning! -19 HP", 2000);
+    flashDamageEffect();
+    if (player.health <= 0) handlePlayerDeath("lightning");
+}
+
 function handlePlayerHit(e) {
     const damage = getPickaxeMultiplier(e.toolId);
     const t = e.username,
