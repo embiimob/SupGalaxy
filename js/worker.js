@@ -285,6 +285,8 @@ const BLOCKS = {
         242: { name: 'Window Pane Green', color: '#57c84d', transparent: true },
         243: { name: 'Window Pane Yellow', color: '#fff95b', transparent: true },
         244: { name: 'Window Pane Rose', color: '#d88ea2', transparent: true },
+        245: { name: 'Sashimi', color: '#ff5f8f', itemOnly: true },
+        246: { name: 'Liquid Blue', color: '#4da6ff', itemOnly: true },
         249: { name: 'Village Plaster', color: '#d6c8a8' },
         250: { name: 'Village Timber Frame', color: '#704425' },
         251: { name: 'Thatch Roof', color: '#b99a58' },

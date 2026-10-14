@@ -432,7 +432,8 @@ async function applySaveFile(e, t, o) {
         player.x = t.profile.x;
         player.y = t.profile.y;
         player.z = t.profile.z;
-        player.health = t.profile.health;
+        player.maxHealth = t.profile.maxHealth === 9999 ? 9999 : 999;
+        player.health = Number.isFinite(t.profile.health) ? Math.min(player.maxHealth, t.profile.health) : 20;
         player.score = t.profile.score;
         INVENTORY = t.profile.inventory;
         restorePetSaveData(t.profile.pets);
@@ -1823,6 +1824,9 @@ function openCrafting() {
     const craftModal = document.getElementById("craftModal");
     craftModal.style.display = "flex"; // Use flex as per new CSS
     const recipeList = document.getElementById("recipeList");
+    const expandedCategories = new Set(
+        [...recipeList.querySelectorAll(".recipe-category[open]")].map(details => details.dataset.category)
+    );
     recipeList.innerHTML = "";
     const categories = [
         { id: "construction", title: "Construction & Furniture" },
@@ -1833,6 +1837,8 @@ function openCrafting() {
     for (const category of categories) {
         const details = document.createElement("details");
         details.className = "recipe-category";
+        details.dataset.category = category.id;
+        details.open = expandedCategories.has(category.id);
         const summary = document.createElement("summary");
         summary.textContent = category.title;
         const recipes = document.createElement("div");
@@ -3440,13 +3446,32 @@ function onPointerDown(e) {
         }
         return
     }
-    if (0 === e.button && t && 122 === t.id) return player.health = Math.min(999, player.health + 5), updateHealthBar(), document.getElementById("health").innerText = player.health, addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && 122 === t.id) return player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 5), updateHealthBar(), addMessage("Consumed Honey! +5 HP", 1500), INVENTORY[selectedHotIndex].count--, INVENTORY[selectedHotIndex].count <= 0 && (INVENTORY[selectedHotIndex] = null), void updateHotbarUI();
+    if (0 === e.button && t && t.id === 245) {
+        player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 10);
+        updateHealthBar();
+        addMessage("Ate Sashimi! +10 HP", 1500);
+        t.count--;
+        if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
+    if (0 === e.button && t && t.id === 246) {
+        const previousHealth = player.health;
+        if (player.health + 100 > 999) player.maxHealth = 9999;
+        player.health = Math.min(player.maxHealth, player.health + 100);
+        updateHealthBar();
+        addMessage(`Consumed Liquid Blue! +${player.health - previousHealth} HP${player.maxHealth > 999 ? "; maximum HP increased to 9999" : ""}`, 2500);
+        t.count--;
+        if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
+        updateHotbarUI();
+        return;
+    }
     if (0 === e.button && t && (t.id === 137 || t.id === 138)) {
         getCurrentWorldState().fishInventoryDirty = true;
         updateSaveChangesButton();
-        player.health = Math.min(999, player.health + 2);
+        player.health = player.health >= 999 ? player.health : Math.min(999, player.health + 2);
         updateHealthBar();
-        document.getElementById("health").innerText = player.health;
         addMessage(`Ate ${BLOCKS[t.id].name}! +2 HP`, 1500);
         t.count--;
         if (t.count <= 0) INVENTORY[selectedHotIndex] = null;
@@ -3671,8 +3696,8 @@ function interactWithFurniture(anchor) {
         player.activityFacing = anchor.facing || 0;
         const heading = [[0, 1], [1, 0], [0, -1], [-1, 0]][player.activityFacing];
         if (anchor.kind === "lie") {
-            player.x = anchor.x + .1 + heading[0] * 1.1;
-            player.z = anchor.z + .1 + heading[1] * 1.1;
+            player.x = anchor.x + .1 + heading[0] * 1.5;
+            player.z = anchor.z + .1 + heading[1] * 1.5;
             player.activityBaseY = anchor.y + .58;
         } else {
             player.x = anchor.x + .1;
@@ -3694,6 +3719,24 @@ function interactWithFurniture(anchor) {
 
 function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw = 0) {
     if (!avatar) return;
+    let poseParts = avatar.userData.furniturePoseParts;
+    if (activity === "sit" && !poseParts) {
+        poseParts = avatar.userData.furniturePoseParts = avatar.children.slice(0, 6).map(part => ({
+            part,
+            geometry: part.geometry,
+            position: part.position.clone()
+        }));
+    }
+    if (poseParts && activity !== "sit") {
+        for (const posePart of poseParts) {
+            if (posePart.sittingGeometry) {
+                posePart.part.geometry = posePart.geometry;
+                posePart.sittingGeometry.dispose();
+                posePart.sittingGeometry = null;
+            }
+            posePart.part.position.copy(posePart.position);
+        }
+    }
     if (!activity) {
         avatar.rotation.set(0, defaultYaw, 0);
         return;
@@ -3710,11 +3753,21 @@ function applyFurniturePose(avatar, activity, facing, activityBaseY, defaultYaw 
             : avatar.position.y + .58;
     } else {
         avatar.rotation.set(0, Math.PI + direction * Math.PI / 2, 0);
-        avatar.position.y += .28;
+        for (const posePart of poseParts.slice(0, 2)) {
+            if (!posePart.sittingGeometry) {
+                posePart.sittingGeometry = posePart.geometry.clone();
+                posePart.sittingGeometry.computeBoundingBox();
+                const legLength = posePart.sittingGeometry.boundingBox.max.y - posePart.sittingGeometry.boundingBox.min.y;
+                posePart.sittingGeometry.translate(0, -legLength / 2, 0);
+                posePart.sitY = posePart.position.y * 2;
+            }
+            posePart.part.geometry = posePart.sittingGeometry;
+            posePart.part.position.y = posePart.sitY;
+        }
     }
     if (avatar.children[0] && avatar.children[1]) {
-        avatar.children[0].rotation.x = activity === "sit" ? 1.05 : 0;
-        avatar.children[1].rotation.x = activity === "sit" ? 1.05 : 0;
+        avatar.children[0].rotation.x = activity === "sit" ? Math.PI / 2 : 0;
+        avatar.children[1].rotation.x = activity === "sit" ? Math.PI / 2 : 0;
     }
     if (avatar.children[2]) {
         avatar.children[2].rotation.x = activity === "sit" ? -.12 : 0;
@@ -4434,11 +4487,11 @@ function getOrientedBuildBlockId(blockId, facing) {
     if (blockId === 189) return [189, 191, 193, 195][facing];
     if (blockId === 197) return [197, 198, 199, 200][facing];
     if (blockId === 201) return [201, 202, 203, 204][facing];
-    if (blockId === 205) return [205, 206, 207, 208][facing];
-    if (blockId === 213) return [213, 214, 215, 216][facing];
-    if (blockId === 231) return [231, 232, 233, 234][facing];
-    if (blockId === 235) return [235, 236, 237, 238][facing];
-    if (blockId === 217) return [217, 218, 219, 220][facing];
+    if (blockId >= 205 && blockId <= 208) return [205, 206, 207, 208][facing];
+    if (blockId >= 213 && blockId <= 216) return [213, 214, 215, 216][facing];
+    if (blockId >= 217 && blockId <= 220) return [217, 218, 219, 220][facing];
+    if (blockId >= 231 && blockId <= 234) return [231, 232, 233, 234][facing];
+    if (blockId >= 235 && blockId <= 238) return [235, 236, 237, 238][facing];
     const paneVariants = {
         225: [225, 239, 225, 239],
         226: [226, 240, 226, 240],
@@ -5242,6 +5295,7 @@ async function downloadHostSession() {
                 y: player.y,
                 z: player.z,
                 health: player.health,
+                maxHealth: player.maxHealth,
                 score: player.score,
                 inventory: INVENTORY,
                 pets: getPetSaveData(),
@@ -5340,7 +5394,7 @@ async function publishToTestnet() {
         chests: serializableChests,
         profile: {
             x: player.x, y: player.y, z: player.z,
-            health: player.health, score: player.score, inventory: INVENTORY,
+            health: player.health, maxHealth: player.maxHealth, score: player.score, inventory: INVENTORY,
             pets: getPetSaveData(),
             avatar: getAvatarSaveData()
         },
@@ -5529,6 +5583,7 @@ async function downloadSinglePlayerSession() {
             y: player.y,
             z: player.z,
             health: player.health,
+            maxHealth: player.maxHealth,
             score: player.score,
             inventory: INVENTORY,
             pets: getPetSaveData(),
@@ -5583,8 +5638,14 @@ function addMessage(e, t) {
 }
 
 function updateHealthBar() {
-    var e = Math.max(0, Math.min(1, player.health / 999));
-    document.getElementById("healthBarInner").style.width = 100 * e + "%"
+    const healthBar = document.getElementById("healthBarInner");
+    const healthLabel = document.getElementById("health");
+    var e = Math.max(0, Math.min(1, player.health / player.maxHealth));
+    healthBar.style.width = 100 * e + "%";
+    const isBoosted = player.maxHealth > 999;
+    healthBar.classList.toggle("health-boosted", isBoosted);
+    healthLabel.classList.toggle("health-boosted", isBoosted);
+    healthLabel.innerText = player.health;
 }
 
 function updateSaveChangesButton() {
