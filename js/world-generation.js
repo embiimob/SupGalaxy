@@ -26,6 +26,7 @@ var weatherParticles = null,
     lightningVisuals = [],
     lightningEventIds = new Set,
     cloudsEnabled = true,
+    weatherAllowed = false,
     weatherPositions = null,
     weatherFallSpeeds = null,
     stormCloudColor = null,
@@ -597,8 +598,10 @@ function createCloudTexture(e) {
     return new THREE.CanvasTexture(o)
 }
 
-function setPlanetWeatherEnabled(enabled) {
-    weatherEnabled = !!enabled;
+function setPlanetWeatherEnabled(enabled, allowClouds = true) {
+    weatherAllowed = !!enabled;
+    cloudsEnabled = !!allowClouds;
+    weatherEnabled = weatherAllowed;
     if (!weatherEnabled) {
         weatherIntensity = 0;
         weatherTarget = 0;
@@ -614,7 +617,7 @@ function applyPlanetWeatherState(state) {
     if (!state || typeof state.enabled !== "boolean" ||
         !Number.isFinite(state.intensity) || !Number.isFinite(state.target) ||
         !Number.isFinite(state.timer) || !Number.isFinite(state.duration)) return;
-    weatherEnabled = state.enabled;
+    weatherEnabled = state.enabled && weatherAllowed;
     weatherIntensity = Math.max(0, Math.min(1, state.intensity));
     weatherTarget = Math.max(0, Math.min(1, state.target));
     weatherTimer = Math.max(0, state.timer);
@@ -822,7 +825,7 @@ function initSky() {
     lightningEventCounter = 0;
     lightningEventIds.clear();
     lightningFlash = 0;
-    cloudsEnabled = !worldArchetype || worldArchetype.name !== "Moon";
+    if (worldArchetype) cloudsEnabled = worldArchetype.name !== "Moon";
     stormCloudColor = new THREE.Color(0x73869a);
     const e = makeSeededRandom(worldSeed + "_sky"),
         t = e(),
