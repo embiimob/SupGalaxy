@@ -435,7 +435,17 @@ async function applySaveFile(e, t, o) {
         player.maxHealth = t.profile.maxHealth === 9999 ? 9999 : 999;
         player.health = Number.isFinite(t.profile.health) ? Math.min(player.maxHealth, t.profile.health) : 20;
         player.score = t.profile.score;
-        INVENTORY = t.profile.inventory;
+
+        INVENTORY = [];
+        INVENTORY[0] = { id: 126, count: 1 };
+        INVENTORY[1] = { id: 133, count: 1 };
+        for (let i = 2; i < 19; i++) {
+            INVENTORY[i] = { id: 125, count: 64 };
+        }
+        for (let i = 19; i < 36; i++) {
+            INVENTORY[i] = { id: 134, count: 64 };
+        }
+
         restorePetSaveData(t.profile.pets);
         restoreAvatarFromSave(t.profile.avatar);
         musicPlaylist = t.musicPlaylist || [];
