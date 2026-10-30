@@ -259,8 +259,7 @@ async function buildTx(utxos,outputs){
 }
 async function broadcastTx(outputs) {
   if(!S.priv) throw new Error('Wallet is locked');
-  const kr=S.keyring||await buildKeyring(S.priv);
-  if(!S.keyring) S.keyring=kr;
+  const kr=await getKeyring();
 
   let feeRate=FEE_DEFAULT;
   try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
@@ -393,8 +392,7 @@ async function broadcastTx(outputs) {
 }
 async function consolidateForMessagingFunds() {
   if(!S.priv) throw new Error('Unlock wallet first');
-  const kr=S.keyring||await buildKeyring(S.priv);
-  if(!S.keyring) S.keyring=kr;
+  const kr=await getKeyring();
 
   const allUtxos = [];
   const validChanges = [];
@@ -462,8 +460,7 @@ window.consolidateForMessaging=async function(){
 
 async function consolidateChangeFunds(){
   if(!S.priv) throw new Error('Unlock wallet first');
-  const kr=S.keyring||await buildKeyring(S.priv);
-  if(!S.keyring) S.keyring=kr;
+  const kr=await getKeyring();
   const changeSigners=(kr.changes||[]).filter(Boolean);
   if(!changeSigners.length) throw new Error('Change keyring unavailable');
   const utxoGroups=await Promise.all(changeSigners.map(async sg=>{
@@ -676,12 +673,26 @@ function renderWalletUI(container, balance=null){
   container.querySelector('#wUnlockPass')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();unlockWallet();}});
   if(!locked) refreshBalance();
 }
+async function getKeyring() {
+  if (S.keyring) return S.keyring;
+  if (!S.keyringPromise) {
+    S.keyringPromise = buildKeyring(S.priv).then(kr => {
+      S.keyring = kr;
+      S.keyringPromise = null;
+      return kr;
+    }).catch(e => {
+      S.keyringPromise = null;
+      throw e;
+    });
+  }
+  return await S.keyringPromise;
+}
+
 async function refreshBalance(){
   if(!S.addr||!S.priv) return;
   try{
     // Use cached keyring (same derivation as SupTV/SupRadio)
-    const kr=S.keyring||await buildKeyring(S.priv);
-    if(!S.keyring) S.keyring=kr;
+    const kr=await getKeyring();
     // Fetch balances for main + all change addresses in parallel
     const bals=await Promise.all(kr.all.map(sg=>getBalance(sg.addr).catch(()=>({confirmed:0,unconfirmed:0}))));
     const total=bals.reduce((acc,b)=>({confirmed:acc.confirmed+(b.confirmed||0),unconfirmed:acc.unconfirmed+(b.unconfirmed||0)}),{confirmed:0,unconfirmed:0});
@@ -765,7 +776,7 @@ function updateWalletMini(){
 
 
 async function afterUnlock(){
-  try{ S.keyring=await buildKeyring(S.priv); }catch{}
+  getKeyring().catch(()=>{});
 
   // load own profile
   try {
@@ -865,7 +876,7 @@ async function exportWif(){
   }
 }
 function lockWallet(){
-  S.priv=null;S.addr='';S.myProfile=null;S.keyring=null;
+  S.priv=null;S.addr='';S.myProfile=null;S.keyring=null;S.keyringPromise=null;
   updateWalletMini();
   const wvb=document.getElementById('walletViewBody');if(wvb) renderWalletUI(wvb);
   const wmb=document.getElementById('walletModalBody');if(wmb) renderWalletUI(wmb);
