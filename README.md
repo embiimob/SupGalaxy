@@ -1,4 +1,4 @@
-# 🌌 SupGalaxy v2.0.0
+# 🌌 SupGalaxy v2.0.1
 
 **SupGalaxy** is an open-source, *serverless voxel world—**Minecraft-style gameplay fused with satoshi-grade decentralization**. Worlds generate from simple keyword seeds and sync globally through **IPFS + P2FK** on Bitcoin testnet3. No accounts. No servers. No gatekeepers. Just your browser and an infinite procedural cosmos.
 
@@ -34,6 +34,7 @@ Built with ❤️ by **embii4u**, **kattacomi**, **Grok (xAI)**, **Jules**, **Ch
 - Syncs player position, builds, and combat  
 - Drag-and-drop `.json` connection files  
 - PvP through left-click with knockback  
+- Connections shows each connected player's world; **Visit Spawn** switches to that world before teleporting to their spawn.
 
 ### 🪄 The Magician’s Stone
 A special block capable of adding **images, video, audio and animated 3d models** into the game world.

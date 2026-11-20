@@ -76,7 +76,7 @@ var scene, camera, renderer, controls, meshGroup, chunkManager, sun, moon, stars
     REMOTE_PLAYER_VIEW_DISTANCE = 64,
     currentLoadRadius = INITIAL_LOAD_RADIUS,
     CHUNKS_PER_SIDE = Math.floor(MAP_SIZE / CHUNK_SIZE),
-    VERSION = "SupGalaxy v2.0.0",
+    VERSION = "SupGalaxy v2.0.1",
     POLL_INTERVAL = 3e4,
     MAX_PEERS = 20,
     BLOCKS = {

@@ -3643,10 +3643,13 @@ function openUsersModal() {
     for (var n of connectedNames) {
         if (n !== userName) {
             a = !0, console.log("[MODAL] Rendering peer:", n);
-            // Use cached spawn from spawnChunks if available, otherwise calculate
-            var spawnKey = n + "@" + worldName;
-            var cachedSpawn = spawnChunks.get(spawnKey);
-            var i = cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey);
+            const connectedName = n;
+            const connectedWorld = userPositions[connectedName]?.world;
+            const spawnKey = connectedName + "@" + connectedWorld;
+            const cachedSpawn = spawnChunks.get(spawnKey);
+            const connectedSpawn = connectedWorld
+                ? (cachedSpawn ? cachedSpawn.spawn : calculateSpawnPoint(spawnKey))
+                : null;
             var h = document.createElement("div");
             h.style.display = "flex";
             h.style.gap = "8px";
@@ -3654,20 +3657,30 @@ function openUsersModal() {
             h.style.marginTop = "8px";
 
             var f = document.createElement("div");
-            f.innerText = n + " (Connected) at (" + Math.floor(i.x) + ", " + Math.floor(i.y) + ", " + Math.floor(i.z) + ")";
+            f.innerText = connectedName + " (Connected) - World: " + (connectedWorld || "Unknown")
+                + (connectedSpawn ? " at (" + Math.floor(connectedSpawn.x) + ", " + Math.floor(connectedSpawn.y) + ", " + Math.floor(connectedSpawn.z) + ")" : "");
 
             var m = document.createElement("button");
             m.innerText = "Visit Spawn";
+            m.disabled = !connectedWorld;
             styleKnownWorldButton(m, true);
 
-            (function (e, o) {
-                m.onclick = function () {
-                    console.log("[MODAL] Teleporting to connected spawn of:", e);
-                    respawnPlayer(o.x, 100, o.z);
-                    t.remove();
-                    isPromptOpen = false;
+            m.onclick = function () {
+                const targetWorld = userPositions[connectedName]?.world;
+                if (!targetWorld) {
+                    addMessage("Player's world is unavailable. Reopen Connections to refresh.", 4000);
+                    return;
                 }
-            })(n, i);
+                const targetKey = connectedName + "@" + targetWorld;
+                const spawn = spawnChunks.get(targetKey)?.spawn || calculateSpawnPoint(targetKey);
+                console.log("[MODAL] Teleporting to connected spawn of:", connectedName, "in world:", targetWorld);
+                if (worldName !== targetWorld) {
+                    switchWorld(targetWorld, { x: spawn.x, y: 100, z: spawn.z });
+                }
+                respawnPlayer(spawn.x, 100, spawn.z);
+                t.remove();
+                isPromptOpen = false;
+            };
 
             h.appendChild(f);
             h.appendChild(m);
