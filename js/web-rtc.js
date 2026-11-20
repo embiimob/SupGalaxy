@@ -20,6 +20,9 @@ var knownServers = [],
     userVideoStreams = new Map;
 const SERVER_PEER = "@server";
 let dedicatedServer = null;
+const dedicatedMediaPeers = new Map();
+const dedicatedMediaSignalQueues = new Map();
+let lastDedicatedMediaUpdate = 0;
 let dedicatedConnectPending = false;
 let dedicatedServerDialogCloser = null;
 let proximityVideoUsers = [],
@@ -415,6 +418,7 @@ async function connectToDedicatedServer(address) {
 function disconnectDedicatedServer(message = "Disconnected from the dedicated server.") {
     const connection = dedicatedServer;
     if (!connection) return;
+    for (const name of dedicatedMediaPeers.keys()) closeDedicatedMediaPeer(name);
     for (const peerName of peers.keys()) {
         if (peerName !== SERVER_PEER) cleanupPeer(peerName);
     }
@@ -491,6 +495,24 @@ function sendToServer(message) {
     return true;
 }
 
+function sendDedicatedPlayerPosition(name) {
+    if (!dedicatedServer?.connected) return;
+    sendToPlayer(name, {
+        type: "player_move",
+        world: worldName,
+        x: player.x, y: player.y, z: player.z,
+        yaw: player.yaw, pitch: player.pitch,
+        isMoving: false, isAttacking: false,
+        timestamp: Date.now()
+    });
+}
+
+function handleDedicatedWorldSwitch(name, world) {
+    if (userPositions[name]) userPositions[name].world = world;
+    if (world !== worldName) closeDedicatedMediaPeer(name);
+    else sendDedicatedPlayerPosition(name);
+}
+
 async function getTurnCredentials() {
     return console.log("[WebRTC] Using static TURN credentials: supgalaxy"), [{
         urls: "stun:supturn.com:3478"
@@ -500,6 +522,225 @@ async function getTurnCredentials() {
         credential: "supgalaxy",
         credentialType: "password"
     }]
+}
+
+function isDedicatedMediaNearby(name) {
+    const position = userPositions[name];
+    return !!position && position.world === worldName &&
+        Number.isFinite(position.targetX) && Number.isFinite(position.targetY) && Number.isFinite(position.targetZ) &&
+        Math.hypot(player.x - position.targetX, player.y - position.targetY, player.z - position.targetZ) <= maxAudioDistance;
+}
+
+function closeDedicatedMediaPeer(name, notify = true) {
+    const entry = dedicatedMediaPeers.get(name);
+    if (!entry) return;
+    if (notify) sendDedicatedMediaSignal(name, entry, "close", null);
+    dedicatedMediaPeers.delete(name);
+    if (entry.pc) {
+        entry.pc.onconnectionstatechange = null;
+        entry.pc.onicecandidate = null;
+        entry.pc.ontrack = null;
+        entry.pc.close();
+    }
+    const audio = userAudioStreams.get(name);
+    if (audio) {
+        audio.audio.srcObject = null;
+        audio.audio.remove();
+        userAudioStreams.delete(name);
+    }
+    const video = userVideoStreams.get(name);
+    if (video) {
+        video.video.srcObject = null;
+        video.video.remove();
+        userVideoStreams.delete(name);
+    }
+}
+
+function sendDedicatedMediaSignal(name, entry, kind, data) {
+    if (dedicatedMediaPeers.get(name) !== entry) return false;
+    try {
+        return sendToPlayer(name, { type: "p2p_signal", session: entry.session, kind, data });
+    } catch (error) {
+        console.error(`[WebRTC] Could not signal media to ${name}:`, error);
+        return false;
+    }
+}
+
+function updateDedicatedRemoteVideo(name, entry) {
+    if (dedicatedMediaPeers.get(name) !== entry) return;
+    const existing = userVideoStreams.get(name);
+    if (!entry.remoteVideoEnabled || !entry.videoTrack || entry.videoTrack.readyState === "ended") {
+        if (existing) {
+            existing.video.srcObject = null;
+            existing.video.remove();
+            userVideoStreams.delete(name);
+        }
+        return;
+    }
+    if (existing) return;
+    const video = document.createElement("video");
+    const stream = new MediaStream([entry.videoTrack]);
+    video.srcObject = stream;
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.style.display = "none";
+    document.body.appendChild(video);
+    userVideoStreams.set(name, { video, stream });
+}
+
+async function createDedicatedMediaPeer(name, session, offer) {
+    const connection = dedicatedServer;
+    const entry = { session, pc: null, started: Date.now(), remoteVideoEnabled: false, candidates: [], descriptionSent: false };
+    dedicatedMediaPeers.set(name, entry);
+    try {
+        await ensureAudioInitialized();
+        const iceServers = await getTurnCredentials();
+        if (dedicatedServer !== connection || dedicatedMediaPeers.get(name) !== entry || !isDedicatedMediaNearby(name)) {
+            if (dedicatedMediaPeers.get(name) === entry) closeDedicatedMediaPeer(name);
+            return;
+        }
+        const pc = entry.pc = new RTCPeerConnection({ iceServers });
+        pc.onicecandidate = event => {
+            if (!event.candidate) return;
+            const candidate = event.candidate.toJSON();
+            if (entry.descriptionSent) sendDedicatedMediaSignal(name, entry, "candidate", candidate);
+            else entry.candidates.push(candidate);
+        };
+        pc.onconnectionstatechange = () => {
+            if (["failed", "closed"].includes(pc.connectionState) && dedicatedMediaPeers.get(name) === entry) {
+                console.warn(`[WebRTC] Media connection to ${name} ${pc.connectionState}.`);
+                closeDedicatedMediaPeer(name);
+            }
+        };
+        pc.ontrack = event => {
+            if (dedicatedMediaPeers.get(name) !== entry) return;
+            const track = event.track;
+            if (track.kind === "audio") {
+                const existing = userAudioStreams.get(name);
+                if (existing) {
+                    existing.audio.srcObject = null;
+                    existing.audio.remove();
+                }
+                const audio = new Audio();
+                audio.volume = 0;
+                audio.autoplay = true;
+                const stream = new MediaStream([track]);
+                audio.srcObject = stream;
+                userAudioStreams.set(name, { audio, stream });
+            } else if (track.kind === "video") {
+                entry.videoTrack = track;
+                track.onended = () => updateDedicatedRemoteVideo(name, entry);
+                updateDedicatedRemoteVideo(name, entry);
+            }
+        };
+        let transceivers;
+        if (offer) {
+            await pc.setRemoteDescription(offer);
+            transceivers = pc.getTransceivers();
+        } else {
+            transceivers = ["audio", "video"].map(kind => pc.addTransceiver(kind, { direction: "sendrecv" }));
+        }
+        for (const transceiver of transceivers) {
+            const kind = transceiver.receiver.track.kind;
+            transceiver.direction = "sendrecv";
+            if (kind === "video") entry.videoSender = transceiver.sender;
+            const track = kind === "audio" ? localAudioStream?.getAudioTracks()[0] : localVideoStream?.getVideoTracks()[0];
+            await transceiver.sender.replaceTrack(track || null);
+        }
+        const description = offer ? await pc.createAnswer() : await pc.createOffer();
+        await pc.setLocalDescription(description);
+        if (dedicatedMediaPeers.get(name) !== entry) return;
+        if (!sendDedicatedMediaSignal(name, entry, offer ? "answer" : "offer", {
+            description: pc.localDescription,
+            videoEnabled: !!localVideoStream
+        })) throw new Error("Server signaling channel is unavailable.");
+        entry.descriptionSent = true;
+        for (const candidate of entry.candidates) sendDedicatedMediaSignal(name, entry, "candidate", candidate);
+        entry.candidates.length = 0;
+    } catch (error) {
+        console.error(`[WebRTC] Could not establish media connection to ${name}:`, error);
+        if (dedicatedMediaPeers.get(name) === entry) closeDedicatedMediaPeer(name);
+    }
+}
+
+async function handleDedicatedMediaSignal(message) {
+    const name = message.username;
+    if (!dedicatedServer?.connected || message.to !== userName || typeof name !== "string" ||
+        name === userName || !peers.has(name)) return;
+    if (typeof message.session !== "string" || !message.session) return;
+    let entry = dedicatedMediaPeers.get(name);
+    if (message.kind === "offer") {
+        if (name >= userName || !isDedicatedMediaNearby(name) || !message.data?.description) return;
+        if (entry?.session === message.session) return;
+        if (entry) closeDedicatedMediaPeer(name);
+        await createDedicatedMediaPeer(name, message.session, message.data.description);
+        entry = dedicatedMediaPeers.get(name);
+        if (entry?.session === message.session) {
+            entry.remoteVideoEnabled = message.data.videoEnabled === true;
+            updateDedicatedRemoteVideo(name, entry);
+        }
+        return;
+    }
+    if (!entry || entry.session !== message.session || !entry.pc) return;
+    if (message.kind === "close") {
+        closeDedicatedMediaPeer(name, false);
+    } else if (message.kind === "answer" && name > userName && message.data?.description) {
+        await entry.pc.setRemoteDescription(message.data.description);
+        entry.remoteVideoEnabled = message.data.videoEnabled === true;
+        updateDedicatedRemoteVideo(name, entry);
+    } else if (message.kind === "candidate" && message.data) {
+        await entry.pc.addIceCandidate(message.data);
+    } else if (message.kind === "video") {
+        entry.remoteVideoEnabled = message.data === true;
+        updateDedicatedRemoteVideo(name, entry);
+    }
+}
+
+function queueDedicatedMediaSignal(message) {
+    const name = message.username;
+    if (typeof name !== "string") return;
+    const previous = dedicatedMediaSignalQueues.get(name) || Promise.resolve();
+    const next = previous.then(() => handleDedicatedMediaSignal(message)).catch(error => {
+        console.error(`[WebRTC] Media signaling from ${name} failed:`, error);
+        const entry = dedicatedMediaPeers.get(name);
+        if (entry?.session === message.session) closeDedicatedMediaPeer(name);
+    });
+    dedicatedMediaSignalQueues.set(name, next);
+    next.finally(() => {
+        if (dedicatedMediaSignalQueues.get(name) === next) dedicatedMediaSignalQueues.delete(name);
+    });
+}
+
+function updateDedicatedProximityMedia() {
+    if (!dedicatedServer?.connected || Date.now() - lastDedicatedMediaUpdate < 500) return;
+    lastDedicatedMediaUpdate = Date.now();
+    for (const [name, entry] of dedicatedMediaPeers) {
+        if (!peers.has(name) || !isDedicatedMediaNearby(name) ||
+            (entry.pc?.connectionState !== "connected" && Date.now() - entry.started > 20000)) {
+            closeDedicatedMediaPeer(name);
+        }
+    }
+    for (const name of peers.keys()) {
+        if (name !== SERVER_PEER && userName < name && !dedicatedMediaPeers.has(name) && isDedicatedMediaNearby(name)) {
+            const session = crypto.randomUUID();
+            void createDedicatedMediaPeer(name, session);
+        }
+    }
+}
+
+async function updateDedicatedCameraTracks() {
+    const track = localVideoStream?.getVideoTracks()[0] || null;
+    for (const [name, entry] of dedicatedMediaPeers) {
+        if (!entry.videoSender) continue;
+        try {
+            await entry.videoSender.replaceTrack(track);
+            sendDedicatedMediaSignal(name, entry, "video", !!track);
+        } catch (error) {
+            console.error(`[WebRTC] Could not update camera for ${name}:`, error);
+            addMessage(`Could not update camera for ${name}.`, 3000);
+        }
+    }
 }
 async function connectToServer(e, t, o) {
     if (dedicatedServer || peers.has(SERVER_PEER) || dedicatedConnectPending) {
@@ -1097,6 +1338,10 @@ function setupDataChannel(e, t) {
                 }
                 return;
             }
+            if (t === SERVER_PEER && s.type === "p2p_signal") {
+                queueDedicatedMediaSignal(s);
+                return;
+            }
             if (n === userName) return;
             switch (s.type) {
                 case "i_am_alive":
@@ -1122,6 +1367,7 @@ function setupDataChannel(e, t) {
                             address: null
                         });
                     }
+                    if (t === SERVER_PEER) sendDedicatedPlayerPosition(i);
 
                     // If host, calculate and store new player's spawn point
                     if (isAuthority(worldName)) {
@@ -1293,6 +1539,7 @@ function setupDataChannel(e, t) {
                         targetPitch: s.pitch
                     });
                     const l = userPositions[n];
+                    if (typeof s.world === "string") l.world = s.world;
 
                     // IMPORTANT: Save selectedBlockId to state so it's included in state_update broadcasts
                     l.selectedBlockId = s.selectedBlockId;
@@ -2401,6 +2648,9 @@ function setupDataChannel(e, t) {
                     }
                     break;
                 case 'world_switch':
+                    if (t === SERVER_PEER && typeof s.world === "string") {
+                        handleDedicatedWorldSwitch(n, s.world);
+                    }
                     if (isAuthority(s.world || worldName)) {
                         const peer = peers.get(s.username);
                         if (peer) {
@@ -3903,6 +4153,7 @@ function cleanupPeer(e) {
         if (dedicatedServer) disconnectDedicatedServer("Dedicated server connection closed.");
         return;
     }
+    closeDedicatedMediaPeer(e);
     clearDisconnectedPlayerPets(e);
     const t = peers.get(e);
     if (t && (t.pc && t.pc.close(), t.keepaliveInterval && clearInterval(t.keepaliveInterval), peers.delete(e)), playerAvatars.has(e)) {
@@ -3918,7 +4169,13 @@ function cleanupPeer(e) {
         const t = userAudioStreams.get(e);
         t.audio.srcObject = null, t.audio.remove(), userAudioStreams.delete(e)
     }
-    userVideoStreams.has(e) && userVideoStreams.delete(e), delete userPositions[e], addMessage(`${e} has disconnected.`), updateHudButtons(), console.log(`[WebRTC] Cleaned up peer: ${e}`)
+    if (userVideoStreams.has(e)) {
+        const video = userVideoStreams.get(e);
+        video.video.srcObject = null;
+        video.video.remove();
+        userVideoStreams.delete(e);
+    }
+    delete userPositions[e], addMessage(`${e} has disconnected.`), updateHudButtons(), console.log(`[WebRTC] Cleaned up peer: ${e}`)
 }
 async function toggleCamera() {
     const e = document.getElementById("cameraBtn"),
@@ -3927,6 +4184,7 @@ async function toggleCamera() {
         a = document.getElementById("proximityVideoLabel");
     if (localVideoStream) {
         localVideoStream.getTracks().forEach((e => e.stop())), localVideoStream = null;
+        await updateDedicatedCameraTracks();
         for (const [e, t] of peers.entries()) {
             if (e === SERVER_PEER) continue;
             if (t.pc) {
@@ -3947,6 +4205,7 @@ async function toggleCamera() {
         localVideoStream = await navigator.mediaDevices.getUserMedia({
             video: !0
         });
+        await updateDedicatedCameraTracks();
         for (const [e, t] of peers.entries()) {
             if (e === SERVER_PEER) continue;
             if (t.pc) {
