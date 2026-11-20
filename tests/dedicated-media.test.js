@@ -68,7 +68,7 @@ function makeClient(name, outgoing) {
             return new Stream([track(options.audio ? "audio" : "video")]);
         } } },
         userName: name, worldName: "earth", player: { x: 0, y: 0, z: 0 },
-        maxAudioDistance: 32, addMessage() {}, updateHudButtons() {},
+        maxAudioDistance: 32, MAX_PEERS: 20, addMessage() {}, updateHudButtons() {},
         clearDisconnectedPlayerPets() {}, scene: { remove() {} }, disposeObject() {}
     });
     vm.runInContext(source, context);
@@ -107,7 +107,7 @@ async function drain(messages, clients) {
     throw new Error("Signaling did not settle");
 }
 
-test("nearby server players negotiate audio and camera without renegotiating the server", async () => {
+test("same-world server players negotiate audio and camera without renegotiating the server", async () => {
     const messages = [];
     const alice = makeClient("alice", messages);
     const bob = makeClient("bob", messages);
@@ -132,21 +132,24 @@ test("nearby server players negotiate audio and camera without renegotiating the
     await drain(messages, clients);
     assert.equal(bob.run("userVideoStreams.has('alice')"), false);
 
-    alice.run("userPositions.bob.targetX = 33; lastDedicatedMediaUpdate = 0; updateDedicatedProximityMedia()");
+    alice.run("userPositions.bob.targetX = 500; lastDedicatedMediaUpdate = 0; updateDedicatedProximityMedia()");
+    await drain(messages, clients);
+    assert.equal(alice.run("dedicatedMediaPeers.size"), 1);
+
+    alice.run("userPositions.bob.world = 'mars'; lastDedicatedMediaUpdate = 0; updateDedicatedProximityMedia()");
     await drain(messages, clients);
     assert.equal(alice.run("dedicatedMediaPeers.size"), 0);
     assert.equal(bob.run("dedicatedMediaPeers.size"), 0);
     assert.equal(bob.run("userAudioStreams.size"), 0);
 });
 
-test("out of range and different worlds do not start media connections", async () => {
+test("distant same-world players connect but different worlds do not", async () => {
     const messages = [];
     const alice = makeClient("alice", messages);
-    alice.addPeer("bob", 33);
+    alice.addPeer("bob", 500);
     alice.run("updateDedicatedProximityMedia()");
-    await drain(messages, {});
-    assert.equal(alice.run("dedicatedMediaPeers.size"), 0);
-    alice.run("userPositions.bob.targetX = 1; userPositions.bob.world = 'mars'; lastDedicatedMediaUpdate = 0; updateDedicatedProximityMedia()");
+    assert.equal(alice.run("dedicatedMediaPeers.size"), 1);
+    alice.run("closeDedicatedMediaPeer('bob', false); userPositions.bob.world = 'mars'; lastDedicatedMediaUpdate = 0; updateDedicatedProximityMedia()");
     await drain(messages, {});
     assert.equal(alice.run("dedicatedMediaPeers.size"), 0);
 });
@@ -163,7 +166,7 @@ test("world transitions close media and provide stationary player positions", as
     await drain(messages, { alice, bob });
     assert.equal(bob.run("dedicatedMediaPeers.size"), 0);
     assert.equal(bob.run("userPositions.alice.world"), "mars");
-    assert.equal(bob.run("isDedicatedMediaNearby('alice')"), false);
+    assert.equal(bob.run("isDedicatedMediaEligible('alice')"), false);
     bob.run("handleDedicatedWorldSwitch('alice', 'earth')");
     assert.equal(messages.length, 1);
     assert.equal(messages[0].type, "player_move");

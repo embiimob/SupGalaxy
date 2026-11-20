@@ -276,6 +276,8 @@ async function connectToDedicatedServer(address) {
         }
         const base = normalizeDedicatedServerAddress(address);
         stopAllPolling();
+        // Request the microphone up front, as P2P connections do; tracks are never added to the server connection.
+        void ensureAudioInitialized();
         const iceServers = await getTurnCredentials();
         if (!isConnecting) return false;
 
@@ -524,11 +526,9 @@ async function getTurnCredentials() {
     }]
 }
 
-function isDedicatedMediaNearby(name) {
-    const position = userPositions[name];
-    return !!position && position.world === worldName &&
-        Number.isFinite(position.targetX) && Number.isFinite(position.targetY) && Number.isFinite(position.targetZ) &&
-        Math.hypot(player.x - position.targetX, player.y - position.targetY, player.z - position.targetZ) <= maxAudioDistance;
+// Like P2P mode, link media with every player in the same world; proximity only controls volume and video selection.
+function isDedicatedMediaEligible(name) {
+    return userPositions[name]?.world === worldName;
 }
 
 function closeDedicatedMediaPeer(name, notify = true) {
@@ -596,7 +596,7 @@ async function createDedicatedMediaPeer(name, session, offer) {
     try {
         await ensureAudioInitialized();
         const iceServers = await getTurnCredentials();
-        if (dedicatedServer !== connection || dedicatedMediaPeers.get(name) !== entry || !isDedicatedMediaNearby(name)) {
+        if (dedicatedServer !== connection || dedicatedMediaPeers.get(name) !== entry || !isDedicatedMediaEligible(name)) {
             if (dedicatedMediaPeers.get(name) === entry) closeDedicatedMediaPeer(name);
             return;
         }
@@ -671,7 +671,7 @@ async function handleDedicatedMediaSignal(message) {
     if (typeof message.session !== "string" || !message.session) return;
     let entry = dedicatedMediaPeers.get(name);
     if (message.kind === "offer") {
-        if (name >= userName || !isDedicatedMediaNearby(name) || !message.data?.description) return;
+        if (name >= userName || !isDedicatedMediaEligible(name) || !message.data?.description) return;
         if (entry?.session === message.session) return;
         if (entry) closeDedicatedMediaPeer(name);
         await createDedicatedMediaPeer(name, message.session, message.data.description);
@@ -716,13 +716,14 @@ function updateDedicatedProximityMedia() {
     if (!dedicatedServer?.connected || Date.now() - lastDedicatedMediaUpdate < 500) return;
     lastDedicatedMediaUpdate = Date.now();
     for (const [name, entry] of dedicatedMediaPeers) {
-        if (!peers.has(name) || !isDedicatedMediaNearby(name) ||
+        if (!peers.has(name) || !isDedicatedMediaEligible(name) ||
             (entry.pc?.connectionState !== "connected" && Date.now() - entry.started > 20000)) {
             closeDedicatedMediaPeer(name);
         }
     }
     for (const name of peers.keys()) {
-        if (name !== SERVER_PEER && userName < name && !dedicatedMediaPeers.has(name) && isDedicatedMediaNearby(name)) {
+        if (dedicatedMediaPeers.size >= MAX_PEERS) break;
+        if (name !== SERVER_PEER && userName < name && !dedicatedMediaPeers.has(name) && isDedicatedMediaEligible(name)) {
             const session = crypto.randomUUID();
             void createDedicatedMediaPeer(name, session);
         }
