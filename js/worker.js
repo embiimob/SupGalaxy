@@ -903,6 +903,15 @@ var API_CALLS_PER_SECOND = 10;
 var apiDelay = 100;
 var p2fkThrottleRequestId = 0;
 var pendingP2fkThrottleRequests = new Map();
+var mempoolRequestId = 0;
+var pendingMempoolRequests = new Map();
+function getMempoolJson(path) {
+        return new Promise((resolve, reject) => {
+            var requestId = ++mempoolRequestId;
+            pendingMempoolRequests.set(requestId, { resolve: resolve, reject: reject });
+            self.postMessage({ type: 'mempool_request', requestId: requestId, path: path });
+        });
+}
 function waitForP2fkApiSlot() {
         return new Promise(resolve => {
             var requestId = ++p2fkThrottleRequestId;
@@ -972,15 +981,7 @@ async function getRootsByAddress(address, skip, qty) {
 async function getMempoolMessagesByAddress(address) {
         try {
             var cleanAddress = encodeURIComponent(address.trim().replace(/^"|"$/g, ""));
-            // Determine if mainnet or testnet based on the existence of a configuration flag, but since we are specifically targeting testnet in SUP space right now, we can check. Wait, the main P2FK endpoints use ?mainnet=false. We'll use testnet for now, but dynamically is better if a flag exists. I'll check if mainnet=true is used anywhere. Actually, all the p2fk.io calls in worker use ?mainnet=false. We will hardcode testnet for now, as that's what the rest of the codebase does.
-            var url = "https://mempool.space/testnet/api/address/" + cleanAddress + "/txs/mempool";
-            await new Promise(resolve => setTimeout(resolve, apiDelay));
-            var mempoolRes = await fetch(url);
-            if (!mempoolRes.ok) {
-                console.error('[Worker] Failed to fetch mempool txs for address:', cleanAddress, 'status:', mempoolRes.status);
-                return [];
-            }
-            var txs = await mempoolRes.json();
+            var txs = await getMempoolJson("/address/" + cleanAddress + "/txs/mempool");
             if (!txs || txs.length === 0) return [];
 
             var messages = [];
@@ -1246,6 +1247,16 @@ self.onmessage = async function(e) {
             if (resolveThrottleRequest) {
                 pendingP2fkThrottleRequests.delete(data.requestId);
                 resolveThrottleRequest();
+            }
+            return;
+        }
+
+        if (data.type === 'mempool_response') {
+            var pendingMempool = pendingMempoolRequests.get(data.requestId);
+            if (pendingMempool) {
+                pendingMempoolRequests.delete(data.requestId);
+                if (data.error) pendingMempool.reject(new Error(data.error));
+                else pendingMempool.resolve(data.result);
             }
             return;
         }
@@ -1958,6 +1969,14 @@ self.onmessage = async function(e) {
             if (data.type === 'p2fk_api_throttle') {
                 waitForP2fkApiSlot().then(function () {
                     worker.postMessage({ type: 'p2fk_api_throttle_granted', requestId: data.requestId });
+                });
+                return;
+            }
+            if (data.type === 'mempool_request') {
+                Mempool.json(data.path).then(function (result) {
+                    worker.postMessage({ type: 'mempool_response', requestId: data.requestId, result: result });
+                }, function (error) {
+                    worker.postMessage({ type: 'mempool_response', requestId: data.requestId, error: error.message });
                 });
                 return;
             }

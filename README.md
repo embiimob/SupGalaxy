@@ -390,6 +390,8 @@ SupGalaxy uses a **truncated unix date** system to ensure block updates from IPF
 
 SupGalaxy includes a built-in Bitcoin testnet3 wallet (`js/wallet.js`) to handle P2FK messaging and decentralized persistence.
 
+Wallet and worker Mempool requests share a per-page queue capped at 10 attempts per 10 seconds. HTTP 429 pauses the queue for at least 10 seconds (or the server's longer `Retry-After`); timeouts after 10 seconds, network errors, HTTP 408 and server errors trigger failover from mempool.space to 47 regional Mempool nodes. All requests use the Testnet3 API.
+
 ### Wallet Functions
 - **Login & Unlock:** You can generate a new testnet3 address or import an existing WIF (Wallet Import Format) private key. Your wallet is protected by a password and stored securely in your browser's local storage.
 - **Saving to Testnet3:** Game state and chunks are uploaded to IPFS (via `p2fk.io`), and the resulting URN is broadcasted on-chain using P2FK messages from your wallet.

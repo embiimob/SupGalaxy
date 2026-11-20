@@ -23,7 +23,6 @@ const P2FK_CHUNK = 20;
 const P2FK_PAD = '#';
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const DELIMITERS = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
-const MEMPOOL_API = 'https://mempool.space/testnet/api';
 
 window.S = window.S || {};
 S.addr = '';
@@ -257,12 +256,25 @@ async function buildTx(utxos,outputs){
   }
   return b2h(serializeTx(inputs,finalOuts));
 }
+async function broadcastMempoolTx(rawHex) {
+  try {
+    const txid=(await Mempool.request('/tx',{method:'POST',headers:{'Content-Type':'text/plain'},body:rawHex})).trim();
+    if(!/^[0-9a-f]{64}$/i.test(txid)) throw new Error('Invalid Mempool broadcast response');
+    return txid;
+  } catch(e) {
+    // A previous attempt may have succeeded even if its response was lost.
+    if(/^Mempool HTTP 4\d\d for \/tx:.*(?:txn-already-in-mempool|txn-already-known|Transaction already in block chain)/i.test(e.message)) {
+      return b2h((await sha256(await sha256(h2b(rawHex)))).reverse());
+    }
+    throw e;
+  }
+}
 async function broadcastTx(outputs) {
   if(!S.priv) throw new Error('Wallet is locked');
   const kr=await getKeyring();
 
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fp=await Mempool.json('/v1/fees/recommended');feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch(e){console.warn('Fee lookup failed; using default:',e);}
   const estFee=(ic,oc)=>Math.ceil((10+148*ic+34*oc)*feeRate);
   const outSats=outputs.map(o=>({addr:o.addr,sat:o.sat !== undefined ? o.sat : Math.round(o.amount*1e8)}));
   const totalOut=outSats.reduce((s,o)=>s+o.sat,0);
@@ -271,7 +283,7 @@ async function broadcastTx(outputs) {
   const totByAddr=new Map();
   const utxoCountByAddr=new Map();
   const balancePromises = kr.all.map(async sg => {
-    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0, funded_txo_count: 0}));
+    const bal = await getBalance(sg.addr);
     totByAddr.set(sg.addr, bal.confirmed);
     utxoCountByAddr.set(sg.addr, bal.utxo_count);
     sg.utxoCount = bal.utxo_count;
@@ -289,9 +301,7 @@ async function broadcastTx(outputs) {
   // Helper to fetch utxos for a specific signer
   const fetchUtxosForSigner = async (sg) => {
     if (fetchedUtxos.has(sg.addr)) return fetchedUtxos.get(sg.addr);
-    const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
-    if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
-    const j=await r.json();
+    const j=await Mempool.json(`/address/${encodeURIComponent(sg.addr)}/utxo`);
     const utxos = j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
     fetchedUtxos.set(sg.addr, utxos);
     return utxos;
@@ -305,6 +315,7 @@ async function broadcastTx(outputs) {
     try {
       pool = await fetchUtxosForSigner(src);
     } catch(e) {
+      console.warn(`UTXO lookup failed for ${src.label}:`,e);
       continue; // Skip if utxo fetch fails
     }
     pool.sort((a,b)=>b.value-a.value);
@@ -386,9 +397,7 @@ async function broadcastTx(outputs) {
   const finalOuts=[...outSats];
   if(change>=DUST) finalOuts.push({addr:changeAddr,sat:change});
   const rawHex=await buildTx(selUtxos,finalOuts);
-  const res=await fetch(`${MEMPOOL_API}/tx`,{method:'POST',headers:{'Content-Type':'text/plain'},body:rawHex});
-  if(!res.ok) throw new Error(`Broadcast failed: ${await res.text()}`);
-  return (await res.text()).trim();
+  return broadcastMempoolTx(rawHex);
 }
 async function consolidateForMessagingFunds() {
   if(!S.priv) throw new Error('Unlock wallet first');
@@ -398,7 +407,7 @@ async function consolidateForMessagingFunds() {
   const validChanges = [];
 
   await Promise.all(kr.all.map(async sg => {
-    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0, utxo_count: 0, funded_txo_count: 0}));
+    const bal = await getBalance(sg.addr);
     if (kr.changes.includes(sg)) {
       sg.utxoCount = bal.utxo_count;
       sg.fundedTxoCount = bal.funded_txo_count || 0;
@@ -408,12 +417,10 @@ async function consolidateForMessagingFunds() {
     }
     if (bal.confirmed <= 0) return;
     try {
-      const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
-      if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
-      const j=await r.json();
+      const j=await Mempool.json(`/address/${encodeURIComponent(sg.addr)}/utxo`);
       const utxos = j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
       allUtxos.push(...utxos);
-    } catch(e) {}
+    } catch(e) { console.warn(`UTXO lookup failed for ${sg.label}:`,e); }
   }));
 
   if(!allUtxos.length) throw new Error('No confirmed funds to consolidate');
@@ -437,16 +444,14 @@ async function consolidateForMessagingFunds() {
   const targetChange = validChanges[0];
 
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fp=await Mempool.json('/v1/fees/recommended');feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch(e){console.warn('Fee lookup failed; using default:',e);}
   const fee=Math.ceil((10+148*allUtxos.length+34)*feeRate);
   const total=allUtxos.reduce((s,u)=>s+Number(u.value||0),0);
   const send=total-fee;
   if(send<DUST) throw new Error(`Consolidation output too small after fee (${send} sat)`);
 
   const rawHex=await buildTx(allUtxos,[{addr:targetChange.addr,sat:send}]);
-  const res=await fetch(`${MEMPOOL_API}/tx`,{method:'POST',headers:{'Content-Type':'text/plain'},body:rawHex});
-  if(!res.ok) throw new Error(`Consolidation broadcast failed: ${await res.text()}`);
-  return(await res.text()).trim();
+  return broadcastMempoolTx(rawHex);
 }
 
 window.consolidateForMessaging=async function(){
@@ -464,29 +469,26 @@ async function consolidateChangeFunds(){
   const changeSigners=(kr.changes||[]).filter(Boolean);
   if(!changeSigners.length) throw new Error('Change keyring unavailable');
   const utxoGroups=await Promise.all(changeSigners.map(async sg=>{
-    const bal = await getBalance(sg.addr).catch(() => ({confirmed: 0, unconfirmed: 0}));
+    const bal = await getBalance(sg.addr);
     if (bal.confirmed <= 0) return [];
     try {
-      const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(sg.addr)}/utxo`);
-      if(!r.ok) throw new Error(`UTXO fetch failed for ${sg.label}`);
-      const j=await r.json();
+      const j=await Mempool.json(`/address/${encodeURIComponent(sg.addr)}/utxo`);
       return j.filter(u=>u.status?.confirmed).map(u=>({...u,srcAddr:sg.addr,signer:sg}));
     } catch(e) {
+      console.warn(`UTXO lookup failed for ${sg.label}:`,e);
       return [];
     }
   }));
   const utxos=utxoGroups.flat();
   if(!utxos.length) throw new Error('No confirmed change funds to consolidate');
   let feeRate=FEE_DEFAULT;
-  try{const fr=await fetch(`${MEMPOOL_API}/v1/fees/recommended`);const fp=await fr.json();feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch{}
+  try{const fp=await Mempool.json('/v1/fees/recommended');feeRate=Math.max(Number(fp?.halfHourFee||FEE_DEFAULT),FEE_MIN);}catch(e){console.warn('Fee lookup failed; using default:',e);}
   const fee=Math.ceil((10+148*utxos.length+34)*feeRate);
   const total=utxos.reduce((s,u)=>s+Number(u.value||0),0);
   const send=total-fee;
   if(send<DUST) throw new Error(`Consolidation output too small after fee (${send} sat)`);
   const rawHex=await buildTx(utxos,[{addr:kr.main.addr,sat:send}]);
-  const res=await fetch(`${MEMPOOL_API}/tx`,{method:'POST',headers:{'Content-Type':'text/plain'},body:rawHex});
-  if(!res.ok) throw new Error(`Consolidation broadcast failed: ${await res.text()}`);
-  return(await res.text()).trim();
+  return broadcastMempoolTx(rawHex);
 }
 
 function randDelim(){const b=new Uint8Array(1),lim=Math.floor(256/DELIMITERS.length)*DELIMITERS.length;let v=0;do{crypto.getRandomValues(b);v=b[0];}while(v>=lim);return DELIMITERS[v%DELIMITERS.length];}
@@ -545,9 +547,7 @@ async function encP2FK(payload,ver=P2FK_VER){
 
 
 async function getBalance(addr){
-  const r=await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(addr)}`);
-  if(!r.ok) throw new Error(`Balance lookup failed ${r.status}`);
-  const p=await r.json();
+  const p=await Mempool.json(`/address/${encodeURIComponent(addr)}`);
   const cs=p?.chain_stats||{},ms=p?.mempool_stats||{};
 
   const confirmedAvailable = (Number(cs.funded_txo_sum||0)-Number(cs.spent_txo_sum||0)) - Number(ms.spent_txo_sum||0);
