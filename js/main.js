@@ -6380,64 +6380,6 @@ function flashDamageEffect() {
     }), 100)
 }
 
-function cleanupPeer(e) {
-    clearDisconnectedPlayerPets(e);
-    const t = peers.get(e);
-    if (t && (t.pc && t.pc.close(), peers.delete(e)), playerAvatars.has(e)) {
-        const t = playerAvatars.get(e);
-        scene.remove(t), disposeObject(t), playerAvatars.delete(e)
-    }
-    if (userAudioStreams.has(e)) {
-        const t = userAudioStreams.get(e);
-        t.audio.srcObject = null, t.audio.remove(), userAudioStreams.delete(e)
-    }
-    userVideoStreams.has(e) && userVideoStreams.delete(e), delete userPositions[e], addMessage(`${e} has disconnected.`), updateHudButtons(), console.log(`[WebRTC] Cleaned up peer: ${e}`)
-}
-async function toggleCamera() {
-    const e = document.getElementById("cameraBtn"),
-        t = document.getElementById("proximityVideo"),
-        o = document.getElementById("proximityVideoElement"),
-        a = document.getElementById("proximityVideoLabel");
-    if (localVideoStream) {
-        localVideoStream.getTracks().forEach((e => e.stop())), localVideoStream = null;
-        for (const [e, t] of peers.entries()) {
-            if (t.pc) {
-                t.pc.getSenders().filter((e => e.track && "video" === e.track.kind)).forEach((e => t.pc.removeTrack(e)));
-                const e = await t.pc.createOffer();
-                await t.pc.setLocalDescription(e), t.dc && "open" === t.dc.readyState && t.dc.send(JSON.stringify({
-                    type: "renegotiation_offer",
-                    offer: e
-                }))
-            }
-            t.dc && "open" === t.dc.readyState && t.dc.send(JSON.stringify({
-                type: "video_stopped",
-                username: userName
-            }))
-        }
-        e.style.opacity = "0.5", t.style.display = "none", o.srcObject && (o.srcObject = null), addMessage("Camera disabled", 2e3)
-    } else try {
-        localVideoStream = await navigator.mediaDevices.getUserMedia({
-            video: !0
-        });
-        for (const [e, t] of peers.entries()) {
-            if (t.pc) {
-                localVideoStream.getTracks().forEach((e => t.pc.addTrack(e, localVideoStream)));
-                const e = await t.pc.createOffer();
-                await t.pc.setLocalDescription(e), t.dc && "open" === t.dc.readyState && t.dc.send(JSON.stringify({
-                    type: "renegotiation_offer",
-                    offer: e
-                }))
-            }
-            t.dc && "open" === t.dc.readyState && t.dc.send(JSON.stringify({
-                type: "video_started",
-                username: userName
-            }))
-        }
-        e.style.opacity = "1", o.srcObject = localVideoStream, a.innerText = userName, t.style.display = "block", addMessage("Camera enabled", 2e3), lastProximityVideoChangeTime = Date.now(), proximityVideoUsers = [userName, ...proximityVideoUsers.filter((e => e !== userName))], currentProximityVideoIndex = 0
-    } catch (e) {
-        addMessage("Could not access camera", 3e3), console.error("Error accessing camera:", e)
-    }
-}
 // initAudio is now a no-op - microphone permission is requested lazily
 // when the first peer connection is established (in web-rtc.js)
 async function initAudio() {
@@ -6458,7 +6400,7 @@ function updateProximityVideo() {
         n = new THREE.Vector3(player.x, player.y, player.z),
         r = [];
     for (const [e, t] of userVideoStreams.entries())
-        if (e !== userName && userPositions[e]) {
+        if (e !== userName && userPositions[e] && (!dedicatedServer || userPositions[e].world === worldName)) {
             const t = userPositions[e],
                 o = new THREE.Vector3(t.targetX, t.targetY, t.targetZ);
             n.distanceTo(o) <= 32 && r.push(e)
@@ -6475,6 +6417,9 @@ function switchWorld(newWorldName, targetSpawn) {
     worldArchetype = null;
     const e = newWorldName;
     if (!e || "" === e.trim()) return void addMessage("World name cannot be empty.", 3e3);
+    if (dedicatedServer && e.slice(0, 8) !== worldName) {
+        for (const name of dedicatedMediaPeers.keys()) closeDedicatedMediaPeer(name);
+    }
 
     // Store the old world name before updating
     const oldWorldName = worldName;
@@ -7348,12 +7293,13 @@ function runGameFrame(e) {
             }
         }
         for (const [e, t] of userAudioStreams.entries())
-            if (userPositions[e]) {
+            if (userPositions[e] && (!dedicatedServer || userPositions[e].world === worldName)) {
                 const o = userPositions[e],
                     a = Math.hypot(player.x - o.targetX, player.y - o.targetY, player.z - o.targetZ);
                 let n = 0;
                 a < maxAudioDistance && (n = Math.max(0, 1 - a / maxAudioDistance), n = Math.pow(n, rolloffFactor)), t.audio.volume = n
-            } for (const e of activeEruptions) {
+            } else t.audio.volume = 0;
+        for (const e of activeEruptions) {
                 const t = document.getElementById(e.soundId);
                 if (t) {
                     const o = Math.hypot(player.x - e.volcano.x, player.y - e.volcano.y, player.z - e.volcano.z),
@@ -7361,7 +7307,7 @@ function runGameFrame(e) {
                     t.volume = o < a ? Math.pow(1 - o / a, rolloffFactor) : 0
                 }
             }
-        updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
+        updateDedicatedProximityMedia(), updateProximityVideo(), lastPollPosition.distanceTo(player) > CHUNK_SIZE && (hasMovedSubstantially = !0), o && (lastMoveTime = e, window.lastMoveTime = e), hasMovedSubstantially && e - lastUpdateTime > 5e3 && (triggerPoll(), lastPollPosition.copy(player), hasMovedSubstantially = !1);
         for (let o = eruptedBlocks.length - 1; o >= 0; o--) {
             const a = eruptedBlocks[o];
             if (isAuthority() || 0 === peers.size)

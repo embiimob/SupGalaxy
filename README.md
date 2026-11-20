@@ -270,6 +270,7 @@ There are three ways to connect with other players via WebRTC: **Dedicated Serve
 Instead of connecting directly to peers, you can connect through a central dedicated server. This allows for instant, always-on connections without exchanging files or using a wallet.
 - **Default Server**: `https://play.supgalaxy.org:55555`
 - **Host Your Own**: You can run your own instance. Check out the project site at [https://github.com/embiimob/SupGalaxy-Server](https://github.com/embiimob/SupGalaxy-Server).
+- **Proximity chat**: As in P2P mode, the microphone is requested on connect and every player in the same world gets a direct audio/video link (the server only relays signaling). Voice fades with distance and video cycles between players within 32 blocks. Allow microphone/camera access and use TURN if direct connections are blocked by NAT.
 
 **To join a server:**
 1. Open 🌐 **Switch world** → click **Connect to Server**.
